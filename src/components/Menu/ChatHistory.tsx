@@ -197,7 +197,7 @@ const ChatHistory = React.memo(
             : 'cursor-pointer opacity-100'
         } ${selectedChats.includes(chatIndex) ? 'bg-blue-500' : ''}`}
         onClick={() => {
-          if (!generating) setCurrentChatIndex(chatIndex);
+          if (!generating && !active) setCurrentChatIndex(chatIndex);
         }}
         draggable={!isEdit}
         onDragStart={handleDragStart}

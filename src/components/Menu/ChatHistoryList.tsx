@@ -170,12 +170,14 @@ const ChatHistoryList = () => {
         const folderId = chats[currentChatIndex].folder;
 
         if (folderId) {
-          const updatedFolders: FolderCollection = JSON.parse(
-            JSON.stringify(useStore.getState().folders)
-          );
-
-          updatedFolders[folderId].expanded = true;
-          setFolders(updatedFolders);
+          const currentFolders = useStore.getState().folders;
+          if (!currentFolders[folderId]?.expanded) {
+            const updatedFolders: FolderCollection = JSON.parse(
+              JSON.stringify(currentFolders)
+            );
+            updatedFolders[folderId].expanded = true;
+            setFolders(updatedFolders);
+          }
         }
       }
     }

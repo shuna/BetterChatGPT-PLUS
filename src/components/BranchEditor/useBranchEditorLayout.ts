@@ -122,15 +122,19 @@ export function useBranchEditorLayout(tree: BranchTree | undefined) {
 }
 
 export function useMultiBranchEditorLayout(entries: MultiLayoutEntry[]) {
-  const contentStore = useStore((state) => state.contentStore);
-  // Build a stable dependency key
-  const depsKey = entries.map((e) => `${e.chatIndex}:${Object.keys(e.tree.nodes).length}:${e.tree.activePath.join('|')}`).join(';');
+  // Build a stable dependency key that includes structure AND content hashes,
+  // so previews update when content changes without subscribing to the entire contentStore object.
+  const depsKey = entries.map((e) => {
+    const nodeKeys = Object.values(e.tree.nodes).map((n) => `${n.id}:${n.contentHash}`).join(',');
+    return `${e.chatIndex}:${nodeKeys}:${e.tree.activePath.join('|')}`;
+  }).join(';');
 
   return useMemo(() => {
     if (entries.length === 0) {
       return { rfNodes: [] as Node<MessageNodeData>[], rfEdges: [] as Edge[] };
     }
 
+    const contentStore = useStore.getState().contentStore;
     const allNodes: Node<MessageNodeData>[] = [];
     const allEdges: Edge[] = [];
     let xOffset = 0;
@@ -150,5 +154,5 @@ export function useMultiBranchEditorLayout(entries: MultiLayoutEntry[]) {
 
     return { rfNodes: allNodes, rfEdges: allEdges };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [depsKey, contentStore]);
+  }, [depsKey]);
 }

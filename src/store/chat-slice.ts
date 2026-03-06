@@ -45,10 +45,13 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
       }
     },
     setCurrentChatIndex: (currentChatIndex: number) => {
+      if (get().currentChatIndex === currentChatIndex) return;
       set((prev: ChatSlice) => ({
         ...prev,
         currentChatIndex: currentChatIndex,
       }));
+      // Persist separately to avoid triggering heavy main-store serialization
+      localStorage.setItem('currentChatIndex', String(currentChatIndex));
     },
     setGenerating: (generating: boolean) => {
       set((prev: ChatSlice) => ({

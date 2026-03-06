@@ -65,7 +65,6 @@ export const createPartializedState = (state: StoreState) => ({
   chats: state.chats?.map(({ messages, ...rest }) =>
     rest.branchTree ? rest : { ...rest, messages }
   ),
-  currentChatIndex: state.currentChatIndex,
   apiKey: state.apiKey,
   apiVersion: state.apiVersion,
   apiEndpoint: state.apiEndpoint,
@@ -116,6 +115,13 @@ const useStore = create<StoreState>()(
       version: 12,
       onRehydrateStorage: () => (state) => {
         if (!state) return;
+        // Restore currentChatIndex from lightweight localStorage key (not main persist)
+        const savedIndex = parseInt(localStorage.getItem('currentChatIndex') ?? '-1', 10);
+        if (state.chats && state.chats.length > 0) {
+          state.currentChatIndex = (savedIndex >= 0 && savedIndex < state.chats.length)
+            ? savedIndex
+            : 0;
+        }
         const contentStore: ContentStoreData = state.contentStore ?? {};
         state.chats?.forEach((chat: ChatInterface) => {
           if (!chat.messages) chat.messages = [];
