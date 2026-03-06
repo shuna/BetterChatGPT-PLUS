@@ -82,6 +82,7 @@ export interface ChatInterface {
   titleSet: boolean;
   imageDetail: ImageDetail;
   branchTree?: BranchTree;
+  collapsedNodes?: Record<string, boolean>;
 }
 
 export interface BranchClipboard {

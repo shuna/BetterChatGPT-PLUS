@@ -15,6 +15,8 @@ export interface ChatSlice {
   setGenerating: (generating: boolean) => void;
   setError: (error: string) => void;
   setFolders: (folders: FolderCollection) => void;
+  toggleCollapseNode: (chatIndex: number, messageIndex: number) => void;
+  setAllCollapsed: (chatIndex: number, collapsed: boolean) => void;
 }
 
 export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
@@ -65,6 +67,43 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
         ...prev,
         folders: folders,
       }));
+    },
+    toggleCollapseNode: (chatIndex: number, messageIndex: number) => {
+      const chats = get().chats;
+      if (!chats) return;
+      const chat = chats[chatIndex];
+      if (!chat) return;
+      // Determine the node key: use nodeId from branchTree if available, else messageIndex string
+      const nodeId = chat.branchTree?.activePath?.[messageIndex] ?? String(messageIndex);
+      const updatedChats: ChatInterface[] = JSON.parse(JSON.stringify(chats));
+      const collapsed = updatedChats[chatIndex].collapsedNodes ?? {};
+      collapsed[nodeId] = !collapsed[nodeId];
+      if (!collapsed[nodeId]) delete collapsed[nodeId];
+      updatedChats[chatIndex].collapsedNodes = collapsed;
+      set((prev: ChatSlice) => ({ ...prev, chats: updatedChats }));
+    },
+    setAllCollapsed: (chatIndex: number, collapsed: boolean) => {
+      const chats = get().chats;
+      if (!chats) return;
+      const chat = chats[chatIndex];
+      if (!chat) return;
+      const updatedChats: ChatInterface[] = JSON.parse(JSON.stringify(chats));
+      if (collapsed) {
+        const newCollapsed: Record<string, boolean> = {};
+        if (chat.branchTree?.activePath) {
+          chat.branchTree.activePath.forEach((nodeId) => {
+            newCollapsed[nodeId] = true;
+          });
+        } else {
+          chat.messages.forEach((_, idx) => {
+            newCollapsed[String(idx)] = true;
+          });
+        }
+        updatedChats[chatIndex].collapsedNodes = newCollapsed;
+      } else {
+        updatedChats[chatIndex].collapsedNodes = {};
+      }
+      set((prev: ChatSlice) => ({ ...prev, chats: updatedChats }));
     },
   };
 };
