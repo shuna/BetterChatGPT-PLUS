@@ -192,10 +192,11 @@ const useSubmit = () => {
           const reader = stream.getReader();
           let reading = true;
           let partial = '';
+          const decoder = new TextDecoder();
           while (reading && useStore.getState().generating) {
             const { done, value } = await reader.read();
             const result = parseEventSource(
-              partial + new TextDecoder().decode(value)
+              partial + decoder.decode(value, { stream: true })
             );
             partial = '';
 
