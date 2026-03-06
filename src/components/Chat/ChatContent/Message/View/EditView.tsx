@@ -19,6 +19,7 @@ import AttachmentIcon from '@icon/AttachmentIcon';
 import { ModelOptions } from '@utils/modelReader';
 import { modelTypes } from '@constants/modelLoader';
 import { toast } from 'react-toastify';
+import BranchIcon from '@icon/BranchIcon';
 
 const EditView = ({
   role,
@@ -230,6 +231,22 @@ const EditView = ({
 
   const { handleSubmit, handleSubmitMidChat } = useSubmit();
 
+  const handleBranchGenerate = () => {
+    if (useStore.getState().generating || !modelValid) return;
+    if (sticky) return;
+
+    const { ensureBranchTree, createBranch } = useStore.getState();
+    ensureBranchTree(currentChatIndex);
+
+    const tree = useStore.getState().chats![currentChatIndex].branchTree!;
+    const nodeId = tree.activePath[messageIndex];
+    if (!nodeId) return;
+
+    createBranch(currentChatIndex, nodeId, _content);
+    setIsEdit(false);
+    handleSubmit();
+  };
+
   const handleGenerateNextOnly = () => {
     if (useStore.getState().generating || !modelValid) return;
 
@@ -427,6 +444,7 @@ const EditView = ({
         handleRemoveImage={handleRemoveImage}
         handleGenerate={handleGenerate}
         handleGenerateNextOnly={handleGenerateNextOnly}
+        handleBranchGenerate={handleBranchGenerate}
         handleSave={handleSave}
         setIsModalOpen={setIsModalOpen}
         setIsEdit={setIsEdit}
@@ -461,6 +479,7 @@ const EditViewButtons = memo(
     handleRemoveImage,
     handleGenerate,
     handleGenerateNextOnly,
+    handleBranchGenerate,
     handleSave,
     setIsModalOpen,
     setIsEdit,
@@ -481,6 +500,7 @@ const EditViewButtons = memo(
     handleRemoveImage: (index: number) => void;
     handleGenerate: () => void;
     handleGenerateNextOnly: () => void;
+    handleBranchGenerate: () => void;
     handleSave: () => void;
     setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
     setIsEdit: React.Dispatch<React.SetStateAction<boolean>>;
@@ -618,21 +638,49 @@ const EditViewButtons = memo(
                       {t('generateBelow')}
                     </div>
                   </button>
+                  <button
+                    className={`btn relative mr-2 btn-neutral ${
+                      generating || noModel ? 'cursor-not-allowed opacity-40' : ''
+                    }`}
+                    onClick={handleBranchGenerate}
+                    disabled={noModel}
+                    title={t('branchGenerate') as string}
+                  >
+                    <div className='flex items-center justify-center gap-2'>
+                      <BranchIcon />
+                      {t('branchGenerate')}
+                    </div>
+                  </button>
                 </>
               ) : (
-                <button
-                  className={`btn relative mr-2 btn-primary ${
-                    noModel ? 'cursor-not-allowed opacity-40' : ''
-                  }`}
-                  onClick={() => {
-                    !generating && !noModel && setIsModalOpen(true);
-                  }}
-                  disabled={noModel}
-                >
-                  <div className='flex items-center justify-center gap-2'>
-                    {t('generate')}
-                  </div>
-                </button>
+                <>
+                  <button
+                    className={`btn relative mr-2 btn-primary ${
+                      noModel ? 'cursor-not-allowed opacity-40' : ''
+                    }`}
+                    onClick={() => {
+                      !generating && !noModel && setIsModalOpen(true);
+                    }}
+                    disabled={noModel}
+                  >
+                    <div className='flex items-center justify-center gap-2'>
+                      {t('generate')}
+                    </div>
+                  </button>
+                  <button
+                    className={`btn relative mr-2 btn-neutral ${
+                      generating || noModel ? 'cursor-not-allowed opacity-40' : ''
+                    }`}
+                    onClick={handleBranchGenerate}
+                    disabled={noModel}
+                    title={t('branchGenerate') as string}
+                  >
+                    <div className='flex items-center justify-center gap-2'>
+                      <BranchIcon />
+                      {t('branchGenerate')}
+                    </div>
+                  </button>
+                </>
               )
             )}
 

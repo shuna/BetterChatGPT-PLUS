@@ -4,10 +4,14 @@ import useStore from '@store/store';
 import ChatContent from './ChatContent';
 import MobileBar from '../MobileBar';
 import StopGeneratingButton from '@components/StopGeneratingButton/StopGeneratingButton';
+import ChatViewTabs from './ChatViewTabs';
+import BranchEditorView from '@components/BranchEditor/BranchEditorView';
 
 const Chat = () => {
   const hideSideMenu = useStore((state) => state.hideSideMenu);
   const menuWidth = useStore((state) => state.menuWidth);
+  const activeView = useStore((state) => state.chatActiveView);
+  const setActiveView = useStore((state) => state.setChatActiveView);
 
   return (
     <div
@@ -16,8 +20,15 @@ const Chat = () => {
     >
       <MobileBar />
       <main className='relative h-full w-full transition-width flex flex-col overflow-hidden items-stretch flex-1'>
-        <ChatContent />
-        <StopGeneratingButton />
+        <ChatViewTabs activeView={activeView} setActiveView={setActiveView} />
+        {activeView === 'chat' ? (
+          <>
+            <ChatContent />
+            <StopGeneratingButton />
+          </>
+        ) : (
+          <BranchEditorView />
+        )}
       </main>
     </div>
   );

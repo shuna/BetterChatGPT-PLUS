@@ -59,5 +59,21 @@
   "reduceMessagesSuccess": "Successfully reduced messages. {{count}} messages were removed.",
   "hiddenMessagesWarning": "Some messages were hidden with the total length of {{hiddenTokens}} tokens to {{reduceMessagesToTotalToken}} tokens to avoid laggy UI.",
   "tokenCostModelNotRegistered": "cost unknown: model not registered",
-  "tokenCostNoPricingData": "cost unknown: no pricing data"
+  "tokenCostNoPricingData": "cost unknown: no pricing data",
+  "branchGenerate": "Branch",
+  "branchEditor": "Branch Editor",
+  "chat": "Chat",
+  "branchOf": "{{current}} of {{total}}",
+  "switchToBranch": "Switch to this branch",
+  "deleteBranch": "Delete branch",
+  "renameBranch": "Rename branch",
+  "compareBranches": "Compare branches",
+  "copyMessages": "Copy messages",
+  "pasteMessages": "Paste messages here",
+  "clipboardEmpty": "Nothing in branch clipboard",
+  "diffTitle": "Branch Comparison",
+  "diffNoChanges": "Branches are identical",
+  "added": "Added",
+  "removed": "Removed",
+  "changed": "Changed"
 }

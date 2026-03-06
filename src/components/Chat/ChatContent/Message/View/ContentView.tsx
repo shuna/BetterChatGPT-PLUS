@@ -36,6 +36,7 @@ import CopyButton from './Button/CopyButton';
 import EditButton from './Button/EditButton';
 import DeleteButton from './Button/DeleteButton';
 import MarkdownModeButton from './Button/MarkdownModeButton';
+import ShowInEditorButton from './Button/ShowInEditorButton';
 
 import CodeBlock from '../CodeBlock';
 import PopupModal from '@components/PopupModal';
@@ -203,6 +204,7 @@ const ContentView = memo(
               <MarkdownModeButton />
               <CopyButton onClick={handleCopy} />
               <EditButton setIsEdit={setIsEdit} />
+              <ShowInEditorButton messageIndex={messageIndex} />
               <DeleteButton setIsDelete={setIsDelete} />
             </>
           )}

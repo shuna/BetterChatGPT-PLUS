@@ -11,6 +11,7 @@ import {
   PartialImportError,
   validateAndFixChats,
   validateExportV1,
+  validateExportV2,
 } from '@utils/import';
 
 import { modelOptions } from '@constants/modelLoader';
@@ -219,6 +220,49 @@ const ImportChat = () => {
                 }
               } else {
                 switch ((parsedData as ExportBase).version) {
+                  case 2:
+                    if (validateExportV2(parsedData)) {
+                      const offset = Object.keys(parsedData.folders).length;
+                      const updatedFolders = useStore.getState().folders;
+                      Object.values(updatedFolders).forEach(
+                        (f) => (f.order += offset)
+                      );
+                      setFolders({ ...parsedData.folders, ...updatedFolders });
+
+                      const prevChatsV2 = useStore.getState().chats;
+                      if (parsedData.chats) {
+                        if (prevChatsV2) {
+                          const updatedChats: ChatInterface[] = JSON.parse(
+                            JSON.stringify(prevChatsV2)
+                          );
+                          setChats(parsedData.chats.concat(updatedChats));
+                        } else {
+                          setChats(parsedData.chats);
+                        }
+                      }
+                      if (parsedData.chats && parsedData.chats.length > 0) {
+                        return {
+                          success: true,
+                          message: t('notifications.successfulImport', {
+                            ns: 'import',
+                          }),
+                        };
+                      } else {
+                        return {
+                          success: false,
+                          message: t('notifications.quotaExceeded', {
+                            ns: 'import',
+                          }),
+                        };
+                      }
+                    } else {
+                      return {
+                        success: false,
+                        message: t('notifications.invalidFormatForVersion', {
+                          ns: 'import',
+                        }),
+                      };
+                    }
                   case 1:
                     if (validateExportV1(parsedData)) {
                       // increment the order of existing folders
@@ -389,6 +433,8 @@ const ImportChat = () => {
             type = 'OpenAIContent';
           } else if (isLegacyImport(parsedData)) {
             type = 'LegacyImport';
+          } else if ((parsedData as ExportBase).version === 2) {
+            type = 'ExportV2';
           } else if ((parsedData as ExportBase).version === 1) {
             type = 'ExportV1';
           }

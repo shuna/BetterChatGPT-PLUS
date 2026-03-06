@@ -16,6 +16,7 @@ import {
   TextContentInterface,
   LocalStorageInterfaceV8_2ToV9,
   LocalStorageInterfaceV9ToV10,
+  LocalStorageInterfaceV10ToV11,
 } from '@type/chat';
 import { DEFAULT_PROVIDERS } from './provider-slice';
 import {
@@ -158,4 +159,9 @@ export const migrateV9 = (persistedState: LocalStorageInterfaceV9ToV10) => {
 
   persistedState.providers = providers;
   persistedState.favoriteModels = [];
+};
+
+export const migrateV10 = (_persistedState: LocalStorageInterfaceV10ToV11) => {
+  // branchTree is lazily initialized inside ChatInterface when first used.
+  // No migration work needed at startup.
 };

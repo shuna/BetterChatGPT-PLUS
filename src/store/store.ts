@@ -9,6 +9,7 @@ import { PromptSlice, createPromptSlice } from './prompt-slice';
 import { ToastSlice, createToastSlice } from './toast-slice';
 import { CustomModelsSlice, createCustomModelsSlice } from './custom-models-slice';
 import { ProviderSlice, createProviderSlice } from './provider-slice';
+import { BranchSlice, createBranchSlice } from './branch-slice';
 import {
   LocalStorageInterfaceV9ToV10,
   LocalStorageInterfaceV0ToV1,
@@ -22,8 +23,10 @@ import {
   LocalStorageInterfaceV8_1ToV8_2,
   LocalStorageInterfaceV8oV8_1,
   LocalStorageInterfaceV8_2ToV9,
+  LocalStorageInterfaceV10ToV11,
 } from '@type/chat';
 import {
+  migrateV10,
   migrateV9,
   migrateV0,
   migrateV1,
@@ -45,7 +48,8 @@ export type StoreState = ChatSlice &
   PromptSlice &
   ToastSlice &
   CustomModelsSlice &
-  ProviderSlice;
+  ProviderSlice &
+  BranchSlice;
 
 export type StoreSlice<T> = (
   set: StoreApi<StoreState>['setState'],
@@ -81,6 +85,7 @@ export const createPartializedState = (state: StoreState) => ({
   customModels: state.customModels,
   providers: state.providers,
   favoriteModels: state.favoriteModels,
+  branchClipboard: state.branchClipboard,
 });
 
 const useStore = create<StoreState>()(
@@ -94,12 +99,13 @@ const useStore = create<StoreState>()(
       ...createToastSlice(set, get),
       ...createCustomModelsSlice(set, get),
       ...createProviderSlice(set, get),
+      ...createBranchSlice(set, get),
     }),
     {
       name: 'free-chat-gpt',
       storage: createJSONStorage(() => compressedStorage),
       partialize: (state) => createPartializedState(state),
-      version: 10,
+      version: 11,
       migrate: (persistedState, version) => {
         switch (version) {
           case 0:
@@ -126,6 +132,8 @@ const useStore = create<StoreState>()(
             migrateV8_2(persistedState as LocalStorageInterfaceV8_2ToV9);
           case 9:
             migrateV9(persistedState as LocalStorageInterfaceV9ToV10);
+          case 10:
+            migrateV10(persistedState as LocalStorageInterfaceV10ToV11);
             break;
         }
         return persistedState as StoreState;
