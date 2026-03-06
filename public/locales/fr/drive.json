@@ -7,7 +7,7 @@
     "create": "Créer un nouveau fichier",
     "confirm": "Confirmer la sélection"
   },
-  "notice": "Note: Vous devrez vous reconnecter à chaque visite ou toutes les heures. Pour éviter que vos données cloud soient écrasées, n'utilisez pas Better ChatGPT sur plus d'un appareil en même temps.",
+  "notice": "Note : Votre session sera automatiquement renouvelée tant que votre compte Google est actif. Une reconnexion n'est nécessaire que si votre session Google expire. Pour éviter que vos données cloud soient écrasées, n'utilisez pas l'application sur plus d'un appareil en même temps.",
   "privacy": "Votre vie privée est importante pour nous et pour la garantir, Better ChatGPT n'a que des accès non sensibles, c'est-à-dire qu'il peut seulement créer, visualiser et gérer ses propres fichiers et dossiers.",
   "toast": {
     "sync": "Synchronisation réussie!",

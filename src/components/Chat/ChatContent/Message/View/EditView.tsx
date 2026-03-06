@@ -49,6 +49,8 @@ const EditView = ({
       ? state.chats![state.currentChatIndex].config.model
       : defaultModel;
   });
+  const favoriteModels = useStore((state) => state.favoriteModels) || [];
+  const modelValid = !!model && favoriteModels.some((f) => f.modelId === model);
 
   const [_content, _setContent] = useState<ContentInterface[]>(content);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -231,7 +233,7 @@ const EditView = ({
       (content) => content.type === 'image_url'
     );
 
-    if (useStore.getState().generating) {
+    if (useStore.getState().generating || !modelValid) {
       return;
     }
 
@@ -405,6 +407,7 @@ const EditView = ({
         handleImageUrlChange={handleImageUrlChange}
         fileInputRef={fileInputRef}
         model={model}
+        modelValid={modelValid}
       />
       {isModalOpen && (
         <PopupModal
@@ -435,6 +438,7 @@ const EditViewButtons = memo(
     handleImageUrlChange,
     fileInputRef,
     model,
+    modelValid,
   }: {
     sticky?: boolean;
     handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
@@ -451,9 +455,11 @@ const EditViewButtons = memo(
     handleImageUrlChange: () => void;
     fileInputRef: React.MutableRefObject<null>;
     model: ModelOptions;
+    modelValid: boolean;
   }) => {
     const { t } = useTranslation();
     const generating = useStore.getState().generating;
+    const noModel = !modelValid;
     const advancedMode = useStore((state) => state.advancedMode);
 
     return (
@@ -530,9 +536,10 @@ const EditViewButtons = memo(
             {sticky && (
               <button
                 className={`btn relative mr-2 btn-primary ${
-                  generating ? 'cursor-not-allowed opacity-40' : ''
+                  generating || noModel ? 'cursor-not-allowed opacity-40' : ''
                 }`}
                 onClick={handleGenerate}
+                disabled={noModel}
                 aria-label={t('generate') as string}
               >
                 <div className='flex items-center justify-center gap-2'>
@@ -543,10 +550,13 @@ const EditViewButtons = memo(
 
             {sticky || (
               <button
-                className='btn relative mr-2 btn-primary'
+                className={`btn relative mr-2 btn-primary ${
+                  noModel ? 'cursor-not-allowed opacity-40' : ''
+                }`}
                 onClick={() => {
-                  !generating && setIsModalOpen(true);
+                  !generating && !noModel && setIsModalOpen(true);
                 }}
+                disabled={noModel}
               >
                 <div className='flex items-center justify-center gap-2'>
                   {t('generate')}

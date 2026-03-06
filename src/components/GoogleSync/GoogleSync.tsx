@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useTranslation } from 'react-i18next';
 
@@ -14,7 +14,7 @@ import {
 import { getFiles, stateToFile } from '@utils/google-api';
 import createGoogleCloudStorage from '@store/storage/GoogleCloudStorage';
 
-import GoogleSyncButton from './GoogleSyncButton';
+import GoogleSyncButton, { GoogleSyncButtonHandle } from './GoogleSyncButton';
 import PopupModal from '@components/PopupModal';
 
 import GoogleIcon from '@icon/GoogleIcon';
@@ -25,6 +25,8 @@ import { GoogleFileResource, SyncStatus } from '@type/google-api';
 import EditIcon from '@icon/EditIcon';
 import CrossIcon from '@icon/CrossIcon';
 import DeleteIcon from '@icon/DeleteIcon';
+
+const SILENT_REFRESH_INTERVAL = 3000000; // 50 minutes
 
 const GoogleSync = ({ clientId }: { clientId: string }) => {
   const { t } = useTranslation(['drive']);
@@ -125,6 +127,26 @@ const GooglePopup = ({
   const setToastMessage = useStore((state) => state.setToastMessage);
   const setToastShow = useStore((state) => state.setToastShow);
 
+  const syncButtonRef = useRef<GoogleSyncButtonHandle>(null);
+  const refreshIntervalRef = useRef<number>();
+
+  const startSilentRefreshInterval = () => {
+    if (refreshIntervalRef.current) {
+      window.clearInterval(refreshIntervalRef.current);
+    }
+    refreshIntervalRef.current = window.setInterval(() => {
+      syncButtonRef.current?.attemptSilentRefresh();
+    }, SILENT_REFRESH_INTERVAL);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (refreshIntervalRef.current) {
+        window.clearInterval(refreshIntervalRef.current);
+      }
+    };
+  }, []);
+
   const [_fileId, _setFileId] = useState<string>(
     useGStore.getState().fileId || ''
   );
@@ -154,11 +176,16 @@ const GooglePopup = ({
       <div className='p-6 border-b border-gray-200 dark:border-gray-600 text-gray-900 dark:text-gray-300 text-sm flex flex-col items-center gap-4 text-center'>
         <p>{t('tagline')}</p>
         <GoogleSyncButton
+          ref={syncButtonRef}
           loginHandler={() => {
             setIsModalOpen(false);
-            window.setTimeout(() => {
-              setIsModalOpen(true);
-            }, 3540000); // timeout - 3540000ms = 59 min (access token last 60 min)
+            startSilentRefreshInterval();
+          }}
+          onSilentRefreshFail={() => {
+            if (refreshIntervalRef.current) {
+              window.clearInterval(refreshIntervalRef.current);
+            }
+            setIsModalOpen(true);
           }}
         />
         <p className='border border-gray-400 px-3 py-2 rounded-md'>

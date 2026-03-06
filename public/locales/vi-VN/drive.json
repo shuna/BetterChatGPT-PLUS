@@ -7,7 +7,7 @@
     "create": "Tạo tập tin mới",
     "confirm": "Xác nhận lựa chọn của bạn"
   },
-  "notice": "Lưu ý: Bạn sẽ cần phải đăng nhập lại sau mỗi lần truy cập hoặc mỗi giờ. Để tránh dữ liệu đám mây của bạn bị ghi đè, không sử dụng Better ChatGPT trên nhiều thiết bị cùng một lúc.",
+  "notice": "Note: Your session will be automatically refreshed while your Google account is active. You may need to re-login if your Google session expires. To avoid your cloud data being overwritten, do not use Better ChatGPT on more than one device at the same time.",
   "privacy": "Quyền riêng tư của bạn rất quan trọng đối với chúng tôi và để đảm bảo điều đó, Better ChatGPT chỉ có quyền truy cập không nhạy cảm, nghĩa là nó chỉ có thể tạo, xem và quản lý các tệp và thư mục của riêng mình.",
   "toast": {
     "sync": "Đồng bộ hóa thành công!",

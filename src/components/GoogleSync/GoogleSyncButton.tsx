@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useCallback, useImperativeHandle, forwardRef } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useGoogleLogin, googleLogout } from '@react-oauth/google';
@@ -6,7 +6,14 @@ import useGStore from '@store/cloud-auth-store';
 import useStore from '@store/store';
 import { createJSONStorage } from 'zustand/middleware';
 
-const GoogleSyncButton = ({ loginHandler }: { loginHandler?: () => void }) => {
+export interface GoogleSyncButtonHandle {
+  attemptSilentRefresh: () => void;
+}
+
+const GoogleSyncButton = forwardRef<
+  GoogleSyncButtonHandle,
+  { loginHandler?: () => void; onSilentRefreshFail?: () => void }
+>(({ loginHandler, onSilentRefreshFail }, ref) => {
   const { t } = useTranslation(['drive']);
 
   const setGoogleAccessToken = useGStore((state) => state.setGoogleAccessToken);
@@ -35,6 +42,24 @@ const GoogleSyncButton = ({ loginHandler }: { loginHandler?: () => void }) => {
     },
     scope: 'https://www.googleapis.com/auth/drive.file',
   });
+
+  const silentLogin = useGoogleLogin({
+    onSuccess: (codeResponse) => {
+      setGoogleAccessToken(codeResponse.access_token);
+    },
+    onError: () => {
+      console.log('Silent refresh failed, manual re-login required');
+      onSilentRefreshFail?.();
+    },
+    scope: 'https://www.googleapis.com/auth/drive.file',
+    prompt: '',
+  });
+
+  useImperativeHandle(ref, () => ({
+    attemptSilentRefresh: () => {
+      silentLogin();
+    },
+  }));
 
   const logout = () => {
     setGoogleAccessToken(undefined);
@@ -70,6 +95,6 @@ const GoogleSyncButton = ({ loginHandler }: { loginHandler?: () => void }) => {
       )}
     </div>
   );
-};
+});
 
 export default GoogleSyncButton;
