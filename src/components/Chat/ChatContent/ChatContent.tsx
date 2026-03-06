@@ -4,6 +4,7 @@ import useStore from '@store/store';
 import { useTranslation } from 'react-i18next';
 
 import ScrollToBottomButton from './ScrollToBottomButton';
+import CollapseAllButtons from './CollapseAllButtons';
 import Message from './Message';
 import NewMessageButton from './Message/NewMessageButton';
 import CrossIcon from '@icon/CrossIcon';
@@ -113,6 +114,7 @@ const ChatContent = () => {
         scroller={customScroller}
       >
         <ScrollToBottomButton />
+        <CollapseAllButtons />
         <div className='flex flex-col items-center text-sm dark:bg-gray-800'>
           <div
             className='flex flex-col items-center text-sm dark:bg-gray-800 w-full'

@@ -38,7 +38,7 @@ const ExportChat = () => {
             };
           });
         }
-        const { branchTree, ...rest } = expanded;
+        const { branchTree, collapsedNodes, ...rest } = expanded;
         return rest as ChatInterface;
       });
       fileData = { chats: v1Chats, folders, version: 1 } satisfies ExportV1;
