@@ -38,6 +38,7 @@
     "colCreated": "発表日",
     "colContext": "コンテキスト",
     "colPrice": "価格 (入力/出力)",
-    "noModelSelected": "モデル未選択"
+    "noModelSelected": "モデル未選択",
+    "keySaved": "APIキーを保存しました"
   }
 }

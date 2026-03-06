@@ -103,9 +103,25 @@ const ProviderMenu = ({
   // Reload models when API key changes for current provider
   const handleSaveApiKey = () => {
     setProviderApiKey(selectedProvider, apiKeyInput);
-    // Clear cached models to force re-fetch with new key
-    setModels((prev) => ({ ...prev, [selectedProvider]: [] }));
-    setTimeout(() => loadModels(selectedProvider), 100);
+    const providerName = providers[selectedProvider]?.name || selectedProvider;
+
+    // Show toast notification
+    useStore.getState().setToastStatus('success');
+    useStore.getState().setToastMessage(`${providerName}: ${t('provider.keySaved', 'APIキーを保存しました')}`);
+    useStore.getState().setToastShow(true);
+
+    // Re-fetch models with new key without clearing existing list
+    const updatedConfig = { ...providers[selectedProvider], apiKey: apiKeyInput };
+    setLoading((prev) => ({ ...prev, [selectedProvider]: true }));
+    fetchProviderModels(updatedConfig)
+      .then((result) => {
+        if (result.length > 0) {
+          setModels((prev) => ({ ...prev, [selectedProvider]: result }));
+        }
+      })
+      .finally(() => {
+        setLoading((prev) => ({ ...prev, [selectedProvider]: false }));
+      });
   };
 
   const isFavorite = (modelId: string, providerId: ProviderId) =>

@@ -70,6 +70,7 @@
     "colCreated": "Released",
     "colContext": "Context",
     "colPrice": "Price (In/Out)",
-    "noModelSelected": "No model selected"
+    "noModelSelected": "No model selected",
+    "keySaved": "API key saved"
   }
 }
