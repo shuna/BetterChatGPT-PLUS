@@ -16,6 +16,12 @@ export interface ExportV1 extends ExportBase {
   folders: FolderCollection;
 }
 
+export interface ExportV2 extends ExportBase {
+  chats?: ChatInterface[];
+  folders: FolderCollection;
+  version: 2;
+}
+
 export type OpenAIChat = {
   title: string;
   mapping: {

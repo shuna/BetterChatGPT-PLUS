@@ -47,5 +47,21 @@
   "submitPlaceholder": "メッセージを入力するか、[/] をクリックしてプロンプトを表示します...",
   "showShareGPT": "ShareGPTボタンを表示",
   "tokenCostModelNotRegistered": "料金不明: モデル未登録",
-  "tokenCostNoPricingData": "料金不明: 料金データなし"
+  "tokenCostNoPricingData": "料金不明: 料金データなし",
+  "branchGenerate": "ブランチ",
+  "branchEditor": "ブランチエディタ",
+  "chat": "チャット",
+  "branchOf": "{{current}} / {{total}}",
+  "switchToBranch": "このブランチに切り替え",
+  "deleteBranch": "ブランチを削除",
+  "renameBranch": "ブランチ名を変更",
+  "compareBranches": "ブランチを比較",
+  "copyMessages": "メッセージをコピー",
+  "pasteMessages": "ここにメッセージを貼り付け",
+  "clipboardEmpty": "クリップボードは空です",
+  "diffTitle": "ブランチ比較",
+  "diffNoChanges": "ブランチは同一です",
+  "added": "追加",
+  "removed": "削除",
+  "changed": "変更"
 }

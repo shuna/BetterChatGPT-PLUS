@@ -48,6 +48,21 @@ export interface MessageInterface {
   content: ContentInterface[];
 }
 
+export interface BranchNode {
+  id: string;
+  parentId: string | null;
+  role: Role;
+  content: ContentInterface[];
+  createdAt: number;
+  label?: string;
+}
+
+export interface BranchTree {
+  nodes: Record<string, BranchNode>;
+  rootId: string;
+  activePath: string[];
+}
+
 export interface ChatInterface {
   id: string;
   title: string;
@@ -56,6 +71,18 @@ export interface ChatInterface {
   config: ConfigInterface;
   titleSet: boolean;
   imageDetail: ImageDetail;
+  branchTree?: BranchTree;
+}
+
+export interface BranchClipboard {
+  nodeIds: string[];
+  sourceChat: string;
+  nodes: Record<string, BranchNode>;
+}
+
+export interface LocalStorageInterfaceV10ToV11
+  extends LocalStorageInterfaceV9ToV10 {
+  // branchTree is inside ChatInterface, no new top-level fields
 }
 
 export interface ConfigInterface {

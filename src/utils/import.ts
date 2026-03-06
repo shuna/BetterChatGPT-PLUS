@@ -16,7 +16,8 @@ import {
   _defaultChatConfig,
   _defaultImageDetail,
 } from '@constants/chat';
-import { ExportV1, OpenAIChat, OpenAIPlaygroundJSON } from '@type/export';
+import { ExportV1, ExportV2, OpenAIChat, OpenAIPlaygroundJSON } from '@type/export';
+import { BranchNode, BranchTree } from '@type/chat';
 import { modelOptions } from '@constants/modelLoader';
 import i18next from 'i18next';
 
@@ -100,6 +101,22 @@ export const validateFolders = (
 
 export const validateExportV1 = (data: ExportV1): data is ExportV1 => {
   return validateAndFixChats(data.chats) && validateFolders(data.folders);
+};
+
+export const validateExportV2 = (data: ExportV2): data is ExportV2 => {
+  if (!validateAndFixChats(data.chats) || !validateFolders(data.folders))
+    return false;
+  // branchTree is optional on each chat; if present, validate basic structure
+  if (data.chats) {
+    for (const chat of data.chats) {
+      if (chat.branchTree) {
+        const bt = chat.branchTree;
+        if (typeof bt.nodes !== 'object' || !Array.isArray(bt.activePath))
+          return false;
+      }
+    }
+  }
+  return true;
 };
 
 // Type guard to check if content is ContentInterface
@@ -364,6 +381,90 @@ export const convertOpenAIToBetterChatGPTFormat = (
     titleSet: true,
     imageDetail: _defaultImageDetail,
   };
+};
+
+// Convert OpenAI mapping tree to BranchTree, preserving all branches
+export const convertOpenAIToBranchTree = (
+  openAIChat: OpenAIChat
+): { branchTree: BranchTree; messages: MessageInterface[] } | null => {
+  const mapping = openAIChat.mapping;
+  if (!mapping) return null;
+
+  const nodes: Record<string, BranchNode> = {};
+  const idMap: Record<string, string> = {}; // openai id -> our uuid
+
+  // First pass: create nodes for all mapping entries that have valid messages
+  for (const [oaiId, entry] of Object.entries(mapping)) {
+    const newId = uuidv4();
+    idMap[oaiId] = newId;
+
+    let role: 'user' | 'assistant' | 'system' = 'system';
+    let content: ContentInterface[] = [{ type: 'text', text: '' } as any];
+
+    if (entry.message) {
+      role = entry.message.author.role as any;
+      if (!roles.includes(role)) role = 'system';
+
+      const msgContent = entry.message.content;
+      if (Array.isArray((msgContent as any).parts)) {
+        const text = (msgContent as any).parts.join('') || '';
+        content = [{ type: 'text', text } as any];
+      } else if (isContentInterface(msgContent)) {
+        content = [msgContent];
+      }
+    }
+
+    nodes[newId] = {
+      id: newId,
+      parentId: null, // will be set in second pass
+      role,
+      content,
+      createdAt: Date.now(),
+    };
+  }
+
+  // Second pass: set parent IDs
+  for (const [oaiId, entry] of Object.entries(mapping)) {
+    if (entry.parent && idMap[entry.parent]) {
+      nodes[idMap[oaiId]].parentId = idMap[entry.parent];
+    }
+  }
+
+  // Find root (no parent)
+  const rootId = Object.values(nodes).find((n) => n.parentId === null)?.id;
+  if (!rootId) return null;
+
+  // Build active path from current_node
+  const activePath: string[] = [];
+  if (openAIChat.current_node && idMap[openAIChat.current_node]) {
+    let cur: string | null = idMap[openAIChat.current_node];
+    while (cur) {
+      activePath.unshift(cur);
+      cur = nodes[cur]?.parentId ?? null;
+    }
+  } else {
+    // Fallback: find deepest path
+    let cur = rootId;
+    activePath.push(cur);
+    while (true) {
+      const children = Object.values(nodes).filter(
+        (n) => n.parentId === cur
+      );
+      if (children.length === 0) break;
+      cur = children[0].id;
+      activePath.push(cur);
+    }
+  }
+
+  const branchTree: BranchTree = { nodes, rootId, activePath };
+
+  // Materialize messages from active path
+  const messages: MessageInterface[] = activePath
+    .map((id) => nodes[id])
+    .filter((n) => n.content.some((c) => (c as any).text?.length > 0))
+    .map((n) => ({ role: n.role, content: n.content }));
+
+  return { branchTree, messages };
 };
 
 // Import OpenAI chat data and convert it to BetterChatGPT format
