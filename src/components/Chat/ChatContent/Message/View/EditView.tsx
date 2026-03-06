@@ -190,7 +190,7 @@ const EditView = ({
     if (sticky) {
       const newMessage = { role: inputRole, content: _content };
       updatedMessages.push(newMessage);
-      upsertActivePathMessage(updatedChats[currentChatIndex], updatedMessages.length - 1, newMessage);
+      upsertActivePathMessage(updatedChats[currentChatIndex], updatedMessages.length - 1, newMessage, useStore.getState().contentStore);
       _setContent([
         {
           type: 'text',
@@ -200,7 +200,7 @@ const EditView = ({
       resetTextAreaHeight();
     } else {
       updatedMessages[messageIndex].content = _content;
-      upsertActivePathMessage(updatedChats[currentChatIndex], messageIndex, updatedMessages[messageIndex]);
+      upsertActivePathMessage(updatedChats[currentChatIndex], messageIndex, updatedMessages[messageIndex], useStore.getState().contentStore);
       setIsEdit(false);
     }
     try {
@@ -218,7 +218,7 @@ const EditView = ({
         const textOnlyContent = _content.filter(isTextContent);
         if (textOnlyContent.length > 0) {
           updatedMessages[messageIndex].content = textOnlyContent;
-          upsertActivePathMessage(updatedChats[currentChatIndex], messageIndex, updatedMessages[messageIndex]);
+          upsertActivePathMessage(updatedChats[currentChatIndex], messageIndex, updatedMessages[messageIndex], useStore.getState().contentStore);
           try {
             setChats(updatedChats);
             toast.info(
@@ -265,7 +265,7 @@ const EditView = ({
 
     // Update message content
     updatedMessages[messageIndex].content = _content;
-    upsertActivePathMessage(updatedChats[currentChatIndex], messageIndex, updatedMessages[messageIndex]);
+    upsertActivePathMessage(updatedChats[currentChatIndex], messageIndex, updatedMessages[messageIndex], useStore.getState().contentStore);
     // Remove only the next message if it exists
     const nextIndex = messageIndex + 1;
     if (nextIndex < updatedMessages.length) {
@@ -304,7 +304,7 @@ const EditView = ({
       if (hasTextContent || hasImageContent) {
         const newMessage = { role: inputRole, content: _content };
         updatedMessages.push(newMessage);
-        upsertActivePathMessage(updatedChats[currentChatIndex], updatedMessages.length - 1, newMessage);
+        upsertActivePathMessage(updatedChats[currentChatIndex], updatedMessages.length - 1, newMessage, useStore.getState().contentStore);
       }
       _setContent([
         {
@@ -315,7 +315,7 @@ const EditView = ({
       resetTextAreaHeight();
     } else {
       updatedMessages[messageIndex].content = _content;
-      upsertActivePathMessage(updatedChats[currentChatIndex], messageIndex, updatedMessages[messageIndex]);
+      upsertActivePathMessage(updatedChats[currentChatIndex], messageIndex, updatedMessages[messageIndex], useStore.getState().contentStore);
       updatedChats[currentChatIndex].messages = updatedMessages.slice(
         0,
         messageIndex + 1
@@ -338,7 +338,7 @@ const EditView = ({
         const textOnlyContent = _content.filter(isTextContent);
         if (textOnlyContent.length > 0) {
           updatedMessages[messageIndex].content = textOnlyContent;
-          upsertActivePathMessage(updatedChats[currentChatIndex], messageIndex, updatedMessages[messageIndex]);
+          upsertActivePathMessage(updatedChats[currentChatIndex], messageIndex, updatedMessages[messageIndex], useStore.getState().contentStore);
           try {
             setChats(updatedChats);
             toast.info(

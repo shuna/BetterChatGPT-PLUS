@@ -2,6 +2,8 @@ import { useMemo } from 'react';
 import dagre from 'dagre';
 import { BranchTree } from '@type/chat';
 import { Node, Edge } from 'reactflow';
+import useStore from '@store/store';
+import { resolveContent, ContentStoreData } from '@utils/contentStore';
 
 const NODE_W = 280;
 const NODE_H = 80;
@@ -37,7 +39,8 @@ function layoutSingleTree(
   tree: BranchTree,
   xOffset: number,
   chatIndex: number,
-  colorIdx: number
+  colorIdx: number,
+  contentStore: ContentStoreData
 ): { rfNodes: Node<MessageNodeData>[]; rfEdges: Edge[]; maxX: number } {
   if (Object.keys(tree.nodes).length === 0) {
     return { rfNodes: [], rfEdges: [], maxX: xOffset };
@@ -69,7 +72,8 @@ function layoutSingleTree(
       const y = pos.y - NODE_H / 2;
       if (x + NODE_W > maxX) maxX = x + NODE_W;
 
-      const textContent = node.content
+      const content = resolveContent(contentStore, node.contentHash);
+      const textContent = content
         .filter((c) => c.type === 'text')
         .map((c) => (c as any).text || '')
         .join(' ');
@@ -118,6 +122,7 @@ export function useBranchEditorLayout(tree: BranchTree | undefined) {
 }
 
 export function useMultiBranchEditorLayout(entries: MultiLayoutEntry[]) {
+  const contentStore = useStore((state) => state.contentStore);
   // Build a stable dependency key
   const depsKey = entries.map((e) => `${e.chatIndex}:${Object.keys(e.tree.nodes).length}:${e.tree.activePath.join('|')}`).join(';');
 
@@ -135,7 +140,8 @@ export function useMultiBranchEditorLayout(entries: MultiLayoutEntry[]) {
         entry.tree,
         xOffset,
         entry.chatIndex,
-        idx
+        idx,
+        contentStore
       );
       allNodes.push(...rfNodes);
       allEdges.push(...rfEdges);
@@ -144,5 +150,5 @@ export function useMultiBranchEditorLayout(entries: MultiLayoutEntry[]) {
 
     return { rfNodes: allNodes, rfEdges: allEdges };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [depsKey]);
+  }, [depsKey, contentStore]);
 }

@@ -82,11 +82,13 @@ const ContentView = memo(
       const updatedChats: ChatInterface[] = JSON.parse(
         JSON.stringify(useStore.getState().chats)
       );
+      const contentStore = useStore.getState().contentStore;
       updatedChats[currentChatIndex].messages.splice(messageIndex, 1);
       if (updatedChats[currentChatIndex].branchTree) {
-        deleteActivePathMessage(updatedChats[currentChatIndex], messageIndex);
+        deleteActivePathMessage(updatedChats[currentChatIndex], messageIndex, contentStore);
         updatedChats[currentChatIndex].messages = materializeActivePath(
-          updatedChats[currentChatIndex].branchTree!
+          updatedChats[currentChatIndex].branchTree!,
+          contentStore
         );
       }
       setChats(updatedChats);

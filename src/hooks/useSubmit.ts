@@ -97,7 +97,8 @@ const useSubmit = () => {
     upsertActivePathMessage(
       updatedChats[currentChatIndex],
       updatedChats[currentChatIndex].messages.length - 1,
-      assistantMessage
+      assistantMessage,
+      useStore.getState().contentStore
     );
 
     setChats(updatedChats);
@@ -167,7 +168,8 @@ const useSubmit = () => {
         upsertActivePathMessage(
           updatedChats[currentChatIndex],
           updatedMessages.length - 1,
-          updatedMessages[updatedMessages.length - 1]
+          updatedMessages[updatedMessages.length - 1],
+          useStore.getState().contentStore
         );
         setChats(updatedChats);
       } else {
@@ -236,7 +238,8 @@ const useSubmit = () => {
               upsertActivePathMessage(
                 updatedChats[currentChatIndex],
                 updatedMessages.length - 1,
-                updatedMessages[updatedMessages.length - 1]
+                updatedMessages[updatedMessages.length - 1],
+                useStore.getState().contentStore
               );
               setChats(updatedChats);
             }
@@ -339,7 +342,8 @@ const useSubmit = () => {
     upsertActivePathMessage(
       updatedChats[currentChatIndex],
       insertIndex,
-      assistantMessage
+      assistantMessage,
+      useStore.getState().contentStore
     );
 
     setChats(updatedChats);
@@ -416,7 +420,8 @@ const useSubmit = () => {
         upsertActivePathMessage(
           updatedChats[currentChatIndex],
           insertIndex,
-          updatedMessages[insertIndex]
+          updatedMessages[insertIndex],
+          useStore.getState().contentStore
         );
         setChats(updatedChats);
       } else {
@@ -484,7 +489,8 @@ const useSubmit = () => {
               upsertActivePathMessage(
                 updatedChats[currentChatIndex],
                 insertIndex,
-                updatedMessages[insertIndex]
+                updatedMessages[insertIndex],
+                useStore.getState().contentStore
               );
               setChats(updatedChats);
             }

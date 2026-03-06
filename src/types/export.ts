@@ -6,6 +6,7 @@ import {
   MessageInterface,
   Role,
 } from './chat';
+import { ContentStoreData } from '@utils/contentStore';
 
 export interface ExportBase {
   version: number;
@@ -20,6 +21,13 @@ export interface ExportV2 extends ExportBase {
   chats?: ChatInterface[];
   folders: FolderCollection;
   version: 2;
+}
+
+export interface ExportV3 extends ExportBase {
+  chats?: ChatInterface[];
+  contentStore: ContentStoreData;
+  folders: FolderCollection;
+  version: 3;
 }
 
 export type OpenAIChat = {

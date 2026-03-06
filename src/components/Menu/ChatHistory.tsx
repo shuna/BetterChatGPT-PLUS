@@ -11,6 +11,7 @@ import TickIcon from '@icon/TickIcon';
 import useStore from '@store/store';
 import { formatNumber } from '@utils/chat';
 import { ChatInterface } from '@type/chat';
+import { retainContent, releaseContent } from '@utils/contentStore';
 
 const ChatHistoryClass = {
   normal:
@@ -62,11 +63,22 @@ const ChatHistory = React.memo(
     };
 
     const deleteChat = () => {
-      const updatedChats = JSON.parse(
-        JSON.stringify(useStore.getState().chats)
-      );
+      const chats = useStore.getState().chats;
+      const updatedChats = JSON.parse(JSON.stringify(chats));
       const indicesToDelete =
         selectedChats.length > 0 ? selectedChats : [chatIndex];
+
+      // Release contentStore refs for deleted chats
+      const contentStore = { ...useStore.getState().contentStore };
+      indicesToDelete.forEach((index) => {
+        const chat = chats?.[index];
+        if (chat?.branchTree) {
+          for (const node of Object.values(chat.branchTree.nodes)) {
+            releaseContent(contentStore, node.contentHash);
+          }
+        }
+      });
+
       indicesToDelete
         .sort((a, b) => b - a)
         .forEach((index) => {
@@ -75,8 +87,10 @@ const ChatHistory = React.memo(
       if (updatedChats.length > 0) {
         setCurrentChatIndex(0);
         setChats(updatedChats);
+        useStore.setState({ contentStore } as any);
       } else {
         initialiseNewChat();
+        // initialiseNewChat() already clears contentStore
       }
       setIsDelete(false);
       setSelectedChats([]);
@@ -152,10 +166,19 @@ const ChatHistory = React.memo(
         const clonedChat = JSON.parse(JSON.stringify(chats[index]));
         clonedChat.title = title;
 
+        // Retain contentStore refs for cloned branchTree nodes
+        const contentStore = { ...useStore.getState().contentStore };
+        if (clonedChat.branchTree) {
+          for (const node of Object.values(clonedChat.branchTree.nodes) as any[]) {
+            retainContent(contentStore, node.contentHash);
+          }
+        }
+
         const updatedChats: ChatInterface[] = JSON.parse(JSON.stringify(chats));
         updatedChats.unshift(clonedChat);
 
         setChats(updatedChats);
+        useStore.setState({ contentStore } as any);
         setCurrentChatIndex(useStore.getState().currentChatIndex + 1);
       }
     };

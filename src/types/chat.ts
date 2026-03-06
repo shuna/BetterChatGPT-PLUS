@@ -52,6 +52,16 @@ export interface BranchNode {
   id: string;
   parentId: string | null;
   role: Role;
+  contentHash: string;
+  createdAt: number;
+  label?: string;
+}
+
+/** @deprecated Pre-v12 format with inline content */
+export interface BranchNodeLegacy {
+  id: string;
+  parentId: string | null;
+  role: Role;
   content: ContentInterface[];
   createdAt: number;
   label?: string;
@@ -78,6 +88,11 @@ export interface BranchClipboard {
   nodeIds: string[];
   sourceChat: string;
   nodes: Record<string, BranchNode>;
+}
+
+export interface LocalStorageInterfaceV11ToV12
+  extends LocalStorageInterfaceV10ToV11 {
+  contentStore: Record<string, { content: ContentInterface[]; refCount: number }>;
 }
 
 export interface LocalStorageInterfaceV10ToV11

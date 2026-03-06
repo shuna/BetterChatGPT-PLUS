@@ -4,6 +4,7 @@ import useStore from '@store/store';
 import { BranchTree } from '@type/chat';
 import { wordDiff, DiffSegment } from '@utils/diffUtils';
 import PopupModal from '@components/PopupModal';
+import { resolveContent } from '@utils/contentStore';
 
 interface BranchDiffModalProps {
   chatIndex: number;
@@ -22,6 +23,7 @@ const BranchDiffModal = ({
   const tree = useStore(
     (state) => state.chats?.[chatIndex]?.branchTree
   ) as BranchTree;
+  const contentStore = useStore((state) => state.contentStore);
 
   const diffRows = useMemo(() => {
     const maxLen = Math.max(pathA.length, pathB.length);
@@ -36,18 +38,17 @@ const BranchDiffModal = ({
       const nodeA = pathA[i] ? tree.nodes[pathA[i]] : null;
       const nodeB = pathB[i] ? tree.nodes[pathB[i]] : null;
 
-      const textA = nodeA
-        ? nodeA.content
+      const contentA = nodeA ? resolveContent(contentStore, nodeA.contentHash) : [];
+      const contentB = nodeB ? resolveContent(contentStore, nodeB.contentHash) : [];
+
+      const textA = contentA
             .filter((c) => c.type === 'text')
             .map((c) => (c as any).text || '')
-            .join(' ')
-        : '';
-      const textB = nodeB
-        ? nodeB.content
+            .join(' ');
+      const textB = contentB
             .filter((c) => c.type === 'text')
             .map((c) => (c as any).text || '')
-            .join(' ')
-        : '';
+            .join(' ');
 
       const role = nodeA?.role || nodeB?.role || 'unknown';
       const segments = wordDiff(textA, textB);
@@ -55,7 +56,7 @@ const BranchDiffModal = ({
       rows.push({ role, segments, textA, textB });
     }
     return rows;
-  }, [pathA, pathB, tree]);
+  }, [pathA, pathB, tree, contentStore]);
 
   const hasChanges = diffRows.some((r) =>
     r.segments.some((s) => s.type !== 'equal')

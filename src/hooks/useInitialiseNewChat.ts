@@ -10,6 +10,8 @@ const useInitialiseNewChat = () => {
   const initialiseNewChat = () => {
     setChats([generateDefaultChat()]);
     setCurrentChatIndex(0);
+    // Clear orphaned content when all chats are replaced
+    useStore.setState({ contentStore: {} } as any);
   };
 
   return initialiseNewChat;

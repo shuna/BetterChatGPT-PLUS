@@ -13,6 +13,8 @@ import {
   validateExportV1,
   validateExportV2,
 } from '@utils/import';
+import { ContentStoreData, addContent, retainContent } from '@utils/contentStore';
+import { flatMessagesToBranchTree } from '@utils/branchUtils';
 
 import { modelOptions } from '@constants/modelLoader';
 
@@ -70,15 +72,29 @@ const ImportChat = () => {
     const file = inputRef.current.files?.[0];
     var shouldAllowPartialImport = false;
     if (file) {
-      const reader = new FileReader();
+      const readFileData = async (): Promise<string> => {
+        if (file.name.endsWith('.gz') && typeof DecompressionStream !== 'undefined') {
+          const ds = new DecompressionStream('gzip');
+          const decompressedStream = file.stream().pipeThrough(ds);
+          return await new Response(decompressedStream).text();
+        }
+        return new Promise((resolve) => {
+          const r = new FileReader();
+          r.onload = (e) => resolve(e.target?.result as string);
+          r.readAsText(file);
+        });
+      };
 
-      reader.onload = async (event) => {
-        const data = event.target?.result as string;
+      const processData = async () => {
+        const data = await readFileData();
         const originalChats = JSON.parse(
           JSON.stringify(useStore.getState().chats)
         );
         const originalFolders = JSON.parse(
           JSON.stringify(useStore.getState().folders)
+        );
+        const originalContentStore = JSON.parse(
+          JSON.stringify(useStore.getState().contentStore ?? {})
         );
         var originalParsedData: any;
         const importData = async (
@@ -221,6 +237,55 @@ const ImportChat = () => {
                 }
               } else {
                 switch ((parsedData as ExportBase).version) {
+                  case 3: {
+                    // V3 Compact: chats already use contentHash, merge contentStore
+                    if (parsedData.chats && parsedData.contentStore && parsedData.folders) {
+                      const offset = Object.keys(parsedData.folders).length;
+                      const updatedFolders = useStore.getState().folders;
+                      Object.values(updatedFolders).forEach(
+                        (f) => (f.order += offset)
+                      );
+                      setFolders({ ...parsedData.folders, ...updatedFolders });
+
+                      // Merge imported contentStore into existing
+                      const existingContentStore = { ...useStore.getState().contentStore };
+                      const importedContentStore = parsedData.contentStore as ContentStoreData;
+                      for (const [hash, entry] of Object.entries(importedContentStore)) {
+                        if (existingContentStore[hash]) {
+                          existingContentStore[hash].refCount += entry.refCount;
+                        } else {
+                          existingContentStore[hash] = { ...entry };
+                        }
+                      }
+                      useStore.setState({ contentStore: existingContentStore } as any);
+
+                      const prevChats = useStore.getState().chats;
+                      if (prevChats) {
+                        const updatedChats: ChatInterface[] = JSON.parse(
+                          JSON.stringify(prevChats)
+                        );
+                        setChats(parsedData.chats.concat(updatedChats));
+                      } else {
+                        setChats(parsedData.chats);
+                      }
+
+                      if (parsedData.chats.length > 0) {
+                        return {
+                          success: true,
+                          message: t('notifications.successfulImport', { ns: 'import' }),
+                        };
+                      } else {
+                        return {
+                          success: false,
+                          message: t('notifications.quotaExceeded', { ns: 'import' }),
+                        };
+                      }
+                    }
+                    return {
+                      success: false,
+                      message: t('notifications.invalidFormatForVersion', { ns: 'import' }),
+                    };
+                  }
                   case 2:
                     if (validateExportV2(parsedData)) {
                       const offset = Object.keys(parsedData.folders).length;
@@ -229,6 +294,25 @@ const ImportChat = () => {
                         (f) => (f.order += offset)
                       );
                       setFolders({ ...parsedData.folders, ...updatedFolders });
+
+                      // Migrate V2 chats: convert inline content to contentHash
+                      const csV2 = { ...useStore.getState().contentStore };
+                      if (parsedData.chats) {
+                        for (const chat of parsedData.chats) {
+                          if (chat.branchTree) {
+                            for (const node of Object.values(chat.branchTree.nodes) as any[]) {
+                              if (node.content && !node.contentHash) {
+                                node.contentHash = addContent(csV2, node.content);
+                                delete node.content;
+                              }
+                            }
+                          } else {
+                            // Create branchTree from messages
+                            chat.branchTree = flatMessagesToBranchTree(chat.messages, csV2);
+                          }
+                        }
+                      }
+                      useStore.setState({ contentStore: csV2 } as any);
 
                       const prevChatsV2 = useStore.getState().chats;
                       if (parsedData.chats) {
@@ -343,6 +427,7 @@ const ImportChat = () => {
               if ((error as DOMException).name === 'QuotaExceededError') {
                 setChats(originalChats);
                 setFolders(originalFolders);
+                useStore.setState({ contentStore: originalContentStore } as any);
                 if (type === 'ExportV1') {
                   if (chatsToImport.chats.length > 0) {
                     if (shouldReduce) {
@@ -434,6 +519,8 @@ const ImportChat = () => {
             type = 'OpenAIContent';
           } else if (isLegacyImport(parsedData)) {
             type = 'LegacyImport';
+          } else if ((parsedData as ExportBase).version === 3) {
+            type = 'ExportV3';
           } else if ((parsedData as ExportBase).version === 2) {
             type = 'ExportV2';
           } else if ((parsedData as ExportBase).version === 1) {
@@ -446,18 +533,20 @@ const ImportChat = () => {
           } else {
             setChats(originalChats);
             setFolders(originalFolders);
+            useStore.setState({ contentStore: originalContentStore } as any);
             toast.error(result.message, { autoClose: 15000 });
             setAlert({ message: result.message, success: false });
           }
         } catch (error: unknown) {
           setChats(originalChats);
           setFolders(originalFolders);
+          useStore.setState({ contentStore: originalContentStore } as any);
           toast.error((error as Error).message, { autoClose: 15000 });
           setAlert({ message: (error as Error).message, success: false });
         }
       };
 
-      reader.readAsText(file);
+      processData();
     }
   };
 
@@ -469,6 +558,7 @@ const ImportChat = () => {
       <input
         className='w-full text-sm file:p-2 text-gray-800 file:text-gray-700 dark:text-gray-300 dark:file:text-gray-200 rounded-md cursor-pointer focus:outline-none bg-gray-50 file:bg-gray-100 dark:bg-gray-800 dark:file:bg-gray-700 file:border-0 border border-gray-300 dark:border-gray-600 placeholder-gray-900 dark:placeholder-gray-300 file:cursor-pointer'
         type='file'
+        accept='.json,.json.gz,.gz'
         ref={inputRef}
       />
       <button

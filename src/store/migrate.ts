@@ -17,7 +17,10 @@ import {
   LocalStorageInterfaceV8_2ToV9,
   LocalStorageInterfaceV9ToV10,
   LocalStorageInterfaceV10ToV11,
+  LocalStorageInterfaceV11ToV12,
+  ContentInterface,
 } from '@type/chat';
+import { ContentStoreData, addContent } from '@utils/contentStore';
 import { DEFAULT_PROVIDERS } from './provider-slice';
 import {
   _defaultChatConfig,
@@ -164,4 +167,29 @@ export const migrateV9 = (persistedState: LocalStorageInterfaceV9ToV10) => {
 export const migrateV10 = (_persistedState: LocalStorageInterfaceV10ToV11) => {
   // branchTree is lazily initialized inside ChatInterface when first used.
   // No migration work needed at startup.
+};
+
+export const migrateV11 = (persistedState: LocalStorageInterfaceV11ToV12) => {
+  // Migrate from inline content to contentHash references.
+  // Build a ContentStore and replace BranchNode.content with BranchNode.contentHash.
+  const contentStore: ContentStoreData = {};
+
+  if (persistedState.chats) {
+    for (const chat of persistedState.chats as any[]) {
+      if (chat.branchTree && chat.branchTree.nodes) {
+        const nodes = chat.branchTree.nodes as Record<string, any>;
+        for (const nodeId of Object.keys(nodes)) {
+          const node = nodes[nodeId];
+          // Only migrate nodes that still have inline content (no contentHash)
+          if (node.content && !node.contentHash) {
+            const content: ContentInterface[] = node.content;
+            node.contentHash = addContent(contentStore, content);
+            delete node.content;
+          }
+        }
+      }
+    }
+  }
+
+  persistedState.contentStore = contentStore;
 };

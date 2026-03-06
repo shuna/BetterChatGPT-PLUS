@@ -3,20 +3,31 @@ import {
   BranchNode,
   BranchTree,
   ChatInterface,
+  ContentInterface,
   MessageInterface,
 } from '@type/chat';
+import {
+  ContentStoreData,
+  addContent,
+  resolveContent,
+  releaseContent,
+} from './contentStore';
 
-export function materializeActivePath(tree: BranchTree): MessageInterface[] {
+export function materializeActivePath(
+  tree: BranchTree,
+  contentStore: ContentStoreData
+): MessageInterface[] {
   return tree.activePath.map((id) => {
     const node = tree.nodes[id];
-    return { role: node.role, content: node.content };
+    return { role: node.role, content: resolveContent(contentStore, node.contentHash) };
   });
 }
 
 export function upsertActivePathMessage(
   chat: ChatInterface,
   index: number,
-  message: MessageInterface
+  message: MessageInterface,
+  contentStore: ContentStoreData
 ) {
   if (!chat.branchTree || index < 0) return;
 
@@ -24,10 +35,13 @@ export function upsertActivePathMessage(
   const existingId = tree.activePath[index];
 
   if (existingId) {
+    const oldHash = tree.nodes[existingId].contentHash;
+    const newHash = addContent(contentStore, message.content);
+    releaseContent(contentStore, oldHash);
     tree.nodes[existingId] = {
       ...tree.nodes[existingId],
       role: message.role,
-      content: message.content,
+      contentHash: newHash,
     };
     return;
   }
@@ -37,12 +51,13 @@ export function upsertActivePathMessage(
   const parentId =
     index === 0 ? null : tree.activePath[tree.activePath.length - 1] ?? null;
   const newId = uuidv4();
+  const contentHash = addContent(contentStore, message.content);
 
   tree.nodes[newId] = {
     id: newId,
     parentId,
     role: message.role,
-    content: message.content,
+    contentHash,
     createdAt: Date.now(),
   };
   tree.activePath.push(newId);
@@ -61,7 +76,8 @@ export function truncateActivePathAfterIndex(
 
 export function deleteActivePathMessage(
   chat: ChatInterface,
-  index: number
+  index: number,
+  contentStore: ContentStoreData
 ) {
   if (!chat.branchTree || index < 0) return;
 
@@ -76,12 +92,14 @@ export function deleteActivePathMessage(
     }
   });
 
+  releaseContent(contentStore, tree.nodes[nodeId].contentHash);
   delete tree.nodes[nodeId];
   tree.activePath.splice(index, 1);
 }
 
 export function flatMessagesToBranchTree(
-  messages: MessageInterface[]
+  messages: MessageInterface[],
+  contentStore: ContentStoreData
 ): BranchTree {
   const nodes: Record<string, BranchNode> = {};
   const ids: string[] = [];
@@ -89,11 +107,12 @@ export function flatMessagesToBranchTree(
   for (let i = 0; i < messages.length; i++) {
     const id = uuidv4();
     ids.push(id);
+    const contentHash = addContent(contentStore, messages[i].content);
     nodes[id] = {
       id,
       parentId: i === 0 ? null : ids[i - 1],
       role: messages[i].role,
-      content: messages[i].content,
+      contentHash,
       createdAt: Date.now() - (messages.length - i) * 1000,
     };
   }

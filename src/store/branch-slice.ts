@@ -10,13 +10,20 @@ import {
   flatMessagesToBranchTree,
   materializeActivePath,
   getChildrenOf,
-  getSiblingsOf,
   buildPathToLeaf,
   collectDescendants,
 } from '@utils/branchUtils';
+import {
+  ContentStoreData,
+  addContent,
+  retainContent,
+  releaseContent,
+  resolveContent,
+} from '@utils/contentStore';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface BranchSlice {
+  contentStore: ContentStoreData;
   branchClipboard: BranchClipboard | null;
   branchEditorFocusNodeId: string | null;
   setBranchEditorFocusNodeId: (nodeId: string | null) => void;
@@ -78,6 +85,7 @@ export interface BranchSlice {
 }
 
 export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
+  contentStore: {},
   branchClipboard: null,
   branchEditorFocusNodeId: null,
   setBranchEditorFocusNodeId: (nodeId) => {
@@ -125,14 +133,18 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   ensureBranchTree: (chatIndex) => {
     const chats = get().chats;
     if (!chats || chats[chatIndex]?.branchTree) return;
+    const contentStore = { ...get().contentStore };
     const updated = JSON.parse(JSON.stringify(chats)) as ChatInterface[];
     updated[chatIndex].branchTree = flatMessagesToBranchTree(
-      updated[chatIndex].messages
+      updated[chatIndex].messages,
+      contentStore
     );
     get().setChats(updated);
+    set({ contentStore } as any);
   },
 
   createBranch: (chatIndex, fromNodeId, newContent) => {
+    const contentStore = { ...get().contentStore };
     const chats = JSON.parse(
       JSON.stringify(get().chats!)
     ) as ChatInterface[];
@@ -140,44 +152,55 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     const fromNode = tree.nodes[fromNodeId];
 
     const newId = uuidv4();
+    let contentHash: string;
+    if (newContent) {
+      contentHash = addContent(contentStore, newContent);
+    } else {
+      contentHash = fromNode.contentHash;
+      retainContent(contentStore, contentHash);
+    }
+
     tree.nodes[newId] = {
       id: newId,
       parentId: fromNode.parentId,
       role: fromNode.role,
-      content: newContent ?? fromNode.content,
+      contentHash,
       createdAt: Date.now(),
     };
 
-    // Rebuild activePath: path up to parent of fromNode, then newId
     const fromIdx = tree.activePath.indexOf(fromNodeId);
     tree.activePath = [...tree.activePath.slice(0, fromIdx), newId];
-    chats[chatIndex].messages = materializeActivePath(tree);
+    chats[chatIndex].messages = materializeActivePath(tree, contentStore);
     get().setChats(chats);
+    set({ contentStore } as any);
     return newId;
   },
 
   switchBranchAtNode: (chatIndex, nodeId) => {
+    const contentStore = get().contentStore;
     const chats = JSON.parse(
       JSON.stringify(get().chats!)
     ) as ChatInterface[];
     const tree = chats[chatIndex].branchTree!;
     const newPath = buildPathToLeaf(tree, nodeId);
     tree.activePath = newPath;
-    chats[chatIndex].messages = materializeActivePath(tree);
+    chats[chatIndex].messages = materializeActivePath(tree, contentStore);
     get().setChats(chats);
   },
 
   switchActivePath: (chatIndex, newPath) => {
+    const contentStore = get().contentStore;
     const chats = JSON.parse(
       JSON.stringify(get().chats!)
     ) as ChatInterface[];
     const tree = chats[chatIndex].branchTree!;
     tree.activePath = newPath;
-    chats[chatIndex].messages = materializeActivePath(tree);
+    chats[chatIndex].messages = materializeActivePath(tree, contentStore);
     get().setChats(chats);
   },
 
   deleteBranch: (chatIndex, nodeId) => {
+    const contentStore = { ...get().contentStore };
     const chats = JSON.parse(
       JSON.stringify(get().chats!)
     ) as ChatInterface[];
@@ -185,10 +208,12 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     const toDelete = collectDescendants(tree, nodeId);
     const parentId = tree.nodes[nodeId]?.parentId;
 
-    toDelete.forEach((id) => delete tree.nodes[id]);
+    toDelete.forEach((id) => {
+      releaseContent(contentStore, tree.nodes[id].contentHash);
+      delete tree.nodes[id];
+    });
 
     if (tree.activePath.some((id) => toDelete.has(id))) {
-      // Switch to a sibling or rewind to parent
       if (parentId) {
         const siblings = getChildrenOf(tree, parentId);
         if (siblings.length > 0) {
@@ -200,9 +225,10 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
       } else {
         tree.activePath = [];
       }
-      chats[chatIndex].messages = materializeActivePath(tree);
+      chats[chatIndex].messages = materializeActivePath(tree, contentStore);
     }
     get().setChats(chats);
+    set({ contentStore } as any);
   },
 
   renameBranchNode: (chatIndex, nodeId, label) => {
@@ -214,6 +240,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   },
 
   appendNodeToActivePath: (chatIndex, role, content) => {
+    const contentStore = { ...get().contentStore };
     const chats = JSON.parse(
       JSON.stringify(get().chats!)
     ) as ChatInterface[];
@@ -221,33 +248,39 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     const parentId =
       tree.activePath[tree.activePath.length - 1] ?? null;
     const newId = uuidv4();
+    const contentHash = addContent(contentStore, content);
     tree.nodes[newId] = {
       id: newId,
       parentId,
       role,
-      content,
+      contentHash,
       createdAt: Date.now(),
     };
     tree.activePath.push(newId);
-    chats[chatIndex].messages = materializeActivePath(tree);
+    chats[chatIndex].messages = materializeActivePath(tree, contentStore);
     get().setChats(chats);
+    set({ contentStore } as any);
     return newId;
   },
 
   updateLastNodeContent: (chatIndex, content) => {
+    const contentStore = { ...get().contentStore };
     const chats = JSON.parse(
       JSON.stringify(get().chats!)
     ) as ChatInterface[];
     const tree = chats[chatIndex].branchTree!;
     const lastId = tree.activePath[tree.activePath.length - 1];
     if (lastId) {
-      tree.nodes[lastId].content = content;
-      chats[chatIndex].messages = materializeActivePath(tree);
+      releaseContent(contentStore, tree.nodes[lastId].contentHash);
+      tree.nodes[lastId].contentHash = addContent(contentStore, content);
+      chats[chatIndex].messages = materializeActivePath(tree, contentStore);
     }
     get().setChats(chats);
+    set({ contentStore } as any);
   },
 
   truncateActivePathAt: (chatIndex, nodeId) => {
+    const contentStore = get().contentStore;
     const chats = JSON.parse(
       JSON.stringify(get().chats!)
     ) as ChatInterface[];
@@ -255,7 +288,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     const idx = tree.activePath.indexOf(nodeId);
     if (idx >= 0) {
       tree.activePath = tree.activePath.slice(0, idx + 1);
-      chats[chatIndex].messages = materializeActivePath(tree);
+      chats[chatIndex].messages = materializeActivePath(tree, contentStore);
     }
     get().setChats(chats);
   },
@@ -288,6 +321,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     const clipboard = get().branchClipboard;
     if (!clipboard) return;
 
+    const contentStore = { ...get().contentStore };
     const chats = JSON.parse(
       JSON.stringify(get().chats!)
     ) as ChatInterface[];
@@ -301,8 +335,10 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     let prevId = afterNodeId;
     for (const origId of clipboard.nodeIds) {
       const newId = idMap[origId];
+      const srcNode = clipboard.nodes[origId];
+      retainContent(contentStore, srcNode.contentHash);
       tree.nodes[newId] = {
-        ...clipboard.nodes[origId],
+        ...srcNode,
         id: newId,
         parentId: prevId,
         createdAt: Date.now(),
@@ -315,8 +351,9 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
       ...tree.activePath.slice(0, insertIdx + 1),
       ...clipboard.nodeIds.map((id) => idMap[id]),
     ];
-    chats[targetChatIndex].messages = materializeActivePath(tree);
+    chats[targetChatIndex].messages = materializeActivePath(tree, contentStore);
     get().setChats(chats);
+    set({ contentStore } as any);
   },
 
   setBranchClipboard: (clipboard) => {

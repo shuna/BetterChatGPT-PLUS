@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 
 import { ChatInterface } from '@type/chat';
+import { retainContent } from '@utils/contentStore';
 
 import TickIcon from '@icon/TickIcon';
 
@@ -27,13 +28,23 @@ const CloneChat = React.memo(() => {
         title = `Copy ${i} of ${chats[index].title}`;
       }
 
-      const clonedChat = JSON.parse(JSON.stringify(chats[index]));
+      // Copy-on-write: deep-clone the structure but share contentHash refs
+      const clonedChat: ChatInterface = JSON.parse(JSON.stringify(chats[index]));
       clonedChat.title = title;
+
+      // Increment refCounts for all content hashes in the cloned tree
+      const contentStore = { ...useStore.getState().contentStore };
+      if (clonedChat.branchTree) {
+        for (const node of Object.values(clonedChat.branchTree.nodes)) {
+          retainContent(contentStore, node.contentHash);
+        }
+      }
 
       const updatedChats: ChatInterface[] = JSON.parse(JSON.stringify(chats));
       updatedChats.unshift(clonedChat);
 
       setChats(updatedChats);
+      useStore.setState({ contentStore } as any);
       setCurrentChatIndex(useStore.getState().currentChatIndex + 1);
       setCloned(true);
 

@@ -10,6 +10,9 @@ import { ToastSlice, createToastSlice } from './toast-slice';
 import { CustomModelsSlice, createCustomModelsSlice } from './custom-models-slice';
 import { ProviderSlice, createProviderSlice } from './provider-slice';
 import { BranchSlice, createBranchSlice } from './branch-slice';
+import { ChatInterface } from '@type/chat';
+import { materializeActivePath } from '@utils/branchUtils';
+import { ContentStoreData } from '@utils/contentStore';
 import {
   LocalStorageInterfaceV9ToV10,
   LocalStorageInterfaceV0ToV1,
@@ -24,9 +27,11 @@ import {
   LocalStorageInterfaceV8oV8_1,
   LocalStorageInterfaceV8_2ToV9,
   LocalStorageInterfaceV10ToV11,
+  LocalStorageInterfaceV11ToV12,
 } from '@type/chat';
 import {
   migrateV10,
+  migrateV11,
   migrateV9,
   migrateV0,
   migrateV1,
@@ -57,7 +62,9 @@ export type StoreSlice<T> = (
 ) => T;
 
 export const createPartializedState = (state: StoreState) => ({
-  chats: state.chats,
+  chats: state.chats?.map(({ messages, ...rest }) =>
+    rest.branchTree ? rest : { ...rest, messages }
+  ),
   currentChatIndex: state.currentChatIndex,
   apiKey: state.apiKey,
   apiVersion: state.apiVersion,
@@ -86,6 +93,7 @@ export const createPartializedState = (state: StoreState) => ({
   providers: state.providers,
   favoriteModels: state.favoriteModels,
   branchClipboard: state.branchClipboard,
+  contentStore: state.contentStore,
 });
 
 const useStore = create<StoreState>()(
@@ -105,7 +113,17 @@ const useStore = create<StoreState>()(
       name: 'free-chat-gpt',
       storage: createJSONStorage(() => compressedStorage),
       partialize: (state) => createPartializedState(state),
-      version: 11,
+      version: 12,
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        const contentStore: ContentStoreData = state.contentStore ?? {};
+        state.chats?.forEach((chat: ChatInterface) => {
+          if (!chat.messages) chat.messages = [];
+          if (chat.branchTree && chat.branchTree.activePath.length > 0) {
+            chat.messages = materializeActivePath(chat.branchTree, contentStore);
+          }
+        });
+      },
       migrate: (persistedState, version) => {
         switch (version) {
           case 0:
@@ -134,6 +152,8 @@ const useStore = create<StoreState>()(
             migrateV9(persistedState as LocalStorageInterfaceV9ToV10);
           case 10:
             migrateV10(persistedState as LocalStorageInterfaceV10ToV11);
+          case 11:
+            migrateV11(persistedState as LocalStorageInterfaceV11ToV12);
             break;
         }
         return persistedState as StoreState;

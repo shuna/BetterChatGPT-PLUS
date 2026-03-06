@@ -18,6 +18,7 @@ import {
 } from '@constants/chat';
 import { ExportV1, ExportV2, OpenAIChat, OpenAIPlaygroundJSON } from '@type/export';
 import { BranchNode, BranchTree } from '@type/chat';
+import { ContentStoreData, addContent, resolveContent } from '@utils/contentStore';
 import { modelOptions } from '@constants/modelLoader';
 import i18next from 'i18next';
 
@@ -385,7 +386,8 @@ export const convertOpenAIToBetterChatGPTFormat = (
 
 // Convert OpenAI mapping tree to BranchTree, preserving all branches
 export const convertOpenAIToBranchTree = (
-  openAIChat: OpenAIChat
+  openAIChat: OpenAIChat,
+  contentStore: ContentStoreData
 ): { branchTree: BranchTree; messages: MessageInterface[] } | null => {
   const mapping = openAIChat.mapping;
   if (!mapping) return null;
@@ -414,11 +416,12 @@ export const convertOpenAIToBranchTree = (
       }
     }
 
+    const contentHash = addContent(contentStore, content);
     nodes[newId] = {
       id: newId,
       parentId: null, // will be set in second pass
       role,
-      content,
+      contentHash,
       createdAt: Date.now(),
     };
   }
@@ -461,8 +464,14 @@ export const convertOpenAIToBranchTree = (
   // Materialize messages from active path
   const messages: MessageInterface[] = activePath
     .map((id) => nodes[id])
-    .filter((n) => n.content.some((c) => (c as any).text?.length > 0))
-    .map((n) => ({ role: n.role, content: n.content }));
+    .filter((n) => {
+      const c = resolveContent(contentStore, n.contentHash);
+      return c.some((ci) => (ci as any).text?.length > 0);
+    })
+    .map((n) => ({
+      role: n.role,
+      content: resolveContent(contentStore, n.contentHash),
+    }));
 
   return { branchTree, messages };
 };
