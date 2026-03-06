@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { shallow } from 'zustand/shallow';
 import useStore from '@store/store';
 import ConfigMenu from '@components/ConfigMenu';
 import { ChatInterface, ConfigInterface, ImageDetail } from '@type/chat';
 import { _defaultChatConfig } from '@constants/chat';
+import { ModelOptions } from '@utils/modelReader';
 
 const ChatTitle = React.memo(() => {
   const { t } = useTranslation('model');
@@ -24,6 +25,8 @@ const ChatTitle = React.memo(() => {
   const setChats = useStore((state) => state.setChats);
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [isModelDropdownOpen, setIsModelDropdownOpen] = useState<boolean>(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const setConfig = (config: ConfigInterface) => {
     const updatedChats: ChatInterface[] = JSON.parse(
@@ -41,6 +44,15 @@ const ChatTitle = React.memo(() => {
     setChats(updatedChats);
   };
 
+  const handleModelChange = (modelId: string) => {
+    const updatedChats: ChatInterface[] = JSON.parse(
+      JSON.stringify(useStore.getState().chats)
+    );
+    updatedChats[currentChatIndex].config.model = modelId as ModelOptions;
+    setChats(updatedChats);
+    setIsModelDropdownOpen(false);
+  };
+
   const getModelDisplayName = (modelId: string) => {
     const fav = favoriteModels.find(f => f.modelId === modelId);
     if (fav) {
@@ -48,6 +60,19 @@ const ChatTitle = React.memo(() => {
     }
     return t('provider.noModelSelected', 'モデル未選択') as string;
   };
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsModelDropdownOpen(false);
+      }
+    };
+    if (isModelDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isModelDropdownOpen]);
 
   // for migrating from old ChatInterface to new ChatInterface (with config)
   useEffect(() => {
@@ -62,30 +87,82 @@ const ChatTitle = React.memo(() => {
   return chat ? (
     <>
       <div
-        className='sticky top-0 z-10 flex gap-x-4 gap-y-1 flex-wrap w-full items-center justify-center border-b border-black/10 bg-gray-50 p-3 dark:border-gray-900/50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 cursor-pointer'
-        onClick={() => {
-          setIsModalOpen(true);
-        }}
+        className='sticky top-0 z-10 flex gap-x-4 gap-y-1 flex-wrap w-full items-center justify-center border-b border-black/10 bg-gray-50 p-3 dark:border-gray-900/50 dark:bg-gray-700 text-gray-600 dark:text-gray-300'
       >
-        <div className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50'>
-          {t('model')}: {getModelDisplayName(chat.config.model)}
+        {/* Model name: dropdown for direct selection */}
+        <div className='relative' ref={dropdownRef}>
+          <div
+            className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer flex items-center gap-1'
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsModelDropdownOpen(!isModelDropdownOpen);
+            }}
+          >
+            {t('model')}: {getModelDisplayName(chat.config.model)}
+            <svg className='w-3 h-3 ml-1' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+              <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
+            </svg>
+          </div>
+          {isModelDropdownOpen && (
+            <div className='absolute top-full left-0 mt-1 min-w-[280px] max-h-[300px] overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg z-50'>
+              {favoriteModels.length === 0 ? (
+                <div className='px-3 py-2 text-sm text-gray-500'>
+                  {t('provider.noModelSelected', 'モデル未選択')}
+                </div>
+              ) : (
+                favoriteModels.map((fav) => (
+                  <div
+                    key={`${fav.providerId}-${fav.modelId}`}
+                    className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                      chat.config.model === fav.modelId
+                        ? 'bg-gray-100 dark:bg-gray-700 font-medium'
+                        : ''
+                    }`}
+                    onClick={() => handleModelChange(fav.modelId)}
+                  >
+                    {fav.modelId} ({providers[fav.providerId]?.name || fav.providerId})
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
-        <div className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50'>
+
+        {/* Other params: click opens config modal */}
+        <div
+          className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer'
+          onClick={() => setIsModalOpen(true)}
+        >
           {t('token.label')}: {chat.config.max_tokens}
         </div>
-        <div className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50'>
+        <div
+          className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer'
+          onClick={() => setIsModalOpen(true)}
+        >
           {t('temperature.label')}: {chat.config.temperature}
         </div>
-        <div className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50'>
+        <div
+          className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer'
+          onClick={() => setIsModalOpen(true)}
+        >
           {t('topP.label')}: {chat.config.top_p}
         </div>
-        <div className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50'>
+        <div
+          className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer'
+          onClick={() => setIsModalOpen(true)}
+        >
           {t('presencePenalty.label')}: {chat.config.presence_penalty}
         </div>
-        <div className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50'>
+        <div
+          className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer'
+          onClick={() => setIsModalOpen(true)}
+        >
           {t('frequencyPenalty.label')}: {chat.config.frequency_penalty}
         </div>
-        <div className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50'>
+        <div
+          className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer'
+          onClick={() => setIsModalOpen(true)}
+        >
           {t('imageDetail.label')}: {chat.imageDetail}
         </div>
       </div>
