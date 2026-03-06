@@ -37,6 +37,7 @@ import EditButton from './Button/EditButton';
 import DeleteButton from './Button/DeleteButton';
 import MarkdownModeButton from './Button/MarkdownModeButton';
 import ShowInEditorButton from './Button/ShowInEditorButton';
+import BranchSwitcher from '../BranchSwitcher';
 
 import CodeBlock from '../CodeBlock';
 import PopupModal from '@components/PopupModal';
@@ -61,6 +62,12 @@ const ContentView = memo(
 
     const currentChatIndex = useStore((state) => state.currentChatIndex);
     const setChats = useStore((state) => state.setChats);
+    const nodeId = useStore(
+      (state) =>
+        state.chats?.[state.currentChatIndex]?.branchTree?.activePath?.[
+          messageIndex
+        ]
+    );
     const lastMessageIndex = useStore((state) =>
       state.chats ? state.chats[state.currentChatIndex].messages.length - 1 : 0
     );
@@ -188,44 +195,54 @@ const ContentView = memo(
             </div>
           </PopupModal>
         )}
-        <div className='flex justify-end gap-2 w-full mt-2'>
-          {isDelete || (
-            <>
-              {!useStore.getState().generating &&
-                role === 'assistant' &&
-                messageIndex === lastMessageIndex && (
-                  <RefreshButton onClick={handleRefresh} />
+        <div className='mt-2 flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-2'>
+          <div className='min-w-0'>
+            {nodeId && (
+              <BranchSwitcher
+                chatIndex={currentChatIndex}
+                nodeId={nodeId}
+              />
+            )}
+          </div>
+          <div className='ml-auto flex flex-wrap items-center justify-end gap-2'>
+            {isDelete || (
+              <>
+                {!useStore.getState().generating &&
+                  role === 'assistant' &&
+                  messageIndex === lastMessageIndex && (
+                    <RefreshButton onClick={handleRefresh} />
+                  )}
+                {messageIndex !== 0 && <UpButton onClick={handleMoveUp} />}
+                {messageIndex !== lastMessageIndex && (
+                  <DownButton onClick={handleMoveDown} />
                 )}
-              {messageIndex !== 0 && <UpButton onClick={handleMoveUp} />}
-              {messageIndex !== lastMessageIndex && (
-                <DownButton onClick={handleMoveDown} />
-              )}
 
-              <MarkdownModeButton />
-              <CopyButton onClick={handleCopy} />
-              <EditButton setIsEdit={setIsEdit} />
-              <ShowInEditorButton messageIndex={messageIndex} />
-              <DeleteButton setIsDelete={setIsDelete} />
-            </>
-          )}
-          {isDelete && (
-            <>
-              <button
-                className='p-1 hover:text-white'
-                aria-label='cancel'
-                onClick={() => setIsDelete(false)}
-              >
-                <CrossIcon />
-              </button>
-              <button
-                className='p-1 hover:text-white'
-                aria-label='confirm'
-                onClick={handleDelete}
-              >
-                <TickIcon />
-              </button>
-            </>
-          )}
+                <MarkdownModeButton />
+                <CopyButton onClick={handleCopy} />
+                <EditButton setIsEdit={setIsEdit} />
+                <ShowInEditorButton messageIndex={messageIndex} />
+                <DeleteButton setIsDelete={setIsDelete} />
+              </>
+            )}
+            {isDelete && (
+              <>
+                <button
+                  className='p-1 hover:text-white'
+                  aria-label='cancel'
+                  onClick={() => setIsDelete(false)}
+                >
+                  <CrossIcon />
+                </button>
+                <button
+                  className='p-1 hover:text-white'
+                  aria-label='confirm'
+                  onClick={handleDelete}
+                >
+                  <TickIcon />
+                </button>
+              </>
+            )}
+          </div>
         </div>
       </>
     );

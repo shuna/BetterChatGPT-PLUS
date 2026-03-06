@@ -3,7 +3,6 @@ import useStore from '@store/store';
 
 import Avatar from './Avatar';
 import MessageContent from './MessageContent';
-import BranchSwitcher from './BranchSwitcher';
 
 import { ContentInterface, Role } from '@type/chat';
 import RoleSelector from './RoleSelector';
@@ -29,13 +28,6 @@ const Message = React.memo(
   }) => {
     const hideSideMenu = useStore((state) => state.hideSideMenu);
     const advancedMode = useStore((state) => state.advancedMode);
-    const currentChatIndex = useStore((state) => state.currentChatIndex);
-    const nodeId = useStore(
-      (state) =>
-        state.chats?.[state.currentChatIndex]?.branchTree?.activePath?.[
-          messageIndex
-        ]
-    );
 
     return (
       <div
@@ -64,12 +56,6 @@ const Message = React.memo(
               messageIndex={messageIndex}
               sticky={sticky}
             />
-            {!sticky && nodeId && (
-              <BranchSwitcher
-                chatIndex={currentChatIndex}
-                nodeId={nodeId}
-              />
-            )}
           </div>
         </div>
       </div>
