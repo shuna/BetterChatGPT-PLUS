@@ -128,42 +128,15 @@ const ChatTitle = React.memo(() => {
           )}
         </div>
 
-        {/* Other params: click opens config modal */}
+        {/* Model options button */}
         <div
-          className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer'
+          className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer flex items-center gap-1'
           onClick={() => setIsModalOpen(true)}
         >
-          {t('token.label')}: {chat.config.max_tokens}
-        </div>
-        <div
-          className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer'
-          onClick={() => setIsModalOpen(true)}
-        >
-          {t('temperature.label')}: {chat.config.temperature}
-        </div>
-        <div
-          className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer'
-          onClick={() => setIsModalOpen(true)}
-        >
-          {t('topP.label')}: {chat.config.top_p}
-        </div>
-        <div
-          className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer'
-          onClick={() => setIsModalOpen(true)}
-        >
-          {t('presencePenalty.label')}: {chat.config.presence_penalty}
-        </div>
-        <div
-          className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer'
-          onClick={() => setIsModalOpen(true)}
-        >
-          {t('frequencyPenalty.label')}: {chat.config.frequency_penalty}
-        </div>
-        <div
-          className='text-center p-1 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer'
-          onClick={() => setIsModalOpen(true)}
-        >
-          {t('imageDetail.label')}: {chat.imageDetail}
+          <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+            <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4' />
+          </svg>
+          {t('modelOptions', 'モデルオプション')}
         </div>
       </div>
       {isModalOpen && (
