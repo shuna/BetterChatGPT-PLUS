@@ -131,6 +131,7 @@ const ImportChat = () => {
                 isLegacyImport(chatsToImport)
               ) {
                 if (validateAndFixChats(chatsToImport)) {
+                  warnUnsupportedModels(originalParsedData, t);
                   // import new folders
                   const folderNameToIdMap: Record<string, string> = {};
                   const parsedFolders: string[] = [];
