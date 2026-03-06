@@ -23,6 +23,7 @@ export interface ConfigSlice {
   displayChatSize: boolean;
   defaultImageDetail: ImageDetail;
   autoScroll: boolean;
+  hideShareGPT: boolean;
   setOpenConfig: (openConfig: boolean) => void;
   setTheme: (theme: Theme) => void;
   setAutoTitle: (autoTitle: boolean) => void;
@@ -41,6 +42,7 @@ export interface ConfigSlice {
   setDisplayChatSize: (displayChatSize: boolean) => void;
   setDefaultImageDetail: (imageDetail: ImageDetail) => void;
   setAutoScroll: (autoScroll: boolean) => void;
+  setHideShareGPT: (hideShareGPT: boolean) => void;
 }
 
 export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
@@ -62,6 +64,7 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
   displayChatSize: _defaultDisplayChatSize,
   defaultImageDetail: _defaultImageDetail,
   autoScroll: true,
+  hideShareGPT: true,
   setOpenConfig: (openConfig: boolean) => {
     set((prev: ConfigSlice) => ({
       ...prev,
@@ -168,6 +171,12 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
     set((prev: ConfigSlice) => ({
       ...prev,
       autoScroll: autoScroll,
+    }));
+  },
+  setHideShareGPT: (hideShareGPT: boolean) => {
+    set((prev: ConfigSlice) => ({
+      ...prev,
+      hideShareGPT: hideShareGPT,
     }));
   },
 });

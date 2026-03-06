@@ -44,6 +44,7 @@ const ChatContent = () => {
   const generating = useStore.getState().generating;
   const hideSideMenu = useStore((state) => state.hideSideMenu);
   const autoScroll = useStore((state) => state.autoScroll);
+  const hideShareGPT = useStore((state) => state.hideShareGPT);
   const model = useStore((state) =>
     state.chats &&
     state.chats.length > 0 &&
@@ -173,7 +174,7 @@ const ChatContent = () => {
             {useStore.getState().generating || (
               <div className='md:w-[calc(100%-50px)] flex gap-4 flex-wrap justify-center'>
                 <DownloadChat saveRef={saveRef} />
-                <ShareGPT />
+                {!hideShareGPT && <ShareGPT />}
                 <CloneChat />
               </div>
             )}

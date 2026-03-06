@@ -76,6 +76,7 @@ export const createPartializedState = (state: StoreState) => ({
   menuWidth: state.menuWidth,
   defaultImageDetail: state.defaultImageDetail,
   autoScroll: state.autoScroll,
+  hideShareGPT: state.hideShareGPT,
   customModels: state.customModels,
   providers: state.providers,
   favoriteModels: state.favoriteModels,
