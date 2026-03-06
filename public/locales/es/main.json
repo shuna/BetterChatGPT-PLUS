@@ -44,5 +44,7 @@
   "cloned": "Cloned",
   "enterToSubmit": "Enter to submit",
   "submitPlaceholder": "Escribe un mensaje o haz clic en [/] para prompt...",
-  "showShareGPT": "Mostrar botón ShareGPT"
+  "showShareGPT": "Mostrar botón ShareGPT",
+  "tokenCostModelNotRegistered": "costo desconocido: modelo no registrado",
+  "tokenCostNoPricingData": "costo desconocido: sin datos de precios"
 }

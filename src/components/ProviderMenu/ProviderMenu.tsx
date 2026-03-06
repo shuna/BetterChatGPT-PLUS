@@ -264,6 +264,8 @@ const ProviderMenu = ({
                           toggleFavoriteModel({
                             modelId: model.id,
                             providerId: model.providerId,
+                            promptPrice: model.promptPrice,
+                            completionPrice: model.completionPrice,
                           })
                         }
                         className='rounded'

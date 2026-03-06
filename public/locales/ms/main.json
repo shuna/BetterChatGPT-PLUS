@@ -44,5 +44,7 @@
   "cloned": "Dicipta",
   "enterToSubmit": "Tekan Enter untuk hantar",
   "submitPlaceholder": "Taip mesej atau klik [/] untuk arahan...",
-  "showShareGPT": "Tunjukkan butang ShareGPT"
+  "showShareGPT": "Tunjukkan butang ShareGPT",
+  "tokenCostModelNotRegistered": "kos tidak diketahui: model tidak didaftarkan",
+  "tokenCostNoPricingData": "kos tidak diketahui: tiada data harga"
 }
