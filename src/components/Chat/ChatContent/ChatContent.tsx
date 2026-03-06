@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import ScrollToBottom from 'react-scroll-to-bottom';
 import useStore from '@store/store';
 import { useTranslation } from 'react-i18next';
@@ -18,6 +18,8 @@ import countTokens, { limitMessageTokens } from '@utils/messageUtils';
 import { defaultModel, reduceMessagesToTotalToken } from '@constants/chat';
 import { toast } from 'react-toastify';
 
+const EMPTY_MESSAGES: never[] = [];
+
 const ChatContent = () => {
   const { t } = useTranslation();
   const inputRole = useStore((state) => state.inputRole);
@@ -29,7 +31,7 @@ const ChatContent = () => {
     state.currentChatIndex >= 0 &&
     state.currentChatIndex < state.chats.length
       ? state.chats[state.currentChatIndex].messages
-      : []
+      : EMPTY_MESSAGES
   );
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const stickyIndex = useStore((state) =>
@@ -53,14 +55,18 @@ const ChatContent = () => {
       ? state.chats[state.currentChatIndex].config.model
       : defaultModel
   );
-  const messagesLimited = limitMessageTokens(messages, reduceMessagesToTotalToken, model);
+  const messagesLimited = useMemo(
+    () => limitMessageTokens(messages, reduceMessagesToTotalToken, model),
+    [messages, model]
+  );
 
   const handleReduceMessages = () => {
     const confirmMessage = t('reduceMessagesWarning');
     if (window.confirm(confirmMessage)) {
-      const updatedChats = JSON.parse(JSON.stringify(useStore.getState().chats));
+      const chats = useStore.getState().chats!;
       const removedMessagesCount = messages.length - messagesLimited.length;
-      updatedChats[currentChatIndex].messages = messagesLimited;
+      const updatedChats = chats.slice();
+      updatedChats[currentChatIndex] = { ...chats[currentChatIndex], messages: messagesLimited };
       setChats(updatedChats);
       toast.dismiss();
       toast.success(t('reduceMessagesSuccess', { count: removedMessagesCount }));

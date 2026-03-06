@@ -76,13 +76,16 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
       if (!chats) return;
       const chat = chats[chatIndex];
       if (!chat) return;
-      // Determine the node key: use nodeId from branchTree if available, else messageIndex string
       const nodeId = chat.branchTree?.activePath?.[messageIndex] ?? String(messageIndex);
-      const updatedChats: ChatInterface[] = JSON.parse(JSON.stringify(chats));
-      const collapsed = updatedChats[chatIndex].collapsedNodes ?? {};
-      collapsed[nodeId] = !collapsed[nodeId];
-      if (!collapsed[nodeId]) delete collapsed[nodeId];
-      updatedChats[chatIndex].collapsedNodes = collapsed;
+      const prev = chat.collapsedNodes ?? {};
+      const next = { ...prev };
+      if (next[nodeId]) {
+        delete next[nodeId];
+      } else {
+        next[nodeId] = true;
+      }
+      const updatedChats = chats.slice();
+      updatedChats[chatIndex] = { ...chat, collapsedNodes: next };
       set((prev: ChatSlice) => ({ ...prev, chats: updatedChats }));
     },
     setAllCollapsed: (chatIndex: number, collapsed: boolean) => {
@@ -90,9 +93,9 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
       if (!chats) return;
       const chat = chats[chatIndex];
       if (!chat) return;
-      const updatedChats: ChatInterface[] = JSON.parse(JSON.stringify(chats));
+      let newCollapsed: Record<string, boolean>;
       if (collapsed) {
-        const newCollapsed: Record<string, boolean> = {};
+        newCollapsed = {};
         if (chat.branchTree?.activePath) {
           chat.branchTree.activePath.forEach((nodeId) => {
             newCollapsed[nodeId] = true;
@@ -102,10 +105,11 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
             newCollapsed[String(idx)] = true;
           });
         }
-        updatedChats[chatIndex].collapsedNodes = newCollapsed;
       } else {
-        updatedChats[chatIndex].collapsedNodes = {};
+        newCollapsed = {};
       }
+      const updatedChats = chats.slice();
+      updatedChats[chatIndex] = { ...chat, collapsedNodes: newCollapsed };
       set((prev: ChatSlice) => ({ ...prev, chats: updatedChats }));
     },
   };

@@ -12,16 +12,19 @@ const BranchEditorView = () => {
   );
   const multiViewChatIndices = useStore((state) => state.multiViewChatIndices);
   const chats = useStore((state) => state.chats);
+  const activeView = useStore((state) => state.chatActiveView);
 
-  // Ensure branch tree for current chat
+  // Ensure branch tree for current chat — only when branch editor is visible
   useEffect(() => {
+    if (activeView !== 'branch-editor') return;
     if (currentChatIndex >= 0 && !branchTree) {
       ensureBranchTree(currentChatIndex);
     }
-  }, [currentChatIndex, branchTree, ensureBranchTree]);
+  }, [activeView, currentChatIndex, branchTree, ensureBranchTree]);
 
-  // Ensure branch trees for all multi-view chats
+  // Ensure branch trees for all multi-view chats — only when branch editor is visible
   useEffect(() => {
+    if (activeView !== 'branch-editor') return;
     if (multiViewChatIndices.length > 1) {
       multiViewChatIndices.forEach((idx) => {
         if (chats?.[idx] && !chats[idx].branchTree) {
@@ -29,7 +32,7 @@ const BranchEditorView = () => {
         }
       });
     }
-  }, [multiViewChatIndices, chats, ensureBranchTree]);
+  }, [activeView, multiViewChatIndices, chats, ensureBranchTree]);
 
   const chatIndices = multiViewChatIndices.length > 1
     ? multiViewChatIndices

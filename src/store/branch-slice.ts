@@ -2,6 +2,7 @@ import { StoreSlice } from './store';
 import {
   BranchClipboard,
   BranchNode,
+  BranchTree,
   ChatInterface,
   ContentInterface,
   Role,
@@ -21,6 +22,37 @@ import {
   resolveContent,
 } from '@utils/contentStore';
 import { v4 as uuidv4 } from 'uuid';
+
+/**
+ * Shallow-clone the chats array, replacing only chats[chatIndex]
+ * with a shallow copy (and its branchTree/nodes if present).
+ * All other chats keep their original references → structural sharing.
+ */
+const cloneChatAt = (
+  chats: ChatInterface[],
+  chatIndex: number
+): ChatInterface[] => {
+  const result = chats.slice(); // shallow copy of array
+  const chat = result[chatIndex];
+  result[chatIndex] = {
+    ...chat,
+    messages: chat.messages.slice(), // shallow copy messages array
+    branchTree: chat.branchTree
+      ? {
+          ...chat.branchTree,
+          nodes: { ...chat.branchTree.nodes },
+          activePath: chat.branchTree.activePath.slice(),
+        }
+      : undefined,
+    collapsedNodes: chat.collapsedNodes
+      ? { ...chat.collapsedNodes }
+      : undefined,
+  };
+  return result;
+};
+
+/** Shallow-clone a single BranchNode (since nodes are small value objects). */
+const cloneNode = (node: BranchNode): BranchNode => ({ ...node });
 
 export interface BranchSlice {
   contentStore: ContentStoreData;
@@ -134,7 +166,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     const chats = get().chats;
     if (!chats || chats[chatIndex]?.branchTree) return;
     const contentStore = { ...get().contentStore };
-    const updated = JSON.parse(JSON.stringify(chats)) as ChatInterface[];
+    const updated = cloneChatAt(chats, chatIndex);
     updated[chatIndex].branchTree = flatMessagesToBranchTree(
       updated[chatIndex].messages,
       contentStore
@@ -145,9 +177,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
 
   createBranch: (chatIndex, fromNodeId, newContent) => {
     const contentStore = { ...get().contentStore };
-    const chats = JSON.parse(
-      JSON.stringify(get().chats!)
-    ) as ChatInterface[];
+    const chats = cloneChatAt(get().chats!, chatIndex);
     const tree = chats[chatIndex].branchTree!;
     const fromNode = tree.nodes[fromNodeId];
 
@@ -178,9 +208,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
 
   switchBranchAtNode: (chatIndex, nodeId) => {
     const contentStore = get().contentStore;
-    const chats = JSON.parse(
-      JSON.stringify(get().chats!)
-    ) as ChatInterface[];
+    const chats = cloneChatAt(get().chats!, chatIndex);
     const tree = chats[chatIndex].branchTree!;
     const newPath = buildPathToLeaf(tree, nodeId);
     tree.activePath = newPath;
@@ -190,9 +218,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
 
   switchActivePath: (chatIndex, newPath) => {
     const contentStore = get().contentStore;
-    const chats = JSON.parse(
-      JSON.stringify(get().chats!)
-    ) as ChatInterface[];
+    const chats = cloneChatAt(get().chats!, chatIndex);
     const tree = chats[chatIndex].branchTree!;
     tree.activePath = newPath;
     chats[chatIndex].messages = materializeActivePath(tree, contentStore);
@@ -201,9 +227,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
 
   deleteBranch: (chatIndex, nodeId) => {
     const contentStore = { ...get().contentStore };
-    const chats = JSON.parse(
-      JSON.stringify(get().chats!)
-    ) as ChatInterface[];
+    const chats = cloneChatAt(get().chats!, chatIndex);
     const tree = chats[chatIndex].branchTree!;
     const toDelete = collectDescendants(tree, nodeId);
     const parentId = tree.nodes[nodeId]?.parentId;
@@ -232,18 +256,16 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   },
 
   renameBranchNode: (chatIndex, nodeId, label) => {
-    const chats = JSON.parse(
-      JSON.stringify(get().chats!)
-    ) as ChatInterface[];
-    chats[chatIndex].branchTree!.nodes[nodeId].label = label;
+    const chats = cloneChatAt(get().chats!, chatIndex);
+    const tree = chats[chatIndex].branchTree!;
+    tree.nodes[nodeId] = cloneNode(tree.nodes[nodeId]);
+    tree.nodes[nodeId].label = label;
     get().setChats(chats);
   },
 
   appendNodeToActivePath: (chatIndex, role, content) => {
     const contentStore = { ...get().contentStore };
-    const chats = JSON.parse(
-      JSON.stringify(get().chats!)
-    ) as ChatInterface[];
+    const chats = cloneChatAt(get().chats!, chatIndex);
     const tree = chats[chatIndex].branchTree!;
     const parentId =
       tree.activePath[tree.activePath.length - 1] ?? null;
@@ -265,13 +287,12 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
 
   updateLastNodeContent: (chatIndex, content) => {
     const contentStore = { ...get().contentStore };
-    const chats = JSON.parse(
-      JSON.stringify(get().chats!)
-    ) as ChatInterface[];
+    const chats = cloneChatAt(get().chats!, chatIndex);
     const tree = chats[chatIndex].branchTree!;
     const lastId = tree.activePath[tree.activePath.length - 1];
     if (lastId) {
       releaseContent(contentStore, tree.nodes[lastId].contentHash);
+      tree.nodes[lastId] = cloneNode(tree.nodes[lastId]);
       tree.nodes[lastId].contentHash = addContent(contentStore, content);
       chats[chatIndex].messages = materializeActivePath(tree, contentStore);
     }
@@ -281,9 +302,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
 
   truncateActivePathAt: (chatIndex, nodeId) => {
     const contentStore = get().contentStore;
-    const chats = JSON.parse(
-      JSON.stringify(get().chats!)
-    ) as ChatInterface[];
+    const chats = cloneChatAt(get().chats!, chatIndex);
     const tree = chats[chatIndex].branchTree!;
     const idx = tree.activePath.indexOf(nodeId);
     if (idx >= 0) {
@@ -322,9 +341,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     if (!clipboard) return;
 
     const contentStore = { ...get().contentStore };
-    const chats = JSON.parse(
-      JSON.stringify(get().chats!)
-    ) as ChatInterface[];
+    const chats = cloneChatAt(get().chats!, targetChatIndex);
     const tree = chats[targetChatIndex].branchTree!;
 
     const idMap: Record<string, string> = {};

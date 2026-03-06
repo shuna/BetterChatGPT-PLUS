@@ -61,39 +61,84 @@ export type StoreSlice<T> = (
   get: StoreApi<StoreState>['getState']
 ) => T;
 
-export const createPartializedState = (state: StoreState) => ({
-  chats: state.chats?.map(({ messages, ...rest }) =>
-    rest.branchTree ? rest : { ...rest, messages }
-  ),
-  apiKey: state.apiKey,
-  apiVersion: state.apiVersion,
-  apiEndpoint: state.apiEndpoint,
-  theme: state.theme,
-  autoTitle: state.autoTitle,
-  advancedMode: state.advancedMode,
-  prompts: state.prompts,
-  defaultChatConfig: state.defaultChatConfig,
-  defaultSystemMessage: state.defaultSystemMessage,
-  hideMenuOptions: state.hideMenuOptions,
-  firstVisit: state.firstVisit,
-  hideSideMenu: state.hideSideMenu,
-  folders: state.folders,
-  enterToSubmit: state.enterToSubmit,
-  inlineLatex: state.inlineLatex,
-  markdownMode: state.markdownMode,
-  totalTokenUsed: state.totalTokenUsed,
-  countTotalTokens: state.countTotalTokens,
-  displayChatSize: state.displayChatSize,
-  menuWidth: state.menuWidth,
-  defaultImageDetail: state.defaultImageDetail,
-  autoScroll: state.autoScroll,
-  hideShareGPT: state.hideShareGPT,
-  customModels: state.customModels,
-  providers: state.providers,
-  favoriteModels: state.favoriteModels,
-  branchClipboard: state.branchClipboard,
-  contentStore: state.contentStore,
-});
+/**
+ * Fields to persist. Extracted so the key list can be reused for
+ * shallow-equality checks without allocating a new object every time.
+ */
+const PERSIST_KEYS: (keyof StoreState)[] = [
+  'chats', 'apiKey', 'apiVersion', 'apiEndpoint', 'theme', 'autoTitle',
+  'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
+  'hideMenuOptions', 'firstVisit', 'hideSideMenu', 'folders', 'enterToSubmit',
+  'inlineLatex', 'markdownMode', 'totalTokenUsed', 'countTotalTokens',
+  'displayChatSize', 'menuWidth', 'defaultImageDetail', 'autoScroll',
+  'hideShareGPT', 'customModels', 'providers', 'favoriteModels',
+  'branchClipboard', 'contentStore',
+];
+
+let _prevInputRefs: Record<string, unknown> = {};
+let _prevResult: ReturnType<typeof _buildPartializedState> | null = null;
+
+function _buildPartializedState(state: StoreState) {
+  return {
+    chats: state.chats?.map(({ messages, ...rest }) =>
+      rest.branchTree ? rest : { ...rest, messages }
+    ),
+    apiKey: state.apiKey,
+    apiVersion: state.apiVersion,
+    apiEndpoint: state.apiEndpoint,
+    theme: state.theme,
+    autoTitle: state.autoTitle,
+    advancedMode: state.advancedMode,
+    prompts: state.prompts,
+    defaultChatConfig: state.defaultChatConfig,
+    defaultSystemMessage: state.defaultSystemMessage,
+    hideMenuOptions: state.hideMenuOptions,
+    firstVisit: state.firstVisit,
+    hideSideMenu: state.hideSideMenu,
+    folders: state.folders,
+    enterToSubmit: state.enterToSubmit,
+    inlineLatex: state.inlineLatex,
+    markdownMode: state.markdownMode,
+    totalTokenUsed: state.totalTokenUsed,
+    countTotalTokens: state.countTotalTokens,
+    displayChatSize: state.displayChatSize,
+    menuWidth: state.menuWidth,
+    defaultImageDetail: state.defaultImageDetail,
+    autoScroll: state.autoScroll,
+    hideShareGPT: state.hideShareGPT,
+    customModels: state.customModels,
+    providers: state.providers,
+    favoriteModels: state.favoriteModels,
+    branchClipboard: state.branchClipboard,
+    contentStore: state.contentStore,
+  };
+}
+
+/**
+ * Memoized partialize: if none of the persisted fields changed by reference,
+ * return the cached result so JSON.stringify produces the same string and
+ * CompressedStorage.setItem can skip the expensive compress+write.
+ */
+export const createPartializedState = (state: StoreState) => {
+  let changed = !_prevResult;
+  if (!changed) {
+    for (const key of PERSIST_KEYS) {
+      if ((state as any)[key] !== _prevInputRefs[key]) {
+        changed = true;
+        break;
+      }
+    }
+  }
+  if (changed) {
+    _prevResult = _buildPartializedState(state);
+    const refs: Record<string, unknown> = {};
+    for (const key of PERSIST_KEYS) {
+      refs[key] = (state as any)[key];
+    }
+    _prevInputRefs = refs;
+  }
+  return _prevResult!;
+};
 
 const useStore = create<StoreState>()(
   persist(
@@ -129,6 +174,9 @@ const useStore = create<StoreState>()(
             chat.messages = materializeActivePath(chat.branchTree, contentStore);
           }
         });
+        // Sync partialize cache with post-rehydrate references so the
+        // first user-triggered state update doesn't cause a redundant persist write.
+        createPartializedState(state as StoreState);
       },
       migrate: (persistedState, version) => {
         switch (version) {

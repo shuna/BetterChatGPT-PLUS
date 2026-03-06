@@ -62,7 +62,7 @@ const EditView = ({
   const [_content, _setContent] = useState<ContentInterface[]>(content);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [imageUrl, setImageUrl] = useState<string>('');
-  const textareaRef = React.createRef<HTMLTextAreaElement>();
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
 
   const { t } = useTranslation();
 
@@ -179,18 +179,16 @@ const EditView = ({
     ) {
       return;
     }
-    const originalChats: ChatInterface[] = JSON.parse(
-      JSON.stringify(useStore.getState().chats)
-    );
-    const updatedChats: ChatInterface[] = JSON.parse(
-      JSON.stringify(useStore.getState().chats)
-    );
-    const updatedMessages = updatedChats[currentChatIndex].messages;
+    const chats = useStore.getState().chats!;
+    const updatedChats = chats.slice();
+    const chat = { ...chats[currentChatIndex], messages: [...chats[currentChatIndex].messages] };
+    updatedChats[currentChatIndex] = chat;
+    const updatedMessages = chat.messages;
 
     if (sticky) {
       const newMessage = { role: inputRole, content: _content };
       updatedMessages.push(newMessage);
-      upsertActivePathMessage(updatedChats[currentChatIndex], updatedMessages.length - 1, newMessage, useStore.getState().contentStore);
+      upsertActivePathMessage(chat, updatedMessages.length - 1, newMessage, useStore.getState().contentStore);
       _setContent([
         {
           type: 'text',
@@ -199,42 +197,11 @@ const EditView = ({
       ]);
       resetTextAreaHeight();
     } else {
-      updatedMessages[messageIndex].content = _content;
-      upsertActivePathMessage(updatedChats[currentChatIndex], messageIndex, updatedMessages[messageIndex], useStore.getState().contentStore);
+      updatedMessages[messageIndex] = { ...updatedMessages[messageIndex], content: _content };
+      upsertActivePathMessage(chat, messageIndex, updatedMessages[messageIndex], useStore.getState().contentStore);
       setIsEdit(false);
     }
-    try {
-      setChats(updatedChats);
-    } catch (error: unknown) {
-      if ((error as DOMException).name === 'QuotaExceededError') {
-        setChats(originalChats);
-        toast.error(
-          t('notifications.quotaExceeded', {
-            ns: 'import',
-          }),
-          { autoClose: 15000 }
-        );
-        // try to save text only
-        const textOnlyContent = _content.filter(isTextContent);
-        if (textOnlyContent.length > 0) {
-          updatedMessages[messageIndex].content = textOnlyContent;
-          upsertActivePathMessage(updatedChats[currentChatIndex], messageIndex, updatedMessages[messageIndex], useStore.getState().contentStore);
-          try {
-            setChats(updatedChats);
-            toast.info(
-              t('notifications.textSavedOnly', {
-                ns: 'import',
-              }),
-              { autoClose: 15000 }
-            );
-          } catch (innerError: unknown) {
-            toast.error((innerError as Error).message);
-          }
-        }
-      } else {
-        toast.error((error as Error).message);
-      }
-    }
+    setChats(updatedChats);
   };
 
   const { handleSubmit, handleSubmitMidChat } = useSubmit();
@@ -258,27 +225,22 @@ const EditView = ({
   const handleGenerateNextOnly = () => {
     if (useStore.getState().generating || !modelValid) return;
 
-    const updatedChats: ChatInterface[] = JSON.parse(
-      JSON.stringify(useStore.getState().chats)
-    );
-    const updatedMessages = updatedChats[currentChatIndex].messages;
+    const chats = useStore.getState().chats!;
+    const updatedChats = chats.slice();
+    const chat = { ...chats[currentChatIndex], messages: [...chats[currentChatIndex].messages] };
+    updatedChats[currentChatIndex] = chat;
+    const updatedMessages = chat.messages;
 
     // Update message content
-    updatedMessages[messageIndex].content = _content;
-    upsertActivePathMessage(updatedChats[currentChatIndex], messageIndex, updatedMessages[messageIndex], useStore.getState().contentStore);
+    updatedMessages[messageIndex] = { ...updatedMessages[messageIndex], content: _content };
+    upsertActivePathMessage(chat, messageIndex, updatedMessages[messageIndex], useStore.getState().contentStore);
     // Remove only the next message if it exists
     const nextIndex = messageIndex + 1;
     if (nextIndex < updatedMessages.length) {
       updatedMessages.splice(nextIndex, 1);
     }
     setIsEdit(false);
-
-    try {
-      setChats(updatedChats);
-    } catch (error: unknown) {
-      console.log(error);
-      return;
-    }
+    setChats(updatedChats);
     handleSubmitMidChat(nextIndex);
   };
 
@@ -292,19 +254,17 @@ const EditView = ({
       return;
     }
 
-    const originalChats: ChatInterface[] = JSON.parse(
-      JSON.stringify(useStore.getState().chats)
-    );
-    const updatedChats: ChatInterface[] = JSON.parse(
-      JSON.stringify(useStore.getState().chats)
-    );
-    const updatedMessages = updatedChats[currentChatIndex].messages;
+    const chats = useStore.getState().chats!;
+    const updatedChats = chats.slice();
+    const chat = { ...chats[currentChatIndex], messages: [...chats[currentChatIndex].messages] };
+    updatedChats[currentChatIndex] = chat;
+    const updatedMessages = chat.messages;
 
     if (sticky) {
       if (hasTextContent || hasImageContent) {
         const newMessage = { role: inputRole, content: _content };
         updatedMessages.push(newMessage);
-        upsertActivePathMessage(updatedChats[currentChatIndex], updatedMessages.length - 1, newMessage, useStore.getState().contentStore);
+        upsertActivePathMessage(chat, updatedMessages.length - 1, newMessage, useStore.getState().contentStore);
       }
       _setContent([
         {
@@ -314,47 +274,13 @@ const EditView = ({
       ]);
       resetTextAreaHeight();
     } else {
-      updatedMessages[messageIndex].content = _content;
-      upsertActivePathMessage(updatedChats[currentChatIndex], messageIndex, updatedMessages[messageIndex], useStore.getState().contentStore);
-      updatedChats[currentChatIndex].messages = updatedMessages.slice(
-        0,
-        messageIndex + 1
-      );
-      truncateActivePathAfterIndex(updatedChats[currentChatIndex], messageIndex);
+      updatedMessages[messageIndex] = { ...updatedMessages[messageIndex], content: _content };
+      upsertActivePathMessage(chat, messageIndex, updatedMessages[messageIndex], useStore.getState().contentStore);
+      chat.messages = updatedMessages.slice(0, messageIndex + 1);
+      truncateActivePathAfterIndex(chat, messageIndex);
       setIsEdit(false);
     }
-    try {
-      setChats(updatedChats);
-    } catch (error: unknown) {
-      if ((error as DOMException).name === 'QuotaExceededError') {
-        setChats(originalChats);
-        toast.error(
-          t('notifications.quotaExceeded', {
-            ns: 'import',
-          }),
-          { autoClose: 15000 }
-        );
-        // try to save text only
-        const textOnlyContent = _content.filter(isTextContent);
-        if (textOnlyContent.length > 0) {
-          updatedMessages[messageIndex].content = textOnlyContent;
-          upsertActivePathMessage(updatedChats[currentChatIndex], messageIndex, updatedMessages[messageIndex], useStore.getState().contentStore);
-          try {
-            setChats(updatedChats);
-            toast.info(
-              t('notifications.textSavedOnly', {
-                ns: 'import',
-              }),
-              { autoClose: 15000 }
-            );
-          } catch (innerError: unknown) {
-            console.log(innerError);
-          }
-        }
-      } else {
-        console.log(error);
-      }
-    }
+    setChats(updatedChats);
     handleSubmit();
   };
 
@@ -366,10 +292,7 @@ const EditView = ({
 
   const handlePaste = async (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const items = e.clipboardData.items;
-    const updatedChats: ChatInterface[] = JSON.parse(
-      JSON.stringify(useStore.getState().chats)
-    );
-    const chat = updatedChats[currentChatIndex];
+    const chat = useStore.getState().chats![currentChatIndex];
     for (const item of items) {
       if (item.type.startsWith('image/')) {
         const blob = item.getAsFile();
