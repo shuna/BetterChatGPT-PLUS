@@ -42,6 +42,10 @@ import BranchSwitcher from '../BranchSwitcher';
 import CodeBlock from '../CodeBlock';
 import PopupModal from '@components/PopupModal';
 import { preprocessLaTeX } from '@utils/chat';
+import {
+  deleteActivePathMessage,
+  materializeActivePath,
+} from '@utils/branchUtils';
 
 const ContentView = memo(
   ({
@@ -79,6 +83,12 @@ const ContentView = memo(
         JSON.stringify(useStore.getState().chats)
       );
       updatedChats[currentChatIndex].messages.splice(messageIndex, 1);
+      if (updatedChats[currentChatIndex].branchTree) {
+        deleteActivePathMessage(updatedChats[currentChatIndex], messageIndex);
+        updatedChats[currentChatIndex].messages = materializeActivePath(
+          updatedChats[currentChatIndex].branchTree!
+        );
+      }
       setChats(updatedChats);
     };
 

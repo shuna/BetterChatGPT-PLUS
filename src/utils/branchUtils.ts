@@ -59,6 +59,27 @@ export function truncateActivePathAfterIndex(
   );
 }
 
+export function deleteActivePathMessage(
+  chat: ChatInterface,
+  index: number
+) {
+  if (!chat.branchTree || index < 0) return;
+
+  const tree = chat.branchTree;
+  const nodeId = tree.activePath[index];
+  if (!nodeId) return;
+
+  const parentId = tree.nodes[nodeId]?.parentId ?? null;
+  Object.values(tree.nodes).forEach((node) => {
+    if (node.parentId === nodeId) {
+      node.parentId = parentId;
+    }
+  });
+
+  delete tree.nodes[nodeId];
+  tree.activePath.splice(index, 1);
+}
+
 export function flatMessagesToBranchTree(
   messages: MessageInterface[]
 ): BranchTree {
