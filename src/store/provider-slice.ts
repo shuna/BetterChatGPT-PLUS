@@ -37,6 +37,7 @@ export interface FavoriteModel {
   providerId: ProviderId;
   promptPrice?: number;    // cost per 1M input tokens (USD)
   completionPrice?: number; // cost per 1M output tokens (USD)
+  contextLength?: number;
 }
 
 export const DEFAULT_PROVIDERS: Record<ProviderId, ProviderConfig> = {
