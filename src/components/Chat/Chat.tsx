@@ -21,14 +21,13 @@ const Chat = () => {
       <MobileBar />
       <main className='relative h-full w-full transition-width flex flex-col overflow-hidden items-stretch flex-1'>
         <ChatViewTabs activeView={activeView} setActiveView={setActiveView} />
-        {activeView === 'chat' ? (
-          <>
-            <ChatContent />
-            <StopGeneratingButton />
-          </>
-        ) : (
+        <div className={activeView === 'chat' ? 'flex flex-col flex-1 overflow-hidden' : 'hidden'}>
+          <ChatContent />
+          <StopGeneratingButton />
+        </div>
+        <div className={activeView === 'branch-editor' ? 'flex flex-col flex-1 overflow-hidden' : 'hidden'}>
           <BranchEditorView />
-        )}
+        </div>
       </main>
     </div>
   );
