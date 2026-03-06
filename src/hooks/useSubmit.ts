@@ -13,6 +13,7 @@ import { _defaultChatConfig } from '@constants/chat';
 import { officialAPIEndpoint } from '@constants/auth';
 import { modelStreamSupport } from '@constants/modelLoader';
 import { FavoriteModel, ProviderConfig } from '@store/provider-slice';
+import { upsertActivePathMessage } from '@utils/branchUtils';
 
 const useSubmit = () => {
   const { t, i18n } = useTranslation('api');
@@ -83,8 +84,7 @@ const useSubmit = () => {
     if (generating || !chats) return;
 
     const updatedChats: ChatInterface[] = JSON.parse(JSON.stringify(chats));
-
-    updatedChats[currentChatIndex].messages.push({
+    const assistantMessage: MessageInterface = {
       role: 'assistant',
       content: [
         {
@@ -92,7 +92,13 @@ const useSubmit = () => {
           text: '',
         } as TextContentInterface,
       ],
-    });
+    };
+    updatedChats[currentChatIndex].messages.push(assistantMessage);
+    upsertActivePathMessage(
+      updatedChats[currentChatIndex],
+      updatedChats[currentChatIndex].messages.length - 1,
+      assistantMessage
+    );
 
     setChats(updatedChats);
     setGenerating(true);
@@ -162,6 +168,11 @@ const useSubmit = () => {
           updatedMessages[updatedMessages.length - 1]
             .content[0] as TextContentInterface
         ).text += data.choices[0].message.content;
+        upsertActivePathMessage(
+          updatedChats[currentChatIndex],
+          updatedMessages.length - 1,
+          updatedMessages[updatedMessages.length - 1]
+        );
         setChats(updatedChats);
       } else {
         if (!resolved.key || resolved.key.length === 0) {
@@ -226,6 +237,11 @@ const useSubmit = () => {
                 updatedMessages[updatedMessages.length - 1]
                   .content[0] as TextContentInterface
               ).text += resultString;
+              upsertActivePathMessage(
+                updatedChats[currentChatIndex],
+                updatedMessages.length - 1,
+                updatedMessages[updatedMessages.length - 1]
+              );
               setChats(updatedChats);
             }
           }
@@ -312,9 +328,7 @@ const useSubmit = () => {
     if (generating || !chats) return;
 
     const updatedChats: ChatInterface[] = JSON.parse(JSON.stringify(chats));
-
-    // Insert empty assistant message at the specified index
-    updatedChats[currentChatIndex].messages.splice(insertIndex, 0, {
+    const assistantMessage: MessageInterface = {
       role: 'assistant',
       content: [
         {
@@ -322,7 +336,15 @@ const useSubmit = () => {
           text: '',
         } as TextContentInterface,
       ],
-    });
+    };
+
+    // Insert empty assistant message at the specified index
+    updatedChats[currentChatIndex].messages.splice(insertIndex, 0, assistantMessage);
+    upsertActivePathMessage(
+      updatedChats[currentChatIndex],
+      insertIndex,
+      assistantMessage
+    );
 
     setChats(updatedChats);
     setGenerating(true);
@@ -392,6 +414,11 @@ const useSubmit = () => {
           updatedMessages[insertIndex]
             .content[0] as TextContentInterface
         ).text += data.choices[0].message.content;
+        upsertActivePathMessage(
+          updatedChats[currentChatIndex],
+          insertIndex,
+          updatedMessages[insertIndex]
+        );
         setChats(updatedChats);
       } else {
         if (!resolved.key || resolved.key.length === 0) {
@@ -455,6 +482,11 @@ const useSubmit = () => {
                 updatedMessages[insertIndex]
                   .content[0] as TextContentInterface
               ).text += resultString;
+              upsertActivePathMessage(
+                updatedChats[currentChatIndex],
+                insertIndex,
+                updatedMessages[insertIndex]
+              );
               setChats(updatedChats);
             }
           }

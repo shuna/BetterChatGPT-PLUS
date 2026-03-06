@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   BranchNode,
   BranchTree,
+  ChatInterface,
   MessageInterface,
 } from '@type/chat';
 
@@ -10,6 +11,52 @@ export function materializeActivePath(tree: BranchTree): MessageInterface[] {
     const node = tree.nodes[id];
     return { role: node.role, content: node.content };
   });
+}
+
+export function upsertActivePathMessage(
+  chat: ChatInterface,
+  index: number,
+  message: MessageInterface
+) {
+  if (!chat.branchTree || index < 0) return;
+
+  const tree = chat.branchTree;
+  const existingId = tree.activePath[index];
+
+  if (existingId) {
+    tree.nodes[existingId] = {
+      ...tree.nodes[existingId],
+      role: message.role,
+      content: message.content,
+    };
+    return;
+  }
+
+  if (index !== tree.activePath.length) return;
+
+  const parentId =
+    index === 0 ? null : tree.activePath[tree.activePath.length - 1] ?? null;
+  const newId = uuidv4();
+
+  tree.nodes[newId] = {
+    id: newId,
+    parentId,
+    role: message.role,
+    content: message.content,
+    createdAt: Date.now(),
+  };
+  tree.activePath.push(newId);
+}
+
+export function truncateActivePathAfterIndex(
+  chat: ChatInterface,
+  lastIndexInclusive: number
+) {
+  if (!chat.branchTree) return;
+  chat.branchTree.activePath = chat.branchTree.activePath.slice(
+    0,
+    lastIndexInclusive + 1
+  );
 }
 
 export function flatMessagesToBranchTree(
