@@ -44,5 +44,7 @@
   "cloned": "Đã nhân bản",
   "enterToSubmit": "Enter để nộp",
   "submitPlaceholder": "Nhập tin nhắn hoặc ấn [/] để tìm các lời nhắc...",
-  "showShareGPT": "Hiển thị nút ShareGPT"
+  "showShareGPT": "Hiển thị nút ShareGPT",
+  "tokenCostModelNotRegistered": "chi phí không xác định: mô hình chưa đăng ký",
+  "tokenCostNoPricingData": "chi phí không xác định: không có dữ liệu giá"
 }

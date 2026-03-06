@@ -44,5 +44,7 @@
   "cloned": "完了しました",
   "enterToSubmit": "Enterキーを押して送信",
   "submitPlaceholder": "メッセージを入力するか、[/] をクリックしてプロンプトを表示します...",
-  "showShareGPT": "ShareGPTボタンを表示"
+  "showShareGPT": "ShareGPTボタンを表示",
+  "tokenCostModelNotRegistered": "料金不明: モデル未登録",
+  "tokenCostNoPricingData": "料金不明: 料金データなし"
 }

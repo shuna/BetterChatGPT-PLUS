@@ -44,5 +44,7 @@
    "cloned": "Clonat",
    "enterToSubmit": "Intrați pentru a trimite",
    "submitPlaceholder": "Tastați un mesaj sau faceți clic pe [/] pentru solicitări...",
-   "showShareGPT": "Afișează butonul ShareGPT"
+   "showShareGPT": "Afișează butonul ShareGPT",
+   "tokenCostModelNotRegistered": "cost necunoscut: model neînregistrat",
+   "tokenCostNoPricingData": "cost necunoscut: fără date de preț"
 }

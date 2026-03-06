@@ -44,5 +44,7 @@
   "cloned": "Klonad",
   "enterToSubmit": "Tryck på Enter för att skicka",
   "submitPlaceholder": "Skriv ett meddelande eller klicka på [/] för uppmaning...",
-  "showShareGPT": "Visa ShareGPT-knappen"
+  "showShareGPT": "Visa ShareGPT-knappen",
+  "tokenCostModelNotRegistered": "kostnad okänd: modell ej registrerad",
+  "tokenCostNoPricingData": "kostnad okänd: inga prisdata"
 }

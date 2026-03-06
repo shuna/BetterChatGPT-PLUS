@@ -44,5 +44,7 @@
   "cloned": "Klonen erfolgreich",
   "enterToSubmit": "Drücke Enter zum absenden",
   "submitPlaceholder": "Verfasse eine Nachricht oder klicke auf [/] für gespeicherte Prompts...",
-  "showShareGPT": "ShareGPT-Schaltfläche anzeigen"
+  "showShareGPT": "ShareGPT-Schaltfläche anzeigen",
+  "tokenCostModelNotRegistered": "Kosten unbekannt: Modell nicht registriert",
+  "tokenCostNoPricingData": "Kosten unbekannt: keine Preisdaten"
 }

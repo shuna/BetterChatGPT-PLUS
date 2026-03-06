@@ -44,5 +44,7 @@
   "cloned": "Klonet",
   "enterToSubmit": "Trykk enter for å sende",
   "submitPlaceholder": "Skriv en melding eller klikk på [/] for oppgave...",
-  "showShareGPT": "Vis ShareGPT-knappen"
+  "showShareGPT": "Vis ShareGPT-knappen",
+  "tokenCostModelNotRegistered": "kostnad ukjent: modell ikke registrert",
+  "tokenCostNoPricingData": "kostnad ukjent: ingen prisdata"
 }

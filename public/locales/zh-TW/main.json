@@ -44,5 +44,7 @@
   "cloned": "已建立副本",
   "enterToSubmit": "按 Enter 鍵送出",
   "submitPlaceholder": "輸入訊息或點選 [/] 以使用提示詞…",
-  "showShareGPT": "顯示ShareGPT按鈕"
+  "showShareGPT": "顯示ShareGPT按鈕",
+  "tokenCostModelNotRegistered": "費用未知：模型未註冊",
+  "tokenCostNoPricingData": "費用未知：無定價資料"
 }
