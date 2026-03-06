@@ -15,7 +15,9 @@ import {
   LocalStorageInterfaceV8oV8_1,
   TextContentInterface,
   LocalStorageInterfaceV8_2ToV9,
+  LocalStorageInterfaceV9ToV10,
 } from '@type/chat';
+import { DEFAULT_PROVIDERS } from './provider-slice';
 import {
   _defaultChatConfig,
   _defaultMenuWidth,
@@ -136,4 +138,24 @@ export const migrateV8_2 = (persistedState: LocalStorageInterfaceV8_2ToV9) => {
   persistedState.chats.forEach((chat) => {
     if (chat.imageDetail == undefined) chat.imageDetail = _defaultImageDetail
   });
+};
+
+export const migrateV9 = (persistedState: LocalStorageInterfaceV9ToV10) => {
+  const providers = { ...DEFAULT_PROVIDERS };
+  const existingEndpoint = persistedState.apiEndpoint || '';
+  const existingKey = persistedState.apiKey || '';
+
+  if (existingKey) {
+    if (existingEndpoint.includes('openrouter')) {
+      providers.openrouter = { ...providers.openrouter, apiKey: existingKey };
+    } else if (existingEndpoint.includes('openai.com')) {
+      providers.openai = { ...providers.openai, apiKey: existingKey };
+    } else {
+      // Default: assign to openrouter
+      providers.openrouter = { ...providers.openrouter, apiKey: existingKey };
+    }
+  }
+
+  persistedState.providers = providers;
+  persistedState.favoriteModels = [];
 };

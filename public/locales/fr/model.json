@@ -24,5 +24,20 @@
   },
   "defaultChatConfig": "Configuration de Chat Par Défaut",
   "defaultSystemMessage": "Message Système Par Défaut",
-  "resetToDefault": "Réinitialiser aux paramètres par défaut"
+  "resetToDefault": "Réinitialiser aux paramètres par défaut",
+  "provider": {
+    "title": "Paramètres du fournisseur IA",
+    "search": "Rechercher des modèles...",
+    "loading": "Chargement...",
+    "apiKeyRequired": "Entrez une clé API pour récupérer la liste des modèles",
+    "noModels": "Aucun modèle trouvé",
+    "apiKeyLabel": "Clé API :",
+    "enterApiKey": "Entrez la clé API pour {{name}}...",
+    "save": "Enregistrer",
+    "colName": "Modèle",
+    "colCreated": "Publication",
+    "colContext": "Contexte",
+    "colPrice": "Prix (Entrée/Sortie)",
+    "noModelSelected": "Aucun modèle sélectionné"
+  }
 }

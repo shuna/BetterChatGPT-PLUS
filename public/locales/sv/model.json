@@ -24,5 +24,20 @@
   },
   "defaultChatConfig": "Standard Chatkonfiguration",
   "defaultSystemMessage": "Standard Systemmeddelande",
-  "resetToDefault": "Återställ till Standard"
+  "resetToDefault": "Återställ till Standard",
+  "provider": {
+    "title": "AI-leverantörsinställningar",
+    "search": "Sök modeller...",
+    "loading": "Laddar...",
+    "apiKeyRequired": "Ange en API-nyckel för att hämta modellistan",
+    "noModels": "Inga modeller hittades",
+    "apiKeyLabel": "API-nyckel:",
+    "enterApiKey": "Ange API-nyckel för {{name}}...",
+    "save": "Spara",
+    "colName": "Modell",
+    "colCreated": "Publicerad",
+    "colContext": "Kontext",
+    "colPrice": "Pris (In/Ut)",
+    "noModelSelected": "Ingen modell vald"
+  }
 }

@@ -24,5 +24,20 @@
   },
   "defaultChatConfig": "デフォルトチャット設定",
   "defaultSystemMessage": "デフォルトシステムメッセージ",
-  "resetToDefault": "デフォルトにリセット"
+  "resetToDefault": "デフォルトにリセット",
+  "provider": {
+    "title": "AIプロバイダ設定",
+    "search": "モデルを検索...",
+    "loading": "読み込み中...",
+    "apiKeyRequired": "APIキーを入力してモデルリストを取得してください",
+    "noModels": "モデルが見つかりません",
+    "apiKeyLabel": "APIキー:",
+    "enterApiKey": "{{name}}のAPIキーを入力...",
+    "save": "保存",
+    "colName": "モデル名",
+    "colCreated": "発表日",
+    "colContext": "コンテキスト",
+    "colPrice": "価格 (入力/出力)",
+    "noModelSelected": "モデル未選択"
+  }
 }

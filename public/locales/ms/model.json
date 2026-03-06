@@ -24,5 +24,20 @@
   },
   "defaultChatConfig": "Konfigurasi Cakap Lalai",
   "defaultSystemMessage": "Mesej Sistem Lalai",
-  "resetToDefault": "Set Semula ke Lalai"
+  "resetToDefault": "Set Semula ke Lalai",
+  "provider": {
+    "title": "Tetapan Penyedia AI",
+    "search": "Cari model...",
+    "loading": "Memuatkan...",
+    "apiKeyRequired": "Masukkan kunci API untuk mendapatkan senarai model",
+    "noModels": "Tiada model ditemui",
+    "apiKeyLabel": "Kunci API:",
+    "enterApiKey": "Masukkan kunci API untuk {{name}}...",
+    "save": "Simpan",
+    "colName": "Model",
+    "colCreated": "Diterbitkan",
+    "colContext": "Konteks",
+    "colPrice": "Harga (Masuk/Keluar)",
+    "noModelSelected": "Tiada model dipilih"
+  }
 }

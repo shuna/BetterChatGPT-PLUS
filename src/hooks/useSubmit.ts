@@ -12,6 +12,7 @@ import { limitMessageTokens, updateTotalTokenUsed } from '@utils/messageUtils';
 import { _defaultChatConfig } from '@constants/chat';
 import { officialAPIEndpoint } from '@constants/auth';
 import { modelStreamSupport } from '@constants/modelLoader';
+import { FavoriteModel, ProviderConfig } from '@store/provider-slice';
 
 const useSubmit = () => {
   const { t, i18n } = useTranslation('api');
@@ -19,10 +20,23 @@ const useSubmit = () => {
   const setError = useStore((state) => state.setError);
   const apiEndpoint = useStore((state) => state.apiEndpoint);
   const apiKey = useStore((state) => state.apiKey);
+  const favoriteModels = useStore((state) => state.favoriteModels) || [];
+  const providers = useStore((state) => state.providers) || {};
   const setGenerating = useStore((state) => state.setGenerating);
   const generating = useStore((state) => state.generating);
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const setChats = useStore((state) => state.setChats);
+
+  // Resolve provider endpoint/apiKey for a model
+  const resolveProvider = (modelId: string): { endpoint: string; key?: string } => {
+    const fav = favoriteModels.find((f) => f.modelId === modelId);
+    if (fav && providers[fav.providerId]) {
+      const p = providers[fav.providerId];
+      return { endpoint: p.endpoint, key: p.apiKey };
+    }
+    // Fallback to global settings
+    return { endpoint: apiEndpoint, key: apiKey };
+  };
 
   const generateTitle = async (
     message: MessageInterface[],
@@ -30,35 +44,28 @@ const useSubmit = () => {
   ): Promise<string> => {
     let data;
     try {
-      if (!apiKey || apiKey.length === 0) {
-        // official endpoint
-        if (apiEndpoint === officialAPIEndpoint) {
+      const titleModel = useStore.getState().titleModel ?? modelConfig.model;
+      const titleChatConfig = { ...modelConfig, model: titleModel };
+      const resolved = resolveProvider(titleModel);
+
+      if (!resolved.key || resolved.key.length === 0) {
+        if (resolved.endpoint === officialAPIEndpoint) {
           throw new Error(t('noApiKeyWarning') as string);
         }
-        const titleChatConfig = {
-          ..._defaultChatConfig, // Spread the original config
-          model: useStore.getState().titleModel ?? _defaultChatConfig.model, // Override the model property
-        };
-        // other endpoints
         data = await getChatCompletion(
-          useStore.getState().apiEndpoint,
+          resolved.endpoint,
           message,
           titleChatConfig,
           undefined,
           undefined,
           useStore.getState().apiVersion
         );
-      } else if (apiKey) {
-        const titleChatConfig = {
-          ...modelConfig, // Spread the original config
-          model: useStore.getState().titleModel ?? modelConfig.model, // Override the model property
-        };
-        // own apikey
+      } else {
         data = await getChatCompletion(
-          useStore.getState().apiEndpoint,
+          resolved.endpoint,
           message,
           titleChatConfig,
-          apiKey,
+          resolved.key,
           undefined,
           useStore.getState().apiVersion
         );
@@ -112,27 +119,26 @@ const useSubmit = () => {
       );
       if (messages.length === 0)
         throw new Error(t('errors.messageExceedMaxToken') as string);
+      const resolved = resolveProvider(chats[currentChatIndex].config.model);
       if (!isStreamSupported) {
-        if (!apiKey || apiKey.length === 0) {
-          // official endpoint
-          if (apiEndpoint === officialAPIEndpoint) {
+        if (!resolved.key || resolved.key.length === 0) {
+          if (resolved.endpoint === officialAPIEndpoint) {
             throw new Error(t('noApiKeyWarning') as string);
           }
-          // other endpoints
           data = await getChatCompletion(
-            useStore.getState().apiEndpoint,
+            resolved.endpoint,
             messages,
             chats[currentChatIndex].config,
             undefined,
             undefined,
             useStore.getState().apiVersion
           );
-        } else if (apiKey) {
+        } else {
           data = await getChatCompletion(
-            useStore.getState().apiEndpoint,
+            resolved.endpoint,
             messages,
             chats[currentChatIndex].config,
-            apiKey,
+            resolved.key,
             undefined,
             useStore.getState().apiVersion
           );
@@ -158,29 +164,24 @@ const useSubmit = () => {
         ).text += data.choices[0].message.content;
         setChats(updatedChats);
       } else {
-        // no api key (free)
-        if (!apiKey || apiKey.length === 0) {
-          // official endpoint
-          if (apiEndpoint === officialAPIEndpoint) {
+        if (!resolved.key || resolved.key.length === 0) {
+          if (resolved.endpoint === officialAPIEndpoint) {
             throw new Error(t('noApiKeyWarning') as string);
           }
-
-          // other endpoints
           stream = await getChatCompletionStream(
-            useStore.getState().apiEndpoint,
+            resolved.endpoint,
             messages,
             chats[currentChatIndex].config,
             undefined,
             undefined,
             useStore.getState().apiVersion
           );
-        } else if (apiKey) {
-          // own apikey
+        } else {
           stream = await getChatCompletionStream(
-            useStore.getState().apiEndpoint,
+            resolved.endpoint,
             messages,
             chats[currentChatIndex].config,
-            apiKey,
+            resolved.key,
             undefined,
             useStore.getState().apiVersion
           );

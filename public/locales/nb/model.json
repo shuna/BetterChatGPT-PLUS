@@ -24,5 +24,20 @@
   },
   "defaultChatConfig": "Standard Chat-konfigurasjon",
   "defaultSystemMessage": "Standard Systemmelding",
-  "resetToDefault": "Tilbakestill til standard"
+  "resetToDefault": "Tilbakestill til standard",
+  "provider": {
+    "title": "AI-leverandørinnstillinger",
+    "search": "Søk modeller...",
+    "loading": "Laster...",
+    "apiKeyRequired": "Skriv inn en API-nøkkel for å hente modellisten",
+    "noModels": "Ingen modeller funnet",
+    "apiKeyLabel": "API-nøkkel:",
+    "enterApiKey": "Skriv inn API-nøkkel for {{name}}...",
+    "save": "Lagre",
+    "colName": "Modell",
+    "colCreated": "Publisert",
+    "colContext": "Kontekst",
+    "colPrice": "Pris (Inn/Ut)",
+    "noModelSelected": "Ingen modell valgt"
+  }
 }

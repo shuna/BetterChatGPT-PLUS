@@ -215,6 +215,10 @@ export interface LocalStorageInterfaceV8_2ToV9
   defaultImageDetail: ImageDetail;
 }
 
+export interface LocalStorageInterfaceV9ToV10
+  extends LocalStorageInterfaceV8_2ToV9 {
+  providers?: any;
+  favoriteModels?: any;
+}
+
 export type { ModelOptions };
-// export interface LocalStorageInterfaceV9ToV10
-//   extends LocalStorageInterfaceV8_2ToV9 {
