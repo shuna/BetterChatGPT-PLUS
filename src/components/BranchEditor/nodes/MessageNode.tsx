@@ -9,13 +9,18 @@ const roleBadgeColors: Record<string, string> = {
 };
 
 const MessageNode = memo(({ data }: NodeProps<MessageNodeData>) => {
+  const borderColor = data.isActive
+    ? data.conversationColor || '#3b82f6'
+    : undefined;
+
   return (
     <div
       className={`px-3 py-2 rounded-lg border-2 shadow-md w-[280px] cursor-pointer transition-colors ${
         data.isActive
-          ? 'border-blue-500 dark:border-blue-400 bg-white dark:bg-gray-700'
+          ? 'bg-white dark:bg-gray-700'
           : 'border-gray-400 dark:border-gray-500 bg-gray-100 dark:bg-gray-800 opacity-80'
       }`}
+      style={data.isActive ? { borderColor } : undefined}
     >
       <Handle type='target' position={Position.Top} className='!bg-gray-400' />
       <div className='flex items-center gap-2 mb-1'>

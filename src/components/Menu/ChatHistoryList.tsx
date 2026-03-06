@@ -38,6 +38,13 @@ const ChatHistoryList = () => {
     null
   );
 
+  // Sync sidebar selection to multi-view store for branch editor comparison
+  const setMultiViewChatIndices = useStore((state) => state.setMultiViewChatIndices);
+
+  useEffect(() => {
+    setMultiViewChatIndices(selectedChats);
+  }, [selectedChats, setMultiViewChatIndices]);
+
   const chatsRef = useRef<ChatInterface[]>(useStore.getState().chats || []);
   const foldersRef = useRef<FolderCollection>(useStore.getState().folders);
   const filterRef = useRef<string>(filter);

@@ -10,14 +10,36 @@ const BranchEditorView = () => {
   const branchTree = useStore(
     (state) => state.chats?.[state.currentChatIndex]?.branchTree
   );
+  const multiViewChatIndices = useStore((state) => state.multiViewChatIndices);
+  const chats = useStore((state) => state.chats);
 
+  // Ensure branch tree for current chat
   useEffect(() => {
     if (currentChatIndex >= 0 && !branchTree) {
       ensureBranchTree(currentChatIndex);
     }
   }, [currentChatIndex, branchTree, ensureBranchTree]);
 
-  if (!branchTree || Object.keys(branchTree.nodes).length === 0) {
+  // Ensure branch trees for all multi-view chats
+  useEffect(() => {
+    if (multiViewChatIndices.length > 1) {
+      multiViewChatIndices.forEach((idx) => {
+        if (chats?.[idx] && !chats[idx].branchTree) {
+          ensureBranchTree(idx);
+        }
+      });
+    }
+  }, [multiViewChatIndices, chats, ensureBranchTree]);
+
+  const chatIndices = multiViewChatIndices.length > 1
+    ? multiViewChatIndices
+    : [currentChatIndex];
+
+  const hasAnyTree = chatIndices.some(
+    (idx) => chats?.[idx]?.branchTree && Object.keys(chats[idx].branchTree!.nodes).length > 0
+  );
+
+  if (!hasAnyTree) {
     return (
       <div className='flex items-center justify-center h-full text-gray-500 dark:text-gray-400'>
         {t('branchEditor')}...
@@ -26,8 +48,11 @@ const BranchEditorView = () => {
   }
 
   return (
-    <div className='h-full w-full'>
-      <BranchEditorCanvas tree={branchTree} chatIndex={currentChatIndex} />
+    <div className='h-full w-full relative'>
+      <BranchEditorCanvas
+        chatIndices={chatIndices}
+        primaryChatIndex={currentChatIndex}
+      />
     </div>
   );
 };

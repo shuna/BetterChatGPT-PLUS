@@ -23,6 +23,22 @@ export interface BranchSlice {
   chatActiveView: 'chat' | 'branch-editor';
   setChatActiveView: (view: 'chat' | 'branch-editor') => void;
 
+  // Multi-view state
+  isMultiView: boolean;
+  setIsMultiView: (enabled: boolean) => void;
+  multiViewChatIndices: number[];
+  setMultiViewChatIndices: (indices: number[]) => void;
+  multiViewPrimaryChatIndex: number | null;
+  setMultiViewPrimaryChatIndex: (index: number | null) => void;
+  moveBranchSequence: (
+    sourceChatIndex: number,
+    fromNodeId: string,
+    toNodeId: string,
+    targetChatIndex: number,
+    afterNodeId: string
+  ) => void;
+  activateFolderOverview: (folderId: string) => void;
+
   ensureBranchTree: (chatIndex: number) => void;
   createBranch: (
     chatIndex: number,
@@ -70,6 +86,40 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   chatActiveView: 'chat' as 'chat' | 'branch-editor',
   setChatActiveView: (view) => {
     set({ chatActiveView: view } as any);
+  },
+
+  isMultiView: false,
+  setIsMultiView: (enabled) => {
+    set({ isMultiView: enabled } as any);
+    if (!enabled) {
+      set({ multiViewChatIndices: [], multiViewPrimaryChatIndex: null } as any);
+    }
+  },
+  multiViewChatIndices: [],
+  setMultiViewChatIndices: (indices) => {
+    set({ multiViewChatIndices: indices } as any);
+  },
+  multiViewPrimaryChatIndex: null,
+  setMultiViewPrimaryChatIndex: (index) => {
+    set({ multiViewPrimaryChatIndex: index } as any);
+  },
+  moveBranchSequence: (sourceChatIndex, fromNodeId, toNodeId, targetChatIndex, afterNodeId) => {
+    get().copyBranchSequence(sourceChatIndex, fromNodeId, toNodeId);
+    get().pasteBranchSequence(targetChatIndex, afterNodeId);
+    get().deleteBranch(sourceChatIndex, fromNodeId);
+  },
+  activateFolderOverview: (folderId) => {
+    const chats = get().chats;
+    if (!chats) return;
+    const indices = chats
+      .map((c, i) => ({ chat: c, index: i }))
+      .filter((item) => item.chat.folder === folderId)
+      .map((item) => item.index);
+    set({
+      isMultiView: true,
+      multiViewChatIndices: indices,
+      multiViewPrimaryChatIndex: get().currentChatIndex,
+    } as any);
   },
 
   ensureBranchTree: (chatIndex) => {

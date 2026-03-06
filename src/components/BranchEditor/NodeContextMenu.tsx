@@ -25,9 +25,15 @@ const NodeContextMenu = ({
   const copyBranchSequence = useStore((state) => state.copyBranchSequence);
   const pasteBranchSequence = useStore((state) => state.pasteBranchSequence);
   const branchClipboard = useStore((state) => state.branchClipboard);
+  const chats = useStore((state) => state.chats);
   const tree = useStore(
     (state) => state.chats?.[chatIndex]?.branchTree
   );
+
+  // Find source chat title for clipboard
+  const clipboardSourceTitle = branchClipboard
+    ? chats?.find((c) => c.id === branchClipboard.sourceChat)?.title || 'Chat'
+    : null;
 
   const handleDelete = () => {
     deleteBranch(chatIndex, nodeId);
@@ -75,6 +81,11 @@ const NodeContextMenu = ({
             onClick={handlePaste}
           >
             {t('pasteMessages')}
+            {clipboardSourceTitle && (
+              <span className='ml-1 text-xs text-gray-400'>
+                ({clipboardSourceTitle})
+              </span>
+            )}
           </button>
         )}
         <button
