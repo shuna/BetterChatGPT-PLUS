@@ -26,6 +26,10 @@
   "defaultChatConfig": "Default Chat Config",
   "defaultSystemMessage": "Default System Message",
   "resetToDefault": "Reset To Default",
+  "stream": {
+    "label": "Streaming",
+    "description": "Enable streaming to display responses in real-time as they are generated."
+  },
   "imageDetail": {
     "label": "Image Detail",
     "low": "low",

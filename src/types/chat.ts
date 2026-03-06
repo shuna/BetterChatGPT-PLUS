@@ -92,6 +92,7 @@ export interface ConfigInterface {
   presence_penalty: number;
   top_p: number;
   frequency_penalty: number;
+  stream?: boolean;
 }
 
 export interface ChatHistoryInterface {

@@ -104,15 +104,11 @@ const useSubmit = () => {
     setGenerating(true);
 
     try {
+      const chatConfig = chats[currentChatIndex].config;
       const isStreamSupported =
-        modelStreamSupport[chats[currentChatIndex].config.model];
-        const { model, temperature, max_tokens } = chats[currentChatIndex].config;
-        const supportsStream = modelStreamSupport[model];
-        console.log('[useSubmit] Model streaming support:', {
-          model,
-          supportsStream,
-          isStreamSupported
-        });
+        chatConfig.stream !== undefined
+          ? chatConfig.stream
+          : modelStreamSupport[chatConfig.model];
       let data;
       let stream;
       if (chats[currentChatIndex].messages.length === 0)
@@ -369,8 +365,11 @@ const useSubmit = () => {
         throw new Error(t('errors.messageExceedMaxToken') as string);
 
       const resolved = resolveProvider(chats[currentChatIndex].config.model);
+      const midChatConfig = chats[currentChatIndex].config;
       const isStreamSupported =
-        modelStreamSupport[chats[currentChatIndex].config.model];
+        midChatConfig.stream !== undefined
+          ? midChatConfig.stream
+          : modelStreamSupport[midChatConfig.model];
 
       if (!isStreamSupported) {
         if (!resolved.key || resolved.key.length === 0) {

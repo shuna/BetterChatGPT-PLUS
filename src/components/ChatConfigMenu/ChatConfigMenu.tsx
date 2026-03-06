@@ -10,6 +10,7 @@ import {
   MaxTokenSlider,
   ModelSelector,
   PresencePenaltySlider,
+  StreamToggle,
   TemperatureSlider,
   TopPSlider,
 } from '@components/ConfigMenu/ConfigMenu';
@@ -66,6 +67,7 @@ const ChatConfigPopup = ({
   const [_frequencyPenalty, _setFrequencyPenalty] = useState<number>(
     config.frequency_penalty
   );
+  const [_stream, _setStream] = useState<boolean>(config.stream !== false);
   const [_imageDetail, _setImageDetail] = useState<ImageDetail>(
     useStore.getState().defaultImageDetail
   );
@@ -80,6 +82,7 @@ const ChatConfigPopup = ({
       top_p: _topP,
       presence_penalty: _presencePenalty,
       frequency_penalty: _frequencyPenalty,
+      stream: _stream,
     });
     setDefaultSystemMessage(_systemMessage);
     setDefaultImageDetail(_imageDetail);
@@ -93,6 +96,7 @@ const ChatConfigPopup = ({
     _setTopP(_defaultChatConfig.top_p);
     _setPresencePenalty(_defaultChatConfig.presence_penalty);
     _setFrequencyPenalty(_defaultChatConfig.frequency_penalty);
+    _setStream(_defaultChatConfig.stream !== false);
     _setImageDetail(_defaultImageDetail);
     _setSystemMessage(_defaultSystemMessage);
     _setImageDetail(_defaultImageDetail);
@@ -113,6 +117,10 @@ const ChatConfigPopup = ({
           _model={_model}
           _setModel={_setModel}
           _label={t('model')}
+        />
+        <StreamToggle
+          _stream={_stream}
+          _setStream={_setStream}
         />
         <MaxTokenSlider
           _maxToken={_maxToken}

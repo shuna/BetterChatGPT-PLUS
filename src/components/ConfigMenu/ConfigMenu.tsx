@@ -31,6 +31,7 @@ const ConfigMenu = ({
     config.frequency_penalty
   );
   const [_imageDetail, _setImageDetail] = useState<ImageDetail>(imageDetail);
+  const [_stream, _setStream] = useState<boolean>(config.stream !== false);
   const { t } = useTranslation('model');
 
   const handleConfirm = () => {
@@ -41,6 +42,7 @@ const ConfigMenu = ({
       presence_penalty: _presencePenalty,
       top_p: _topP,
       frequency_penalty: _frequencyPenalty,
+      stream: _stream,
     });
     setImageDetail(_imageDetail);
     setIsModalOpen(false);
@@ -58,6 +60,10 @@ const ConfigMenu = ({
           _model={_model}
           _setModel={_setModel}
           _label={t('Model')}
+        />
+        <StreamToggle
+          _stream={_stream}
+          _setStream={_setStream}
         />
         <MaxTokenSlider
           _maxToken={_maxToken}
@@ -337,6 +343,44 @@ export const FrequencyPenaltySlider = ({
       <div className='min-w-fit text-gray-500 dark:text-gray-300 text-sm mt-2'>
         {t('frequencyPenalty.description')}
       </div>
+    </div>
+  );
+};
+
+export const StreamToggle = ({
+  _stream,
+  _setStream,
+}: {
+  _stream: boolean;
+  _setStream: React.Dispatch<React.SetStateAction<boolean>>;
+}) => {
+  const { t } = useTranslation('model');
+
+  return (
+    <div className='mt-4 flex items-center justify-between'>
+      <div>
+        <label className='block text-sm font-medium text-gray-900 dark:text-white'>
+          {t('stream.label')}
+        </label>
+        <div className='text-gray-500 dark:text-gray-300 text-sm'>
+          {t('stream.description')}
+        </div>
+      </div>
+      <button
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+          _stream ? 'bg-blue-600' : 'bg-gray-400 dark:bg-gray-600'
+        }`}
+        onClick={() => _setStream(!_stream)}
+        type='button'
+        role='switch'
+        aria-checked={_stream}
+      >
+        <span
+          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+            _stream ? 'translate-x-6' : 'translate-x-1'
+          }`}
+        />
+      </button>
     </div>
   );
 };
