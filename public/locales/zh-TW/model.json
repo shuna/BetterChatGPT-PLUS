@@ -24,5 +24,20 @@
   },
   "defaultChatConfig": "預設聊天設定",
   "defaultSystemMessage": "預設系統訊息",
-  "resetToDefault": "重設為預設值"
+  "resetToDefault": "重設為預設值",
+  "provider": {
+    "title": "AI供應商設定",
+    "search": "搜尋模型...",
+    "loading": "載入中...",
+    "apiKeyRequired": "請輸入API金鑰以取得模型列表",
+    "noModels": "找不到模型",
+    "apiKeyLabel": "API金鑰：",
+    "enterApiKey": "輸入{{name}}的API金鑰...",
+    "save": "儲存",
+    "colName": "模型名稱",
+    "colCreated": "發佈日期",
+    "colContext": "上下文",
+    "colPrice": "價格（輸入/輸出）",
+    "noModelSelected": "未選擇模型"
+  }
 }

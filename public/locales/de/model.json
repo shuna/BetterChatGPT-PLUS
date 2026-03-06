@@ -24,5 +24,20 @@
   },
   "defaultChatConfig": "Standard Chat Konfiguration",
   "defaultSystemMessage": "Standard System Nachricht",
-  "resetToDefault": "Auf Standardkonfiguration zurücksetzen"
+  "resetToDefault": "Auf Standardkonfiguration zurücksetzen",
+  "provider": {
+    "title": "KI-Anbieter-Einstellungen",
+    "search": "Modelle suchen...",
+    "loading": "Laden...",
+    "apiKeyRequired": "Geben Sie einen API-Schlüssel ein, um die Modellliste abzurufen",
+    "noModels": "Keine Modelle gefunden",
+    "apiKeyLabel": "API-Schlüssel:",
+    "enterApiKey": "API-Schlüssel für {{name}} eingeben...",
+    "save": "Speichern",
+    "colName": "Modell",
+    "colCreated": "Veröffentlicht",
+    "colContext": "Kontext",
+    "colPrice": "Preis (Ein/Aus)",
+    "noModelSelected": "Kein Modell ausgewählt"
+  }
 }

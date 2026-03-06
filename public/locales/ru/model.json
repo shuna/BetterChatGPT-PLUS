@@ -24,5 +24,20 @@
   },
   "defaultChatConfig": "Конфигурация чата по умолчанию",
   "defaultSystemMessage": "Системное сообщение по умолчанию",
-  "resetToDefault": "Восстановить значения по умолчанию"
+  "resetToDefault": "Восстановить значения по умолчанию",
+  "provider": {
+    "title": "Настройки провайдера ИИ",
+    "search": "Поиск моделей...",
+    "loading": "Загрузка...",
+    "apiKeyRequired": "Введите API-ключ для получения списка моделей",
+    "noModels": "Модели не найдены",
+    "apiKeyLabel": "API-ключ:",
+    "enterApiKey": "Введите API-ключ для {{name}}...",
+    "save": "Сохранить",
+    "colName": "Модель",
+    "colCreated": "Дата выпуска",
+    "colContext": "Контекст",
+    "colPrice": "Цена (Вход/Выход)",
+    "noModelSelected": "Модель не выбрана"
+  }
 }

@@ -9,6 +9,8 @@ import { _defaultChatConfig } from '@constants/chat';
 const ChatTitle = React.memo(() => {
   const { t } = useTranslation('model');
   const customModels = useStore((state) => state.customModels);
+  const favoriteModels = useStore((state) => state.favoriteModels) || [];
+  const providers = useStore((state) => state.providers) || {};
   const chat = useStore(
     (state) =>
       state.chats &&
@@ -40,12 +42,11 @@ const ChatTitle = React.memo(() => {
   };
 
   const getModelDisplayName = (modelId: string) => {
-    const isCustom = customModels.some(m => m.id === modelId);
-    if (isCustom) {
-      const customModel = customModels.find(m => m.id === modelId);
-      return `${customModel?.name} ${t('customModels.customLabel', { ns: 'model' })}`;
+    const fav = favoriteModels.find(f => f.modelId === modelId);
+    if (fav) {
+      return `${modelId} (${providers[fav.providerId]?.name || fav.providerId})`;
     }
-    return modelId;
+    return t('provider.noModelSelected', 'モデル未選択') as string;
   };
 
   // for migrating from old ChatInterface to new ChatInterface (with config)

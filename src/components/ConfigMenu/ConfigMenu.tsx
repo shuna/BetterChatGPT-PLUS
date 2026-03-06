@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
 import { ConfigInterface, ImageDetail } from '@type/chat';
 import Select from 'react-select';
-import { modelOptions, modelMaxToken } from '@constants/modelLoader';
+import { modelMaxToken } from '@constants/modelLoader';
 import { ModelOptions } from '@utils/modelReader';
 import useStore from '@store/store';
 
@@ -96,24 +96,13 @@ export const ModelSelector = ({
   _label: string;
 }) => {
   const { t } = useTranslation(['main', 'model']);
-  const [localModelOptions, setLocalModelOptions] = useState<string[]>(modelOptions);
-  const customModels = useStore((state) => state.customModels);
+  const favoriteModels = useStore((state) => state.favoriteModels) || [];
+  const providers = useStore((state) => state.providers) || {};
 
-  // Update model options when custom models change
-  useEffect(() => {
-    const customModelIds = customModels.map(model => model.id);
-    const defaultModelIds = modelOptions.filter(id => !customModelIds.includes(id));
-    setLocalModelOptions([...customModelIds, ...defaultModelIds]);
-  }, [customModels]);
-
-  const modelOptionsFormatted = localModelOptions.map((model) => {
-    const isCustom = customModels.some(m => m.id === model);
-    const customModel = customModels.find(m => m.id === model);
-    return {
-      value: model,
-      label: isCustom ? `${customModel?.name} ${t('customModels.customLabel', { ns: 'model' })}` : model,
-    };
-  });
+  const modelOptionsFormatted = favoriteModels.map((fav) => ({
+    value: fav.modelId,
+    label: `${fav.modelId} (${providers[fav.providerId]?.name || fav.providerId})`,
+  }));
 
   const customStyles = {
     control: (provided: any) => ({
@@ -153,16 +142,15 @@ export const ModelSelector = ({
         {_label}
       </label>
       <Select
-        value={{
-          value: _model,
-          label: customModels.some(m => m.id === _model) 
-            ? `${customModels.find(m => m.id === _model)?.name} ${t('customModels.customLabel', { ns: 'model' })}` 
-            : _model,
-        }}
+        value={
+          modelOptionsFormatted.find((o) => o.value === _model) || null
+        }
         onChange={(selectedOption) =>
           _setModel(selectedOption?.value as ModelOptions)
         }
         options={modelOptionsFormatted}
+        placeholder={t('model:provider.noModelSelected', 'No model selected')}
+        isClearable
         className='basic-single'
         classNamePrefix='select'
         styles={customStyles}

@@ -56,5 +56,20 @@
     "customLabel": "(custom)",
     "streamSupported": "Stream Support",
     "streamSupportedDescription": "Enable streaming for real-time response generation"
+  },
+  "provider": {
+    "title": "AI Provider Settings",
+    "search": "Search models...",
+    "loading": "Loading...",
+    "apiKeyRequired": "Enter an API key to fetch the model list",
+    "noModels": "No models found",
+    "apiKeyLabel": "API Key:",
+    "enterApiKey": "Enter API key for {{name}}...",
+    "save": "Save",
+    "colName": "Model",
+    "colCreated": "Released",
+    "colContext": "Context",
+    "colPrice": "Price (In/Out)",
+    "noModelSelected": "No model selected"
   }
 }

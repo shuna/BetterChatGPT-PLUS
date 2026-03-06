@@ -7,7 +7,9 @@ import { ConfigSlice, createConfigSlice } from './config-slice';
 import { PromptSlice, createPromptSlice } from './prompt-slice';
 import { ToastSlice, createToastSlice } from './toast-slice';
 import { CustomModelsSlice, createCustomModelsSlice } from './custom-models-slice';
+import { ProviderSlice, createProviderSlice } from './provider-slice';
 import {
+  LocalStorageInterfaceV9ToV10,
   LocalStorageInterfaceV0ToV1,
   LocalStorageInterfaceV1ToV2,
   LocalStorageInterfaceV2ToV3,
@@ -21,6 +23,7 @@ import {
   LocalStorageInterfaceV8_2ToV9,
 } from '@type/chat';
 import {
+  migrateV9,
   migrateV0,
   migrateV1,
   migrateV2,
@@ -40,7 +43,8 @@ export type StoreState = ChatSlice &
   ConfigSlice &
   PromptSlice &
   ToastSlice &
-  CustomModelsSlice;
+  CustomModelsSlice &
+  ProviderSlice;
 
 export type StoreSlice<T> = (
   set: StoreApi<StoreState>['setState'],
@@ -73,6 +77,8 @@ export const createPartializedState = (state: StoreState) => ({
   defaultImageDetail: state.defaultImageDetail,
   autoScroll: state.autoScroll,
   customModels: state.customModels,
+  providers: state.providers,
+  favoriteModels: state.favoriteModels,
 });
 
 const useStore = create<StoreState>()(
@@ -85,11 +91,12 @@ const useStore = create<StoreState>()(
       ...createPromptSlice(set, get),
       ...createToastSlice(set, get),
       ...createCustomModelsSlice(set, get),
+      ...createProviderSlice(set, get),
     }),
     {
       name: 'free-chat-gpt',
       partialize: (state) => createPartializedState(state),
-      version: 9,
+      version: 10,
       migrate: (persistedState, version) => {
         switch (version) {
           case 0:
@@ -114,6 +121,8 @@ const useStore = create<StoreState>()(
             migrateV8_1_fix(persistedState as LocalStorageInterfaceV8_1ToV8_2);
           case 8.2:
             migrateV8_2(persistedState as LocalStorageInterfaceV8_2ToV9);
+          case 9:
+            migrateV9(persistedState as LocalStorageInterfaceV9ToV10);
             break;
         }
         return persistedState as StoreState;

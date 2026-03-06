@@ -24,5 +24,20 @@
   },
   "defaultChatConfig": "Cấu hình trò chuyện mặc định",
   "defaultSystemMessage": "Thông báo hệ thống mặc định",
-  "resetToDefault": "Đặt lại về mặc định"
+  "resetToDefault": "Đặt lại về mặc định",
+  "provider": {
+    "title": "Cài đặt nhà cung cấp AI",
+    "search": "Tìm kiếm mô hình...",
+    "loading": "Đang tải...",
+    "apiKeyRequired": "Nhập khóa API để lấy danh sách mô hình",
+    "noModels": "Không tìm thấy mô hình nào",
+    "apiKeyLabel": "Khóa API:",
+    "enterApiKey": "Nhập khóa API cho {{name}}...",
+    "save": "Lưu",
+    "colName": "Mô hình",
+    "colCreated": "Ngày phát hành",
+    "colContext": "Ngữ cảnh",
+    "colPrice": "Giá (Vào/Ra)",
+    "noModelSelected": "Chưa chọn mô hình"
+  }
 }
