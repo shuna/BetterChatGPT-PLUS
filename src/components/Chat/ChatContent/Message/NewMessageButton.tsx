@@ -48,7 +48,7 @@ const NewMessageButton = React.memo(
 
     return (
       <div
-        className='h-0 w-0 relative'
+        className='h-0 w-0 relative z-10'
         key={messageIndex}
         aria-label='insert message'
       >
