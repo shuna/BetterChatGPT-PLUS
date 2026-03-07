@@ -193,7 +193,7 @@ export const MaxTokenSlider = ({
   }, [_model]);
 
   return (
-    <div>
+    <div className='mt-5 pt-5 border-t border-gray-500'>
       <label className='block text-sm font-medium text-gray-900 dark:text-white'>
         {t('token.label')}: {_maxToken}
       </label>
