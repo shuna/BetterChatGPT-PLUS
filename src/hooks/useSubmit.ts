@@ -6,8 +6,10 @@ import {
   MessageInterface,
   TextContentInterface,
 } from '@type/chat';
-import { getChatCompletion, getChatCompletionStream } from '@api/api';
+import { getChatCompletion, getChatCompletionStream, prepareStreamRequest } from '@api/api';
 import { parseEventSource } from '@api/helper';
+import * as swBridge from '@utils/swBridge';
+import { deleteRequest as deleteStreamRecord } from '@utils/streamDb';
 import { limitMessageTokens, updateTotalTokenUsed, loadEncoder } from '@utils/messageUtils';
 import { _defaultChatConfig } from '@constants/chat';
 import { officialAPIEndpoint } from '@constants/auth';
@@ -179,16 +181,32 @@ const useSubmit = () => {
           if (resolved.endpoint === officialAPIEndpoint) {
             throw new Error(t('noApiKeyWarning') as string);
           }
-          stream = await getChatCompletionStream(
-            resolved.endpoint,
-            messages,
-            chats[currentChatIndex].config,
-            undefined,
-            undefined,
-            useStore.getState().apiVersion
+        }
+
+        const messageIndex = updatedChats[currentChatIndex].messages.length - 1;
+
+        const updateMessageText = (resultString: string) => {
+          const latestChats2 = useStore.getState().chats!;
+          const uc = cloneChatAtIndex(latestChats2, currentChatIndex);
+          const um = uc[currentChatIndex].messages;
+          const oldMsg = um[um.length - 1];
+          const newContent0 = { ...oldMsg.content[0] as TextContentInterface };
+          newContent0.text += resultString;
+          const lastMsg = { ...oldMsg, content: [newContent0, ...oldMsg.content.slice(1)] };
+          um[um.length - 1] = lastMsg;
+          upsertActivePathMessage(
+            uc[currentChatIndex],
+            um.length - 1,
+            lastMsg,
+            useStore.getState().contentStore
           );
-        } else {
-          stream = await getChatCompletionStream(
+          setChats(uc);
+        };
+
+        if (await swBridge.waitForController()) {
+          // Service Worker path
+          const requestId = crypto.randomUUID();
+          const prepared = prepareStreamRequest(
             resolved.endpoint,
             messages,
             chats[currentChatIndex].config,
@@ -196,59 +214,93 @@ const useSubmit = () => {
             undefined,
             useStore.getState().apiVersion
           );
-        }
 
-        if (stream) {
-          if (stream.locked)
-            throw new Error(t('errors.streamLocked') as string);
-          const reader = stream.getReader();
-          let reading = true;
-          let partial = '';
-          const decoder = new TextDecoder();
-          while (reading && useStore.getState().generating) {
-            const { done, value } = await reader.read();
-            const chunk = partial + decoder.decode(value, { stream: !done });
-            const parsed = parseEventSource(chunk, done);
-            partial = parsed.partial;
-
-            if (parsed.done || done) {
-              reading = false;
-            }
-
-            const resultString = parsed.events.reduce((output: string, curr) => {
-              if (!curr.choices || !curr.choices[0] || !curr.choices[0].delta) {
-                return output;
+          await new Promise<void>((resolve, reject) => {
+            let swHandle: swBridge.SwStreamHandle;
+            const checkStop = setInterval(() => {
+              if (!useStore.getState().generating) {
+                swHandle?.cancel();
+                clearInterval(checkStop);
+                deleteStreamRecord(requestId).catch(() => {});
+                resolve();
               }
-              const content = curr.choices[0]?.delta?.content ?? null;
-              if (content) output += content;
-              return output;
-            }, '');
+            }, 500);
 
-            if (resultString) {
-              const latestChats2 = useStore.getState().chats!;
-              const updatedChats = cloneChatAtIndex(latestChats2, currentChatIndex);
-              const updatedMessages = updatedChats[currentChatIndex].messages;
-              const oldMsg = updatedMessages[updatedMessages.length - 1];
-              const newContent0 = { ...oldMsg.content[0] as TextContentInterface };
-              newContent0.text += resultString;
-              const lastMsg = { ...oldMsg, content: [newContent0, ...oldMsg.content.slice(1)] };
-              updatedMessages[updatedMessages.length - 1] = lastMsg;
-              upsertActivePathMessage(
-                updatedChats[currentChatIndex],
-                updatedMessages.length - 1,
-                lastMsg,
-                useStore.getState().contentStore
-              );
-              setChats(updatedChats);
+            swBridge.startStream({
+              requestId,
+              endpoint: prepared.endpoint,
+              headers: prepared.headers,
+              body: prepared.body,
+              chatIndex: currentChatIndex,
+              messageIndex,
+              onChunk: (text) => {
+                if (text) updateMessageText(text);
+              },
+              onDone: () => {
+                clearInterval(checkStop);
+                deleteStreamRecord(requestId).catch(() => {});
+                resolve();
+              },
+              onError: (error) => {
+                clearInterval(checkStop);
+                deleteStreamRecord(requestId).catch(() => {});
+                reject(new Error(error));
+              },
+            }).then((handle) => {
+              swHandle = handle;
+            }).catch((err) => {
+              clearInterval(checkStop);
+              deleteStreamRecord(requestId).catch(() => {});
+              reject(err);
+            });
+          });
+        } else {
+          // Direct streaming fallback
+          stream = await getChatCompletionStream(
+            resolved.endpoint,
+            messages,
+            chats[currentChatIndex].config,
+            resolved.key || undefined,
+            undefined,
+            useStore.getState().apiVersion
+          );
+
+          if (stream) {
+            if (stream.locked)
+              throw new Error(t('errors.streamLocked') as string);
+            const reader = stream.getReader();
+            let reading = true;
+            let partial = '';
+            const decoder = new TextDecoder();
+            while (reading && useStore.getState().generating) {
+              const { done, value } = await reader.read();
+              const chunk = partial + decoder.decode(value, { stream: !done });
+              const parsed = parseEventSource(chunk, done);
+              partial = parsed.partial;
+
+              if (parsed.done || done) {
+                reading = false;
+              }
+
+              const resultString = parsed.events.reduce((output: string, curr) => {
+                if (!curr.choices || !curr.choices[0] || !curr.choices[0].delta) {
+                  return output;
+                }
+                const content = curr.choices[0]?.delta?.content ?? null;
+                if (content) output += content;
+                return output;
+              }, '');
+
+              if (resultString) updateMessageText(resultString);
             }
+            if (useStore.getState().generating) {
+              reader.cancel(t('errors.cancelledByUser') as string);
+            } else {
+              reader.cancel(t('errors.generationCompleted') as string);
+            }
+            reader.releaseLock();
+            stream.cancel();
           }
-          if (useStore.getState().generating) {
-            reader.cancel(t('errors.cancelledByUser') as string);
-          } else {
-            reader.cancel(t('errors.generationCompleted') as string);
-          }
-          reader.releaseLock();
-          stream.cancel();
         }
       }
 
@@ -427,16 +479,29 @@ const useSubmit = () => {
           if (resolved.endpoint === officialAPIEndpoint) {
             throw new Error(t('noApiKeyWarning') as string);
           }
-          stream = await getChatCompletionStream(
-            resolved.endpoint,
-            messages,
-            chats[currentChatIndex].config,
-            undefined,
-            undefined,
-            useStore.getState().apiVersion
+        }
+
+        const updateMidChatText = (resultString: string) => {
+          const latestChats4 = useStore.getState().chats!;
+          const uc = cloneChatAtIndex(latestChats4, currentChatIndex);
+          const um = uc[currentChatIndex].messages;
+          const oldMsg4 = um[insertIndex];
+          const newContent04 = { ...oldMsg4.content[0] as TextContentInterface };
+          newContent04.text += resultString;
+          const msg = { ...oldMsg4, content: [newContent04, ...oldMsg4.content.slice(1)] };
+          um[insertIndex] = msg;
+          upsertActivePathMessage(
+            uc[currentChatIndex],
+            insertIndex,
+            msg,
+            useStore.getState().contentStore
           );
-        } else {
-          stream = await getChatCompletionStream(
+          setChats(uc);
+        };
+
+        if (await swBridge.waitForController()) {
+          const requestId = crypto.randomUUID();
+          const prepared = prepareStreamRequest(
             resolved.endpoint,
             messages,
             chats[currentChatIndex].config,
@@ -444,59 +509,92 @@ const useSubmit = () => {
             undefined,
             useStore.getState().apiVersion
           );
-        }
 
-        if (stream) {
-          if (stream.locked)
-            throw new Error(t('errors.streamLocked') as string);
-          const reader = stream.getReader();
-          let reading = true;
-          let partial = '';
-          const decoder = new TextDecoder();
-          while (reading && useStore.getState().generating) {
-            const { done, value } = await reader.read();
-            const chunk = partial + decoder.decode(value, { stream: !done });
-            const parsed = parseEventSource(chunk, done);
-            partial = parsed.partial;
-
-            if (parsed.done || done) {
-              reading = false;
-            }
-
-            const resultString = parsed.events.reduce((output: string, curr) => {
-              if (!curr.choices || !curr.choices[0] || !curr.choices[0].delta) {
-                return output;
+          await new Promise<void>((resolve, reject) => {
+            let swHandle: swBridge.SwStreamHandle;
+            const checkStop = setInterval(() => {
+              if (!useStore.getState().generating) {
+                swHandle?.cancel();
+                clearInterval(checkStop);
+                deleteStreamRecord(requestId).catch(() => {});
+                resolve();
               }
-              const content = curr.choices[0]?.delta?.content ?? null;
-              if (content) output += content;
-              return output;
-            }, '');
+            }, 500);
 
-            if (resultString) {
-              const latestChats4 = useStore.getState().chats!;
-              const updatedChats = cloneChatAtIndex(latestChats4, currentChatIndex);
-              const updatedMessages = updatedChats[currentChatIndex].messages;
-              const oldMsg4 = updatedMessages[insertIndex];
-              const newContent04 = { ...oldMsg4.content[0] as TextContentInterface };
-              newContent04.text += resultString;
-              const msg = { ...oldMsg4, content: [newContent04, ...oldMsg4.content.slice(1)] };
-              updatedMessages[insertIndex] = msg;
-              upsertActivePathMessage(
-                updatedChats[currentChatIndex],
-                insertIndex,
-                msg,
-                useStore.getState().contentStore
-              );
-              setChats(updatedChats);
+            swBridge.startStream({
+              requestId,
+              endpoint: prepared.endpoint,
+              headers: prepared.headers,
+              body: prepared.body,
+              chatIndex: currentChatIndex,
+              messageIndex: insertIndex,
+              onChunk: (text) => {
+                if (text) updateMidChatText(text);
+              },
+              onDone: () => {
+                clearInterval(checkStop);
+                deleteStreamRecord(requestId).catch(() => {});
+                resolve();
+              },
+              onError: (error) => {
+                clearInterval(checkStop);
+                deleteStreamRecord(requestId).catch(() => {});
+                reject(new Error(error));
+              },
+            }).then((handle) => {
+              swHandle = handle;
+            }).catch((err) => {
+              clearInterval(checkStop);
+              deleteStreamRecord(requestId).catch(() => {});
+              reject(err);
+            });
+          });
+        } else {
+          stream = await getChatCompletionStream(
+            resolved.endpoint,
+            messages,
+            chats[currentChatIndex].config,
+            resolved.key || undefined,
+            undefined,
+            useStore.getState().apiVersion
+          );
+
+          if (stream) {
+            if (stream.locked)
+              throw new Error(t('errors.streamLocked') as string);
+            const reader = stream.getReader();
+            let reading = true;
+            let partial = '';
+            const decoder = new TextDecoder();
+            while (reading && useStore.getState().generating) {
+              const { done, value } = await reader.read();
+              const chunk = partial + decoder.decode(value, { stream: !done });
+              const parsed = parseEventSource(chunk, done);
+              partial = parsed.partial;
+
+              if (parsed.done || done) {
+                reading = false;
+              }
+
+              const resultString = parsed.events.reduce((output: string, curr) => {
+                if (!curr.choices || !curr.choices[0] || !curr.choices[0].delta) {
+                  return output;
+                }
+                const content = curr.choices[0]?.delta?.content ?? null;
+                if (content) output += content;
+                return output;
+              }, '');
+
+              if (resultString) updateMidChatText(resultString);
             }
+            if (useStore.getState().generating) {
+              reader.cancel(t('errors.cancelledByUser') as string);
+            } else {
+              reader.cancel(t('errors.generationCompleted') as string);
+            }
+            reader.releaseLock();
+            stream.cancel();
           }
-          if (useStore.getState().generating) {
-            reader.cancel(t('errors.cancelledByUser') as string);
-          } else {
-            reader.cancel(t('errors.generationCompleted') as string);
-          }
-          reader.releaseLock();
-          stream.cancel();
         }
       }
 

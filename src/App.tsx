@@ -6,6 +6,7 @@ import Chat from '@components/Chat';
 import Menu from '@components/Menu';
 
 import useInitialiseNewChat from '@hooks/useInitialiseNewChat';
+import useStreamRecovery from '@hooks/useStreamRecovery';
 import { ChatInterface } from '@type/chat';
 import { Theme } from '@type/theme';
 import ApiPopup from '@components/ApiPopup';
@@ -16,6 +17,7 @@ import VersionInfo from '@components/Footer/VersionInfo';
 
 function App() {
   const initialiseNewChat = useInitialiseNewChat();
+  useStreamRecovery();
   const setChats = useStore((state) => state.setChats);
   const setTheme = useStore((state) => state.setTheme);
   const setApiKey = useStore((state) => state.setApiKey);
