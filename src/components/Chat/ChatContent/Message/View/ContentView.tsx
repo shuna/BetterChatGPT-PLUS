@@ -20,6 +20,7 @@ import {
 } from '@type/chat';
 
 import RefreshButton from './Button/RefreshButton';
+import RegenerateNextButton from './Button/RegenerateNextButton';
 import UpButton from './Button/UpButton';
 import DownButton from './Button/DownButton';
 import CopyButton from './Button/CopyButton';
@@ -49,7 +50,7 @@ const ContentView = memo(
     setIsEdit: React.Dispatch<React.SetStateAction<boolean>>;
     messageIndex: number;
   }) => {
-    const { handleSubmit } = useSubmit();
+    const { handleSubmit, handleSubmitMidChat } = useSubmit();
 
     const [isDelete, setIsDelete] = useState<boolean>(false);
     const [zoomedImage, setZoomedImage] = useState<string | null>(null);
@@ -109,13 +110,47 @@ const ContentView = memo(
     };
 
     const handleRefresh = () => {
+      if (useStore.getState().generating) return;
+
       const updatedChats: ChatInterface[] = JSON.parse(
         JSON.stringify(useStore.getState().chats)
       );
       const updatedMessages = updatedChats[currentChatIndex].messages;
-      updatedMessages.splice(updatedMessages.length - 1, 1);
-      setChats(updatedChats);
-      handleSubmit();
+      const contentStore = useStore.getState().contentStore;
+
+      const removeAt = (idx: number) => {
+        updatedMessages.splice(idx, 1);
+        if (updatedChats[currentChatIndex].branchTree) {
+          deleteActivePathMessage(updatedChats[currentChatIndex], idx, contentStore);
+          updatedChats[currentChatIndex].messages = materializeActivePath(
+            updatedChats[currentChatIndex].branchTree!,
+            contentStore
+          );
+        }
+      };
+
+      if (role === 'assistant') {
+        // assistantバブル: 自身を削除して再生成
+        removeAt(messageIndex);
+        setChats(updatedChats);
+        if (messageIndex >= updatedChats[currentChatIndex].messages.length) {
+          handleSubmit();
+        } else {
+          handleSubmitMidChat(messageIndex);
+        }
+      } else {
+        // userバブル: 直下のメッセージ(assistant)を1つ削除して再生成
+        const nextIndex = messageIndex + 1;
+        if (nextIndex < updatedMessages.length) {
+          removeAt(nextIndex);
+        }
+        setChats(updatedChats);
+        if (nextIndex >= updatedChats[currentChatIndex].messages.length) {
+          handleSubmit();
+        } else {
+          handleSubmitMidChat(nextIndex);
+        }
+      }
     };
 
     const currentTextContent = isTextContent(content[0]) ? content[0].text : '';
@@ -195,11 +230,12 @@ const ContentView = memo(
           <div className='ml-auto flex flex-wrap items-center justify-end gap-2'>
             {isDelete || (
               <>
-                {!useStore.getState().generating &&
-                  role === 'assistant' &&
-                  messageIndex === lastMessageIndex && (
-                    <RefreshButton onClick={handleRefresh} />
-                  )}
+                {!useStore.getState().generating && role === 'assistant' && (
+                  <RefreshButton onClick={handleRefresh} />
+                )}
+                {!useStore.getState().generating && role === 'user' && (
+                  <RegenerateNextButton onClick={handleRefresh} />
+                )}
                 {messageIndex !== 0 && <UpButton onClick={handleMoveUp} />}
                 {messageIndex !== lastMessageIndex && (
                   <DownButton onClick={handleMoveDown} />
