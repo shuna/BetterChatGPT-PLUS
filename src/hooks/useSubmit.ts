@@ -207,28 +207,24 @@ const useSubmit = () => {
           const decoder = new TextDecoder();
           while (reading && useStore.getState().generating) {
             const { done, value } = await reader.read();
-            const result = parseEventSource(
-              partial + decoder.decode(value, { stream: true })
-            );
-            partial = '';
+            const chunk = partial + decoder.decode(value, { stream: !done });
+            const parsed = parseEventSource(chunk, done);
+            partial = parsed.partial;
 
-            if (result === '[DONE]' || done) {
+            if (parsed.done || done) {
               reading = false;
-            } else {
-              const resultString = result.reduce((output: string, curr) => {
-                if (typeof curr === 'string') {
-                  partial += curr;
-                } else {
-                  if (!curr.choices || !curr.choices[0] || !curr.choices[0].delta) {
-                    // cover the case where we get some element which doesnt have text data, e.g. usage stats
-                    return output;
-                  }
-                  const content = curr.choices[0]?.delta?.content ?? null;
-                  if (content) output += content;
-                }
-                return output;
-              }, '');
+            }
 
+            const resultString = parsed.events.reduce((output: string, curr) => {
+              if (!curr.choices || !curr.choices[0] || !curr.choices[0].delta) {
+                return output;
+              }
+              const content = curr.choices[0]?.delta?.content ?? null;
+              if (content) output += content;
+              return output;
+            }, '');
+
+            if (resultString) {
               const latestChats2 = useStore.getState().chats!;
               const updatedChats = cloneChatAtIndex(latestChats2, currentChatIndex);
               const updatedMessages = updatedChats[currentChatIndex].messages;
@@ -459,27 +455,24 @@ const useSubmit = () => {
           const decoder = new TextDecoder();
           while (reading && useStore.getState().generating) {
             const { done, value } = await reader.read();
-            const result = parseEventSource(
-              partial + decoder.decode(value, { stream: true })
-            );
-            partial = '';
+            const chunk = partial + decoder.decode(value, { stream: !done });
+            const parsed = parseEventSource(chunk, done);
+            partial = parsed.partial;
 
-            if (result === '[DONE]' || done) {
+            if (parsed.done || done) {
               reading = false;
-            } else {
-              const resultString = result.reduce((output: string, curr) => {
-                if (typeof curr === 'string') {
-                  partial += curr;
-                } else {
-                  if (!curr.choices || !curr.choices[0] || !curr.choices[0].delta) {
-                    return output;
-                  }
-                  const content = curr.choices[0]?.delta?.content ?? null;
-                  if (content) output += content;
-                }
-                return output;
-              }, '');
+            }
 
+            const resultString = parsed.events.reduce((output: string, curr) => {
+              if (!curr.choices || !curr.choices[0] || !curr.choices[0].delta) {
+                return output;
+              }
+              const content = curr.choices[0]?.delta?.content ?? null;
+              if (content) output += content;
+              return output;
+            }, '');
+
+            if (resultString) {
               const latestChats4 = useStore.getState().chats!;
               const updatedChats = cloneChatAtIndex(latestChats4, currentChatIndex);
               const updatedMessages = updatedChats[currentChatIndex].messages;
