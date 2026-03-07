@@ -121,15 +121,21 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   branchClipboard: null,
   branchEditorFocusNodeId: null,
   setBranchEditorFocusNodeId: (nodeId) => {
+    if (get().branchEditorFocusNodeId === nodeId) return;
     set({ branchEditorFocusNodeId: nodeId } as any);
   },
   chatActiveView: 'chat' as 'chat' | 'branch-editor',
   setChatActiveView: (view) => {
+    if (get().chatActiveView === view) return;
     set({ chatActiveView: view } as any);
   },
 
   isMultiView: false,
   setIsMultiView: (enabled) => {
+    if (get().isMultiView === enabled && (enabled || (
+      get().multiViewChatIndices.length === 0 &&
+      get().multiViewPrimaryChatIndex === null
+    ))) return;
     set({ isMultiView: enabled } as any);
     if (!enabled) {
       set({ multiViewChatIndices: [], multiViewPrimaryChatIndex: null } as any);
@@ -137,10 +143,18 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   },
   multiViewChatIndices: [],
   setMultiViewChatIndices: (indices) => {
+    const current = get().multiViewChatIndices;
+    if (
+      current.length === indices.length &&
+      current.every((value, index) => value === indices[index])
+    ) {
+      return;
+    }
     set({ multiViewChatIndices: indices } as any);
   },
   multiViewPrimaryChatIndex: null,
   setMultiViewPrimaryChatIndex: (index) => {
+    if (get().multiViewPrimaryChatIndex === index) return;
     set({ multiViewPrimaryChatIndex: index } as any);
   },
   moveBranchSequence: (sourceChatIndex, fromNodeId, toNodeId, targetChatIndex, afterNodeId) => {

@@ -5,6 +5,18 @@ import { ConfigInterface, ImageDetail, TotalTokenUsed } from '@type/chat';
 import { ModelOptions } from '@utils/modelReader';
 import { normalizeConfigStream } from '@utils/streamSupport';
 
+const isSameConfig = (
+  left: ConfigInterface,
+  right: ConfigInterface
+) =>
+  left.model === right.model &&
+  left.max_tokens === right.max_tokens &&
+  left.temperature === right.temperature &&
+  left.presence_penalty === right.presence_penalty &&
+  left.top_p === right.top_p &&
+  left.frequency_penalty === right.frequency_penalty &&
+  (left.stream !== false) === (right.stream !== false);
+
 export interface ConfigSlice {
   openConfig: boolean;
   theme: Theme;
@@ -67,114 +79,134 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
   autoScroll: true,
   hideShareGPT: true,
   setOpenConfig: (openConfig: boolean) => {
+    if (get().openConfig === openConfig) return;
     set((prev: ConfigSlice) => ({
       ...prev,
       openConfig: openConfig,
     }));
   },
   setTheme: (theme: Theme) => {
+    if (get().theme === theme) return;
     set((prev: ConfigSlice) => ({
       ...prev,
       theme: theme,
     }));
   },
   setAutoTitle: (autoTitle: boolean) => {
+    if (get().autoTitle === autoTitle) return;
     set((prev: ConfigSlice) => ({
       ...prev,
       autoTitle: autoTitle,
     }));
   },
   setTitleModel: (titleModel: ModelOptions) => {
+    if (get().titleModel === titleModel) return;
     set((prev: ConfigSlice) => ({
       ...prev,
       titleModel: titleModel,
     }));
   },
   setAdvancedMode: (advancedMode: boolean) => {
+    if (get().advancedMode === advancedMode) return;
     set((prev: ConfigSlice) => ({
       ...prev,
       advancedMode: advancedMode,
     }));
   },
   setDefaultChatConfig: (defaultChatConfig: ConfigInterface) => {
+    const normalized = normalizeConfigStream(defaultChatConfig);
+    if (isSameConfig(get().defaultChatConfig, normalized)) return;
     set((prev: ConfigSlice) => ({
       ...prev,
-      defaultChatConfig: normalizeConfigStream(defaultChatConfig),
+      defaultChatConfig: normalized,
     }));
   },
   setDefaultSystemMessage: (defaultSystemMessage: string) => {
+    if (get().defaultSystemMessage === defaultSystemMessage) return;
     set((prev: ConfigSlice) => ({
       ...prev,
       defaultSystemMessage: defaultSystemMessage,
     }));
   },
   setHideMenuOptions: (hideMenuOptions: boolean) => {
+    if (get().hideMenuOptions === hideMenuOptions) return;
     set((prev: ConfigSlice) => ({
       ...prev,
       hideMenuOptions: hideMenuOptions,
     }));
   },
   setHideSideMenu: (hideSideMenu: boolean) => {
+    if (get().hideSideMenu === hideSideMenu) return;
     set((prev: ConfigSlice) => ({
       ...prev,
       hideSideMenu: hideSideMenu,
     }));
   },
   setEnterToSubmit: (enterToSubmit: boolean) => {
+    if (get().enterToSubmit === enterToSubmit) return;
     set((prev: ConfigSlice) => ({
       ...prev,
       enterToSubmit: enterToSubmit,
     }));
   },
   setInlineLatex: (inlineLatex: boolean) => {
+    if (get().inlineLatex === inlineLatex) return;
     set((prev: ConfigSlice) => ({
       ...prev,
       inlineLatex: inlineLatex,
     }));
   },
   setMarkdownMode: (markdownMode: boolean) => {
+    if (get().markdownMode === markdownMode) return;
     set((prev: ConfigSlice) => ({
       ...prev,
       markdownMode: markdownMode,
     }));
   },
   setCountTotalTokens: (countTotalTokens: boolean) => {
+    if (get().countTotalTokens === countTotalTokens) return;
     set((prev: ConfigSlice) => ({
       ...prev,
       countTotalTokens: countTotalTokens,
     }));
   },
   setTotalTokenUsed: (totalTokenUsed: TotalTokenUsed) => {
+    if (get().totalTokenUsed === totalTokenUsed) return;
     set((prev: ConfigSlice) => ({
       ...prev,
       totalTokenUsed: totalTokenUsed,
     }));
   },
   setMenuWidth: (menuWidth: number) => {
+    if (get().menuWidth === menuWidth) return;
     set((prev: ConfigSlice) => ({
       ...prev,
       menuWidth: menuWidth,
     }));
   },
   setDisplayChatSize: (displayChatSize: boolean) => {
+    if (get().displayChatSize === displayChatSize) return;
     set((prev: ConfigSlice) => ({
       ...prev,
       displayChatSize: displayChatSize,
     }));
   },
   setDefaultImageDetail: (imageDetail: ImageDetail) => {
+    if (get().defaultImageDetail === imageDetail) return;
     set((prev: ConfigSlice) => ({
       ...prev,
       defaultImageDetail: imageDetail,
     }));
   },
   setAutoScroll: (autoScroll: boolean) => {
+    if (get().autoScroll === autoScroll) return;
     set((prev: ConfigSlice) => ({
       ...prev,
       autoScroll: autoScroll,
     }));
   },
   setHideShareGPT: (hideShareGPT: boolean) => {
+    if (get().hideShareGPT === hideShareGPT) return;
     set((prev: ConfigSlice) => ({
       ...prev,
       hideShareGPT: hideShareGPT,

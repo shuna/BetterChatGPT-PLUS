@@ -139,6 +139,7 @@ export const createProviderSlice: StoreSlice<ProviderSlice> = (set, get) => ({
   providers: { ...DEFAULT_PROVIDERS },
   favoriteModels: [],
   setProviderApiKey: (id: ProviderId, key: string) => {
+    if (get().providers[id]?.apiKey === key) return;
     set((prev: ProviderSlice) => ({
       ...prev,
       providers: {
@@ -148,6 +149,7 @@ export const createProviderSlice: StoreSlice<ProviderSlice> = (set, get) => ({
     }));
   },
   setProviderEndpoint: (id: ProviderId, endpoint: string) => {
+    if (get().providers[id]?.endpoint === endpoint) return;
     set((prev: ProviderSlice) => ({
       ...prev,
       providers: {
@@ -176,6 +178,7 @@ export const createProviderSlice: StoreSlice<ProviderSlice> = (set, get) => ({
     });
   },
   setFavoriteModels: (models: FavoriteModel[]) => {
+    if (get().favoriteModels === models) return;
     set((prev: ProviderSlice) => ({
       ...prev,
       favoriteModels: models,
