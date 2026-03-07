@@ -69,12 +69,18 @@ const ContentView = memo(
     );
     const inlineLatex = useStore((state) => state.inlineLatex);
     const markdownMode = useStore((state) => state.markdownMode);
-    const generating = useStore((state) => state.generating);
-    const generatingMessageIndex = useStore((state) => state.generatingMessageIndex);
-    const isGeneratingMessage =
+    const currentChatId = useStore((state) =>
+      state.chats?.[state.currentChatIndex]?.id ?? ''
+    );
+    const isGeneratingMessage = useStore((state) =>
       role === 'assistant' &&
-      generating &&
-      generatingMessageIndex === messageIndex;
+      Object.values(state.generatingSessions).some(
+        (s) => s.chatId === currentChatId && s.messageIndex === messageIndex
+      )
+    );
+    const isCurrentChatGenerating = useStore((state) =>
+      Object.values(state.generatingSessions).some((s) => s.chatId === currentChatId)
+    );
 
     const handleDelete = () => {
       const chats = useStore.getState().chats!;
@@ -110,7 +116,7 @@ const ContentView = memo(
     };
 
     const handleRefresh = () => {
-      if (useStore.getState().generating) return;
+      if (isCurrentChatGenerating) return;
 
       const plan = resolveRegenerateTarget(
         role as Role,
@@ -221,10 +227,10 @@ const ContentView = memo(
           <div className='ml-auto flex flex-wrap items-center justify-end gap-2'>
             {isDelete || (
               <>
-                {!generating && role === 'assistant' && (
+                {!isCurrentChatGenerating && role === 'assistant' && (
                   <RefreshButton onClick={handleRefresh} />
                 )}
-                {!generating && role === 'user' && (
+                {!isCurrentChatGenerating && role === 'user' && (
                   <RegenerateNextButton onClick={handleRefresh} />
                 )}
                 {messageIndex !== 0 && <UpButton onClick={handleMoveUp} />}

@@ -12,7 +12,8 @@ export const getChatCompletion = async (
   config: ConfigInterface,
   apiKey?: string,
   customHeaders?: Record<string, string>,
-  apiVersionToUse?: string
+  apiVersionToUse?: string,
+  signal?: AbortSignal
 ) => {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
@@ -58,6 +59,7 @@ export const getChatCompletion = async (
       ...config,
       max_tokens: undefined,
     }),
+    signal,
   });
   if (!response.ok) throw new Error(await response.text());
 
@@ -71,7 +73,8 @@ export const getChatCompletionStream = async (
   config: ConfigInterface,
   apiKey?: string,
   customHeaders?: Record<string, string>,
-  apiVersionToUse?: string
+  apiVersionToUse?: string,
+  signal?: AbortSignal
 ) => {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
@@ -114,6 +117,7 @@ export const getChatCompletionStream = async (
       max_tokens: undefined,
       stream: true,
     }),
+    signal,
   });
   if (response.status === 404 || response.status === 405) {
     const text = await response.text();

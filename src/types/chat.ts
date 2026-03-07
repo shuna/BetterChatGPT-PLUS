@@ -265,4 +265,15 @@ export interface LocalStorageInterfaceV9ToV10
   favoriteModels?: any;
 }
 
+export interface GeneratingSession {
+  sessionId: string;
+  chatId: string;
+  chatIndex: number;
+  messageIndex: number;
+  mode: 'append' | 'midchat';
+  insertIndex: number | null;
+  requestPath: 'sw' | 'fetch';
+  startedAt: number;
+}
+
 export type { ModelOptions };

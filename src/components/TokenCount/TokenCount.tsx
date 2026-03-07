@@ -12,7 +12,10 @@ const TokenCount = React.memo(() => {
   const [tokenCount, setTokenCount] = useState<number>(0);
   const [imageTokenCount, setImageTokenCount] = useState<number>(0);
   const encoderReady = useTokenEncoder();
-  const generating = useStore((state) => state.generating);
+  const generating = useStore((state) => {
+    const chatId = state.chats?.[state.currentChatIndex]?.id ?? '';
+    return Object.values(state.generatingSessions).some((s) => s.chatId === chatId);
+  });
   const messages = useStore(
     (state) =>
       state.chats ? state.chats[state.currentChatIndex].messages : [],

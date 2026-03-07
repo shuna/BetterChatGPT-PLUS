@@ -1,8 +1,8 @@
 import useStore from '@store/store';
 import { useTranslation } from 'react-i18next';
 import {
-  ChatInterface,
   ConfigInterface,
+  GeneratingSession,
   MessageInterface,
   TextContentInterface,
 } from '@type/chat';
@@ -13,10 +13,54 @@ import { deleteRequest as deleteStreamRecord } from '@utils/streamDb';
 import { limitMessageTokens, updateTotalTokenUsed, loadEncoder } from '@utils/messageUtils';
 import { _defaultChatConfig } from '@constants/chat';
 import { officialAPIEndpoint } from '@constants/auth';
-import { FavoriteModel, ProviderConfig } from '@store/provider-slice';
 import { upsertActivePathMessage } from '@utils/branchUtils';
 import { cloneChatAtIndex } from '@utils/chatShallowClone';
 import { getEffectiveStreamEnabled } from '@utils/streamSupport';
+
+// ── Runtime maps (NOT in store – non-serializable) ──
+const abortControllers = new Map<string, AbortController>();
+const swCancellers = new Map<string, () => void>();
+
+export function stopSession(sessionId: string) {
+  abortControllers.get(sessionId)?.abort();
+  swCancellers.get(sessionId)?.();
+  abortControllers.delete(sessionId);
+  swCancellers.delete(sessionId);
+  // Remove from store immediately so SW polling fallback can detect the stop
+  useStore.getState().removeSession(sessionId);
+}
+
+export function stopSessionsForChat(chatId: string) {
+  const sessions = useStore.getState().generatingSessions;
+  Object.values(sessions)
+    .filter((s) => s.chatId === chatId)
+    .forEach((s) => stopSession(s.sessionId));
+}
+
+// ── Atomic chunk writer ──
+function writeChunk(chatId: string, messageIndex: number, text: string) {
+  useStore.setState((state) => {
+    const chats = state.chats;
+    if (!chats) return state;
+    const ci = chats.findIndex((c) => c.id === chatId);
+    if (ci < 0) return state;
+    const uc = cloneChatAtIndex(chats, ci);
+    const msg = uc[ci].messages[messageIndex];
+    if (!msg) return state;
+    const text0 = msg.content[0] as TextContentInterface;
+    const updated = { ...msg, content: [{ ...text0, text: text0.text + text }, ...msg.content.slice(1)] };
+    uc[ci].messages[messageIndex] = updated;
+    upsertActivePathMessage(uc[ci], messageIndex, updated, state.contentStore);
+    return { ...state, chats: uc };
+  });
+}
+
+// ── Helper: check if chat is already generating ──
+function isChatGenerating(chatId: string): boolean {
+  return Object.values(useStore.getState().generatingSessions).some(
+    (s) => s.chatId === chatId
+  );
+}
 
 const useSubmit = () => {
   const { t, i18n } = useTranslation('api');
@@ -26,21 +70,15 @@ const useSubmit = () => {
   const apiKey = useStore((state) => state.apiKey);
   const favoriteModels = useStore((state) => state.favoriteModels) || [];
   const providers = useStore((state) => state.providers) || {};
-  const setGenerating = useStore((state) => state.setGenerating);
-  const setGeneratingMessageIndex = useStore((state) => state.setGeneratingMessageIndex);
-  const setLastSubmitContext = useStore((state) => state.setLastSubmitContext);
-  const generating = useStore((state) => state.generating);
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const setChats = useStore((state) => state.setChats);
 
-  // Resolve provider endpoint/apiKey for a model
   const resolveProvider = (modelId: string): { endpoint: string; key?: string } => {
     const fav = favoriteModels.find((f) => f.modelId === modelId);
     if (fav && providers[fav.providerId]) {
       const p = providers[fav.providerId];
       return { endpoint: p.endpoint, key: p.apiKey };
     }
-    // Fallback to global settings
     return { endpoint: apiEndpoint, key: apiKey };
   };
 
@@ -59,356 +97,326 @@ const useSubmit = () => {
           throw new Error(t('noApiKeyWarning') as string);
         }
         data = await getChatCompletion(
-          resolved.endpoint,
-          message,
-          titleChatConfig,
-          undefined,
-          undefined,
+          resolved.endpoint, message, titleChatConfig, undefined, undefined,
           useStore.getState().apiVersion
         );
       } else {
         data = await getChatCompletion(
-          resolved.endpoint,
-          message,
-          titleChatConfig,
-          resolved.key,
-          undefined,
+          resolved.endpoint, message, titleChatConfig, resolved.key, undefined,
           useStore.getState().apiVersion
         );
       }
     } catch (error: unknown) {
-      throw new Error(
-        `${t('errors.errorGeneratingTitle')}\n${(error as Error).message}`
-      );
+      throw new Error(`${t('errors.errorGeneratingTitle')}\n${(error as Error).message}`);
     }
     return data.choices[0].message.content;
   };
 
+  // ── Stream execution (shared by append & midchat) ──
+  const executeStream = async (
+    sessionId: string,
+    chatId: string,
+    chatIndex: number,
+    messageIndex: number,
+    messages: MessageInterface[],
+    config: ConfigInterface,
+    resolved: { endpoint: string; key?: string },
+    abortController: AbortController
+  ) => {
+    const isStreamSupported = getEffectiveStreamEnabled(config);
+
+    if (!isStreamSupported) {
+      // Non-streaming – pass AbortSignal so stopSession() can cancel the fetch
+      let data;
+      const signal = abortController.signal;
+      if (!resolved.key || resolved.key.length === 0) {
+        if (resolved.endpoint === officialAPIEndpoint) {
+          throw new Error(t('noApiKeyWarning') as string);
+        }
+        data = await getChatCompletion(
+          resolved.endpoint, messages, config, undefined, undefined,
+          useStore.getState().apiVersion, signal
+        );
+      } else {
+        data = await getChatCompletion(
+          resolved.endpoint, messages, config, resolved.key, undefined,
+          useStore.getState().apiVersion, signal
+        );
+      }
+
+      // Guard: if session was stopped while awaiting, discard the result
+      if (!useStore.getState().generatingSessions[sessionId]) return;
+
+      if (!data?.choices?.[0]?.message?.content) {
+        throw new Error(t('errors.failedToRetrieveData') as string);
+      }
+
+      writeChunk(chatId, messageIndex, data.choices[0].message.content);
+      return;
+    }
+
+    // Streaming
+    if (!resolved.key || resolved.key.length === 0) {
+      if (resolved.endpoint === officialAPIEndpoint) {
+        throw new Error(t('noApiKeyWarning') as string);
+      }
+    }
+
+    const onChunk = (text: string) => {
+      if (text) writeChunk(chatId, messageIndex, text);
+    };
+
+    if (await swBridge.waitForController()) {
+      // ── Service Worker path ──
+      const requestId = crypto.randomUUID();
+      const prepared = prepareStreamRequest(
+        resolved.endpoint, messages, config, resolved.key, undefined,
+        useStore.getState().apiVersion
+      );
+
+      await new Promise<void>((resolve, reject) => {
+        let swHandle: swBridge.SwStreamHandle;
+
+        // Fallback polling: if stopSession was called before swHandle resolved
+        const checkStop = setInterval(() => {
+          if (!useStore.getState().generatingSessions[sessionId]) {
+            swHandle?.cancel();
+            clearInterval(checkStop);
+            deleteStreamRecord(requestId).catch(() => {});
+            resolve();
+          }
+        }, 500);
+
+        swBridge.startStream({
+          requestId,
+          endpoint: prepared.endpoint,
+          headers: prepared.headers,
+          body: prepared.body,
+          chatIndex,
+          messageIndex,
+          onChunk,
+          onDone: () => {
+            clearInterval(checkStop);
+            deleteStreamRecord(requestId).catch(() => {});
+            resolve();
+          },
+          onError: (error) => {
+            clearInterval(checkStop);
+            deleteStreamRecord(requestId).catch(() => {});
+            reject(new Error(error));
+          },
+        }).then((handle) => {
+          swHandle = handle;
+          swCancellers.set(sessionId, () => handle.cancel());
+        }).catch((err) => {
+          clearInterval(checkStop);
+          deleteStreamRecord(requestId).catch(() => {});
+          reject(err);
+        });
+      });
+    } else {
+      // ── Direct fetch path ──
+      const stream = await getChatCompletionStream(
+        resolved.endpoint, messages, config,
+        resolved.key || undefined, undefined,
+        useStore.getState().apiVersion,
+        abortController.signal
+      );
+
+      if (stream) {
+        if (stream.locked) throw new Error(t('errors.streamLocked') as string);
+        const reader = stream.getReader();
+        let reading = true;
+        let partial = '';
+        const decoder = new TextDecoder();
+
+        try {
+          while (reading && !abortController.signal.aborted) {
+            const { done, value } = await reader.read();
+            const chunk = partial + decoder.decode(value, { stream: !done });
+            const parsed = parseEventSource(chunk, done);
+            partial = parsed.partial;
+
+            if (parsed.done || done) reading = false;
+
+            const resultString = parsed.events.reduce((output: string, curr) => {
+              if (!curr.choices?.[0]?.delta) return output;
+              const content = curr.choices[0]?.delta?.content ?? null;
+              if (content) output += content;
+              return output;
+            }, '');
+
+            if (resultString) onChunk(resultString);
+          }
+        } finally {
+          if (!abortController.signal.aborted) {
+            reader.cancel(t('errors.generationCompleted') as string);
+          } else {
+            reader.cancel(t('errors.cancelledByUser') as string);
+          }
+          reader.releaseLock();
+          stream.cancel();
+        }
+      }
+    }
+  };
+
   const handleSubmit = async () => {
     const chats = useStore.getState().chats;
-    if (generating || !chats) return;
+    if (!chats) return;
 
-    const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
+    const chatIndex = currentChatIndex;
+    const chatId = chats[chatIndex]?.id;
+    if (!chatId) return;
+
+    // Same-chat guard
+    if (isChatGenerating(chatId)) return;
+
+    const sessionId = crypto.randomUUID();
+    const abortController = new AbortController();
+    abortControllers.set(sessionId, abortController);
+
+    const updatedChats = cloneChatAtIndex(chats, chatIndex);
     const assistantMessage: MessageInterface = {
       role: 'assistant',
-      content: [
-        {
-          type: 'text',
-          text: '',
-        } as TextContentInterface,
-      ],
+      content: [{ type: 'text', text: '' } as TextContentInterface],
     };
-    updatedChats[currentChatIndex].messages.push(assistantMessage);
+    updatedChats[chatIndex].messages.push(assistantMessage);
+    const messageIndex = updatedChats[chatIndex].messages.length - 1;
     upsertActivePathMessage(
-      updatedChats[currentChatIndex],
-      updatedChats[currentChatIndex].messages.length - 1,
-      assistantMessage,
+      updatedChats[chatIndex], messageIndex, assistantMessage,
       useStore.getState().contentStore
     );
-
     setChats(updatedChats);
-    setGenerating(true);
-    setGeneratingMessageIndex(updatedChats[currentChatIndex].messages.length - 1);
-    setLastSubmitContext('append', null, currentChatIndex);
+
+    const session: GeneratingSession = {
+      sessionId, chatId, chatIndex, messageIndex,
+      mode: 'append', insertIndex: null,
+      requestPath: 'sw', startedAt: Date.now(),
+    };
+    useStore.getState().addSession(session);
+    useStore.getState().setLastSubmitContext('append', null, chatIndex, chatId);
 
     try {
-      const chatConfig = chats[currentChatIndex].config;
-      const isStreamSupported = getEffectiveStreamEnabled(chatConfig);
-      let data;
-      let stream;
-      if (chats[currentChatIndex].messages.length === 0)
+      if (chats[chatIndex].messages.length === 0)
         throw new Error(t('errors.noMessagesSubmitted') as string);
 
       await loadEncoder();
       const messages = limitMessageTokens(
-        chats[currentChatIndex].messages,
-        chats[currentChatIndex].config.max_tokens,
-        chats[currentChatIndex].config.model
+        chats[chatIndex].messages,
+        chats[chatIndex].config.max_tokens,
+        chats[chatIndex].config.model
       );
       if (messages.length === 0)
         throw new Error(t('errors.messageExceedMaxToken') as string);
-      const resolved = resolveProvider(chats[currentChatIndex].config.model);
-      if (!isStreamSupported) {
-        if (!resolved.key || resolved.key.length === 0) {
-          if (resolved.endpoint === officialAPIEndpoint) {
-            throw new Error(t('noApiKeyWarning') as string);
-          }
-          data = await getChatCompletion(
-            resolved.endpoint,
-            messages,
-            chats[currentChatIndex].config,
-            undefined,
-            undefined,
-            useStore.getState().apiVersion
-          );
-        } else {
-          data = await getChatCompletion(
-            resolved.endpoint,
-            messages,
-            chats[currentChatIndex].config,
-            resolved.key,
-            undefined,
-            useStore.getState().apiVersion
-          );
-        }
 
-        if (
-          !data ||
-          !data.choices ||
-          !data.choices[0] ||
-          !data.choices[0].message ||
-          !data.choices[0].message.content
-        ) {
-          throw new Error(t('errors.failedToRetrieveData') as string);
-        }
+      const resolved = resolveProvider(chats[chatIndex].config.model);
 
-        const latestChats = useStore.getState().chats!;
-        const updatedChats = cloneChatAtIndex(latestChats, currentChatIndex);
-        const updatedMessages = updatedChats[currentChatIndex].messages;
-        const oldMsg = updatedMessages[updatedMessages.length - 1];
-        const newContent0 = { ...oldMsg.content[0] as TextContentInterface };
-        newContent0.text += data.choices[0].message.content;
-        const lastMsg = { ...oldMsg, content: [newContent0, ...oldMsg.content.slice(1)] };
-        updatedMessages[updatedMessages.length - 1] = lastMsg;
-        upsertActivePathMessage(
-          updatedChats[currentChatIndex],
-          updatedMessages.length - 1,
-          lastMsg,
-          useStore.getState().contentStore
-        );
-        setChats(updatedChats);
-      } else {
-        if (!resolved.key || resolved.key.length === 0) {
-          if (resolved.endpoint === officialAPIEndpoint) {
-            throw new Error(t('noApiKeyWarning') as string);
-          }
-        }
+      await executeStream(
+        sessionId, chatId, chatIndex, messageIndex,
+        messages, chats[chatIndex].config, resolved, abortController
+      );
 
-        const messageIndex = updatedChats[currentChatIndex].messages.length - 1;
-
-        const updateMessageText = (resultString: string) => {
-          const latestChats2 = useStore.getState().chats!;
-          const uc = cloneChatAtIndex(latestChats2, currentChatIndex);
-          const um = uc[currentChatIndex].messages;
-          const oldMsg = um[um.length - 1];
-          const newContent0 = { ...oldMsg.content[0] as TextContentInterface };
-          newContent0.text += resultString;
-          const lastMsg = { ...oldMsg, content: [newContent0, ...oldMsg.content.slice(1)] };
-          um[um.length - 1] = lastMsg;
-          upsertActivePathMessage(
-            uc[currentChatIndex],
-            um.length - 1,
-            lastMsg,
-            useStore.getState().contentStore
-          );
-          setChats(uc);
-        };
-
-        if (await swBridge.waitForController()) {
-          // Service Worker path
-          const requestId = crypto.randomUUID();
-          const prepared = prepareStreamRequest(
-            resolved.endpoint,
-            messages,
-            chats[currentChatIndex].config,
-            resolved.key,
-            undefined,
-            useStore.getState().apiVersion
-          );
-
-          await new Promise<void>((resolve, reject) => {
-            let swHandle: swBridge.SwStreamHandle;
-            const checkStop = setInterval(() => {
-              if (!useStore.getState().generating) {
-                swHandle?.cancel();
-                clearInterval(checkStop);
-                deleteStreamRecord(requestId).catch(() => {});
-                resolve();
-              }
-            }, 500);
-
-            swBridge.startStream({
-              requestId,
-              endpoint: prepared.endpoint,
-              headers: prepared.headers,
-              body: prepared.body,
-              chatIndex: currentChatIndex,
-              messageIndex,
-              onChunk: (text) => {
-                if (text) updateMessageText(text);
-              },
-              onDone: () => {
-                clearInterval(checkStop);
-                deleteStreamRecord(requestId).catch(() => {});
-                resolve();
-              },
-              onError: (error) => {
-                clearInterval(checkStop);
-                deleteStreamRecord(requestId).catch(() => {});
-                reject(new Error(error));
-              },
-            }).then((handle) => {
-              swHandle = handle;
-            }).catch((err) => {
-              clearInterval(checkStop);
-              deleteStreamRecord(requestId).catch(() => {});
-              reject(err);
-            });
-          });
-        } else {
-          // Direct streaming fallback
-          stream = await getChatCompletionStream(
-            resolved.endpoint,
-            messages,
-            chats[currentChatIndex].config,
-            resolved.key || undefined,
-            undefined,
-            useStore.getState().apiVersion
-          );
-
-          if (stream) {
-            if (stream.locked)
-              throw new Error(t('errors.streamLocked') as string);
-            const reader = stream.getReader();
-            let reading = true;
-            let partial = '';
-            const decoder = new TextDecoder();
-            while (reading && useStore.getState().generating) {
-              const { done, value } = await reader.read();
-              const chunk = partial + decoder.decode(value, { stream: !done });
-              const parsed = parseEventSource(chunk, done);
-              partial = parsed.partial;
-
-              if (parsed.done || done) {
-                reading = false;
-              }
-
-              const resultString = parsed.events.reduce((output: string, curr) => {
-                if (!curr.choices || !curr.choices[0] || !curr.choices[0].delta) {
-                  return output;
-                }
-                const content = curr.choices[0]?.delta?.content ?? null;
-                if (content) output += content;
-                return output;
-              }, '');
-
-              if (resultString) updateMessageText(resultString);
-            }
-            if (useStore.getState().generating) {
-              reader.cancel(t('errors.cancelledByUser') as string);
-            } else {
-              reader.cancel(t('errors.generationCompleted') as string);
-            }
-            reader.releaseLock();
-            stream.cancel();
-          }
-        }
-      }
-
-      // update tokens used in chatting
+      // Token accounting
       const currChats = useStore.getState().chats;
       const countTotalTokens = useStore.getState().countTotalTokens;
-
       if (currChats && countTotalTokens) {
-        const model = currChats[currentChatIndex].config.model;
-        const messages = currChats[currentChatIndex].messages;
-        updateTotalTokenUsed(
-          model,
-          messages.slice(0, -1),
-          messages[messages.length - 1]
-        );
-      }
-
-      // generate title for new chats
-      if (
-        useStore.getState().autoTitle &&
-        currChats &&
-        !currChats[currentChatIndex]?.titleSet
-      ) {
-        const messages_length = currChats[currentChatIndex].messages.length;
-        const assistant_message =
-          currChats[currentChatIndex].messages[messages_length - 1].content;
-        const user_message =
-          currChats[currentChatIndex].messages[messages_length - 2].content;
-
-        const message: MessageInterface = {
-          role: 'user',
-          content: [
-            ...user_message,
-            ...assistant_message,
-            {
-              type: 'text',
-              text: `Generate a title in less than 6 words for the conversation so far (language: ${i18n.language})`,
-            } as TextContentInterface,
-          ],
-        };
-
-        const titleChats = useStore.getState().chats!;
-        const updatedChats = cloneChatAtIndex(titleChats, currentChatIndex);
-        let title = (
-          await generateTitle([message], updatedChats[currentChatIndex].config)
-        ).trim();
-        if (title.startsWith('"') && title.endsWith('"')) {
-          title = title.slice(1, -1);
-        }
-        updatedChats[currentChatIndex].title = title;
-        updatedChats[currentChatIndex].titleSet = true;
-        setChats(updatedChats);
-
-        // update tokens used for generating title
-        if (countTotalTokens) {
-          const model = _defaultChatConfig.model;
-          updateTotalTokenUsed(model, [message], {
-            role: 'assistant',
-            content: [{ type: 'text', text: title } as TextContentInterface],
-          });
+        const ci = currChats.findIndex((c) => c.id === chatId);
+        if (ci >= 0) {
+          const model = currChats[ci].config.model;
+          const msgs = currChats[ci].messages;
+          updateTotalTokenUsed(model, msgs.slice(0, -1), msgs[msgs.length - 1]);
         }
       }
-      setLastSubmitContext(null, null, null);
+
+      // Auto title
+      if (useStore.getState().autoTitle) {
+        const currChats2 = useStore.getState().chats;
+        if (currChats2) {
+          const ci = currChats2.findIndex((c) => c.id === chatId);
+          if (ci >= 0 && !currChats2[ci]?.titleSet) {
+            const msgs = currChats2[ci].messages;
+            const messages_length = msgs.length;
+            const assistant_message = msgs[messages_length - 1].content;
+            const user_message = msgs[messages_length - 2].content;
+
+            const message: MessageInterface = {
+              role: 'user',
+              content: [
+                ...user_message, ...assistant_message,
+                { type: 'text', text: `Generate a title in less than 6 words for the conversation so far (language: ${i18n.language})` } as TextContentInterface,
+              ],
+            };
+
+            const titleChats = useStore.getState().chats!;
+            const tci = titleChats.findIndex((c) => c.id === chatId);
+            if (tci >= 0) {
+              const uc = cloneChatAtIndex(titleChats, tci);
+              let title = (await generateTitle([message], uc[tci].config)).trim();
+              if (title.startsWith('"') && title.endsWith('"')) title = title.slice(1, -1);
+              uc[tci].title = title;
+              uc[tci].titleSet = true;
+              setChats(uc);
+
+              if (countTotalTokens) {
+                const model = _defaultChatConfig.model;
+                updateTotalTokenUsed(model, [message], {
+                  role: 'assistant',
+                  content: [{ type: 'text', text: title } as TextContentInterface],
+                });
+              }
+            }
+          }
+        }
+      }
+      useStore.getState().setLastSubmitContext(null, null, null, null);
     } catch (e: unknown) {
       const err = (e as Error).message;
       console.log(err);
       setError(err);
+    } finally {
+      useStore.getState().removeSession(sessionId);
+      abortControllers.delete(sessionId);
+      swCancellers.delete(sessionId);
     }
-    setGeneratingMessageIndex(null);
-    setGenerating(false);
   };
 
   const handleSubmitMidChat = async (insertIndex: number) => {
     const chats = useStore.getState().chats;
-    if (generating || !chats) return;
+    if (!chats) return;
 
-    const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
+    const chatIndex = currentChatIndex;
+    const chatId = chats[chatIndex]?.id;
+    if (!chatId) return;
+
+    if (isChatGenerating(chatId)) return;
+
+    const sessionId = crypto.randomUUID();
+    const abortController = new AbortController();
+    abortControllers.set(sessionId, abortController);
+
+    const updatedChats = cloneChatAtIndex(chats, chatIndex);
     const assistantMessage: MessageInterface = {
       role: 'assistant',
-      content: [
-        {
-          type: 'text',
-          text: '',
-        } as TextContentInterface,
-      ],
+      content: [{ type: 'text', text: '' } as TextContentInterface],
     };
-
-    // Insert empty assistant message at the specified index
-    updatedChats[currentChatIndex].messages.splice(insertIndex, 0, assistantMessage);
+    updatedChats[chatIndex].messages.splice(insertIndex, 0, assistantMessage);
     upsertActivePathMessage(
-      updatedChats[currentChatIndex],
-      insertIndex,
-      assistantMessage,
+      updatedChats[chatIndex], insertIndex, assistantMessage,
       useStore.getState().contentStore
     );
-
     setChats(updatedChats);
-    setGenerating(true);
-    setGeneratingMessageIndex(insertIndex);
-    setLastSubmitContext('midchat', insertIndex, currentChatIndex);
+
+    const session: GeneratingSession = {
+      sessionId, chatId, chatIndex, messageIndex: insertIndex,
+      mode: 'midchat', insertIndex,
+      requestPath: 'sw', startedAt: Date.now(),
+    };
+    useStore.getState().addSession(session);
+    useStore.getState().setLastSubmitContext('midchat', insertIndex, chatIndex, chatId);
 
     try {
-      let data;
-      let stream;
-
-      // Use only messages up to insertIndex (exclusive) as context
-      const allMessages = updatedChats[currentChatIndex].messages;
+      const allMessages = updatedChats[chatIndex].messages;
       const contextMessages = allMessages.slice(0, insertIndex);
 
       if (contextMessages.length === 0)
@@ -417,218 +425,48 @@ const useSubmit = () => {
       await loadEncoder();
       const messages = limitMessageTokens(
         contextMessages,
-        chats[currentChatIndex].config.max_tokens,
-        chats[currentChatIndex].config.model
+        chats[chatIndex].config.max_tokens,
+        chats[chatIndex].config.model
       );
       if (messages.length === 0)
         throw new Error(t('errors.messageExceedMaxToken') as string);
 
-      const resolved = resolveProvider(chats[currentChatIndex].config.model);
-      const midChatConfig = chats[currentChatIndex].config;
-      const isStreamSupported = getEffectiveStreamEnabled(midChatConfig);
+      const resolved = resolveProvider(chats[chatIndex].config.model);
 
-      if (!isStreamSupported) {
-        if (!resolved.key || resolved.key.length === 0) {
-          if (resolved.endpoint === officialAPIEndpoint) {
-            throw new Error(t('noApiKeyWarning') as string);
-          }
-          data = await getChatCompletion(
-            resolved.endpoint,
-            messages,
-            chats[currentChatIndex].config,
-            undefined,
-            undefined,
-            useStore.getState().apiVersion
-          );
-        } else {
-          data = await getChatCompletion(
-            resolved.endpoint,
-            messages,
-            chats[currentChatIndex].config,
-            resolved.key,
-            undefined,
-            useStore.getState().apiVersion
-          );
-        }
+      await executeStream(
+        sessionId, chatId, chatIndex, insertIndex,
+        messages, chats[chatIndex].config, resolved, abortController
+      );
 
-        if (
-          !data ||
-          !data.choices ||
-          !data.choices[0] ||
-          !data.choices[0].message ||
-          !data.choices[0].message.content
-        ) {
-          throw new Error(t('errors.failedToRetrieveData') as string);
-        }
-
-        const latestChats3 = useStore.getState().chats!;
-        const updatedChats = cloneChatAtIndex(latestChats3, currentChatIndex);
-        const updatedMessages = updatedChats[currentChatIndex].messages;
-        const oldMsg3 = updatedMessages[insertIndex];
-        const newContent03 = { ...oldMsg3.content[0] as TextContentInterface };
-        newContent03.text += data.choices[0].message.content;
-        const msg = { ...oldMsg3, content: [newContent03, ...oldMsg3.content.slice(1)] };
-        updatedMessages[insertIndex] = msg;
-        upsertActivePathMessage(
-          updatedChats[currentChatIndex],
-          insertIndex,
-          msg,
-          useStore.getState().contentStore
-        );
-        setChats(updatedChats);
-      } else {
-        if (!resolved.key || resolved.key.length === 0) {
-          if (resolved.endpoint === officialAPIEndpoint) {
-            throw new Error(t('noApiKeyWarning') as string);
-          }
-        }
-
-        const updateMidChatText = (resultString: string) => {
-          const latestChats4 = useStore.getState().chats!;
-          const uc = cloneChatAtIndex(latestChats4, currentChatIndex);
-          const um = uc[currentChatIndex].messages;
-          const oldMsg4 = um[insertIndex];
-          const newContent04 = { ...oldMsg4.content[0] as TextContentInterface };
-          newContent04.text += resultString;
-          const msg = { ...oldMsg4, content: [newContent04, ...oldMsg4.content.slice(1)] };
-          um[insertIndex] = msg;
-          upsertActivePathMessage(
-            uc[currentChatIndex],
-            insertIndex,
-            msg,
-            useStore.getState().contentStore
-          );
-          setChats(uc);
-        };
-
-        if (await swBridge.waitForController()) {
-          const requestId = crypto.randomUUID();
-          const prepared = prepareStreamRequest(
-            resolved.endpoint,
-            messages,
-            chats[currentChatIndex].config,
-            resolved.key,
-            undefined,
-            useStore.getState().apiVersion
-          );
-
-          await new Promise<void>((resolve, reject) => {
-            let swHandle: swBridge.SwStreamHandle;
-            const checkStop = setInterval(() => {
-              if (!useStore.getState().generating) {
-                swHandle?.cancel();
-                clearInterval(checkStop);
-                deleteStreamRecord(requestId).catch(() => {});
-                resolve();
-              }
-            }, 500);
-
-            swBridge.startStream({
-              requestId,
-              endpoint: prepared.endpoint,
-              headers: prepared.headers,
-              body: prepared.body,
-              chatIndex: currentChatIndex,
-              messageIndex: insertIndex,
-              onChunk: (text) => {
-                if (text) updateMidChatText(text);
-              },
-              onDone: () => {
-                clearInterval(checkStop);
-                deleteStreamRecord(requestId).catch(() => {});
-                resolve();
-              },
-              onError: (error) => {
-                clearInterval(checkStop);
-                deleteStreamRecord(requestId).catch(() => {});
-                reject(new Error(error));
-              },
-            }).then((handle) => {
-              swHandle = handle;
-            }).catch((err) => {
-              clearInterval(checkStop);
-              deleteStreamRecord(requestId).catch(() => {});
-              reject(err);
-            });
-          });
-        } else {
-          stream = await getChatCompletionStream(
-            resolved.endpoint,
-            messages,
-            chats[currentChatIndex].config,
-            resolved.key || undefined,
-            undefined,
-            useStore.getState().apiVersion
-          );
-
-          if (stream) {
-            if (stream.locked)
-              throw new Error(t('errors.streamLocked') as string);
-            const reader = stream.getReader();
-            let reading = true;
-            let partial = '';
-            const decoder = new TextDecoder();
-            while (reading && useStore.getState().generating) {
-              const { done, value } = await reader.read();
-              const chunk = partial + decoder.decode(value, { stream: !done });
-              const parsed = parseEventSource(chunk, done);
-              partial = parsed.partial;
-
-              if (parsed.done || done) {
-                reading = false;
-              }
-
-              const resultString = parsed.events.reduce((output: string, curr) => {
-                if (!curr.choices || !curr.choices[0] || !curr.choices[0].delta) {
-                  return output;
-                }
-                const content = curr.choices[0]?.delta?.content ?? null;
-                if (content) output += content;
-                return output;
-              }, '');
-
-              if (resultString) updateMidChatText(resultString);
-            }
-            if (useStore.getState().generating) {
-              reader.cancel(t('errors.cancelledByUser') as string);
-            } else {
-              reader.cancel(t('errors.generationCompleted') as string);
-            }
-            reader.releaseLock();
-            stream.cancel();
-          }
-        }
-      }
-
-      // update tokens used
+      // Token accounting
       const currChats = useStore.getState().chats;
       const countTotalTokens = useStore.getState().countTotalTokens;
-
       if (currChats && countTotalTokens) {
-        const model = currChats[currentChatIndex].config.model;
-        const msgs = currChats[currentChatIndex].messages;
-        updateTotalTokenUsed(
-          model,
-          msgs.slice(0, insertIndex),
-          msgs[insertIndex]
-        );
+        const ci = currChats.findIndex((c) => c.id === chatId);
+        if (ci >= 0) {
+          const model = currChats[ci].config.model;
+          const msgs = currChats[ci].messages;
+          updateTotalTokenUsed(model, msgs.slice(0, insertIndex), msgs[insertIndex]);
+        }
       }
-      setLastSubmitContext(null, null, null);
+      useStore.getState().setLastSubmitContext(null, null, null, null);
     } catch (e: unknown) {
       const err = (e as Error).message;
       console.log(err);
       setError(err);
+    } finally {
+      useStore.getState().removeSession(sessionId);
+      abortControllers.delete(sessionId);
+      swCancellers.delete(sessionId);
     }
-    setGeneratingMessageIndex(null);
-    setGenerating(false);
   };
 
   const handleRetry = async () => {
-    const { lastSubmitMode, lastSubmitIndex, lastSubmitChatIndex } = useStore.getState();
-    if (!lastSubmitMode || lastSubmitChatIndex === null) return;
+    const { lastSubmitMode, lastSubmitIndex, lastSubmitChatIndex, lastSubmitChatId } = useStore.getState();
+    if (!lastSubmitMode || lastSubmitChatIndex === null || !lastSubmitChatId) return;
 
-    // Ensure we retry on the correct chat
     if (currentChatIndex !== lastSubmitChatIndex) return;
+    if (isChatGenerating(lastSubmitChatId)) return;
 
     const chats = useStore.getState().chats;
     if (!chats) return;
@@ -638,7 +476,6 @@ const useSubmit = () => {
     updatedChats[currentChatIndex] = chat;
 
     if (lastSubmitMode === 'append') {
-      // Remove the last assistant message (empty or partial) left by the failed generation
       const lastMsg = chat.messages[chat.messages.length - 1];
       if (lastMsg?.role === 'assistant') {
         chat.messages.pop();
@@ -647,7 +484,6 @@ const useSubmit = () => {
       setError('');
       handleSubmit();
     } else if (lastSubmitMode === 'midchat' && lastSubmitIndex !== null) {
-      // Remove the inserted assistant message (empty or partial) at the target index
       const targetMsg = chat.messages[lastSubmitIndex];
       if (targetMsg?.role === 'assistant') {
         chat.messages.splice(lastSubmitIndex, 1);

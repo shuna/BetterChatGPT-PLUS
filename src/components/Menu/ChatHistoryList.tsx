@@ -135,7 +135,7 @@ const ChatHistoryList = () => {
 
     const unsubscribe = useStore.subscribe((state) => {
       if (
-        !state.generating &&
+        Object.keys(state.generatingSessions).length === 0 &&
         state.chats &&
         state.chats !== chatsRef.current
       ) {

@@ -10,9 +10,9 @@ import CloneIcon from '@icon/CloneIcon';
 import TickIcon from '@icon/TickIcon';
 import useStore from '@store/store';
 import { formatNumber } from '@utils/chat';
-import { ChatInterface } from '@type/chat';
 import { retainContent, releaseContent } from '@utils/contentStore';
 import { cloneChatAtIndex, deepCloneSingleChat } from '@utils/chatShallowClone';
+import { stopSessionsForChat } from '@hooks/useSubmit';
 
 const ChatHistoryClass = {
   normal:
@@ -47,7 +47,11 @@ const ChatHistory = React.memo(
     const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
     const setChats = useStore((state) => state.setChats);
     const active = useStore((state) => state.currentChatIndex === chatIndex);
-    const generating = useStore((state) => state.generating);
+
+    const chatId = useStore((state) => state.chats?.[chatIndex]?.id ?? '');
+    const isThisChatGenerating = useStore((state) =>
+      Object.values(state.generatingSessions).some((s) => s.chatId === chatId)
+    );
 
     const [isDelete, setIsDelete] = useState<boolean>(false);
     const [isEdit, setIsEdit] = useState<boolean>(false);
@@ -70,7 +74,6 @@ const ChatHistory = React.memo(
       const indicesToDelete =
         selectedChats.length > 0 ? selectedChats : [chatIndex];
 
-      // Release contentStore refs for deleted chats
       const contentStore = { ...useStore.getState().contentStore };
       indicesToDelete.forEach((index) => {
         const chat = chats?.[index];
@@ -92,7 +95,6 @@ const ChatHistory = React.memo(
         useStore.setState({ contentStore } as any);
       } else {
         initialiseNewChat();
-        // initialiseNewChat() already clears contentStore
       }
       setIsDelete(false);
       setSelectedChats([]);
@@ -107,7 +109,6 @@ const ChatHistory = React.memo(
 
     const handleTick = (e: React.MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation();
-
       if (isEdit) editTitle();
       else if (isDelete) deleteChat();
     };
@@ -122,7 +123,6 @@ const ChatHistory = React.memo(
         e.preventDefault();
         return;
       }
-
       if (e.dataTransfer) {
         const chatIndices =
           selectedChats.length > 0 ? selectedChats : [chatIndex];
@@ -168,7 +168,6 @@ const ChatHistory = React.memo(
         const clonedChat = deepCloneSingleChat(chats[index]);
         clonedChat.title = title;
 
-        // Retain contentStore refs for cloned branchTree nodes
         const contentStore = { ...useStore.getState().contentStore };
         if (clonedChat.branchTree) {
           for (const node of Object.values(clonedChat.branchTree.nodes) as any[]) {
@@ -185,6 +184,11 @@ const ChatHistory = React.memo(
       }
     };
 
+    const handleStopGeneration = (e: React.MouseEvent<HTMLButtonElement>) => {
+      e.stopPropagation();
+      if (chatId) stopSessionsForChat(chatId);
+    };
+
     useEffect(() => {
       if (inputRef && inputRef.current) inputRef.current.focus();
     }, [isEdit]);
@@ -193,15 +197,9 @@ const ChatHistory = React.memo(
       <a
         className={`${
           active ? ChatHistoryClass.active : ChatHistoryClass.normal
-        } ${
-          generating
-            ? active
-              ? 'cursor-default opacity-100'
-              : 'cursor-not-allowed opacity-60'
-            : 'cursor-pointer opacity-100'
-        } ${selectedChats.includes(chatIndex) ? 'bg-blue-500' : ''}`}
+        } cursor-pointer opacity-100 ${selectedChats.includes(chatIndex) ? 'bg-blue-500' : ''}`}
         onClick={() => {
-          if (!generating && !active) setCurrentChatIndex(chatIndex);
+          if (!active) setCurrentChatIndex(chatIndex);
         }}
         draggable={!isEdit}
         onDragStart={handleDragStart}
@@ -212,9 +210,25 @@ const ChatHistory = React.memo(
           onClick={handleCheckboxClick}
           onChange={() => {}}
         />
-        <ChatIcon />
-        {generating && active && (
-          <span className='inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse' />
+        {isThisChatGenerating ? (
+          <button
+            className='p-0.5 hover:text-red-400 text-green-400 flex-shrink-0'
+            onClick={handleStopGeneration}
+            aria-label='stop generation'
+            title='Stop generation'
+          >
+            <svg
+              className='h-4 w-4 animate-spin'
+              viewBox='0 0 24 24'
+              fill='none'
+              stroke='currentColor'
+              strokeWidth='2'
+            >
+              <circle cx='12' cy='12' r='10' strokeDasharray='60' strokeDashoffset='15' />
+            </svg>
+          </button>
+        ) : (
+          <ChatIcon />
         )}
         <div
           className='flex-1 text-ellipsis max-h-5 overflow-hidden break-all relative'

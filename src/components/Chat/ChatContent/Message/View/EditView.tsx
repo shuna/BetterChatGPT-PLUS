@@ -25,6 +25,12 @@ import {
   upsertActivePathMessage,
 } from '@utils/branchUtils';
 
+function isChatBusy(): boolean {
+  const state = useStore.getState();
+  const chatId = state.chats?.[state.currentChatIndex]?.id ?? '';
+  return Object.values(state.generatingSessions).some((s) => s.chatId === chatId);
+}
+
 const EditView = ({
   role,
   content: content,
@@ -175,7 +181,7 @@ const EditView = ({
 
     if (
       sticky &&
-      ((!hasTextContent && !hasImageContent) || useStore.getState().generating)
+      ((!hasTextContent && !hasImageContent) || isChatBusy())
     ) {
       return;
     }
@@ -207,7 +213,7 @@ const EditView = ({
   const { handleSubmit, handleSubmitMidChat } = useSubmit();
 
   const handleBranchOnly = () => {
-    if (useStore.getState().generating) return;
+    if (isChatBusy()) return;
     if (sticky) return;
 
     const { ensureBranchTree, createBranch } = useStore.getState();
@@ -222,7 +228,7 @@ const EditView = ({
   };
 
   const handleBranchGenerate = () => {
-    if (useStore.getState().generating || !modelValid) return;
+    if (isChatBusy() || !modelValid) return;
     if (sticky) return;
 
     const { ensureBranchTree, createBranch } = useStore.getState();
@@ -238,7 +244,7 @@ const EditView = ({
   };
 
   const handleGenerateNextOnly = () => {
-    if (useStore.getState().generating || !modelValid) return;
+    if (isChatBusy() || !modelValid) return;
 
     const chats = useStore.getState().chats!;
     const updatedChats = chats.slice();
@@ -265,7 +271,7 @@ const EditView = ({
       (content) => content.type === 'image_url'
     );
 
-    if (useStore.getState().generating || !modelValid) {
+    if (isChatBusy() || !modelValid) {
       return;
     }
 
@@ -471,11 +477,16 @@ const EditViewButtons = memo(
     role?: string;
   }) => {
     const { t } = useTranslation();
-    const generating = useStore.getState().generating;
+    const generating = useStore((state) => {
+      const chatId = state.chats?.[state.currentChatIndex]?.id ?? '';
+      return Object.values(state.generatingSessions).some((s) => s.chatId === chatId);
+    });
     const noModel = !modelValid;
     const advancedMode = useStore((state) => state.advancedMode);
     const lastMessageIndex = useStore((state) =>
-      state.chats ? state.chats[state.currentChatIndex].messages.length - 1 : 0
+      state.chats?.[state.currentChatIndex]?.messages.length
+        ? state.chats[state.currentChatIndex].messages.length - 1
+        : 0
     );
     const isAssistant = role === 'assistant';
     const isNotLast = !sticky && messageIndex < lastMessageIndex;

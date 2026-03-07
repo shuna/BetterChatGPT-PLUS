@@ -10,10 +10,11 @@ import NewMessageButton from './Message/NewMessageButton';
 import CrossIcon from '@icon/CrossIcon';
 
 import useSubmit from '@hooks/useSubmit';
+import { stopSessionsForChat } from '@hooks/useSubmit';
 import DownloadChat from './DownloadChat';
 import CloneChat from './CloneChat';
 const ShareGPT = React.lazy(() => import('@components/ShareGPT'));
-import { ImageContentInterface, TextContentInterface } from '@type/chat';
+import { TextContentInterface } from '@type/chat';
 import countTokens, { limitMessageTokens } from '@utils/messageUtils';
 import { defaultModel, reduceMessagesToTotalToken } from '@constants/chat';
 import { toast } from 'react-toastify';
@@ -43,10 +44,17 @@ const ChatContent = () => {
       : 0
   );
   const advancedMode = useStore((state) => state.advancedMode);
-  const generating = useStore((state) => state.generating);
   const hideSideMenu = useStore((state) => state.hideSideMenu);
   const autoScroll = useStore((state) => state.autoScroll);
   const hideShareGPT = useStore((state) => state.hideShareGPT);
+
+  const currentChatId = useStore((state) =>
+    state.chats?.[state.currentChatIndex]?.id ?? ''
+  );
+  const isCurrentChatGenerating = useStore((state) =>
+    Object.values(state.generatingSessions).some((s) => s.chatId === currentChatId)
+  );
+
   const model = useStore((state) =>
     state.chats &&
     state.chats.length > 0 &&
@@ -74,7 +82,7 @@ const ChatContent = () => {
   };
 
   useEffect(() => {
-    if (!generating) {
+    if (!isCurrentChatGenerating) {
       if (messagesLimited.length < messages.length) {
         const hiddenTokens =
           countTokens(messages, model) - countTokens(messagesLimited, model);
@@ -94,22 +102,21 @@ const ChatContent = () => {
         toast.error(message);
       }
     }
-  }, [messagesLimited, generating, messages, model]);
+  }, [messagesLimited, isCurrentChatGenerating, messages, model]);
 
   const saveRef = useRef<HTMLDivElement>(null);
 
   // clear error at the start of generating new messages
   useEffect(() => {
-    if (generating) {
+    if (isCurrentChatGenerating) {
       setError('');
     }
-  }, [generating]);
+  }, [isCurrentChatGenerating]);
 
   const { error, handleRetry } = useSubmit();
   const lastSubmitMode = useStore((state) => state.lastSubmitMode);
   const setLastSubmitContext = useStore((state) => state.setLastSubmitContext);
 
-  // Custom scroller function to control auto-scroll behavior
   const customScroller = ({ maxValue }: { maxValue: number; minValue: number; offsetHeight: number; scrollHeight: number; scrollTop: number }) => {
     return autoScroll ? maxValue : 0;
   };
@@ -128,7 +135,7 @@ const ChatContent = () => {
             className='flex flex-col items-center text-sm dark:bg-gray-800 w-full'
             ref={saveRef}
           >
-            {!generating && advancedMode && messages?.length === 0 && (
+            {!isCurrentChatGenerating && advancedMode && messages?.length === 0 && (
               <NewMessageButton messageIndex={-1} />
             )}
             {messagesLimited?.map(
@@ -140,7 +147,7 @@ const ChatContent = () => {
                       content={message.content}
                       messageIndex={index}
                     />
-                    {!generating && advancedMode && (
+                    {!isCurrentChatGenerating && advancedMode && (
                       <NewMessageButton messageIndex={index} />
                     )}
                   </React.Fragment>
@@ -150,13 +157,42 @@ const ChatContent = () => {
 
           <Message
             role={inputRole}
-            // For now we always initizlize a new message with an empty text content.
-            // It is possible to send a message to the API without a TextContentInterface,
-            // but the UI would need to be modified to allow the user to control the order of text and image content
             content={[{ type: 'text', text: '' } as TextContentInterface]}
             messageIndex={stickyIndex}
             sticky
           />
+
+          {/* Inline stop button for current chat */}
+          {isCurrentChatGenerating && (
+            <div className='flex justify-center my-2'>
+              <button
+                className='btn relative btn-neutral border-0 md:border'
+                onClick={() => {
+                  if (currentChatId) stopSessionsForChat(currentChatId);
+                }}
+                aria-label={t('stopGenerating') as string}
+              >
+                <div className='flex w-full items-center justify-center gap-2'>
+                  <svg
+                    stroke='currentColor'
+                    fill='none'
+                    strokeWidth='1.5'
+                    viewBox='0 0 24 24'
+                    strokeLinecap='round'
+                    strokeLinejoin='round'
+                    className='h-3 w-3 animate-pulse'
+                    height='1em'
+                    width='1em'
+                    xmlns='http://www.w3.org/2000/svg'
+                  >
+                    <rect x='3' y='3' width='18' height='18' rx='2' ry='2'></rect>
+                  </svg>
+                  {t('stopGenerating')}
+                </div>
+              </button>
+            </div>
+          )}
+
           {error !== '' && (
             <div className='relative py-2 px-3 w-3/5 mt-3 max-md:w-11/12 border rounded-md border-red-500 bg-red-500/10'>
               <div className='text-gray-600 dark:text-gray-100 text-sm whitespace-pre-wrap'>
@@ -176,7 +212,7 @@ const ChatContent = () => {
                 className='text-white absolute top-1 right-1 cursor-pointer'
                 onClick={() => {
                   setError('');
-                  setLastSubmitContext(null, null, null);
+                  setLastSubmitContext(null, null, null, null);
                 }}
               >
                 <CrossIcon />
@@ -190,7 +226,7 @@ const ChatContent = () => {
                 : 'md:max-w-3xl lg:max-w-3xl xl:max-w-4xl'
             }`}
           >
-            {generating || (
+            {isCurrentChatGenerating || (
               <div className='md:w-[calc(100%-50px)] flex gap-4 flex-wrap justify-center'>
                 <DownloadChat saveRef={saveRef} />
                 {!hideShareGPT && <Suspense fallback={null}><ShareGPT /></Suspense>}

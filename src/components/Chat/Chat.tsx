@@ -3,7 +3,7 @@ import useStore from '@store/store';
 
 import ChatContent from './ChatContent';
 import MobileBar from '../MobileBar';
-import StopGeneratingButton from '@components/StopGeneratingButton/StopGeneratingButton';
+
 import ChatViewTabs from './ChatViewTabs';
 
 const BranchEditorView = React.lazy(
@@ -26,7 +26,6 @@ const Chat = () => {
         <ChatViewTabs activeView={activeView} setActiveView={setActiveView} />
         <div className={activeView === 'chat' ? 'flex flex-col flex-1 overflow-hidden' : 'hidden'}>
           <ChatContent />
-          <StopGeneratingButton />
         </div>
         {activeView === 'branch-editor' && (
           <div className='flex flex-col flex-1 overflow-hidden'>

@@ -60,7 +60,7 @@ async function recoverPending() {
 
   if (records.length === 0) return;
 
-  const { setChats, setGenerating } = useStore.getState();
+  const { setChats } = useStore.getState();
 
   for (const record of records) {
     const { requestId, chatIndex, messageIndex, bufferedText, status } = record;
@@ -118,9 +118,11 @@ async function recoverPending() {
       }
     }
 
-    // Stop generating state
+    // Clear any generating sessions for this chat
     if (effectiveStatus !== 'streaming') {
-      setGenerating(false);
+      useStore.getState().removeSessionsForChat(
+        useStore.getState().chats?.[chatIndex]?.id ?? ''
+      );
     }
 
     // Show toast

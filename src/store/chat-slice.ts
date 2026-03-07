@@ -1,5 +1,5 @@
 import { StoreSlice } from './store';
-import { ChatInterface, FolderCollection, MessageInterface } from '@type/chat';
+import { ChatInterface, FolderCollection, GeneratingSession, MessageInterface } from '@type/chat';
 import { toast } from 'react-toastify';
 
 export interface ChatSlice {
@@ -7,21 +7,28 @@ export interface ChatSlice {
   chats?: ChatInterface[];
   collapsedNodeMaps: Record<string, Record<string, boolean>>;
   currentChatIndex: number;
-  generating: boolean;
-  generatingMessageIndex: number | null;
+  generatingSessions: Record<string, GeneratingSession>;
   error: string;
   lastSubmitMode: 'append' | 'midchat' | null;
   lastSubmitIndex: number | null;
   lastSubmitChatIndex: number | null;
+  lastSubmitChatId: string | null;
   folders: FolderCollection;
   setMessages: (messages: MessageInterface[]) => void;
   setChats: (chats: ChatInterface[]) => void;
   setCurrentChatIndex: (currentChatIndex: number) => void;
-  setGenerating: (generating: boolean) => void;
-  setGeneratingMessageIndex: (index: number | null) => void;
   setError: (error: string) => void;
-  setLastSubmitContext: (mode: 'append' | 'midchat' | null, index: number | null, chatIndex: number | null) => void;
+  setLastSubmitContext: (
+    mode: 'append' | 'midchat' | null,
+    index: number | null,
+    chatIndex: number | null,
+    chatId?: string | null
+  ) => void;
   setFolders: (folders: FolderCollection) => void;
+  addSession: (session: GeneratingSession) => void;
+  removeSession: (sessionId: string) => void;
+  updateSession: (sessionId: string, patch: Partial<GeneratingSession>) => void;
+  removeSessionsForChat: (chatId: string) => void;
   toggleCollapseNode: (chatIndex: number, messageIndex: number) => void;
   setAllCollapsed: (chatIndex: number, collapsed: boolean) => void;
 }
@@ -60,12 +67,12 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
     messages: [],
     collapsedNodeMaps: {},
     currentChatIndex: -1,
-    generating: false,
-    generatingMessageIndex: null,
+    generatingSessions: {},
     error: '',
     lastSubmitMode: null,
     lastSubmitIndex: null,
     lastSubmitChatIndex: null,
+    lastSubmitChatId: null,
     folders: {},
     setMessages: (messages: MessageInterface[]) => {
       set((prev: ChatSlice) => ({
@@ -97,24 +104,18 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
       // Persist separately to avoid triggering heavy main-store serialization
       localStorage.setItem('currentChatIndex', String(currentChatIndex));
     },
-    setGenerating: (generating: boolean) => {
-      set((prev: ChatSlice) => ({
-        ...prev,
-        generating: generating,
-      }));
-    },
-    setGeneratingMessageIndex: (index: number | null) => {
-      set((prev: ChatSlice) => ({
-        ...prev,
-        generatingMessageIndex: index,
-      }));
-    },
-    setLastSubmitContext: (mode: 'append' | 'midchat' | null, index: number | null, chatIndex: number | null) => {
+    setLastSubmitContext: (
+      mode: 'append' | 'midchat' | null,
+      index: number | null,
+      chatIndex: number | null,
+      chatId?: string | null
+    ) => {
       set((prev: ChatSlice) => ({
         ...prev,
         lastSubmitMode: mode,
         lastSubmitIndex: index,
         lastSubmitChatIndex: chatIndex,
+        lastSubmitChatId: chatId ?? null,
       }));
     },
     setError: (error: string) => {
@@ -129,6 +130,44 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
         folders: folders,
       }));
     },
+    addSession: (session: GeneratingSession) => {
+      set((prev: ChatSlice) => ({
+        ...prev,
+        generatingSessions: {
+          ...prev.generatingSessions,
+          [session.sessionId]: session,
+        },
+      }));
+    },
+    removeSession: (sessionId: string) => {
+      set((prev: ChatSlice) => {
+        const next = { ...prev.generatingSessions };
+        delete next[sessionId];
+        return { ...prev, generatingSessions: next };
+      });
+    },
+    updateSession: (sessionId: string, patch: Partial<GeneratingSession>) => {
+      set((prev: ChatSlice) => {
+        const session = prev.generatingSessions[sessionId];
+        if (!session) return prev;
+        return {
+          ...prev,
+          generatingSessions: {
+            ...prev.generatingSessions,
+            [sessionId]: { ...session, ...patch },
+          },
+        };
+      });
+    },
+    removeSessionsForChat: (chatId: string) => {
+      set((prev: ChatSlice) => {
+        const next: Record<string, GeneratingSession> = {};
+        for (const [k, v] of Object.entries(prev.generatingSessions)) {
+          if (v.chatId !== chatId) next[k] = v;
+        }
+        return { ...prev, generatingSessions: next };
+      });
+    },
     toggleCollapseNode: (chatIndex: number, messageIndex: number) => {
       const chats = get().chats;
       if (!chats) return;
@@ -137,7 +176,6 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
       const nodeId = chat.branchTree?.activePath?.[messageIndex] ?? String(messageIndex);
       const prev = getCollapsedNodesForChat(chats, get().collapsedNodeMaps, chatIndex);
       const next = { ...prev };
-      const wasCollapsed = !!next[nodeId];
       if (next[nodeId]) {
         delete next[nodeId];
       } else {
