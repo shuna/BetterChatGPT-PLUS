@@ -9,6 +9,7 @@ const ProviderMenuButton = () => {
   return (
     <>
       <button
+        id='provider-menu'
         className='btn btn-neutral'
         onClick={() => setIsModalOpen(true)}
       >

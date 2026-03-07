@@ -77,7 +77,7 @@ const ApiPopup = () => {
                 className='link cursor-pointer'
                 onClick={() => {
                   setIsModalOpen(false);
-                  document.getElementById('api-menu')?.click();
+                  document.getElementById('provider-menu')?.click();
                 }}
               />,
             ]}
