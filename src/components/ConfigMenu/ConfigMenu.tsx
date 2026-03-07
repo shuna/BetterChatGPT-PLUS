@@ -5,6 +5,7 @@ import { ConfigInterface, ImageDetail } from '@type/chat';
 import Select from 'react-select';
 import { modelMaxToken } from '@constants/modelLoader';
 import { ModelOptions } from '@utils/modelReader';
+import { isModelStreamSupported, normalizeConfigStream } from '@utils/streamSupport';
 import useStore from '@store/store';
 
 const ConfigMenu = ({
@@ -33,9 +34,16 @@ const ConfigMenu = ({
   const [_imageDetail, _setImageDetail] = useState<ImageDetail>(imageDetail);
   const [_stream, _setStream] = useState<boolean>(config.stream !== false);
   const { t } = useTranslation('model');
+  const isStreamSupported = isModelStreamSupported(_model);
+
+  useEffect(() => {
+    if (!isStreamSupported && _stream) {
+      _setStream(false);
+    }
+  }, [isStreamSupported, _stream]);
 
   const handleConfirm = () => {
-    setConfig({
+    setConfig(normalizeConfigStream({
       max_tokens: _maxToken,
       model: _model,
       temperature: _temperature,
@@ -43,7 +51,7 @@ const ConfigMenu = ({
       top_p: _topP,
       frequency_penalty: _frequencyPenalty,
       stream: _stream,
-    });
+    }));
     setImageDetail(_imageDetail);
     setIsModalOpen(false);
   };
@@ -64,6 +72,7 @@ const ConfigMenu = ({
         <StreamToggle
           _stream={_stream}
           _setStream={_setStream}
+          disabled={!isStreamSupported}
         />
         <MaxTokenSlider
           _maxToken={_maxToken}
@@ -350,34 +359,63 @@ export const FrequencyPenaltySlider = ({
 export const StreamToggle = ({
   _stream,
   _setStream,
+  disabled = false,
 }: {
   _stream: boolean;
   _setStream: React.Dispatch<React.SetStateAction<boolean>>;
+  disabled?: boolean;
 }) => {
   const { t } = useTranslation('model');
 
   return (
     <div className='mt-4 flex items-center justify-between'>
       <div>
-        <label className='block text-sm font-medium text-gray-900 dark:text-white'>
+        <label
+          className={`block text-sm font-medium ${
+            disabled
+              ? 'text-gray-400 dark:text-gray-500'
+              : 'text-gray-900 dark:text-white'
+          }`}
+        >
           {t('stream.label')}
         </label>
-        <div className='text-gray-500 dark:text-gray-300 text-sm'>
-          {t('stream.description')}
+        <div
+          className={`text-sm ${
+            disabled
+              ? 'text-gray-400 dark:text-gray-500'
+              : 'text-gray-500 dark:text-gray-300'
+          }`}
+        >
+          {disabled
+            ? t(
+                'stream.unsupportedDescription',
+                'This model does not support streaming.'
+              )
+            : t('stream.description')}
         </div>
       </div>
       <button
         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-          _stream ? 'bg-blue-600' : 'bg-gray-400 dark:bg-gray-600'
+          disabled
+            ? 'cursor-not-allowed bg-gray-300 dark:bg-gray-700 opacity-60'
+            : _stream
+              ? 'bg-blue-600'
+              : 'bg-gray-400 dark:bg-gray-600'
         }`}
-        onClick={() => _setStream(!_stream)}
+        onClick={() => {
+          if (!disabled) {
+            _setStream(!_stream);
+          }
+        }}
         type='button'
         role='switch'
-        aria-checked={_stream}
+        aria-checked={!disabled && _stream}
+        aria-disabled={disabled}
+        disabled={disabled}
       >
         <span
           className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-            _stream ? 'translate-x-6' : 'translate-x-1'
+            !disabled && _stream ? 'translate-x-6' : 'translate-x-1'
           }`}
         />
       </button>

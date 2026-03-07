@@ -8,6 +8,7 @@ import { ChatInterface, ConfigInterface, ImageDetail } from '@type/chat';
 import { _defaultChatConfig } from '@constants/chat';
 import { ModelOptions } from '@utils/modelReader';
 import { cloneChatAtIndex } from '@utils/chatShallowClone';
+import { normalizeConfigStream } from '@utils/streamSupport';
 
 export type ChatView = 'chat' | 'branch-editor';
 
@@ -60,7 +61,7 @@ const ChatViewTabs = ({
     const chats = useStore.getState().chats;
     if (!chats) return;
     const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
-    updatedChats[currentChatIndex].config = config;
+    updatedChats[currentChatIndex].config = normalizeConfigStream(config);
     setChats(updatedChats);
   };
 
@@ -76,7 +77,10 @@ const ChatViewTabs = ({
     const chats = useStore.getState().chats;
     if (!chats) return;
     const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
-    updatedChats[currentChatIndex].config.model = modelId as ModelOptions;
+    updatedChats[currentChatIndex].config = normalizeConfigStream({
+      ...updatedChats[currentChatIndex].config,
+      model: modelId as ModelOptions,
+    });
     setChats(updatedChats);
     setIsModelDropdownOpen(false);
   };
@@ -105,7 +109,9 @@ const ChatViewTabs = ({
     const chats = useStore.getState().chats;
     if (chats && chats.length > 0 && currentChatIndex !== -1 && !chat?.config) {
       const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
-      updatedChats[currentChatIndex].config = { ..._defaultChatConfig };
+      updatedChats[currentChatIndex].config = normalizeConfigStream({
+        ..._defaultChatConfig,
+      });
       setChats(updatedChats);
     }
   }, [currentChatIndex]);

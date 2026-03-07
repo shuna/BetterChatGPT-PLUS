@@ -3,6 +3,7 @@ import { Theme } from '@type/theme';
 import { _defaultChatConfig, _defaultSystemMessage,_defaultMenuWidth, defaultModel, _defaultImageDetail, _defaultDisplayChatSize } from '@constants/chat';
 import { ConfigInterface, ImageDetail, TotalTokenUsed } from '@type/chat';
 import { ModelOptions } from '@utils/modelReader';
+import { normalizeConfigStream } from '@utils/streamSupport';
 
 export interface ConfigSlice {
   openConfig: boolean;
@@ -98,7 +99,7 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
   setDefaultChatConfig: (defaultChatConfig: ConfigInterface) => {
     set((prev: ConfigSlice) => ({
       ...prev,
-      defaultChatConfig: defaultChatConfig,
+      defaultChatConfig: normalizeConfigStream(defaultChatConfig),
     }));
   },
   setDefaultSystemMessage: (defaultSystemMessage: string) => {

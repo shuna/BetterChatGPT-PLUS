@@ -20,6 +20,7 @@ import {
   _defaultImageDetail,
   _defaultSystemMessage,
 } from '@constants/chat';
+import { isModelStreamSupported, normalizeConfigStream } from '@utils/streamSupport';
 import { ModelOptions } from '@utils/modelReader';
 import { ImageDetail } from '@type/chat';
 
@@ -73,9 +74,16 @@ const ChatConfigPopup = ({
   );
 
   const { t } = useTranslation('model');
+  const isStreamSupported = isModelStreamSupported(_model);
+
+  React.useEffect(() => {
+    if (!isStreamSupported && _stream) {
+      _setStream(false);
+    }
+  }, [isStreamSupported, _stream]);
 
   const handleSave = () => {
-    setDefaultChatConfig({
+    setDefaultChatConfig(normalizeConfigStream({
       model: _model,
       max_tokens: _maxToken,
       temperature: _temperature,
@@ -83,7 +91,7 @@ const ChatConfigPopup = ({
       presence_penalty: _presencePenalty,
       frequency_penalty: _frequencyPenalty,
       stream: _stream,
-    });
+    }));
     setDefaultSystemMessage(_systemMessage);
     setDefaultImageDetail(_imageDetail);
     setIsModalOpen(false);
@@ -121,6 +129,7 @@ const ChatConfigPopup = ({
         <StreamToggle
           _stream={_stream}
           _setStream={_setStream}
+          disabled={!isStreamSupported}
         />
         <MaxTokenSlider
           _maxToken={_maxToken}

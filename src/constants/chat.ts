@@ -6,6 +6,7 @@ import {
   TextContentInterface,
 } from '@type/chat';
 import useStore from '@store/store';
+import { normalizeConfigStream } from '@utils/streamSupport';
 
 const date = new Date();
 const dateString =
@@ -58,7 +59,7 @@ export const generateDefaultChat = (
           },
         ]
       : [],
-  config: { ...useStore.getState().defaultChatConfig },
+  config: normalizeConfigStream({ ...useStore.getState().defaultChatConfig }),
   titleSet: false,
   folder,
   imageDetail: useStore.getState().defaultImageDetail,

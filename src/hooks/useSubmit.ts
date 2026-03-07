@@ -13,10 +13,10 @@ import { deleteRequest as deleteStreamRecord } from '@utils/streamDb';
 import { limitMessageTokens, updateTotalTokenUsed, loadEncoder } from '@utils/messageUtils';
 import { _defaultChatConfig } from '@constants/chat';
 import { officialAPIEndpoint } from '@constants/auth';
-import { modelStreamSupport } from '@constants/modelLoader';
 import { FavoriteModel, ProviderConfig } from '@store/provider-slice';
 import { upsertActivePathMessage } from '@utils/branchUtils';
 import { cloneChatAtIndex } from '@utils/chatShallowClone';
+import { getEffectiveStreamEnabled } from '@utils/streamSupport';
 
 const useSubmit = () => {
   const { t, i18n } = useTranslation('api');
@@ -109,10 +109,7 @@ const useSubmit = () => {
 
     try {
       const chatConfig = chats[currentChatIndex].config;
-      const isStreamSupported =
-        chatConfig.stream !== undefined
-          ? chatConfig.stream
-          : modelStreamSupport[chatConfig.model];
+      const isStreamSupported = getEffectiveStreamEnabled(chatConfig);
       let data;
       let stream;
       if (chats[currentChatIndex].messages.length === 0)
@@ -420,10 +417,7 @@ const useSubmit = () => {
 
       const resolved = resolveProvider(chats[currentChatIndex].config.model);
       const midChatConfig = chats[currentChatIndex].config;
-      const isStreamSupported =
-        midChatConfig.stream !== undefined
-          ? midChatConfig.stream
-          : modelStreamSupport[midChatConfig.model];
+      const isStreamSupported = getEffectiveStreamEnabled(midChatConfig);
 
       if (!isStreamSupported) {
         if (!resolved.key || resolved.key.length === 0) {

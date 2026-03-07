@@ -102,6 +102,9 @@ async function handleStartStream(msg, clientId) {
   const { requestId, endpoint, headers, body } = msg;
   const controller = new AbortController();
   activeStreams.set(requestId, controller);
+  let bufferedText = '';
+  let flushTimer = null;
+  let flushChain = Promise.resolve();
 
   // Save initial record
   await dbPut({
@@ -119,6 +122,29 @@ async function handleStartStream(msg, clientId) {
     self.clients.get(clientId).then((client) => {
       if (client) client.postMessage(data);
     });
+  }
+
+  function flushBufferedText() {
+    if (flushTimer) {
+      clearTimeout(flushTimer);
+      flushTimer = null;
+    }
+
+    const snapshot = bufferedText;
+    flushChain = flushChain
+      .then(async () => {
+        await dbUpdate(requestId, { bufferedText: snapshot });
+      })
+      .catch(() => {});
+
+    return flushChain;
+  }
+
+  function scheduleFlush() {
+    if (flushTimer) return;
+    flushTimer = setTimeout(() => {
+      flushBufferedText();
+    }, 200);
   }
 
   try {
@@ -150,15 +176,10 @@ async function handleStartStream(msg, clientId) {
 
       const text = extractText(parsed.events);
       if (text) {
-        // Update IndexedDB
-        const record = await dbGet(requestId);
-        if (record) {
-          record.bufferedText += text;
-          record.updatedAt = Date.now();
-          await dbPut(record);
-        }
         // Forward to client
         postToClient({ type: 'sw-chunk', requestId, text });
+        bufferedText += text;
+        scheduleFlush();
       }
 
       if (parsed.done || done) {
@@ -166,15 +187,20 @@ async function handleStartStream(msg, clientId) {
       }
     }
 
+    await flushBufferedText();
     await dbUpdate(requestId, { status: 'completed' });
     postToClient({ type: 'sw-done', requestId });
   } catch (err) {
     const isAbort = err.name === 'AbortError';
     const status = isAbort ? 'interrupted' : 'failed';
     const error = isAbort ? 'Cancelled' : (err.message || String(err));
+    await flushBufferedText();
     await dbUpdate(requestId, { status, error });
     postToClient({ type: isAbort ? 'sw-cancelled' : 'sw-error', requestId, error });
   } finally {
+    if (flushTimer) {
+      clearTimeout(flushTimer);
+    }
     activeStreams.delete(requestId);
   }
 }
