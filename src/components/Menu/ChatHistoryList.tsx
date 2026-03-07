@@ -245,7 +245,7 @@ const ChatHistoryList = () => {
           <ChatHistory
             title={title}
             chatSize={chatSize}
-            key={`${title}-${id}`}
+            key={`${title}-${id}-${index}`}
             chatIndex={index}
             selectedChats={selectedChats}
             setSelectedChats={setSelectedChats}

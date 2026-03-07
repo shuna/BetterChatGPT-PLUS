@@ -5,6 +5,7 @@ import { toast } from 'react-toastify';
 export interface ChatSlice {
   messages: MessageInterface[];
   chats?: ChatInterface[];
+  collapsedNodeMaps: Record<string, Record<string, boolean>>;
   currentChatIndex: number;
   generating: boolean;
   error: string;
@@ -19,9 +20,39 @@ export interface ChatSlice {
   setAllCollapsed: (chatIndex: number, collapsed: boolean) => void;
 }
 
+const getCollapsedMapKey = (chatIndex: number) => String(chatIndex);
+
+const getCollapsedNodesForChat = (
+  chats: ChatInterface[] | undefined,
+  collapsedNodeMaps: Record<string, Record<string, boolean>>,
+  chatIndex: number
+) => {
+  const mapKey = getCollapsedMapKey(chatIndex);
+  return collapsedNodeMaps[mapKey] ?? chats?.[chatIndex]?.collapsedNodes ?? {};
+};
+
+const buildCollapsedNodeMaps = (chats: ChatInterface[] | undefined) => {
+  const next: Record<string, Record<string, boolean>> = {};
+  chats?.forEach((chat, index) => {
+    if (chat.collapsedNodes && Object.keys(chat.collapsedNodes).length > 0) {
+      next[getCollapsedMapKey(index)] = { ...chat.collapsedNodes };
+    }
+  });
+  return next;
+};
+
+const hasSameChatOrder = (
+  prevChats: ChatInterface[] | undefined,
+  nextChats: ChatInterface[]
+) => {
+  if (!prevChats || prevChats.length !== nextChats.length) return false;
+  return prevChats.every((chat, index) => chat.id === nextChats[index]?.id);
+};
+
 export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
   return {
     messages: [],
+    collapsedNodeMaps: {},
     currentChatIndex: -1,
     generating: false,
     error: '',
@@ -37,6 +68,9 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
         set((prev: ChatSlice) => ({
           ...prev,
           chats: chats,
+          collapsedNodeMaps: hasSameChatOrder(prev.chats, chats)
+            ? prev.collapsedNodeMaps
+            : buildCollapsedNodeMaps(chats),
         }));
       } catch (e: unknown) {
         // Notify if storage quota exceeded
@@ -72,27 +106,37 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
       }));
     },
     toggleCollapseNode: (chatIndex: number, messageIndex: number) => {
+      const t0 = performance.now();
       const chats = get().chats;
       if (!chats) return;
       const chat = chats[chatIndex];
       if (!chat) return;
       const nodeId = chat.branchTree?.activePath?.[messageIndex] ?? String(messageIndex);
-      const prev = chat.collapsedNodes ?? {};
+      const prev = getCollapsedNodesForChat(chats, get().collapsedNodeMaps, chatIndex);
       const next = { ...prev };
+      const wasCollapsed = !!next[nodeId];
       if (next[nodeId]) {
         delete next[nodeId];
       } else {
         next[nodeId] = true;
       }
-      const updatedChats = chats.slice();
-      updatedChats[chatIndex] = { ...chat, collapsedNodes: next };
-      set((prev: ChatSlice) => ({ ...prev, chats: updatedChats }));
+      const mapKey = getCollapsedMapKey(chatIndex);
+      set((prev: ChatSlice) => ({
+        ...prev,
+        collapsedNodeMaps: {
+          ...prev.collapsedNodeMaps,
+          [mapKey]: next,
+        },
+      }));
+      console.log(`[perf] toggleCollapseNode(${nodeId}, ${wasCollapsed ? 'expand' : 'collapse'}): store update ${(performance.now() - t0).toFixed(2)}ms`);
     },
     setAllCollapsed: (chatIndex: number, collapsed: boolean) => {
+      const t0 = performance.now();
       const chats = get().chats;
       if (!chats) return;
       const chat = chats[chatIndex];
       if (!chat) return;
+      const targetNodeCount = chat.branchTree?.activePath?.length ?? chat.messages.length;
       let newCollapsed: Record<string, boolean>;
       if (collapsed) {
         newCollapsed = {};
@@ -108,9 +152,15 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
       } else {
         newCollapsed = {};
       }
-      const updatedChats = chats.slice();
-      updatedChats[chatIndex] = { ...chat, collapsedNodes: newCollapsed };
-      set((prev: ChatSlice) => ({ ...prev, chats: updatedChats }));
+      const mapKey = getCollapsedMapKey(chatIndex);
+      set((prev: ChatSlice) => ({
+        ...prev,
+        collapsedNodeMaps: {
+          ...prev.collapsedNodeMaps,
+          [mapKey]: newCollapsed,
+        },
+      }));
+      console.log(`[perf] setAllCollapsed(${collapsed}, ${targetNodeCount} nodes): store update ${(performance.now() - t0).toFixed(2)}ms`);
     },
   };
 };
