@@ -56,6 +56,9 @@ const ProviderMenu = ({
   const providers = useStore((state) => state.providers);
   const favoriteModels = useStore((state) => state.favoriteModels);
   const setProviderApiKey = useStore((state) => state.setProviderApiKey);
+  const setProviderEndpoint = useStore((state) => state.setProviderEndpoint);
+  const apiVersion = useStore((state) => state.apiVersion);
+  const setApiVersion = useStore((state) => state.setApiVersion);
   const toggleFavoriteModel = useStore((state) => state.toggleFavoriteModel);
 
   const [selectedProvider, setSelectedProvider] = useState<ProviderId>('openrouter');
@@ -75,11 +78,15 @@ const ProviderMenu = ({
     }
   };
   const [apiKeyInput, setApiKeyInput] = useState('');
+  const [endpointInput, setEndpointInput] = useState('');
+  const [apiVersionInput, setApiVersionInput] = useState('');
 
-  // Sync API key input when provider changes
+  // Sync inputs when provider changes
   useEffect(() => {
     setApiKeyInput(providers[selectedProvider]?.apiKey || '');
-  }, [selectedProvider, providers]);
+    setEndpointInput(providers[selectedProvider]?.endpoint || '');
+    setApiVersionInput(apiVersion || '');
+  }, [selectedProvider, providers, apiVersion]);
 
   const loadModels = useCallback(
     async (providerId: ProviderId) => {
@@ -101,17 +108,19 @@ const ProviderMenu = ({
   }, [selectedProvider]);
 
   // Reload models when API key changes for current provider
-  const handleSaveApiKey = () => {
+  const handleSaveSettings = () => {
     setProviderApiKey(selectedProvider, apiKeyInput);
+    setProviderEndpoint(selectedProvider, endpointInput);
+    setApiVersion(apiVersionInput);
     const providerName = providers[selectedProvider]?.name || selectedProvider;
 
     // Show toast notification
     useStore.getState().setToastStatus('success');
-    useStore.getState().setToastMessage(`${providerName}: ${t('provider.keySaved', 'APIキーを保存しました')}`);
+    useStore.getState().setToastMessage(`${providerName}: ${t('provider.saved', '設定を保存しました')}`);
     useStore.getState().setToastShow(true);
 
     // Re-fetch models with new key without clearing existing list
-    const updatedConfig = { ...providers[selectedProvider], apiKey: apiKeyInput };
+    const updatedConfig = { ...providers[selectedProvider], apiKey: apiKeyInput, endpoint: endpointInput };
     setLoading((prev) => ({ ...prev, [selectedProvider]: true }));
     fetchProviderModels(updatedConfig)
       .then((result) => {
@@ -293,24 +302,52 @@ const ProviderMenu = ({
                 )}
               </div>
 
-              {/* API Key */}
-              <div className='p-3 border-t dark:border-gray-600 flex items-center gap-2'>
-                <label className='text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap'>
-                  {t('provider.apiKeyLabel', 'API Key:')}
-                </label>
-                <input
-                  type='password'
-                  value={apiKeyInput}
-                  onChange={(e) => setApiKeyInput(e.target.value)}
-                  placeholder={t('provider.enterApiKey', 'Enter API key for {{name}}...', { name: providers[selectedProvider]?.name || selectedProvider }) as string}
-                  className='flex-1 px-3 py-2 text-sm bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
-                />
-                <button
-                  onClick={handleSaveApiKey}
-                  className='btn btn-primary text-sm px-4 py-2'
-                >
-                  {t('provider.save', 'Save')}
-                </button>
+              {/* Provider Settings */}
+              <div className='p-3 border-t dark:border-gray-600 flex flex-col gap-2'>
+                <div className='flex items-center gap-2'>
+                  <label className='text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap w-24'>
+                    {t('provider.endpointLabel', 'Endpoint:')}
+                  </label>
+                  <input
+                    type='text'
+                    value={endpointInput}
+                    onChange={(e) => setEndpointInput(e.target.value)}
+                    placeholder={t('provider.enterEndpoint', 'API endpoint URL') as string}
+                    className='flex-1 px-3 py-2 text-sm bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
+                  />
+                </div>
+                {(selectedProvider === 'openai') && (
+                  <div className='flex items-center gap-2'>
+                    <label className='text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap w-24'>
+                      {t('provider.apiVersionLabel', 'API Version:')}
+                    </label>
+                    <input
+                      type='text'
+                      value={apiVersionInput}
+                      onChange={(e) => setApiVersionInput(e.target.value)}
+                      placeholder={t('provider.apiVersionPlaceholder', 'e.g. 2023-07-01-preview (Azure)') as string}
+                      className='flex-1 px-3 py-2 text-sm bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
+                    />
+                  </div>
+                )}
+                <div className='flex items-center gap-2'>
+                  <label className='text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap w-24'>
+                    {t('provider.apiKeyLabel', 'API Key:')}
+                  </label>
+                  <input
+                    type='password'
+                    value={apiKeyInput}
+                    onChange={(e) => setApiKeyInput(e.target.value)}
+                    placeholder={t('provider.enterApiKey', 'Enter API key for {{name}}...', { name: providers[selectedProvider]?.name || selectedProvider }) as string}
+                    className='flex-1 px-3 py-2 text-sm bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
+                  />
+                  <button
+                    onClick={handleSaveSettings}
+                    className='btn btn-primary text-sm px-4 py-2'
+                  >
+                    {t('provider.save', 'Save')}
+                  </button>
+                </div>
               </div>
             </div>
           </div>

@@ -1,7 +1,6 @@
 import React, { Suspense, useEffect, useState } from 'react';
 import useStore from '@store/store';
 
-import Api from './Api';
 import CollapseOptions from './CollapseOptions';
 import { TotalTokenCostDisplay } from '@components/SettingsMenu/TotalTokenCost';
 
@@ -42,7 +41,6 @@ const MenuOptions = () => {
           <Suspense fallback={null}>
             {googleClientId && <GoogleSync clientId={googleClientId} />}
             <ImportExportChat />
-            <Api />
             <SettingsMenu />
           </Suspense>
         )}
