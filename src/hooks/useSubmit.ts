@@ -27,6 +27,8 @@ const useSubmit = () => {
   const favoriteModels = useStore((state) => state.favoriteModels) || [];
   const providers = useStore((state) => state.providers) || {};
   const setGenerating = useStore((state) => state.setGenerating);
+  const setGeneratingMessageIndex = useStore((state) => state.setGeneratingMessageIndex);
+  const setLastSubmitContext = useStore((state) => state.setLastSubmitContext);
   const generating = useStore((state) => state.generating);
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const setChats = useStore((state) => state.setChats);
@@ -106,6 +108,8 @@ const useSubmit = () => {
 
     setChats(updatedChats);
     setGenerating(true);
+    setGeneratingMessageIndex(updatedChats[currentChatIndex].messages.length - 1);
+    setLastSubmitContext('append', null, currentChatIndex);
 
     try {
       const chatConfig = chats[currentChatIndex].config;
@@ -360,11 +364,13 @@ const useSubmit = () => {
           });
         }
       }
+      setLastSubmitContext(null, null, null);
     } catch (e: unknown) {
       const err = (e as Error).message;
       console.log(err);
       setError(err);
     }
+    setGeneratingMessageIndex(null);
     setGenerating(false);
   };
 
@@ -394,6 +400,8 @@ const useSubmit = () => {
 
     setChats(updatedChats);
     setGenerating(true);
+    setGeneratingMessageIndex(insertIndex);
+    setLastSubmitContext('midchat', insertIndex, currentChatIndex);
 
     try {
       let data;
@@ -605,15 +613,52 @@ const useSubmit = () => {
           msgs[insertIndex]
         );
       }
+      setLastSubmitContext(null, null, null);
     } catch (e: unknown) {
       const err = (e as Error).message;
       console.log(err);
       setError(err);
     }
+    setGeneratingMessageIndex(null);
     setGenerating(false);
   };
 
-  return { handleSubmit, handleSubmitMidChat, error };
+  const handleRetry = async () => {
+    const { lastSubmitMode, lastSubmitIndex, lastSubmitChatIndex } = useStore.getState();
+    if (!lastSubmitMode || lastSubmitChatIndex === null) return;
+
+    // Ensure we retry on the correct chat
+    if (currentChatIndex !== lastSubmitChatIndex) return;
+
+    const chats = useStore.getState().chats;
+    if (!chats) return;
+
+    const updatedChats = chats.slice();
+    const chat = { ...chats[currentChatIndex], messages: [...chats[currentChatIndex].messages] };
+    updatedChats[currentChatIndex] = chat;
+
+    if (lastSubmitMode === 'append') {
+      // Remove the last assistant message (empty or partial) left by the failed generation
+      const lastMsg = chat.messages[chat.messages.length - 1];
+      if (lastMsg?.role === 'assistant') {
+        chat.messages.pop();
+        setChats(updatedChats);
+      }
+      setError('');
+      handleSubmit();
+    } else if (lastSubmitMode === 'midchat' && lastSubmitIndex !== null) {
+      // Remove the inserted assistant message (empty or partial) at the target index
+      const targetMsg = chat.messages[lastSubmitIndex];
+      if (targetMsg?.role === 'assistant') {
+        chat.messages.splice(lastSubmitIndex, 1);
+        setChats(updatedChats);
+      }
+      setError('');
+      handleSubmitMidChat(lastSubmitIndex);
+    }
+  };
+
+  return { handleSubmit, handleSubmitMidChat, handleRetry, error };
 };
 
 export default useSubmit;

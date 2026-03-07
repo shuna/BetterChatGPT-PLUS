@@ -64,5 +64,8 @@
   "diffNoChanges": "ブランチは同一です",
   "added": "追加",
   "removed": "削除",
-  "changed": "変更"
+  "changed": "変更",
+  "stopGenerating": "生成を停止",
+  "retry": "再試行",
+  "searchDisabledDuringGeneration": "生成中..."
 }

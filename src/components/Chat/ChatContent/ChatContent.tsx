@@ -43,7 +43,7 @@ const ChatContent = () => {
       : 0
   );
   const advancedMode = useStore((state) => state.advancedMode);
-  const generating = useStore.getState().generating;
+  const generating = useStore((state) => state.generating);
   const hideSideMenu = useStore((state) => state.hideSideMenu);
   const autoScroll = useStore((state) => state.autoScroll);
   const hideShareGPT = useStore((state) => state.hideShareGPT);
@@ -105,7 +105,9 @@ const ChatContent = () => {
     }
   }, [generating]);
 
-  const { error } = useSubmit();
+  const { error, handleRetry } = useSubmit();
+  const lastSubmitMode = useStore((state) => state.lastSubmitMode);
+  const setLastSubmitContext = useStore((state) => state.setLastSubmitContext);
 
   // Custom scroller function to control auto-scroll behavior
   const customScroller = ({ maxValue }: { maxValue: number; minValue: number; offsetHeight: number; scrollHeight: number; scrollTop: number }) => {
@@ -160,10 +162,21 @@ const ChatContent = () => {
               <div className='text-gray-600 dark:text-gray-100 text-sm whitespace-pre-wrap'>
                 {error}
               </div>
+              {lastSubmitMode && (
+                <div className='flex items-center gap-2 mt-2'>
+                  <button
+                    className='px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600 transition-colors'
+                    onClick={handleRetry}
+                  >
+                    {t('retry')}
+                  </button>
+                </div>
+              )}
               <div
                 className='text-white absolute top-1 right-1 cursor-pointer'
                 onClick={() => {
                   setError('');
+                  setLastSubmitContext(null, null, null);
                 }}
               >
                 <CrossIcon />
@@ -177,7 +190,7 @@ const ChatContent = () => {
                 : 'md:max-w-3xl lg:max-w-3xl xl:max-w-4xl'
             }`}
           >
-            {useStore.getState().generating || (
+            {generating || (
               <div className='md:w-[calc(100%-50px)] flex gap-4 flex-wrap justify-center'>
                 <DownloadChat saveRef={saveRef} />
                 {!hideShareGPT && <Suspense fallback={null}><ShareGPT /></Suspense>}

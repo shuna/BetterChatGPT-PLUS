@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { debounce } from 'lodash';
 import useStore from '@store/store';
 
@@ -11,6 +12,7 @@ const ChatSearch = ({
   filter: string;
   setFilter: React.Dispatch<React.SetStateAction<string>>;
 }) => {
+  const { t } = useTranslation();
   const [_filter, _setFilter] = useState<string>(filter);
   const generating = useStore((state) => state.generating);
 
@@ -29,12 +31,19 @@ const ChatSearch = ({
   }, [_filter]);
 
   return (
-    <SearchBar
-      value={_filter}
-      handleChange={handleChange}
-      className='h-8 mb-2'
-      disabled={generating}
-    />
+    <div className='relative'>
+      <SearchBar
+        value={_filter}
+        handleChange={handleChange}
+        className='h-8 mb-2'
+        disabled={generating}
+      />
+      {generating && (
+        <div className='absolute inset-0 flex items-center justify-center text-xs text-gray-400 pointer-events-none'>
+          {t('searchDisabledDuringGeneration')}
+        </div>
+      )}
+    </div>
   );
 };
 

@@ -8,13 +8,19 @@ export interface ChatSlice {
   collapsedNodeMaps: Record<string, Record<string, boolean>>;
   currentChatIndex: number;
   generating: boolean;
+  generatingMessageIndex: number | null;
   error: string;
+  lastSubmitMode: 'append' | 'midchat' | null;
+  lastSubmitIndex: number | null;
+  lastSubmitChatIndex: number | null;
   folders: FolderCollection;
   setMessages: (messages: MessageInterface[]) => void;
   setChats: (chats: ChatInterface[]) => void;
   setCurrentChatIndex: (currentChatIndex: number) => void;
   setGenerating: (generating: boolean) => void;
+  setGeneratingMessageIndex: (index: number | null) => void;
   setError: (error: string) => void;
+  setLastSubmitContext: (mode: 'append' | 'midchat' | null, index: number | null, chatIndex: number | null) => void;
   setFolders: (folders: FolderCollection) => void;
   toggleCollapseNode: (chatIndex: number, messageIndex: number) => void;
   setAllCollapsed: (chatIndex: number, collapsed: boolean) => void;
@@ -55,7 +61,11 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
     collapsedNodeMaps: {},
     currentChatIndex: -1,
     generating: false,
+    generatingMessageIndex: null,
     error: '',
+    lastSubmitMode: null,
+    lastSubmitIndex: null,
+    lastSubmitChatIndex: null,
     folders: {},
     setMessages: (messages: MessageInterface[]) => {
       set((prev: ChatSlice) => ({
@@ -91,6 +101,20 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
       set((prev: ChatSlice) => ({
         ...prev,
         generating: generating,
+      }));
+    },
+    setGeneratingMessageIndex: (index: number | null) => {
+      set((prev: ChatSlice) => ({
+        ...prev,
+        generatingMessageIndex: index,
+      }));
+    },
+    setLastSubmitContext: (mode: 'append' | 'midchat' | null, index: number | null, chatIndex: number | null) => {
+      set((prev: ChatSlice) => ({
+        ...prev,
+        lastSubmitMode: mode,
+        lastSubmitIndex: index,
+        lastSubmitChatIndex: chatIndex,
       }));
     },
     setError: (error: string) => {

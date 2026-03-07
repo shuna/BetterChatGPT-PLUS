@@ -195,7 +195,9 @@ const ChatHistory = React.memo(
           active ? ChatHistoryClass.active : ChatHistoryClass.normal
         } ${
           generating
-            ? 'cursor-not-allowed opacity-40'
+            ? active
+              ? 'cursor-default opacity-100'
+              : 'cursor-not-allowed opacity-60'
             : 'cursor-pointer opacity-100'
         } ${selectedChats.includes(chatIndex) ? 'bg-blue-500' : ''}`}
         onClick={() => {
@@ -211,6 +213,9 @@ const ChatHistory = React.memo(
           onChange={() => {}}
         />
         <ChatIcon />
+        {generating && active && (
+          <span className='inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse' />
+        )}
         <div
           className='flex-1 text-ellipsis max-h-5 overflow-hidden break-all relative'
           title={`${title}${chatSize ? ` (${formatNumber(chatSize)})` : ''}`}

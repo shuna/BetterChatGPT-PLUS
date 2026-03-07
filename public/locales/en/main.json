@@ -76,5 +76,8 @@
   "diffNoChanges": "Branches are identical",
   "added": "Added",
   "removed": "Removed",
-  "changed": "Changed"
+  "changed": "Changed",
+  "stopGenerating": "Stop generating",
+  "retry": "Retry",
+  "searchDisabledDuringGeneration": "Generating..."
 }

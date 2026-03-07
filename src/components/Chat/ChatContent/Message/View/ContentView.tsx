@@ -69,6 +69,12 @@ const ContentView = memo(
     );
     const inlineLatex = useStore((state) => state.inlineLatex);
     const markdownMode = useStore((state) => state.markdownMode);
+    const generating = useStore((state) => state.generating);
+    const generatingMessageIndex = useStore((state) => state.generatingMessageIndex);
+    const isGeneratingMessage =
+      role === 'assistant' &&
+      generating &&
+      generatingMessageIndex === messageIndex;
 
     const handleDelete = () => {
       const chats = useStore.getState().chats!;
@@ -149,20 +155,28 @@ const ContentView = memo(
       <>
         <div className='markdown prose w-full md:max-w-full break-words dark:prose-invert dark share-gpt-message'>
           {markdownMode ? (
-            <Suspense
-              fallback={
-                <span className='whitespace-pre-wrap'>
-                  {currentTextContent}
-                </span>
-              }
-            >
-              <MarkdownRenderer
-                content={currentTextContent}
-                inlineLatex={inlineLatex}
-              />
-            </Suspense>
+            <>
+              <Suspense
+                fallback={
+                  <span className='whitespace-pre-wrap'>
+                    {currentTextContent}
+                  </span>
+                }
+              >
+                <MarkdownRenderer
+                  content={currentTextContent}
+                  inlineLatex={inlineLatex}
+                />
+              </Suspense>
+              {isGeneratingMessage && (
+                <span className='inline-block animate-pulse text-gray-500 dark:text-gray-400'>▌</span>
+              )}
+            </>
           ) : (
-            <span className='whitespace-pre-wrap'>{currentTextContent}</span>
+            <span className='whitespace-pre-wrap'>
+              {currentTextContent}
+              {isGeneratingMessage && <span className='animate-pulse'>▌</span>}
+            </span>
           )}
         </div>
         {validImageContents.length > 0 && (
@@ -207,10 +221,10 @@ const ContentView = memo(
           <div className='ml-auto flex flex-wrap items-center justify-end gap-2'>
             {isDelete || (
               <>
-                {!useStore.getState().generating && role === 'assistant' && (
+                {!generating && role === 'assistant' && (
                   <RefreshButton onClick={handleRefresh} />
                 )}
-                {!useStore.getState().generating && role === 'user' && (
+                {!generating && role === 'user' && (
                   <RegenerateNextButton onClick={handleRefresh} />
                 )}
                 {messageIndex !== 0 && <UpButton onClick={handleMoveUp} />}
