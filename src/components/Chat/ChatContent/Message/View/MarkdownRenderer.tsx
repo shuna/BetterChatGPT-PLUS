@@ -1,4 +1,4 @@
-import React, { DetailedHTMLProps, HTMLAttributes, memo, useLayoutEffect, useRef } from 'react';
+import React, { DetailedHTMLProps, HTMLAttributes, memo } from 'react';
 
 import ReactMarkdown from 'react-markdown';
 import { CodeProps, ReactMarkdownProps } from 'react-markdown/lib/ast-to-react';
@@ -47,16 +47,6 @@ const MarkdownRenderer = memo(
     content: string;
     inlineLatex: boolean;
   }) => {
-    const renderStartRef = useRef(performance.now());
-    renderStartRef.current = performance.now();
-
-    useLayoutEffect(() => {
-      const elapsed = performance.now() - renderStartRef.current;
-      if (elapsed > 5) {
-        console.log(`[perf] MarkdownRenderer render+commit: ${elapsed.toFixed(2)}ms (content length=${content.length})`);
-      }
-    });
-
     return (
       <ReactMarkdown
         remarkPlugins={[

@@ -106,7 +106,6 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
       }));
     },
     toggleCollapseNode: (chatIndex: number, messageIndex: number) => {
-      const t0 = performance.now();
       const chats = get().chats;
       if (!chats) return;
       const chat = chats[chatIndex];
@@ -128,15 +127,12 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
           [mapKey]: next,
         },
       }));
-      console.log(`[perf] toggleCollapseNode(${nodeId}, ${wasCollapsed ? 'expand' : 'collapse'}): store update ${(performance.now() - t0).toFixed(2)}ms`);
     },
     setAllCollapsed: (chatIndex: number, collapsed: boolean) => {
-      const t0 = performance.now();
       const chats = get().chats;
       if (!chats) return;
       const chat = chats[chatIndex];
       if (!chat) return;
-      const targetNodeCount = chat.branchTree?.activePath?.length ?? chat.messages.length;
       let newCollapsed: Record<string, boolean>;
       if (collapsed) {
         newCollapsed = {};
@@ -160,7 +156,6 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
           [mapKey]: newCollapsed,
         },
       }));
-      console.log(`[perf] setAllCollapsed(${collapsed}, ${targetNodeCount} nodes): store update ${(performance.now() - t0).toFixed(2)}ms`);
     },
   };
 };

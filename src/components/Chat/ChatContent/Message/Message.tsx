@@ -1,4 +1,4 @@
-import React, { useCallback, useLayoutEffect, useRef } from 'react';
+import React, { useCallback } from 'react';
 import useStore from '@store/store';
 
 import Avatar from './Avatar';
@@ -66,14 +66,6 @@ const Message = React.memo(
       if (!text) return `${role} message`;
       return text.length > 280 ? `${text.slice(0, 280)}...` : text;
     })();
-
-    const renderStartRef = useRef(performance.now());
-    renderStartRef.current = performance.now();
-
-    useLayoutEffect(() => {
-      const elapsed = performance.now() - renderStartRef.current;
-      console.log(`[perf] Message[${messageIndex}] render+commit: ${elapsed.toFixed(2)}ms (collapsed=${isCollapsed})`);
-    });
 
     const handleToggleCollapse = useCallback(() => {
       if (!sticky) {
