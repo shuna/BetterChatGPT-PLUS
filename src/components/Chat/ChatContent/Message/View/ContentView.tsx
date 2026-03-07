@@ -15,6 +15,7 @@ import {
   ChatInterface,
   ContentInterface,
   ImageContentInterface,
+  Role,
   isImageContent,
   isTextContent,
 } from '@type/chat';
@@ -32,8 +33,8 @@ import BranchSwitcher from '../BranchSwitcher';
 
 import PopupModal from '@components/PopupModal';
 import {
-  deleteActivePathMessage,
-  materializeActivePath,
+  removeMessageWithBranchSync,
+  resolveRegenerateTarget,
 } from '@utils/branchUtils';
 
 const MarkdownRenderer = React.lazy(() => import('./MarkdownRenderer'));
@@ -70,25 +71,18 @@ const ContentView = memo(
     const markdownMode = useStore((state) => state.markdownMode);
 
     const handleDelete = () => {
-      const updatedChats: ChatInterface[] = JSON.parse(
-        JSON.stringify(useStore.getState().chats)
-      );
+      const chats = useStore.getState().chats!;
       const contentStore = useStore.getState().contentStore;
-      updatedChats[currentChatIndex].messages.splice(messageIndex, 1);
-      if (updatedChats[currentChatIndex].branchTree) {
-        deleteActivePathMessage(updatedChats[currentChatIndex], messageIndex, contentStore);
-        updatedChats[currentChatIndex].messages = materializeActivePath(
-          updatedChats[currentChatIndex].branchTree!,
-          contentStore
-        );
-      }
+      const updatedChats = chats.slice();
+      updatedChats[currentChatIndex] = structuredClone(chats[currentChatIndex]);
+      removeMessageWithBranchSync(updatedChats[currentChatIndex], messageIndex, contentStore);
       setChats(updatedChats);
     };
 
     const handleMove = (direction: 'up' | 'down') => {
-      const updatedChats: ChatInterface[] = JSON.parse(
-        JSON.stringify(useStore.getState().chats)
-      );
+      const chats = useStore.getState().chats!;
+      const updatedChats = chats.slice();
+      updatedChats[currentChatIndex] = structuredClone(chats[currentChatIndex]);
       const updatedMessages = updatedChats[currentChatIndex].messages;
       const temp = updatedMessages[messageIndex];
       if (direction === 'up') {
@@ -112,44 +106,27 @@ const ContentView = memo(
     const handleRefresh = () => {
       if (useStore.getState().generating) return;
 
-      const updatedChats: ChatInterface[] = JSON.parse(
-        JSON.stringify(useStore.getState().chats)
+      const plan = resolveRegenerateTarget(
+        role as Role,
+        messageIndex,
+        useStore.getState().chats![currentChatIndex].messages.length
       );
-      const updatedMessages = updatedChats[currentChatIndex].messages;
+      if (!plan) return;
+
+      const chats = useStore.getState().chats!;
       const contentStore = useStore.getState().contentStore;
+      const updatedChats = chats.slice();
+      updatedChats[currentChatIndex] = structuredClone(chats[currentChatIndex]);
 
-      const removeAt = (idx: number) => {
-        updatedMessages.splice(idx, 1);
-        if (updatedChats[currentChatIndex].branchTree) {
-          deleteActivePathMessage(updatedChats[currentChatIndex], idx, contentStore);
-          updatedChats[currentChatIndex].messages = materializeActivePath(
-            updatedChats[currentChatIndex].branchTree!,
-            contentStore
-          );
-        }
-      };
+      if (plan.removeIndex >= 0) {
+        removeMessageWithBranchSync(updatedChats[currentChatIndex], plan.removeIndex, contentStore);
+      }
+      setChats(updatedChats);
 
-      if (role === 'assistant') {
-        // assistantバブル: 自身を削除して再生成
-        removeAt(messageIndex);
-        setChats(updatedChats);
-        if (messageIndex >= updatedChats[currentChatIndex].messages.length) {
-          handleSubmit();
-        } else {
-          handleSubmitMidChat(messageIndex);
-        }
+      if (plan.submitMode === 'append') {
+        handleSubmit();
       } else {
-        // userバブル: 直下のメッセージ(assistant)を1つ削除して再生成
-        const nextIndex = messageIndex + 1;
-        if (nextIndex < updatedMessages.length) {
-          removeAt(nextIndex);
-        }
-        setChats(updatedChats);
-        if (nextIndex >= updatedChats[currentChatIndex].messages.length) {
-          handleSubmit();
-        } else {
-          handleSubmitMidChat(nextIndex);
-        }
+        handleSubmitMidChat(plan.insertIndex);
       }
     };
 

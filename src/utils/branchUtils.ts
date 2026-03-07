@@ -5,6 +5,7 @@ import {
   ChatInterface,
   ContentInterface,
   MessageInterface,
+  Role,
 } from '@type/chat';
 import {
   ContentStoreData,
@@ -179,4 +180,49 @@ export function collectDescendants(
     }
   }
   return result;
+}
+
+export function removeMessageWithBranchSync(
+  chat: ChatInterface,
+  index: number,
+  contentStore: ContentStoreData
+): void {
+  chat.messages.splice(index, 1);
+  if (chat.branchTree) {
+    deleteActivePathMessage(chat, index, contentStore);
+    chat.messages = materializeActivePath(chat.branchTree, contentStore);
+  }
+}
+
+export interface RegenerateTarget {
+  removeIndex: number;
+  submitMode: 'append' | 'insert';
+  insertIndex: number;
+}
+
+export function resolveRegenerateTarget(
+  role: Role,
+  messageIndex: number,
+  messagesLength: number
+): RegenerateTarget | null {
+  if (role === 'system') return null;
+
+  if (role === 'assistant') {
+    const afterRemoval = messagesLength - 1;
+    return {
+      removeIndex: messageIndex,
+      submitMode: messageIndex >= afterRemoval ? 'append' : 'insert',
+      insertIndex: messageIndex,
+    };
+  }
+
+  // user: target the next assistant message
+  const nextIndex = messageIndex + 1;
+  const hasNext = nextIndex < messagesLength;
+  const lengthAfterRemoval = hasNext ? messagesLength - 1 : messagesLength;
+  return {
+    removeIndex: hasNext ? nextIndex : -1,
+    submitMode: nextIndex >= lengthAfterRemoval ? 'append' : 'insert',
+    insertIndex: nextIndex,
+  };
 }
