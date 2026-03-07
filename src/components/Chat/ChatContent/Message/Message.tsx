@@ -1,10 +1,10 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useLayoutEffect, useRef } from 'react';
 import useStore from '@store/store';
 
 import Avatar from './Avatar';
 import MessageContent from './MessageContent';
 
-import { ContentInterface, Role } from '@type/chat';
+import { ContentInterface, Role, isTextContent } from '@type/chat';
 import RoleSelector from './RoleSelector';
 
 const backgroundStyle = ['dark:bg-gray-800', 'bg-gray-50 dark:bg-gray-650'];
@@ -52,8 +52,27 @@ const Message = React.memo(
 
     const isCollapsed = useStore((state) => {
       if (sticky || !nodeId) return false;
-      const chat = state.chats?.[state.currentChatIndex];
-      return chat?.collapsedNodes?.[nodeId] ?? false;
+      const chatIndex = state.currentChatIndex;
+      const collapsedNodes =
+        state.collapsedNodeMaps[String(chatIndex)] ??
+        state.chats?.[chatIndex]?.collapsedNodes ??
+        {};
+      return collapsedNodes[nodeId] ?? false;
+    });
+
+    const collapsedPreview = (() => {
+      const firstText = content.find(isTextContent);
+      const text = firstText?.text.replace(/\s+/g, ' ').trim() ?? '';
+      if (!text) return `${role} message`;
+      return text.length > 280 ? `${text.slice(0, 280)}...` : text;
+    })();
+
+    const renderStartRef = useRef(performance.now());
+    renderStartRef.current = performance.now();
+
+    useLayoutEffect(() => {
+      const elapsed = performance.now() - renderStartRef.current;
+      console.log(`[perf] Message[${messageIndex}] render+commit: ${elapsed.toFixed(2)}ms (collapsed=${isCollapsed})`);
     });
 
     const handleToggleCollapse = useCallback(() => {
@@ -83,22 +102,28 @@ const Message = React.memo(
         >
           <Avatar role={role} />
           <div
-            className={`w-[calc(100%-50px)] transition-[max-height] duration-200 ease-in-out ${
-              isCollapsed ? 'max-h-[5rem] overflow-hidden' : ''
-            }`}
+            className='w-[calc(100%-50px)]'
           >
-            {advancedMode &&
-              <RoleSelector
-                role={role}
-                messageIndex={messageIndex}
-                sticky={sticky}
-              />}
-            <MessageContent
-              role={role}
-              content={content}
-              messageIndex={messageIndex}
-              sticky={sticky}
-            />
+            {isCollapsed ? (
+              <div className='py-1 text-sm leading-6 text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words'>
+                {collapsedPreview}
+              </div>
+            ) : (
+              <>
+                {advancedMode &&
+                  <RoleSelector
+                    role={role}
+                    messageIndex={messageIndex}
+                    sticky={sticky}
+                  />}
+                <MessageContent
+                  role={role}
+                  content={content}
+                  messageIndex={messageIndex}
+                  sticky={sticky}
+                />
+              </>
+            )}
           </div>
         </div>
         {isCollapsed && (
