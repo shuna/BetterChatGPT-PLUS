@@ -24,6 +24,15 @@ import { isModelStreamSupported, normalizeConfigStream } from '@utils/streamSupp
 import { ModelOptions } from '@utils/modelReader';
 import { ImageDetail } from '@type/chat';
 
+const isSameConfig = (left: typeof _defaultChatConfig, right: typeof _defaultChatConfig) =>
+  left.model === right.model &&
+  left.max_tokens === right.max_tokens &&
+  left.temperature === right.temperature &&
+  left.top_p === right.top_p &&
+  left.presence_penalty === right.presence_penalty &&
+  left.frequency_penalty === right.frequency_penalty &&
+  (left.stream !== false) === (right.stream !== false);
+
 const ChatConfigMenu = () => {
   const { t } = useTranslation('model');
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -83,7 +92,7 @@ const ChatConfigPopup = ({
   }, [isStreamSupported, _stream]);
 
   const handleSave = () => {
-    setDefaultChatConfig(normalizeConfigStream({
+    const nextConfig = normalizeConfigStream({
       model: _model,
       max_tokens: _maxToken,
       temperature: _temperature,
@@ -91,9 +100,17 @@ const ChatConfigPopup = ({
       presence_penalty: _presencePenalty,
       frequency_penalty: _frequencyPenalty,
       stream: _stream,
-    }));
-    setDefaultSystemMessage(_systemMessage);
-    setDefaultImageDetail(_imageDetail);
+    });
+
+    if (!isSameConfig(config, nextConfig)) {
+      setDefaultChatConfig(nextConfig);
+    }
+    if (useStore.getState().defaultSystemMessage !== _systemMessage) {
+      setDefaultSystemMessage(_systemMessage);
+    }
+    if (useStore.getState().defaultImageDetail !== _imageDetail) {
+      setDefaultImageDetail(_imageDetail);
+    }
     setIsModalOpen(false);
   };
 

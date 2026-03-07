@@ -18,24 +18,28 @@ export const createAuthSlice: StoreSlice<AuthSlice> = (set, get) => ({
   apiVersion: undefined,
   firstVisit: true,
   setApiKey: (apiKey: string) => {
+    if (get().apiKey === apiKey) return;
     set((prev: AuthSlice) => ({
       ...prev,
       apiKey: apiKey,
     }));
   },
   setApiEndpoint: (apiEndpoint: string) => {
+    if (get().apiEndpoint === apiEndpoint) return;
     set((prev: AuthSlice) => ({
       ...prev,
       apiEndpoint: apiEndpoint,
     }));
   },
   setApiVersion: (apiVersion: string) => {
+    if (get().apiVersion === apiVersion) return;
     set((prev: AuthSlice) => ({
       ...prev,
       apiVersion: apiVersion,
     }));
   },
   setFirstVisit: (firstVisit: boolean) => {
+    if (get().firstVisit === firstVisit) return;
     set((prev: AuthSlice) => ({
       ...prev,
       firstVisit: firstVisit,

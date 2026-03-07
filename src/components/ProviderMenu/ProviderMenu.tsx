@@ -109,6 +109,14 @@ const ProviderMenu = ({
 
   // Reload models when API key changes for current provider
   const handleSaveSettings = () => {
+    const currentProvider = providers[selectedProvider];
+    const hasConfigChanges =
+      (currentProvider?.apiKey || '') !== apiKeyInput ||
+      (currentProvider?.endpoint || '') !== endpointInput ||
+      (apiVersion || '') !== apiVersionInput;
+
+    if (!hasConfigChanges) return;
+
     setProviderApiKey(selectedProvider, apiKeyInput);
     setProviderEndpoint(selectedProvider, endpointInput);
     setApiVersion(apiVersionInput);
@@ -120,7 +128,7 @@ const ProviderMenu = ({
     useStore.getState().setToastShow(true);
 
     // Re-fetch models with new key without clearing existing list
-    const updatedConfig = { ...providers[selectedProvider], apiKey: apiKeyInput, endpoint: endpointInput };
+    const updatedConfig = { ...currentProvider, apiKey: apiKeyInput, endpoint: endpointInput };
     setLoading((prev) => ({ ...prev, [selectedProvider]: true }));
     fetchProviderModels(updatedConfig)
       .then((result) => {
