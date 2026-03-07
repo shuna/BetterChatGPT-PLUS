@@ -8,7 +8,7 @@ import {
 } from '@type/chat';
 import { getChatCompletion, getChatCompletionStream } from '@api/api';
 import { parseEventSource } from '@api/helper';
-import { limitMessageTokens, updateTotalTokenUsed } from '@utils/messageUtils';
+import { limitMessageTokens, updateTotalTokenUsed, loadEncoder } from '@utils/messageUtils';
 import { _defaultChatConfig } from '@constants/chat';
 import { officialAPIEndpoint } from '@constants/auth';
 import { modelStreamSupport } from '@constants/modelLoader';
@@ -116,6 +116,7 @@ const useSubmit = () => {
       if (chats[currentChatIndex].messages.length === 0)
         throw new Error(t('errors.noMessagesSubmitted') as string);
 
+      await loadEncoder();
       const messages = limitMessageTokens(
         chats[currentChatIndex].messages,
         chats[currentChatIndex].config.max_tokens,
@@ -360,6 +361,7 @@ const useSubmit = () => {
       if (contextMessages.length === 0)
         throw new Error(t('errors.noMessagesSubmitted') as string);
 
+      await loadEncoder();
       const messages = limitMessageTokens(
         contextMessages,
         chats[currentChatIndex].config.max_tokens,

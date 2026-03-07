@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import useStore from '@store/store';
 
 import ChatContent from './ChatContent';
 import MobileBar from '../MobileBar';
 import StopGeneratingButton from '@components/StopGeneratingButton/StopGeneratingButton';
 import ChatViewTabs from './ChatViewTabs';
-import BranchEditorView from '@components/BranchEditor/BranchEditorView';
+
+const BranchEditorView = React.lazy(
+  () => import('@components/BranchEditor/BranchEditorView')
+);
 
 const Chat = () => {
   const hideSideMenu = useStore((state) => state.hideSideMenu);
@@ -25,9 +28,13 @@ const Chat = () => {
           <ChatContent />
           <StopGeneratingButton />
         </div>
-        <div className={activeView === 'branch-editor' ? 'flex flex-col flex-1 overflow-hidden' : 'hidden'}>
-          <BranchEditorView />
-        </div>
+        {activeView === 'branch-editor' && (
+          <div className='flex flex-col flex-1 overflow-hidden'>
+            <Suspense fallback={<div className='flex items-center justify-center flex-1'><div className='animate-spin rounded-full h-8 w-8 border-b-2 border-gray-500'></div></div>}>
+              <BranchEditorView />
+            </Suspense>
+          </div>
+        )}
       </main>
     </div>
   );

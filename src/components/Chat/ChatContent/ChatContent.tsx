@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { Suspense, useEffect, useMemo, useRef } from 'react';
 import ScrollToBottom from 'react-scroll-to-bottom';
 import useStore from '@store/store';
 import { useTranslation } from 'react-i18next';
@@ -12,7 +12,7 @@ import CrossIcon from '@icon/CrossIcon';
 import useSubmit from '@hooks/useSubmit';
 import DownloadChat from './DownloadChat';
 import CloneChat from './CloneChat';
-import ShareGPT from '@components/ShareGPT';
+const ShareGPT = React.lazy(() => import('@components/ShareGPT'));
 import { ImageContentInterface, TextContentInterface } from '@type/chat';
 import countTokens, { limitMessageTokens } from '@utils/messageUtils';
 import { defaultModel, reduceMessagesToTotalToken } from '@constants/chat';
@@ -180,7 +180,7 @@ const ChatContent = () => {
             {useStore.getState().generating || (
               <div className='md:w-[calc(100%-50px)] flex gap-4 flex-wrap justify-center'>
                 <DownloadChat saveRef={saveRef} />
-                {!hideShareGPT && <ShareGPT />}
+                {!hideShareGPT && <Suspense fallback={null}><ShareGPT /></Suspense>}
                 <CloneChat />
               </div>
             )}

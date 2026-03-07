@@ -4,12 +4,14 @@ import { shallow } from 'zustand/shallow';
 import { useTranslation } from 'react-i18next';
 
 import countTokens from '@utils/messageUtils';
+import useTokenEncoder from '@hooks/useTokenEncoder';
 import { isTextContent, isImageContent } from '@type/chat';
 
 const TokenCount = React.memo(() => {
   const { t } = useTranslation();
   const [tokenCount, setTokenCount] = useState<number>(0);
   const [imageTokenCount, setImageTokenCount] = useState<number>(0);
+  const encoderReady = useTokenEncoder();
   const generating = useStore((state) => state.generating);
   const messages = useStore(
     (state) =>
@@ -51,7 +53,7 @@ const TokenCount = React.memo(() => {
       setTokenCount(newPromptTokens);
       setImageTokenCount(newImageTokens);
     }
-  }, [messages, generating, model]);
+  }, [messages, generating, model, encoderReady]);
 
   return (
     <div className='absolute top-[-16px] right-0'>

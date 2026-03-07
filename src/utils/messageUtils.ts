@@ -9,24 +9,53 @@ import {
   TotalTokenUsed,
 } from '@type/chat';
 import { ModelOptions } from './modelReader';
-const cl100k_base = await import('@dqbd/tiktoken/encoders/cl100k_base.json');
 
-const encoder = new Tiktoken(
-  cl100k_base.bpe_ranks,
-  {
-    ...cl100k_base.special_tokens,
-    '<|im_start|>': 100264,
-    '<|im_end|>': 100265,
-    '<|im_sep|>': 100266,
-  },
-  cl100k_base.pat_str
-);
+let encoder: Tiktoken | null = null;
+let encoderPromise: Promise<Tiktoken> | null = null;
+const listeners: Set<() => void> = new Set();
+
+export const loadEncoder = (): Promise<Tiktoken> => {
+  if (encoder) return Promise.resolve(encoder);
+  if (!encoderPromise) {
+    encoderPromise = import('@dqbd/tiktoken/encoders/cl100k_base.json').then(
+      (cl100k_base) => {
+        encoder = new Tiktoken(
+          cl100k_base.bpe_ranks,
+          {
+            ...cl100k_base.special_tokens,
+            '<|im_start|>': 100264,
+            '<|im_end|>': 100265,
+            '<|im_sep|>': 100266,
+          },
+          cl100k_base.pat_str
+        );
+        listeners.forEach((fn) => fn());
+        listeners.clear();
+        return encoder;
+      }
+    );
+  }
+  return encoderPromise;
+};
+
+export const isEncoderReady = (): boolean => encoder !== null;
+
+export const onEncoderReady = (fn: () => void): (() => void) => {
+  if (encoder) {
+    fn();
+    return () => {};
+  }
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+};
 
 // https://github.com/dqbd/tiktoken/issues/23#issuecomment-1483317174
 export const getChatGPTEncoding = (
   messages: MessageInterface[],
   model: ModelOptions
 ) => {
+  if (!encoder) return new Uint32Array(0);
+
   const isGpt3 = model === 'gpt-3.5-turbo';
 
   const msgSep = isGpt3 ? '\n' : '';
@@ -58,41 +87,17 @@ export const limitMessageTokens = (
   limit: number = 4096,
   model: ModelOptions
 ): MessageInterface[] => {
+  if (!encoder) return messages;
+
   const limitedMessages: MessageInterface[] = [];
   let tokenCount = 0;
 
-  // const isSystemFirstMessage = messages[0]?.role === 'system';
-  // let retainSystemMessage = false;
-
-  // // Check if the first message is a system message and if it fits within the token limit
-  // if (isSystemFirstMessage) {
-  //   const systemTokenCount = countTokens([messages[0]], model);
-  //   if (systemTokenCount < limit) {
-  //     tokenCount += systemTokenCount;
-  //     retainSystemMessage = true;
-  //   }
-  // }
-
-  // Iterate through messages in reverse order, adding them to the limitedMessages array
-  // until the token limit is reached (excludes first message)
   for (let i = messages.length - 1; i >= 0; i--) {
     const count = countTokens([messages[i]], model);
     if (count + tokenCount > limit) break;
     tokenCount += count;
     limitedMessages.unshift({ ...messages[i] });
   }
-
-  // // Process first message
-  // if (retainSystemMessage) {
-  //   // Insert the system message in the third position from the end
-  //   limitedMessages.splice(-3, 0, { ...messages[0] });
-  // } else if (!isSystemFirstMessage && messages.length > 0) {
-  //   // Check if the first message (non-system) can fit within the limit
-  //   const firstMessageTokenCount = countTokens([messages[0]], model);
-  //   if (firstMessageTokenCount + tokenCount < limit) {
-  //     limitedMessages.unshift({ ...messages[0] });
-  //   }
-  // }
 
   return limitedMessages;
 };
@@ -107,35 +112,30 @@ export const updateTotalTokenUsed = (
     JSON.stringify(useStore.getState().totalTokenUsed)
   );
 
-  // Filter text and image prompts
   const textPrompts = promptMessages.filter(
     (e) => Array.isArray(e.content) && e.content.some(isTextContent)
   );
-  
+
   const imgPrompts = promptMessages.filter(
     (e) => Array.isArray(e.content) && e.content.some(isImageContent)
   );
 
-  // Count tokens
   const newPromptTokens = countTokens(textPrompts, model);
   const newImageTokens = countTokens(imgPrompts, model);
   const newCompletionTokens = countTokens([completionMessage], model);
 
-  // Destructure existing token counts or default to 0
   const {
     promptTokens = 0,
     completionTokens = 0,
     imageTokens = 0,
   } = updatedTotalTokenUsed[model] ?? {};
 
-  // Update token counts
   updatedTotalTokenUsed[model] = {
     promptTokens: promptTokens + newPromptTokens,
     completionTokens: completionTokens + newCompletionTokens,
     imageTokens: imageTokens + newImageTokens,
   };
 
-  // Set the updated token counts in the store
   setTotalTokenUsed(updatedTotalTokenUsed);
 };
 

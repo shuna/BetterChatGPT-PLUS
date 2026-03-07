@@ -1,17 +1,9 @@
 import React, {
-  DetailedHTMLProps,
-  HTMLAttributes,
+  Suspense,
   memo,
   useState,
 } from 'react';
 
-import ReactMarkdown from 'react-markdown';
-import { CodeProps, ReactMarkdownProps } from 'react-markdown/lib/ast-to-react';
-
-import rehypeKatex from 'rehype-katex';
-import rehypeHighlight from 'rehype-highlight';
-import remarkMath from 'remark-math';
-import remarkGfm from 'remark-gfm';
 import useStore from '@store/store';
 
 import TickIcon from '@icon/TickIcon';
@@ -27,8 +19,6 @@ import {
   isTextContent,
 } from '@type/chat';
 
-import { codeLanguageSubset } from '@constants/chat';
-
 import RefreshButton from './Button/RefreshButton';
 import UpButton from './Button/UpButton';
 import DownButton from './Button/DownButton';
@@ -39,13 +29,13 @@ import MarkdownModeButton from './Button/MarkdownModeButton';
 import ShowInEditorButton from './Button/ShowInEditorButton';
 import BranchSwitcher from '../BranchSwitcher';
 
-import CodeBlock from '../CodeBlock';
 import PopupModal from '@components/PopupModal';
-import { preprocessLaTeX } from '@utils/chat';
 import {
   deleteActivePathMessage,
   materializeActivePath,
 } from '@utils/branchUtils';
+
+const MarkdownRenderer = React.lazy(() => import('./MarkdownRenderer'));
 
 const ContentView = memo(
   ({
@@ -147,32 +137,18 @@ const ContentView = memo(
       <>
         <div className='markdown prose w-full md:max-w-full break-words dark:prose-invert dark share-gpt-message'>
           {markdownMode ? (
-            <ReactMarkdown
-              remarkPlugins={[
-                remarkGfm,
-                [remarkMath, { singleDollarTextMath: inlineLatex }],
-              ]}
-              rehypePlugins={[
-                rehypeKatex,
-                [
-                  rehypeHighlight,
-                  {
-                    detect: true,
-                    ignoreMissing: true,
-                    subset: codeLanguageSubset,
-                  },
-                ],
-              ]}
-              linkTarget='_new'
-              components={{
-                code,
-                p,
-              }}
+            <Suspense
+              fallback={
+                <span className='whitespace-pre-wrap'>
+                  {currentTextContent}
+                </span>
+              }
             >
-              {inlineLatex
-                ? preprocessLaTeX(currentTextContent)
-                : currentTextContent}
-            </ReactMarkdown>
+              <MarkdownRenderer
+                content={currentTextContent}
+                inlineLatex={inlineLatex}
+              />
+            </Suspense>
           ) : (
             <span className='whitespace-pre-wrap'>{currentTextContent}</span>
           )}
@@ -258,33 +234,6 @@ const ContentView = memo(
         </div>
       </>
     );
-  }
-);
-
-const code = memo((props: CodeProps) => {
-  const { inline, className, children } = props;
-  const match = /language-(\w+)/.exec(className || '');
-  const lang = match && match[1];
-
-  if (inline) {
-    return <code className={className}>{children}</code>;
-  } else {
-    return <CodeBlock lang={lang || 'text'} codeChildren={children} />;
-  }
-});
-
-const p = memo(
-  (
-    props?: Omit<
-      DetailedHTMLProps<
-        HTMLAttributes<HTMLParagraphElement>,
-        HTMLParagraphElement
-      >,
-      'ref'
-    > &
-      ReactMarkdownProps
-  ) => {
-    return <p className='whitespace-pre-wrap'>{props?.children}</p>;
   }
 );
 
