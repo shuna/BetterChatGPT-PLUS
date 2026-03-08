@@ -66,14 +66,6 @@ export default defineConfig({
             return 'vendor-tiktoken';
           }
 
-          if (
-            id.includes('node_modules/reactflow/') ||
-            id.includes('node_modules/dagre/') ||
-            id.includes('node_modules/d3-')
-          ) {
-            return 'vendor-graph';
-          }
-
           return undefined;
         },
       },
