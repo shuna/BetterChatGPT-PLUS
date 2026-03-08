@@ -6,18 +6,67 @@ import {
   chatToMarkdown,
   downloadImg,
   downloadMarkdown,
-  // downloadPDF,
   htmlToImg,
 } from '@utils/chat';
 import ImageIcon from '@icon/ImageIcon';
-import PdfIcon from '@icon/PdfIcon';
 import MarkdownIcon from '@icon/MarkdownIcon';
 import JsonIcon from '@icon/JsonIcon';
 
 import downloadFile from '@utils/downloadFile';
+import { createRoot } from 'react-dom/client';
+import Message from './Message';
+import { MessageInterface } from '@type/chat';
+
+const renderAllMessagesForCapture = (
+  visibleMessages: Array<{ message: MessageInterface; originalIndex: number }>
+): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    if (visibleMessages.length === 0) {
+      reject(new Error('No messages to export'));
+      return;
+    }
+
+    const container = document.createElement('div');
+    container.style.position = 'absolute';
+    container.style.left = '-9999px';
+    container.style.top = '0';
+    container.style.width = '1023px';
+    container.className = 'flex flex-col items-center text-sm dark:bg-gray-800';
+    document.body.appendChild(container);
+
+    const root = createRoot(container);
+    root.render(
+      <React.StrictMode>
+        {visibleMessages.map(({ message, originalIndex }) => (
+          <Message
+            key={originalIndex}
+            role={message.role}
+            content={message.content}
+            messageIndex={originalIndex}
+          />
+        ))}
+      </React.StrictMode>
+    );
+
+    // Wait for render to complete and images to load
+    requestAnimationFrame(() => {
+      setTimeout(async () => {
+        try {
+          const imgData = await htmlToImg(container);
+          resolve(imgData);
+        } catch (e) {
+          reject(e);
+        } finally {
+          root.unmount();
+          document.body.removeChild(container);
+        }
+      }, 500);
+    });
+  });
+};
 
 const DownloadChat = React.memo(
-  ({ saveRef }: { saveRef: React.RefObject<HTMLDivElement> }) => {
+  ({ visibleMessages }: { visibleMessages: Array<{ message: MessageInterface; originalIndex: number }> }) => {
     const { t } = useTranslation();
     const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
     return (
@@ -42,8 +91,8 @@ const DownloadChat = React.memo(
                 className='btn btn-neutral gap-2'
                 aria-label='image'
                 onClick={async () => {
-                  if (saveRef && saveRef.current) {
-                    const imgData = await htmlToImg(saveRef.current);
+                  try {
+                    const imgData = await renderAllMessagesForCapture(visibleMessages);
                     downloadImg(
                       imgData,
                       `${
@@ -54,6 +103,8 @@ const DownloadChat = React.memo(
                           ].title.trim() ?? 'download'
                       }.png`
                     );
+                  } catch (e) {
+                    console.error('Image export failed:', e);
                   }
                 }}
               >
@@ -63,20 +114,7 @@ const DownloadChat = React.memo(
               {/* <button
                 className='btn btn-neutral gap-2'
                 onClick={async () => {
-                  if (saveRef && saveRef.current) {
-                    const imgData = await htmlToImg(saveRef.current);
-                    downloadPDF(
-                      imgData,
-                      useStore.getState().theme,
-                      `${
-                        useStore
-                          .getState()
-                          .chats?.[
-                            useStore.getState().currentChatIndex
-                          ].title.trim() ?? 'download'
-                      }.pdf`
-                    );
-                  }
+                  // PDF export placeholder
                 }}
               >
                 <PdfIcon />
@@ -86,21 +124,19 @@ const DownloadChat = React.memo(
                 className='btn btn-neutral gap-2'
                 aria-label='markdown'
                 onClick={async () => {
-                  if (saveRef && saveRef.current) {
-                    const chats = useStore.getState().chats;
-                    if (chats) {
-                      const markdown = chatToMarkdown(
-                        chats[useStore.getState().currentChatIndex]
-                      );
-                      downloadMarkdown(
-                        markdown,
-                        `${
-                          chats[
-                            useStore.getState().currentChatIndex
-                          ].title.trim() ?? 'download'
-                        }.md`
-                      );
-                    }
+                  const chats = useStore.getState().chats;
+                  if (chats) {
+                    const markdown = chatToMarkdown(
+                      chats[useStore.getState().currentChatIndex]
+                    );
+                    downloadMarkdown(
+                      markdown,
+                      `${
+                        chats[
+                          useStore.getState().currentChatIndex
+                        ].title.trim() ?? 'download'
+                      }.md`
+                    );
                   }
                 }}
               >

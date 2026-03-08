@@ -1,13 +1,9 @@
-import { useMemo } from 'react';
-import dagre from 'dagre';
-import { BranchTree, isTextContent } from '@type/chat';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { BranchTree } from '@type/chat';
 import { Node, Edge } from 'reactflow';
 import useStore from '@store/store';
-import { resolveContent, ContentStoreData } from '@utils/contentStore';
-
-const NODE_W = 280;
-const NODE_H = 80;
-const TREE_GAP = 120;
+import type { WorkerInput, WorkerOutput } from './branchLayout.worker';
+import { perfStart, perfEnd } from '@utils/perfTrace';
 
 // Color hues for multi-view conversations
 export const CONVERSATION_COLORS = [
@@ -35,83 +31,10 @@ export interface MultiLayoutEntry {
   tree: BranchTree;
 }
 
-function layoutSingleTree(
-  tree: BranchTree,
-  xOffset: number,
-  chatIndex: number,
-  colorIdx: number,
-  contentStore: ContentStoreData
-): { rfNodes: Node<MessageNodeData>[]; rfEdges: Edge[]; maxX: number } {
-  if (Object.keys(tree.nodes).length === 0) {
-    return { rfNodes: [], rfEdges: [], maxX: xOffset };
-  }
+const EMPTY_NODES: Node<MessageNodeData>[] = [];
+const EMPTY_EDGES: Edge[] = [];
 
-  const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: 'TB', nodesep: 80, ranksep: 100 });
-  g.setDefaultEdgeLabel(() => ({}));
-
-  Object.values(tree.nodes).forEach((node) => {
-    g.setNode(node.id, { width: NODE_W, height: NODE_H });
-  });
-
-  Object.values(tree.nodes).forEach((node) => {
-    if (node.parentId) g.setEdge(node.parentId, node.id);
-  });
-
-  dagre.layout(g);
-
-  const activeSet = new Set(tree.activePath);
-  const color = CONVERSATION_COLORS[colorIdx % CONVERSATION_COLORS.length];
-
-  let maxX = xOffset;
-
-  const rfNodes: Node<MessageNodeData>[] = Object.values(tree.nodes).map(
-    (node) => {
-      const pos = g.node(node.id);
-      const x = pos.x - NODE_W / 2 + xOffset;
-      const y = pos.y - NODE_H / 2;
-      if (x + NODE_W > maxX) maxX = x + NODE_W;
-
-      const content = resolveContent(contentStore, node.contentHash);
-      const textContent = content
-        .filter(isTextContent)
-        .map((c) => c.text)
-        .join(' ');
-
-      return {
-        id: node.id,
-        type: 'messageNode',
-        position: { x, y },
-        data: {
-          nodeId: node.id,
-          role: node.role,
-          contentPreview:
-            textContent.length > 80
-              ? textContent.slice(0, 80) + '...'
-              : textContent,
-          label: node.label,
-          isActive: activeSet.has(node.id),
-          chatIndex,
-          colorHue: color.hue,
-          conversationColor: color.stroke,
-        },
-      };
-    }
-  );
-
-  const rfEdges: Edge[] = Object.values(tree.nodes)
-    .filter((n) => n.parentId)
-    .map((n) => ({
-      id: `${n.parentId}-${n.id}`,
-      source: n.parentId!,
-      target: n.id,
-      style: activeSet.has(n.id)
-        ? { stroke: color.stroke, strokeWidth: 2 }
-        : { stroke: '#6b7280', strokeWidth: 1 },
-    }));
-
-  return { rfNodes, rfEdges, maxX };
-}
+let nextRequestId = 0;
 
 export function useBranchEditorLayout(tree: BranchTree | undefined) {
   const entries = useMemo(
@@ -122,37 +45,108 @@ export function useBranchEditorLayout(tree: BranchTree | undefined) {
 }
 
 export function useMultiBranchEditorLayout(entries: MultiLayoutEntry[]) {
-  // Build a stable dependency key that includes structure AND content hashes,
-  // so previews update when content changes without subscribing to the entire contentStore object.
+  const [rfNodes, setRfNodes] = useState<Node<MessageNodeData>[]>(EMPTY_NODES);
+  const [rfEdges, setRfEdges] = useState<Edge[]>(EMPTY_EDGES);
+  const [isComputing, setIsComputing] = useState(false);
+  const workerRef = useRef<Worker | null>(null);
+  const latestRequestRef = useRef<number>(0);
+
+  // Stable dependency key
   const depsKey = entries.map((e) => {
     const nodeKeys = Object.values(e.tree.nodes).map((n) => `${n.id}:${n.contentHash}`).join(',');
     return `${e.chatIndex}:${nodeKeys}:${e.tree.activePath.join('|')}`;
   }).join(';');
 
-  return useMemo(() => {
+  useEffect(() => {
     if (entries.length === 0) {
-      return { rfNodes: [] as Node<MessageNodeData>[], rfEdges: [] as Edge[] };
+      setRfNodes(EMPTY_NODES);
+      setRfEdges(EMPTY_EDGES);
+      setIsComputing(false);
+      return;
     }
 
-    const contentStore = useStore.getState().contentStore;
-    const allNodes: Node<MessageNodeData>[] = [];
-    const allEdges: Edge[] = [];
-    let xOffset = 0;
-
-    entries.forEach((entry, idx) => {
-      const { rfNodes, rfEdges, maxX } = layoutSingleTree(
-        entry.tree,
-        xOffset,
-        entry.chatIndex,
-        idx,
-        contentStore
+    // Lazily create worker
+    if (!workerRef.current) {
+      workerRef.current = new Worker(
+        new URL('./branchLayout.worker.ts', import.meta.url),
+        { type: 'module' }
       );
-      allNodes.push(...rfNodes);
-      allEdges.push(...rfEdges);
-      xOffset = maxX + TREE_GAP;
-    });
+    }
 
-    return { rfNodes: allNodes, rfEdges: allEdges };
+    const worker = workerRef.current;
+    const requestId = ++nextRequestId;
+    latestRequestRef.current = requestId;
+
+    // Collect only the content hashes referenced by current entries
+    const neededHashes = new Set<string>();
+    for (const e of entries) {
+      for (const node of Object.values(e.tree.nodes)) {
+        neededHashes.add(node.contentHash);
+      }
+    }
+
+    const fullStore = useStore.getState().contentStore;
+    const subset: WorkerInput['contentStore'] = {};
+    for (const hash of neededHashes) {
+      if (fullStore[hash]) {
+        subset[hash] = fullStore[hash] as WorkerInput['contentStore'][string];
+      }
+    }
+
+    const input: WorkerInput = {
+      requestId,
+      entries: entries.map((e) => ({
+        chatIndex: e.chatIndex,
+        chatId: e.chatId,
+        chatTitle: e.chatTitle,
+        nodes: e.tree.nodes as WorkerInput['entries'][0]['nodes'],
+        activePath: e.tree.activePath,
+      })),
+      contentStore: subset,
+    };
+
+    setIsComputing(true);
+    perfStart('layout-worker-roundtrip');
+    const toastTimer = setTimeout(() => {
+      const store = useStore.getState();
+      store.setToastMessage('レイアウト計算に時間がかかっています...');
+      store.setToastStatus('warning');
+      store.setToastShow(true);
+    }, 3000);
+
+    worker.onmessage = (e: MessageEvent<WorkerOutput>) => {
+      // Ignore stale responses
+      if (e.data.requestId !== latestRequestRef.current) return;
+      clearTimeout(toastTimer);
+      perfEnd('layout-worker-roundtrip');
+      setIsComputing(false);
+      setRfNodes(e.data.rfNodes as Node<MessageNodeData>[]);
+      setRfEdges(e.data.rfEdges as Edge[]);
+    };
+
+    worker.onerror = () => {
+      clearTimeout(toastTimer);
+      setIsComputing(false);
+      const store = useStore.getState();
+      store.setToastMessage('レイアウト計算に失敗しました');
+      store.setToastStatus('error');
+      store.setToastShow(true);
+    };
+
+    worker.postMessage(input);
+
+    return () => { clearTimeout(toastTimer); };
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [depsKey]);
+
+  // Cleanup worker on unmount
+  useEffect(() => {
+    return () => {
+      workerRef.current?.terminate();
+      workerRef.current = null;
+    };
+  }, []);
+
+  return { rfNodes, rfEdges, isComputing };
 }

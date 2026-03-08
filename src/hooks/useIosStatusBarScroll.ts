@@ -23,32 +23,14 @@ export default function useIosStatusBarScroll() {
     root.style.minHeight = 'calc(100% + 1px)';
     window.scrollTo(0, 1);
 
-    const findScrollableChild = (parent: Element): Element | null => {
-      for (const child of Array.from(parent.children)) {
-        const style = getComputedStyle(child);
-        if (
-          (style.overflowY === 'auto' || style.overflowY === 'scroll') &&
-          child.scrollHeight > child.clientHeight
-        ) {
-          return child;
-        }
-      }
-      return null;
-    };
-
     const onScroll = () => {
       if (window.scrollY !== 0) return;
 
-      // Find the react-scroll-to-bottom wrapper (has emotion css class)
-      const wrapper = document.querySelector(
-        '[class*="css-"][class*="react-scroll-to-bottom"]'
-      ) || document.querySelector('[class*="react-scroll-to-bottom"]');
+      // Find the Virtuoso scroller element (it is the scrollable container)
+      const scroller = document.querySelector('[data-virtuoso-scroller="true"]');
 
-      if (wrapper) {
-        const scrollable = findScrollableChild(wrapper);
-        if (scrollable) {
-          scrollable.scrollTo({ top: 0, behavior: 'smooth' });
-        }
+      if (scroller) {
+        scroller.scrollTo({ top: 0, behavior: 'smooth' });
       }
 
       // Re-set 1px scroll for next tap

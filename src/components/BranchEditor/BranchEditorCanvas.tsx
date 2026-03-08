@@ -23,6 +23,7 @@ import ConversationHeaderNode from './nodes/ConversationHeaderNode';
 import NodeContextMenu from './NodeContextMenu';
 import BranchDiffModal from './BranchDiffModal';
 import { buildPathToLeaf } from '@utils/branchUtils';
+import { perfStart, perfEnd } from '@utils/perfTrace';
 
 const nodeTypes = {
   messageNode: MessageNode,
@@ -58,7 +59,42 @@ const BranchEditorCanvas = ({
     [chatIndices, chats]
   );
 
-  const { rfNodes: layoutNodes, rfEdges } = useMultiBranchEditorLayout(entries);
+  React.useLayoutEffect(() => {
+    perfStart('branch-editor-switch');
+  }, [chatIndices]);
+  React.useEffect(() => {
+    perfEnd('branch-editor-switch');
+  }, [chatIndices]);
+
+  const { rfNodes: layoutNodes, rfEdges, isComputing } = useMultiBranchEditorLayout(entries);
+
+  // Build per-chat node index (single O(N) pass) for header generation and drag detection
+  const chatNodeIndex = React.useMemo(() => {
+    const index = new Map<number, {
+      nodes: Node<MessageNodeData>[];
+      minX: number;
+      maxX: number;
+      minY: number;
+      avgX: number;
+    }>();
+    for (const node of layoutNodes) {
+      if (node.type !== 'messageNode') continue;
+      const ci = (node.data as MessageNodeData).chatIndex;
+      let entry = index.get(ci);
+      if (!entry) {
+        entry = { nodes: [], minX: Infinity, maxX: -Infinity, minY: Infinity, avgX: 0 };
+        index.set(ci, entry);
+      }
+      entry.nodes.push(node as Node<MessageNodeData>);
+      if (node.position.x < entry.minX) entry.minX = node.position.x;
+      if (node.position.x > entry.maxX) entry.maxX = node.position.x;
+      if (node.position.y < entry.minY) entry.minY = node.position.y;
+    }
+    for (const e of index.values()) {
+      e.avgX = e.nodes.reduce((s, n) => s + n.position.x, 0) / e.nodes.length;
+    }
+    return index;
+  }, [layoutNodes]);
 
   // Inject conversation header nodes when multi-view
   const rfNodes = React.useMemo(() => {
@@ -66,20 +102,14 @@ const BranchEditorCanvas = ({
 
     const headers: Node[] = [];
     entries.forEach((entry, idx) => {
-      // Find the topmost node for this chat
-      const chatNodes = layoutNodes.filter(
-        (n) => (n.data as MessageNodeData).chatIndex === entry.chatIndex
-      );
-      if (chatNodes.length === 0) return;
-      const minY = Math.min(...chatNodes.map((n) => n.position.y));
-      const avgX =
-        chatNodes.reduce((sum, n) => sum + n.position.x, 0) / chatNodes.length;
+      const stats = chatNodeIndex.get(entry.chatIndex);
+      if (!stats || stats.nodes.length === 0) return;
       const color = CONVERSATION_COLORS[idx % CONVERSATION_COLORS.length];
 
       headers.push({
         id: `header-${entry.chatIndex}`,
         type: 'conversationHeader',
-        position: { x: avgX, y: minY - 50 },
+        position: { x: stats.avgX, y: stats.minY - 50 },
         data: {
           chatIndex: entry.chatIndex,
           chatTitle: entry.chatTitle,
@@ -91,7 +121,7 @@ const BranchEditorCanvas = ({
     });
 
     return [...headers, ...layoutNodes];
-  }, [layoutNodes, entries]);
+  }, [layoutNodes, entries, chatNodeIndex]);
 
   const reactFlowInstance = useRef<ReactFlowInstance | null>(null);
 
@@ -216,30 +246,23 @@ const BranchEditorCanvas = ({
       const nodeChatIndex = node.data.chatIndex >= 0 ? node.data.chatIndex : primaryChatIndex;
 
       // Check if the node was dragged into a different tree's X range
-      // Find which tree column the node's new X position falls in
       let targetEntry: MultiLayoutEntry | null = null;
       let closestTargetNode: Node<MessageNodeData> | null = null;
 
       for (const entry of entries) {
         if (entry.chatIndex === source.chatIndex) continue;
-        // Find nodes belonging to this entry
-        const treeNodes = rfNodes.filter(
-          (n) => n.type === 'messageNode' && (n.data as MessageNodeData).chatIndex === entry.chatIndex
-        );
-        if (treeNodes.length === 0) continue;
+        const stats = chatNodeIndex.get(entry.chatIndex);
+        if (!stats || stats.nodes.length === 0) continue;
 
-        const minX = Math.min(...treeNodes.map((n) => n.position.x));
-        const maxX = Math.max(...treeNodes.map((n) => n.position.x)) + 280;
-
-        if (node.position.x >= minX - 50 && node.position.x <= maxX + 50) {
+        if (node.position.x >= stats.minX - 50 && node.position.x <= stats.maxX + 280 + 50) {
           targetEntry = entry;
           // Find the closest node in the target tree (by Y position)
           let minDist = Infinity;
-          for (const tn of treeNodes) {
+          for (const tn of stats.nodes) {
             const dist = Math.abs(tn.position.y - node.position.y);
             if (dist < minDist) {
               minDist = dist;
-              closestTargetNode = tn as Node<MessageNodeData>;
+              closestTargetNode = tn;
             }
           }
           break;
@@ -268,7 +291,7 @@ const BranchEditorCanvas = ({
 
       dragSourceRef.current = null;
     },
-    [entries, primaryChatIndex, rfNodes, setNodes]
+    [entries, primaryChatIndex, chatNodeIndex, setNodes]
   );
 
   const handleDropCopy = useCallback(() => {
@@ -347,6 +370,18 @@ const BranchEditorCanvas = ({
           pathB={diffPaths.pathB}
           setIsOpen={setShowDiff}
         />
+      )}
+
+      {isComputing && (
+        <div className='absolute inset-0 z-30 flex items-center justify-center bg-white/50 dark:bg-gray-900/50 pointer-events-none'>
+          <div className='flex flex-col items-center gap-2'>
+            <svg className='animate-spin h-8 w-8 text-blue-500' xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24'>
+              <circle className='opacity-25' cx='12' cy='12' r='10' stroke='currentColor' strokeWidth='4' />
+              <path className='opacity-75' fill='currentColor' d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z' />
+            </svg>
+            <span className='text-sm text-gray-600 dark:text-gray-300'>レイアウト計算中...</span>
+          </div>
+        </div>
       )}
 
       {dropPopover && (

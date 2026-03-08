@@ -1,4 +1,4 @@
-import React, { DetailedHTMLProps, HTMLAttributes, memo } from 'react';
+import React, { DetailedHTMLProps, HTMLAttributes, memo, useMemo } from 'react';
 
 import ReactMarkdown from 'react-markdown';
 import { CodeProps, ReactMarkdownProps } from 'react-markdown/lib/ast-to-react';
@@ -11,6 +11,8 @@ import remarkGfm from 'remark-gfm';
 import { codeLanguageSubset } from '@constants/chat';
 import CodeBlock from '../CodeBlock';
 import { preprocessLaTeX } from '@utils/chat';
+
+const hasCodeBlockPattern = /^```/m;
 
 const code = memo((props: CodeProps) => {
   const { inline, className, children } = props;
@@ -39,6 +41,20 @@ const p = memo(
   }
 );
 
+const rehypePluginsWithHighlight = [
+  rehypeKatex,
+  [
+    rehypeHighlight,
+    {
+      detect: true,
+      ignoreMissing: true,
+      subset: codeLanguageSubset,
+    },
+  ],
+] as const;
+
+const rehypePluginsWithoutHighlight = [rehypeKatex] as const;
+
 const MarkdownRenderer = memo(
   ({
     content,
@@ -47,23 +63,21 @@ const MarkdownRenderer = memo(
     content: string;
     inlineLatex: boolean;
   }) => {
+    const rehypePlugins = useMemo(
+      () =>
+        hasCodeBlockPattern.test(content)
+          ? rehypePluginsWithHighlight
+          : rehypePluginsWithoutHighlight,
+      [content]
+    );
+
     return (
       <ReactMarkdown
         remarkPlugins={[
           remarkGfm,
           [remarkMath, { singleDollarTextMath: inlineLatex }],
         ]}
-        rehypePlugins={[
-          rehypeKatex,
-          [
-            rehypeHighlight,
-            {
-              detect: true,
-              ignoreMissing: true,
-              subset: codeLanguageSubset,
-            },
-          ],
-        ]}
+        rehypePlugins={rehypePlugins as any}
         linkTarget='_new'
         components={{
           code,
