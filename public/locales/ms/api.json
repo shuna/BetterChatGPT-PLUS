@@ -3,7 +3,7 @@
   "apiEndpoint": {
     "inputLabel": "Hujung API",
     "description": "Apabila anda memilih hujung nyawa API yang tidak rasmi, ia pada dasarnya berfungsi sebagai proksi. Proksi berfungsi dengan bertindak sebagai perantara di antara peranti anda dan pelayan destinasi, dalam kes ini, API OpenAI. Dengan berbuat demikian, ia membolehkan anda mengakses API OpenAI di kawasan di mana ia mungkin sebaliknya terhad.",
-    "warn": "Selain itu, jika anda menyediakan hujung nyawa API tersendiri yang memberikan akses percuma ke API OpenAI, anda boleh menggunakan ChatGPT tanpa perlu menyediakan kunci API dengan hanya meninggalkan medan kunci API kosong. Walau bagaimanapun, amat penting untuk berhati-hati semasa menggunakan hujung nyawa API pihak ketiga, kerana yang tidak boleh dipercayai mungkin merekodkan maklumat peribadi anda dalam perbualan. Sentiasa sahkan kebolehpercayaan hujung nyawa API sebelum menggunakannya untuk melindungi privasi dan keselamatan anda."
+    "warn": "Selain itu, jika anda menyediakan endpoint tersuai yang memberi akses kepada API serasi OpenAI, anda mungkin boleh menggunakan aplikasi ini tanpa mengisi kunci API. Namun begitu, berhati-hatilah dengan endpoint pihak ketiga kerana perkhidmatan yang tidak dipercayai boleh merekod kandungan perbualan atau maklumat peribadi lain. Sentiasa semak kebolehpercayaan endpoint sebelum menggunakannya."
   },
   "apiKey": {
     "howTo": "Dapatkan kunci API peribadi anda <0>di sini</0>.",

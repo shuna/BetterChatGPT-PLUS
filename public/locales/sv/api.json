@@ -3,7 +3,7 @@
   "apiEndpoint": {
     "inputLabel": "API-slutpunkt",
     "description": "När du väljer en inofficiell API-slutpunkt fungerar den som en proxy. En proxy fungerar genom att agera som mellanhand mellan din enhet och destinationsservern, i det här fallet OpenAI API. Genom att göra detta kan du få tillgång till OpenAI API i regioner där det annars kan vara begränsat.",
-    "warn": "Dessutom, om du anger en anpassad API-slutpunkt som ger gratis åtkomst till OpenAI API, kan du använda ChatGPT utan att behöva ange en API-nyckel genom att helt enkelt lämna API-nyckelfältet tomt. Det är dock viktigt att vara försiktig när du använder tredjeparts API-slutpunkter, eftersom opålitliga sådana kan logga din personliga information i konversationerna. Verifiera alltid tillförlitligheten hos en API-slutpunkt innan du använder den för att skydda din integritet och säkerhet."
+    "warn": "Om du anger en anpassad slutpunkt med tillgang till ett OpenAI-kompatibelt API kan du kanske anvanda appen utan API-nyckel. Var dock forsiktig med tredjeparts-slutpunkter, eftersom opalitliga tjanster kan logga samtalsinnehall eller annan personlig information. Kontrollera alltid att en slutpunkt ar tillforlitlig innan du anvander den."
   },
   "apiKey": {
     "howTo": "Få din personliga API-nyckel <0>här</0>.",

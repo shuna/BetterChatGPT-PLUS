@@ -8,7 +8,7 @@
     "confirm": "Confirm selection"
   },
   "notice": "注意：Googleアカウントのセッションが有効な間、自動的にトークンが更新されます。セッションが切れた場合のみ再ログインが必要です。クラウドデータの上書きを避けるため、同時に複数のデバイスで使用しないでください。",
-  "privacy": "Your privacy is important to us, and to ensure it, Better ChatGPT only has non-sensitive access, meaning it can only create, view, and manage its own files and folders.",
+  "privacy": "プライバシーは非常に重要です。そのため Weavelet Canvas は非機密の権限のみを要求し、自身のファイルとフォルダの作成・表示・管理だけを行います。",
   "toast": {
     "sync": "Sync successful!",
     "stop": "Syncing stopped"

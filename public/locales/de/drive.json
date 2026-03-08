@@ -8,7 +8,7 @@
     "confirm": "Auswahl bestätigen"
   },
   "notice": "Hinweis: Deine Sitzung wird automatisch erneuert, solange dein Google-Konto aktiv ist. Eine erneute Anmeldung ist nur erforderlich, wenn deine Google-Sitzung abläuft. Verwende die App nicht gleichzeitig auf mehreren Geräten, um zu vermeiden, dass deine Cloud-Daten überschrieben werden.",
-  "privacy": "Deine Privatsphäre ist uns wichtig und um sie zu schützen, hat Better ChatGPT nur limitierten Zugriff. Das bedeutet, dass Better ChatGPT nur die eigenen Dateien und Ordner erstellen, anzeigen und verwalten kann.",
+  "privacy": "Deine Privatsphäre ist uns wichtig und um sie zu schützen, hat Weavelet Canvas nur limitierten Zugriff. Das bedeutet, dass Weavelet Canvas nur die eigenen Dateien und Ordner erstellen, anzeigen und verwalten kann.",
   "toast": {
     "sync": "Synchronisation erfolgreich!",
     "stop": "Synchronisation angehalten"

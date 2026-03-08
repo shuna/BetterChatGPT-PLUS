@@ -7,8 +7,8 @@
      "create": "Creați un fișier nou",
      "confirm": "Confirmați selecția"
    },
-   "notice": "Note: Your session will be automatically refreshed while your Google account is active. You may need to re-login if your Google session expires. To avoid your cloud data being overwritten, do not use Better ChatGPT on more than one device at the same time.",
-   "privacy": "Confidențialitatea ta este importantă pentru noi și, pentru a o asigura, Better ChatGPT are doar acces non-sensibil, ceea ce înseamnă că poate crea, vizualiza și gestiona doar propriile fișiere și foldere.",
+   "notice": "Note: Your session will be automatically refreshed while your Google account is active. You may need to re-login if your Google session expires. To avoid your cloud data being overwritten, do not use Weavelet Canvas on more than one device at the same time.",
+   "privacy": "Confidențialitatea ta este importantă pentru noi și, pentru a o asigura, Weavelet Canvas are doar acces non-sensibil, ceea ce înseamnă că poate crea, vizualiza și gestiona doar propriile fișiere și foldere.",
    "toast": {
      "sync": "Sincronizare reușită!",
      "stop": "Sincronizare oprită"

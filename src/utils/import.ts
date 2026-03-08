@@ -155,19 +155,19 @@ export class PartialImportError extends Error {
   }
 }
 
-export const convertOpenAIToBetterChatGPTFormatPartialOK = (
+export const convertOpenAIToConversationFormatPartialOK = (
   openAIChatExport: any
 ): ChatInterface => {
-  return convertOpenAIToBetterChatGPTFormat(openAIChatExport, true);
+  return convertOpenAIToConversationFormat(openAIChatExport, true);
 };
 
-export const convertOpenAIToBetterChatGPTFormatPartialNTY = (
+export const convertOpenAIToConversationFormatPartialNTY = (
   openAIChatExport: any
 ): ChatInterface => {
-  return convertOpenAIToBetterChatGPTFormat(openAIChatExport, false);
+  return convertOpenAIToConversationFormat(openAIChatExport, false);
 };
-// Convert OpenAI chat format to BetterChatGPT format
-export const convertOpenAIToBetterChatGPTFormat = (
+// Convert OpenAI chat exports into the app's conversation format.
+export const convertOpenAIToConversationFormat = (
   openAIChatExport: any,
   shouldAllowPartialImport: boolean
 ): ChatInterface => {
@@ -476,20 +476,20 @@ export const convertOpenAIToBranchTree = (
   return { branchTree, messages };
 };
 
-// Import OpenAI chat data and convert it to BetterChatGPT format
+// Import OpenAI chat data and convert it into the app's conversation format.
 export const importOpenAIChatExport = (
   openAIChatExport: any,
   shouldAllowPartialImport: boolean
 ) => {
   if (Array.isArray(openAIChatExport)) {
     if (shouldAllowPartialImport) {
-      return openAIChatExport.map(convertOpenAIToBetterChatGPTFormatPartialOK);
+      return openAIChatExport.map(convertOpenAIToConversationFormatPartialOK);
     } else {
-      return openAIChatExport.map(convertOpenAIToBetterChatGPTFormatPartialNTY);
+      return openAIChatExport.map(convertOpenAIToConversationFormatPartialNTY);
     }
   } else if (typeof openAIChatExport === 'object') {
     return [
-      convertOpenAIToBetterChatGPTFormat(
+      convertOpenAIToConversationFormat(
         openAIChatExport,
         shouldAllowPartialImport
       ),
@@ -497,3 +497,10 @@ export const importOpenAIChatExport = (
   }
   return [];
 };
+
+// Backward-compatible aliases for older imports.
+export const convertOpenAIToBetterChatGPTFormatPartialOK =
+  convertOpenAIToConversationFormatPartialOK;
+export const convertOpenAIToBetterChatGPTFormatPartialNTY =
+  convertOpenAIToConversationFormatPartialNTY;
+export const convertOpenAIToBetterChatGPTFormat = convertOpenAIToConversationFormat;

@@ -5,10 +5,12 @@ import HeartIcon from '@icon/HeartIcon';
 
 const Me = () => {
   const { t } = useTranslation();
+  const projectUrl =
+    import.meta.env.VITE_PROJECT_URL ?? 'https://github.com/shuna/weavelet-canvas';
   return (
     <a
       className='flex py-2 px-2 items-center gap-3 rounded-md hover:bg-gray-500/10 transition-colors duration-200 text-white cursor-pointer text-sm'
-      href='https://github.com/ztjhz/BetterChatGPT'
+      href={projectUrl}
       target='_blank'
     >
       <HeartIcon />

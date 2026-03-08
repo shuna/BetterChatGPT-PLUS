@@ -3,7 +3,7 @@
    "apiEndpoint": {
      "inputLabel": "Punctul final API",
      "description": "Când alegeți un punct final API neoficial, acesta funcționează ca un proxy. Un proxy funcționează ca intermediar între dispozitivul dvs. și serverul de destinație, în acest caz, API-ul OpenAI. Procedând astfel, vă permite pentru a accesa API-ul OpenAI în regiuni în care altfel ar putea fi restricționat.",
-     "warn": "În plus, dacă furnizați un punct final API personalizat care oferă acces gratuit la API-ul OpenAI, puteți utiliza ChatGPT fără a fi nevoie să furnizați o cheie API, pur și simplu lăsând câmpul cheie API necompletat. Cu toate acestea, este esențial să fiți prudenți atunci când utilizați puncte finale API terțe, deoarece cele nedemne de încredere vă pot înregistra informațiile personale în conversații. Verificați întotdeauna fiabilitatea unui punct final API înainte de a-l folosi pentru a vă proteja confidențialitatea și securitatea."
+     "warn": "In plus, daca furnizati un endpoint personalizat cu acces la un API compatibil OpenAI, este posibil sa puteti utiliza aplicatia fara a introduce o cheie API. Fiti totusi prudenti cu endpoint-urile terte, deoarece serviciile nesigure pot inregistra continutul conversatiilor sau alte informatii personale. Verificati intotdeauna fiabilitatea unui endpoint inainte de utilizare."
    },
    "apiKey": {
      "howTo": "Obțineți cheia personală API <0>aici</0>.",
