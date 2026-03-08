@@ -3,7 +3,7 @@
   "apiEndpoint": {
     "inputLabel": "API Endpunkt",
     "description": "Wenn du einen inoffiziellen API-Endpunkt auswählst, funktioniert er als Proxy. Ein Proxy fungiert als Vermittler zwischen deinem Gerät und dem Zielserver, in diesem Fall der OpenAI-API. Auf diese Weise ist es möglich, auf die OpenAI-API zuzugreifen, auch in Regionen, in denen der Zugriff normalerweise eingeschränkt ist.",
-    "warn": "Wenn du einen benutzerdefinierten API-Endpunkt verwendest, der kostenlosen Zugriff auf die OpenAI-API gewährt, kannst du ChatGPT ohne die Angabe eines API-Schlüssels nutzen, indem du das API-Schlüssel-Feld einfach leer lässt. Es ist jedoch wichtig, bei der Verwendung von API-Endpunkten von Drittanbietern vorsichtig zu sein, da unzuverlässige Endpunkte deine persönlichen Informationen in den Gesprächen protokollieren können. Überprüfe immer die Zuverlässigkeit eines API-Endpunkts, bevor du ihn verwendest, um deine Privatsphäre und Sicherheit zu schützen."
+    "warn": "Wenn du einen benutzerdefinierten Endpunkt verwendest, der Zugang zu einer OpenAI-kompatiblen API bietet, kannst du diese App moeglicherweise ohne API-Schluessel nutzen. Sei bei Endpunkten von Drittanbietern jedoch vorsichtig, da unvertrauenswuerdige Anbieter Gespraechsinhalte oder andere persoenliche Daten protokollieren koennen. Pruefe die Zuverlaessigkeit eines Endpunkts immer vor der Nutzung."
   },
   "apiKey": {
     "howTo": "Besorge dir <0>hier</0> deinen eigenen API-Schlüssel.",

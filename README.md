@@ -1,14 +1,29 @@
-# BetterChatGPT-PLUS
+# Weavelet Canvas
 
 ## English
 
-This repository is a fork of [BetterChatGPT-PLUS](https://github.com/animalnots/BetterChatGPT-PLUS), which itself is based on [BetterChatGPT](https://github.com/ztjhz/BetterChatGPT).  
-The repository name is still `BetterChatGPT-PLUS` for now, but it is planned to be changed later.
+Weavelet Canvas is a visual workspace for AI conversations built on top of the BetterChatGPT and BetterChatGPT-PLUS lineage.  
+It focuses on local-first conversation management, visual branching, and editing workflows for OpenAI-compatible APIs.
 
-### About BetterChatGPT
+### Official Naming
 
-BetterChatGPT is an open-source web client that provides a ChatGPT-like conversational experience using the OpenAI API.  
-It includes features such as multi-chat management, model switching, message editing, saving, and synchronization.
+- Official product name: `Weavelet Canvas`
+- Short product name: `Weavelet`
+- Repository slug: `weavelet-canvas`
+- Package / bundle / app identifier style: `weavelet-canvas` or `weaveletCanvas`
+- Do not use: `BetterChatGPT`, `BetterChatGPT-PLUS`, `Better ChatGPT`, `ChatGPT+` as product names
+
+### Naming Notes
+
+- Always write the product name as `Weavelet Canvas` in titles, app labels, release notes, and store metadata.
+- Use `Weavelet` alone only where space is constrained, such as compact navigation labels.
+- Treat `Canvas` as part of the formal product name, not as an optional suffix.
+- Keep upstream names only when describing project lineage, migration, or compatibility.
+
+### About This Project
+
+Weavelet Canvas is an open-source client for OpenAI-compatible conversational APIs.  
+It includes multi-conversation management, model switching, message editing, saving, synchronization, and a visual branch editor for restructuring conversations.
 
 ### Main Changes Merged into This Fork
 
@@ -89,7 +104,7 @@ yarn build
 ### Acknowledgements
 
 Deep thanks to the authors and contributors of [BetterChatGPT](https://github.com/ztjhz/BetterChatGPT), which provided the starting point for this project.  
-This fork was able to accumulate its improvements because of the excellent foundation they created for extending a local-first ChatGPT-like experience.
+This fork was able to accumulate its improvements because of the excellent foundation they created for extending a local-first conversation workspace.
 
 We also sincerely thank the authors and contributors of [BetterChatGPT-PLUS](https://github.com/animalnots/BetterChatGPT-PLUS), who added many practical extensions.  
 This repository inherits those improvements while continuing to improve operations, refine the UI, strengthen branch-editing features, and improve performance.
@@ -98,13 +113,28 @@ This repository inherits those improvements while continuing to improve operatio
 
 ## 日本語
 
-このリポジトリは、[BetterChatGPT](https://github.com/ztjhz/BetterChatGPT) をベースにした [BetterChatGPT-PLUS](https://github.com/animalnots/BetterChatGPT-PLUS) をさらにフォークしたプロジェクトです。  
-現時点ではリポジトリ名はまだ `BetterChatGPT-PLUS` のままですが、今後修正予定です。
+Weavelet Canvas は、[BetterChatGPT](https://github.com/ztjhz/BetterChatGPT) と [BetterChatGPT-PLUS](https://github.com/animalnots/BetterChatGPT-PLUS) の系譜を引き継ぐ、AI 会話向けのビジュアルワークスペースです。  
+移行期間中のため、ローカルフォルダ名や一部の内部識別子には upstream 名が残っている場合があります。
 
-### BetterChatGPT について
+### 正式名称と表記ルール
 
-BetterChatGPT は、OpenAI API を使って ChatGPT ライクな会話体験を提供するオープンソースの Web クライアントです。  
-複数会話の管理、モデル切り替え、メッセージ編集、保存・同期などを備えています。
+- 正式名称: `Weavelet Canvas`
+- 短縮名称: `Weavelet`
+- リポジトリスラッグ: `weavelet-canvas`
+- パッケージ名 / バンドルID / 識別子の基本形: `weavelet-canvas` または `weaveletCanvas`
+- 製品名として使わない表記: `BetterChatGPT`, `BetterChatGPT-PLUS`, `Better ChatGPT`, `ChatGPT+`
+
+### 表記メモ
+
+- タイトル、アプリ名、リリースノート、配布メタデータでは常に `Weavelet Canvas` を使います。
+- 省スペース箇所だけ `Weavelet` を使います。
+- `Canvas` は機能名ではなく正式名称の一部として扱います。
+- `BetterChatGPT` 系の名称は、系譜説明・移行説明・互換性説明のみに残します。
+
+### このプロジェクトについて
+
+Weavelet Canvas は、OpenAI API 互換の会話 API を扱うためのオープンソースクライアントです。  
+複数会話の管理、モデル切り替え、メッセージ編集、保存・同期に加えて、会話を再構成するための Visual Branch Editor を備えています。
 
 ### このフォークで取り込んだ主な変更
 
@@ -185,7 +215,7 @@ yarn build
 ### 謝辞
 
 このプロジェクトの出発点となった [BetterChatGPT](https://github.com/ztjhz/BetterChatGPT) の作者・コントリビューターの皆様に深く感謝します。  
-ChatGPT ライクな体験をローカル主導で拡張できる優れた土台があったからこそ、本フォークでの改善を積み重ねることができました。
+ローカル主導の会話ワークスペースを拡張できる優れた土台があったからこそ、本フォークでの改善を積み重ねることができました。
 
 また、数多くの実用的な拡張を加えた [BetterChatGPT-PLUS](https://github.com/animalnots/BetterChatGPT-PLUS) の作者・コントリビューターの皆様にも感謝します。  
 本リポジトリはその成果を受け継ぎながら、さらに運用上の改善、UI 調整、分岐編集まわりの機能強化、パフォーマンス改善を継続している派生プロジェクトです。

@@ -1,5 +1,5 @@
 {
-  "name": "better-chatgpt",
+  "name": "weavelet-canvas",
   "private": true,
   "version": "1.27.0",
   "type": "module",
@@ -32,7 +32,7 @@
       "url": "https://github.com/ReignOfComputer"
     }
   ],
-  "description": "Play and chat smarter with BetterChatGPT - an amazing open-source web app with a better UI for exploring OpenAI's ChatGPT API!",
+  "description": "Weavelet Canvas is a visual workspace for AI conversations with branching, editing, and comparison tools.",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
@@ -43,8 +43,8 @@
     "debug": "concurrently -k \"cross-env BROWSER=none yarn dev\" \"wait-on tcp:5173 && electron --inspect=5858 .\""
   },
   "build": {
-    "appId": "better-chatgpt",
-    "productName": "Better ChatGPT",
+    "appId": "com.suzuki.weaveletcanvas",
+    "productName": "Weavelet Canvas",
     "artifactName": "${os}-${name}-${version}-${arch}.${ext}",
     "directories": {
       "output": "release"

@@ -50,7 +50,7 @@ export const onEncoderReady = (fn: () => void): (() => void) => {
 };
 
 // https://github.com/dqbd/tiktoken/issues/23#issuecomment-1483317174
-export const getChatGPTEncoding = (
+export const getConversationEncoding = (
   messages: MessageInterface[],
   model: ModelOptions
 ) => {
@@ -79,8 +79,10 @@ export const getChatGPTEncoding = (
 
 const countTokens = (messages: MessageInterface[], model: ModelOptions) => {
   if (!messages || messages.length === 0) return 0;
-  return getChatGPTEncoding(messages, model).length;
+  return getConversationEncoding(messages, model).length;
 };
+
+export const getChatGPTEncoding = getConversationEncoding;
 
 export const limitMessageTokens = (
   messages: MessageInterface[],

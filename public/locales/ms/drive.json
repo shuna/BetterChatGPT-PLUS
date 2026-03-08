@@ -7,8 +7,8 @@
     "create": "Create new file",
     "confirm": "Confirm selection"
   },
-  "notice": "Note: Your session will be automatically refreshed while your Google account is active. You may need to re-login if your Google session expires. To avoid your cloud data being overwritten, do not use Better ChatGPT on more than one device at the same time.",
-  "privacy": "Your privacy is important to us, and to ensure it, Better ChatGPT only has non-sensitive access, meaning it can only create, view, and manage its own files and folders.",
+  "notice": "Note: Your session will be automatically refreshed while your Google account is active. You may need to re-login if your Google session expires. To avoid your cloud data being overwritten, do not use Weavelet Canvas on more than one device at the same time.",
+  "privacy": "Your privacy is important to us, and to ensure it, Weavelet Canvas only has non-sensitive access, meaning it can only create, view, and manage its own files and folders.",
   "toast": {
     "sync": "Sync successful!",
     "stop": "Syncing stopped"

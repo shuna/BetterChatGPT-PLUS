@@ -7,8 +7,8 @@
     "create": "Tạo tập tin mới",
     "confirm": "Xác nhận lựa chọn của bạn"
   },
-  "notice": "Note: Your session will be automatically refreshed while your Google account is active. You may need to re-login if your Google session expires. To avoid your cloud data being overwritten, do not use Better ChatGPT on more than one device at the same time.",
-  "privacy": "Quyền riêng tư của bạn rất quan trọng đối với chúng tôi và để đảm bảo điều đó, Better ChatGPT chỉ có quyền truy cập không nhạy cảm, nghĩa là nó chỉ có thể tạo, xem và quản lý các tệp và thư mục của riêng mình.",
+  "notice": "Note: Your session will be automatically refreshed while your Google account is active. You may need to re-login if your Google session expires. To avoid your cloud data being overwritten, do not use Weavelet Canvas on more than one device at the same time.",
+  "privacy": "Quyền riêng tư của bạn rất quan trọng đối với chúng tôi và để đảm bảo điều đó, Weavelet Canvas chỉ có quyền truy cập không nhạy cảm, nghĩa là nó chỉ có thể tạo, xem và quản lý các tệp và thư mục của riêng mình.",
   "toast": {
     "sync": "Đồng bộ hóa thành công!",
     "stop": "Đồng bộ hóa đã dừng"
