@@ -5,21 +5,6 @@
 Weavelet Canvas is a visual workspace for AI conversations built on top of the BetterChatGPT and BetterChatGPT-PLUS lineage.  
 It focuses on local-first conversation management, visual branching, and editing workflows for OpenAI-compatible APIs.
 
-### Official Naming
-
-- Official product name: `Weavelet Canvas`
-- Short product name: `Weavelet`
-- Repository slug: `weavelet-canvas`
-- Package / bundle / app identifier style: `weavelet-canvas` or `weaveletCanvas`
-- Do not use: `BetterChatGPT`, `BetterChatGPT-PLUS`, `Better ChatGPT`, `ChatGPT+` as product names
-
-### Naming Notes
-
-- Always write the product name as `Weavelet Canvas` in titles, app labels, release notes, and store metadata.
-- Use `Weavelet` alone only where space is constrained, such as compact navigation labels.
-- Treat `Canvas` as part of the formal product name, not as an optional suffix.
-- Keep upstream names only when describing project lineage, migration, or compatibility.
-
 ### About This Project
 
 Weavelet Canvas is an open-source client for OpenAI-compatible conversational APIs.  
@@ -115,21 +100,6 @@ This repository inherits those improvements while continuing to improve operatio
 
 Weavelet Canvas は、[BetterChatGPT](https://github.com/ztjhz/BetterChatGPT) と [BetterChatGPT-PLUS](https://github.com/animalnots/BetterChatGPT-PLUS) の系譜を引き継ぐ、AI 会話向けのビジュアルワークスペースです。  
 移行期間中のため、ローカルフォルダ名や一部の内部識別子には upstream 名が残っている場合があります。
-
-### 正式名称と表記ルール
-
-- 正式名称: `Weavelet Canvas`
-- 短縮名称: `Weavelet`
-- リポジトリスラッグ: `weavelet-canvas`
-- パッケージ名 / バンドルID / 識別子の基本形: `weavelet-canvas` または `weaveletCanvas`
-- 製品名として使わない表記: `BetterChatGPT`, `BetterChatGPT-PLUS`, `Better ChatGPT`, `ChatGPT+`
-
-### 表記メモ
-
-- タイトル、アプリ名、リリースノート、配布メタデータでは常に `Weavelet Canvas` を使います。
-- 省スペース箇所だけ `Weavelet` を使います。
-- `Canvas` は機能名ではなく正式名称の一部として扱います。
-- `BetterChatGPT` 系の名称は、系譜説明・移行説明・互換性説明のみに残します。
 
 ### このプロジェクトについて
 
