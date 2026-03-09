@@ -98,7 +98,7 @@ function extractText(events) {
 
 // --- Stream handler ---
 
-async function handleStartStream(msg, clientId) {
+async function handleStartStream(msg, sourceClient) {
   const { requestId, endpoint, headers, body } = msg;
   const controller = new AbortController();
   activeStreams.set(requestId, controller);
@@ -119,9 +119,9 @@ async function handleStartStream(msg, clientId) {
   });
 
   function postToClient(data) {
-    self.clients.get(clientId).then((client) => {
-      if (client) client.postMessage(data);
-    });
+    if (sourceClient) {
+      sourceClient.postMessage(data);
+    }
   }
 
   function flushBufferedText() {
@@ -220,11 +220,17 @@ self.addEventListener('message', (event) => {
   if (!msg || !msg.type) return;
 
   if (msg.type === 'startStream') {
-    // event.source may be null in some browsers, use clientId from source or ports
-    const clientId = event.source?.id;
-    if (clientId) {
-      handleStartStream(msg, clientId);
-    }
+    // event.source may lack an id in some browsers; resolve the client
+    // object directly so we can always post responses back.
+    const resolveClient = event.source
+      ? Promise.resolve(event.source)
+      : self.clients.matchAll({ type: 'window' }).then((all) => all[0] || null);
+
+    resolveClient.then((client) => {
+      if (client) {
+        handleStartStream(msg, client);
+      }
+    });
   } else if (msg.type === 'cancelStream') {
     const controller = activeStreams.get(msg.requestId);
     if (controller) {

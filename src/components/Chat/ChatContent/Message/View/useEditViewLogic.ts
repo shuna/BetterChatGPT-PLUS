@@ -8,6 +8,7 @@ import {
   isImageContent,
 } from '@type/chat';
 import { defaultModel } from '@constants/chat';
+import { isKnownModel } from '@utils/modelLookup';
 
 function isChatBusy(): boolean {
   const state = useStore.getState();
@@ -59,8 +60,10 @@ export function useEditViewLogic({
     };
   });
   const favoriteModels = useStore((state) => state.favoriteModels) || [];
-  const modelValid = !!model && favoriteModels.some((f) =>
-    f.modelId === model && (providerId ? f.providerId === providerId : true)
+  const modelValid = !!model && (
+    favoriteModels.some((f) =>
+      f.modelId === model && (providerId ? f.providerId === providerId : true)
+    ) || isKnownModel(model)
   );
 
   const [_content, _setContent] = useState<ContentInterface[]>(content);
