@@ -11,7 +11,7 @@ import {
   sortModels,
   useProviderModels,
 } from './providerMenuHelpers';
-import ProviderModelList from './ProviderModelList';
+import ProviderModelList, { ManualModelInput } from './ProviderModelList';
 import ProviderSettingsForm from './ProviderSettingsForm';
 import ProviderSidebar from './ProviderSidebar';
 
@@ -165,6 +165,13 @@ const ProviderMenu = ({
                 sortField={sortField}
                 sortDir={sortDir}
                 onSort={handleSort}
+                favoriteModels={favoriteModels}
+                onToggleFavorite={toggleFavoriteModel}
+              />
+
+              <hr className='border-gray-200 dark:border-gray-600' />
+              <ManualModelInput
+                selectedProvider={selectedProvider}
                 favoriteModels={favoriteModels}
                 onToggleFavorite={toggleFavoriteModel}
               />

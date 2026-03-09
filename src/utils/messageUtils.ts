@@ -5,7 +5,7 @@ import {
   MessageInterface,
   TotalTokenUsed,
 } from '@type/chat';
-import { ModelOptions } from './modelReader';
+import { ModelOptions } from '@type/chat';
 
 type WorkerPayload =
   | { type: 'init' }
@@ -129,7 +129,8 @@ export const limitMessageTokens = async (
 export const updateTotalTokenUsed = async (
   model: ModelOptions,
   promptMessages: MessageInterface[],
-  completionMessage: MessageInterface
+  completionMessage: MessageInterface,
+  providerId?: string
 ): Promise<void> => {
   const setTotalTokenUsed = useStore.getState().setTotalTokenUsed;
   const updatedTotalTokenUsed: TotalTokenUsed = JSON.parse(
@@ -150,13 +151,14 @@ export const updateTotalTokenUsed = async (
     countTokens([completionMessage], model),
   ]);
 
+  const tokenKey = providerId ? `${model}:::${providerId}` : model;
   const {
     promptTokens = 0,
     completionTokens = 0,
     imageTokens = 0,
-  } = updatedTotalTokenUsed[model] ?? {};
+  } = updatedTotalTokenUsed[tokenKey] ?? {};
 
-  updatedTotalTokenUsed[model] = {
+  updatedTotalTokenUsed[tokenKey] = {
     promptTokens: promptTokens + newPromptTokens,
     completionTokens: completionTokens + newCompletionTokens,
     imageTokens: imageTokens + newImageTokens,

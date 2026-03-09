@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { _defaultChatConfig, _defaultImageDetail } from '@constants/chat';
 import { DEFAULT_PROVIDERS } from './provider-config';
-import { migrateV9, migrateV10, migrateV11 } from './migrate';
+import { migrateV9, migrateV10, migrateV11, migrateV12 } from './migrate';
 
 // ---------------------------------------------------------------------------
 // v9 → v10: provider migration from flat apiKey/apiEndpoint
@@ -185,5 +185,79 @@ describe('migrateV11', () => {
     expect(n1.contentHash).toBe(n2.contentHash);
     // refCount should be 2
     expect(state.contentStore[n1.contentHash].refCount).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v12 → v13: providerModelCache + favoriteModel capabilities + config.providerId
+// ---------------------------------------------------------------------------
+describe('migrateV12', () => {
+  it('initializes providerModelCache as empty object', () => {
+    const state = { chats: [], favoriteModels: [] } as any;
+    migrateV12(state);
+    expect(state.providerModelCache).toEqual({});
+  });
+
+  it('adds modelType and streamSupport defaults to favoriteModels', () => {
+    const state = {
+      chats: [],
+      favoriteModels: [
+        { modelId: 'gpt-4o', providerId: 'openai' },
+        { modelId: 'claude-3', providerId: 'openrouter' },
+      ],
+    } as any;
+    migrateV12(state);
+
+    expect(state.favoriteModels[0].modelType).toBe('text');
+    expect(state.favoriteModels[0].streamSupport).toBe(true);
+    expect(state.favoriteModels[1].modelType).toBe('text');
+    expect(state.favoriteModels[1].streamSupport).toBe(true);
+  });
+
+  it('assigns providerId to chat configs from favoriteModels', () => {
+    const state = {
+      chats: [
+        { config: { model: 'gpt-4o' } },
+        { config: { model: 'unknown-model' } },
+      ],
+      favoriteModels: [
+        { modelId: 'gpt-4o', providerId: 'openai' },
+      ],
+    } as any;
+    migrateV12(state);
+
+    expect(state.chats[0].config.providerId).toBe('openai');
+    expect(state.chats[1].config.providerId).toBeUndefined();
+  });
+
+  it('uses first match when modelId appears in multiple favorites', () => {
+    const state = {
+      chats: [{ config: { model: 'gpt-4o' } }],
+      favoriteModels: [
+        { modelId: 'gpt-4o', providerId: 'openai' },
+        { modelId: 'gpt-4o', providerId: 'openrouter' },
+      ],
+    } as any;
+    migrateV12(state);
+
+    expect(state.chats[0].config.providerId).toBe('openai');
+  });
+
+  it('does not overwrite existing config.providerId', () => {
+    const state = {
+      chats: [{ config: { model: 'gpt-4o', providerId: 'openrouter' } }],
+      favoriteModels: [
+        { modelId: 'gpt-4o', providerId: 'openai' },
+      ],
+    } as any;
+    migrateV12(state);
+
+    expect(state.chats[0].config.providerId).toBe('openrouter');
+  });
+
+  it('handles missing chats and favoriteModels gracefully', () => {
+    const state = {} as any;
+    expect(() => migrateV12(state)).not.toThrow();
+    expect(state.providerModelCache).toEqual({});
   });
 });

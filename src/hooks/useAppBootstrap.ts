@@ -3,7 +3,6 @@ import useStore from '@store/store';
 import i18n from '../i18n';
 import { ChatInterface } from '@type/chat';
 import { Theme } from '@type/theme';
-import { initializeModels } from '@constants/modelLoader';
 import useInitialiseNewChat from './useInitialiseNewChat';
 
 const useAppBootstrap = () => {
@@ -14,7 +13,12 @@ const useAppBootstrap = () => {
   const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
 
   useEffect(() => {
-    initializeModels();
+    // Auto-open provider menu if no favorites and no custom models
+    const { favoriteModels, customModels, setShowProviderMenu } = useStore.getState();
+    if ((!favoriteModels || favoriteModels.length === 0) && (!customModels || customModels.length === 0)) {
+      setShowProviderMenu(true);
+    }
+
     document.documentElement.lang = i18n.language;
 
     const handleLanguageChanged = (language: string) => {

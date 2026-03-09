@@ -19,7 +19,6 @@ import {
 import { ExportV1, ExportV2, OpenAIChat, OpenAIPlaygroundJSON } from '@type/export';
 import { BranchNode, BranchTree } from '@type/chat';
 import { ContentStoreData, addContent, resolveContent } from '@utils/contentStore';
-import { modelOptions } from '@constants/modelLoader';
 import { ensureUniqueChatIds } from '@utils/chatIdentity';
 import i18next from 'i18next';
 
@@ -78,7 +77,7 @@ const extractConfigOverrides = (value: unknown): Partial<ConfigInterface> => {
   if (typeof source.presence_penalty === 'number') {
     overrides.presence_penalty = source.presence_penalty;
   }
-  if (typeof source.model === 'string' && modelOptions.includes(source.model)) {
+  if (typeof source.model === 'string' && source.model.length > 0) {
     overrides.model = source.model;
   }
 
@@ -161,12 +160,10 @@ const validateAndFixChatConfig = (config: unknown): config is ConfigInterface =>
     config.frequency_penalty = _defaultChatConfig.frequency_penalty;
   if (!(typeof config.frequency_penalty === 'number')) return false;
 
-  const modelId =
+  config.model =
     typeof config.model === 'string' && config.model.length > 0
       ? config.model
       : defaultModel;
-  if (!modelOptions.includes(modelId)) config.model = defaultModel;
-  else config.model = modelId;
 
   return true;
 };

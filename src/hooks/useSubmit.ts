@@ -103,7 +103,8 @@ const useSubmit = () => {
         chats[chatIndex].config.model,
         favoriteModels,
         providers,
-        fallbackProvider
+        fallbackProvider,
+        chats[chatIndex].config.providerId
       );
 
       await executeSubmitStream({
@@ -128,6 +129,7 @@ const useSubmit = () => {
           setChats,
           apiVersion: useStore.getState().apiVersion,
           titleModel: useStore.getState().titleModel,
+          titleProviderId: useStore.getState().titleProviderId,
           t: (key: string) => t(key) as string,
           favoriteModels,
           providers,

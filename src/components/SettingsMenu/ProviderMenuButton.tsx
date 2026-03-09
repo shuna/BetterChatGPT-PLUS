@@ -1,10 +1,20 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import ProviderMenu from '@components/ProviderMenu/ProviderMenu';
+import useStore from '@store/store';
 
 const ProviderMenuButton = () => {
   const { t } = useTranslation('model');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const showProviderMenu = useStore((state) => state.showProviderMenu);
+  const setShowProviderMenu = useStore((state) => state.setShowProviderMenu);
+
+  useEffect(() => {
+    if (showProviderMenu) {
+      setIsModalOpen(true);
+      setShowProviderMenu(false);
+    }
+  }, [showProviderMenu, setShowProviderMenu]);
 
   return (
     <>

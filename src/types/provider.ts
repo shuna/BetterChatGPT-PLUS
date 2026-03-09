@@ -27,7 +27,8 @@ export interface ProviderModel {
   promptPrice?: number;
   completionPrice?: number;
   created?: number;
-  isHardcoded?: boolean;
+  modelType?: 'text' | 'image';
+  streamSupport?: boolean;
 }
 
 export interface FavoriteModel {
@@ -36,4 +37,6 @@ export interface FavoriteModel {
   promptPrice?: number;
   completionPrice?: number;
   contextLength?: number;
+  modelType?: 'text' | 'image';
+  streamSupport?: boolean;
 }

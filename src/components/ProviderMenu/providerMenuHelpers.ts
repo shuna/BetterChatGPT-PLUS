@@ -1,5 +1,6 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { fetchProviderModels } from '@api/providerModels';
+import useStore from '@store/store';
 import { ProviderConfig, ProviderId, ProviderModel } from '@type/provider';
 
 export type SortField = 'alpha' | 'created' | 'context' | 'price';
@@ -69,11 +70,39 @@ export const sortModels = (
 };
 
 export const useProviderModels = (providers: Record<ProviderId, ProviderConfig>) => {
-  const [models, setModels] = useState<ProviderModelMap>({});
+  const cachedModels = useStore((state) => state.providerModelCache);
+  const setProviderModelCache = useStore((state) => state.setProviderModelCache);
+  const [models, setModels] = useState<ProviderModelMap>(() => ({ ...cachedModels }));
   const [loading, setLoading] = useState<ProviderLoadingMap>({});
+
+  // Sync local state when Zustand cache changes (e.g. cleared on endpoint/apiKey change)
+  useEffect(() => {
+    setModels((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const key of Object.keys(next) as ProviderId[]) {
+        if (!cachedModels[key]) {
+          delete next[key];
+          changed = true;
+        }
+      }
+      for (const key of Object.keys(cachedModels) as ProviderId[]) {
+        if (cachedModels[key] && cachedModels[key] !== prev[key]) {
+          next[key] = cachedModels[key];
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [cachedModels]);
 
   const setProviderLoading = (providerId: ProviderId, isLoading: boolean) => {
     setLoading((previous) => ({ ...previous, [providerId]: isLoading }));
+  };
+
+  const updateModels = (providerId: ProviderId, result: ProviderModel[]) => {
+    setModels((previous) => ({ ...previous, [providerId]: result }));
+    setProviderModelCache(providerId, result);
   };
 
   const loadModels = useCallback(
@@ -83,7 +112,7 @@ export const useProviderModels = (providers: Record<ProviderId, ProviderConfig>)
       setProviderLoading(providerId, true);
       try {
         const result = await fetchProviderModels(providers[providerId]);
-        setModels((previous) => ({ ...previous, [providerId]: result }));
+        updateModels(providerId, result);
       } finally {
         setProviderLoading(providerId, false);
       }
@@ -96,9 +125,7 @@ export const useProviderModels = (providers: Record<ProviderId, ProviderConfig>)
       setProviderLoading(providerId, true);
       try {
         const result = await fetchProviderModels(providerConfig);
-        if (result.length > 0) {
-          setModels((previous) => ({ ...previous, [providerId]: result }));
-        }
+        updateModels(providerId, result);
       } finally {
         setProviderLoading(providerId, false);
       }

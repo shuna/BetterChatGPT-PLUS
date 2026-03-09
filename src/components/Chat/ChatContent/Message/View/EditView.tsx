@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { ContentInterface, TextContentInterface } from '@type/chat';
-import { modelTypes } from '@constants/modelLoader';
+import { useModelType } from '@utils/modelLookup';
 import PopupModal from '@components/PopupModal';
 import AttachmentIcon from '@icon/AttachmentIcon';
 import EditViewButtons from './EditViewButtons';
@@ -22,6 +22,7 @@ const EditView = ({
 }) => {
   const { t } = useTranslation();
   const logic = useEditViewLogic({ content, setIsEdit, messageIndex, sticky });
+  const isImageModel = useModelType(logic.model, logic.providerId) === 'image';
 
   return (
     <div className='relative'>
@@ -33,7 +34,7 @@ const EditView = ({
         }`}
       >
         <div className='relative flex items-start'>
-          {modelTypes[logic.model] == 'image' && (
+          {isImageModel && (
             <button
               className='absolute left-0 bottom-0 btn btn-secondary h-10 ml-[-1.2rem] mb-[-0.4rem]'
               onClick={logic.handleUploadButtonClick}
@@ -47,7 +48,7 @@ const EditView = ({
           <textarea
             ref={logic.textareaRef}
             className={`m-0 resize-none rounded-lg bg-transparent overflow-y-hidden focus:ring-0 focus-visible:ring-0 leading-7 w-full placeholder:text-gray-500/40 pr-10 ${
-              modelTypes[logic.model] == 'image' ? 'pl-7' : ''
+              isImageModel ? 'pl-7' : ''
             }`}
             onChange={(e) => {
               logic._setContent((prev) => [
@@ -82,6 +83,7 @@ const EditView = ({
         handleImageUrlChange={logic.handleImageUrlChange}
         fileInputRef={logic.fileInputRef}
         model={logic.model}
+        providerId={logic.providerId}
         modelValid={logic.modelValid}
         messageIndex={messageIndex}
         role={role}

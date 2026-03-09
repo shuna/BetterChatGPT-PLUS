@@ -19,6 +19,7 @@ import {
   LocalStorageInterfaceV9ToV10,
   LocalStorageInterfaceV10ToV11,
   LocalStorageInterfaceV11ToV12,
+  LocalStorageInterfaceV12ToV13,
   ContentInterface,
 } from '@type/chat';
 import { ContentStoreData, addContent } from '@utils/contentStore';
@@ -202,4 +203,33 @@ export const migrateV11 = (persistedState: LocalStorageInterfaceV11ToV12) => {
   }
 
   persistedState.contentStore = contentStore;
+};
+
+export const migrateV12 = (persistedState: LocalStorageInterfaceV12ToV13) => {
+  // Initialize provider model cache
+  persistedState.providerModelCache = {};
+
+  // Add modelType and streamSupport defaults to existing favoriteModels
+  type LegacyFavorite = { modelId: string; providerId: string; modelType?: string; streamSupport?: boolean };
+  const favorites = (persistedState as unknown as { favoriteModels?: LegacyFavorite[] }).favoriteModels;
+  if (Array.isArray(favorites)) {
+    for (const fav of favorites) {
+      if (fav.modelType === undefined) fav.modelType = 'text';
+      if (fav.streamSupport === undefined) fav.streamSupport = true;
+    }
+  }
+
+  // Add providerId to existing chat configs based on favoriteModels lookup
+  type LegacyChat = { config?: { model?: string; providerId?: string } };
+  const chats = (persistedState as unknown as { chats?: LegacyChat[] }).chats;
+  if (Array.isArray(chats) && Array.isArray(favorites)) {
+    for (const chat of chats) {
+      if (chat.config && !chat.config.providerId && chat.config.model) {
+        const match = favorites.find((f) => f.modelId === chat.config!.model);
+        if (match) {
+          chat.config.providerId = match.providerId;
+        }
+      }
+    }
+  }
 };

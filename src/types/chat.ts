@@ -1,4 +1,4 @@
-import { ModelOptions } from '@utils/modelReader';
+export type ModelOptions = string;
 import { Prompt } from './prompt';
 import { Theme } from './theme';
 import type { FavoriteModel, ProviderConfig, ProviderId } from './provider';
@@ -94,6 +94,11 @@ export interface LocalStorageInterfaceV11ToV12
   contentStore: Record<string, { content: ContentInterface[]; refCount: number }>;
 }
 
+export interface LocalStorageInterfaceV12ToV13
+  extends LocalStorageInterfaceV11ToV12 {
+  providerModelCache: Record<string, unknown[]>;
+}
+
 export interface LocalStorageInterfaceV10ToV11
   extends LocalStorageInterfaceV9ToV10 {
   // branchTree is inside ChatInterface, no new top-level fields
@@ -107,6 +112,7 @@ export interface ConfigInterface {
   top_p: number;
   frequency_penalty: number;
   stream?: boolean;
+  providerId?: ProviderId;
 }
 
 export interface ChatHistoryInterface {
@@ -274,4 +280,3 @@ export interface GeneratingSession {
   startedAt: number;
 }
 
-export type { ModelOptions };

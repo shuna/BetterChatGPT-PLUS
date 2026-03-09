@@ -1,6 +1,5 @@
 import { getChatCompletion } from '@api/api';
 import { officialAPIEndpoint } from '@constants/auth';
-import { _defaultChatConfig } from '@constants/chat';
 import useStore from '@store/store';
 import { upsertActivePathMessage } from '@utils/branchUtils';
 import { cloneChatAtIndex } from '@utils/chatShallowClone';
@@ -11,6 +10,7 @@ import {
   ConfigInterface,
   GeneratingSession,
   MessageInterface,
+  ModelOptions,
   TextContentInterface,
 } from '@type/chat';
 import { FavoriteModel, ProviderConfig, ProviderId } from '@type/provider';
@@ -78,8 +78,18 @@ export const resolveProviderForModel = (
   modelId: string,
   favoriteModels: FavoriteModel[],
   providers: ProviderMap,
-  fallback: ResolvedProvider
+  fallback: ResolvedProvider,
+  providerId?: ProviderId
 ): ResolvedProvider => {
+  // If providerId is specified, resolve directly
+  if (providerId) {
+    const provider = providers[providerId];
+    if (provider) {
+      return { endpoint: provider.endpoint, key: provider.apiKey };
+    }
+  }
+
+  // Fallback to favoriteModels lookup
   const favorite = favoriteModels.find((entry) => entry.modelId === modelId);
   if (!favorite) return fallback;
 
@@ -123,21 +133,23 @@ export const applySubmitTokenUsage = async (
   const chatIndex = state.chats.findIndex((chat) => chat.id === chatId);
   if (chatIndex < 0) return;
 
-  const model = state.chats[chatIndex].config.model;
+  const config = state.chats[chatIndex].config;
   const messages = state.chats[chatIndex].messages;
   const assistantMessage = messages[assistantMessageIndex];
   if (!assistantMessage) return;
 
   await updateTotalTokenUsed(
-    model,
+    config.model,
     messages.slice(0, assistantMessageIndex),
-    assistantMessage
+    assistantMessage,
+    config.providerId
   );
 };
 
 type TitleGenerationDeps = {
   apiVersion?: string;
   titleModel?: string;
+  titleProviderId?: ProviderId;
   t: (key: string) => string;
   favoriteModels: FavoriteModel[];
   providers: ProviderMap;
@@ -151,12 +163,14 @@ export const generateTitleForChat = async (
 ): Promise<string> => {
   try {
     const titleModel = deps.titleModel ?? modelConfig.model;
-    const titleChatConfig = { ...modelConfig, model: titleModel };
+    const titleProviderId = deps.titleModel ? deps.titleProviderId : modelConfig.providerId;
+    const titleChatConfig = { ...modelConfig, model: titleModel, providerId: titleProviderId };
     const resolved = resolveProviderForModel(
       titleModel,
       deps.favoriteModels,
       deps.providers,
-      deps.fallbackProvider
+      deps.fallbackProvider,
+      titleProviderId
     );
 
     if ((!resolved.key || resolved.key.length === 0) && resolved.endpoint === officialAPIEndpoint) {
@@ -204,8 +218,6 @@ export const setGeneratedTitle = (
   chats[chatIndex].titleSet = true;
 };
 
-export const getTitleTokenUsageModel = () => _defaultChatConfig.model;
-
 type AutoTitleDeps = TitleGenerationDeps & {
   chatId: string;
   language: string;
@@ -250,9 +262,12 @@ export const maybeGenerateAutoTitle = async ({
   setChats(updatedChats);
 
   if (useStore.getState().countTotalTokens) {
-    await updateTotalTokenUsed(getTitleTokenUsageModel(), [promptMessage], {
+    const titleConfig = updatedChats[titleChatIndex].config;
+    const titleTokenModel = deps.titleModel ?? titleConfig.model;
+    const titleTokenProviderId = deps.titleModel ? deps.titleProviderId : titleConfig.providerId;
+    await updateTotalTokenUsed(titleTokenModel as ModelOptions, [promptMessage], {
       role: 'assistant',
       content: [{ type: 'text', text: title }],
-    });
+    }, titleTokenProviderId);
   }
 };

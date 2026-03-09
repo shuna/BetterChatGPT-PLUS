@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
 import { ConfigInterface, ImageDetail } from '@type/chat';
-import { modelMaxToken } from '@constants/modelLoader';
-import { ModelOptions } from '@utils/modelReader';
+import { getModelMaxToken } from '@utils/modelLookup';
+import { ModelOptions } from '@type/chat';
 import { isModelStreamSupported, normalizeConfigStream } from '@utils/streamSupport';
 import useStore from '@store/store';
+import { ProviderId } from '@type/provider';
 import {
   DarkSelectField,
   FieldDescription,
@@ -28,6 +29,7 @@ const ConfigMenu = ({
 }) => {
   const [_maxToken, _setMaxToken] = useState<number>(config.max_tokens);
   const [_model, _setModel] = useState<ModelOptions>(config.model);
+  const [_providerId, _setProviderId] = useState<ProviderId | undefined>(config.providerId);
   const [_temperature, _setTemperature] = useState<number>(config.temperature);
   const [_presencePenalty, _setPresencePenalty] = useState<number>(
     config.presence_penalty
@@ -39,7 +41,7 @@ const ConfigMenu = ({
   const [_imageDetail, _setImageDetail] = useState<ImageDetail>(imageDetail);
   const [_stream, _setStream] = useState<boolean>(config.stream !== false);
   const { t } = useTranslation('model');
-  const isStreamSupported = isModelStreamSupported(_model);
+  const isStreamSupported = isModelStreamSupported(_model, _providerId);
 
   useEffect(() => {
     if (!isStreamSupported && _stream) {
@@ -56,6 +58,7 @@ const ConfigMenu = ({
       top_p: _topP,
       frequency_penalty: _frequencyPenalty,
       stream: _stream,
+      providerId: _providerId,
     }));
     setImageDetail(_imageDetail);
     setIsModalOpen(false);
@@ -72,6 +75,11 @@ const ConfigMenu = ({
         <ModelSelector
           _model={_model}
           _setModel={_setModel}
+          _providerId={_providerId}
+          _onModelChange={(modelId, providerId) => {
+            _setModel(modelId);
+            _setProviderId(providerId);
+          }}
           _label={t('Model')}
         />
         <StreamToggle
@@ -83,6 +91,7 @@ const ConfigMenu = ({
           _maxToken={_maxToken}
           _setMaxToken={_setMaxToken}
           _model={_model}
+          _providerId={_providerId}
         />
         <TemperatureSlider
           _temperature={_temperature}
@@ -109,27 +118,48 @@ const ConfigMenu = ({
 export const ModelSelector = ({
   _model,
   _setModel,
+  _providerId,
+  _onModelChange,
   _label,
 }: {
   _model: ModelOptions;
   _setModel: React.Dispatch<React.SetStateAction<ModelOptions>>;
+  _providerId?: ProviderId;
+  _onModelChange?: (modelId: ModelOptions, providerId: ProviderId | undefined) => void;
   _label: string;
 }) => {
   const { t } = useTranslation(['main', 'model']);
   const favoriteModels = useStore((state) => state.favoriteModels) || [];
   const providers = useStore((state) => state.providers) || {};
 
+  // Use composite key "modelId:::providerId" to disambiguate same modelId across providers
   const modelOptionsFormatted = favoriteModels.map((fav) => ({
-    value: fav.modelId,
+    value: `${fav.modelId}:::${fav.providerId}`,
     label: `${fav.modelId} (${providers[fav.providerId]?.name || fav.providerId})`,
   }));
+
+  // Find the current composite value using providerId for exact match
+  const currentFav = _providerId
+    ? favoriteModels.find((f) => f.modelId === _model && f.providerId === _providerId)
+    : favoriteModels.find((f) => f.modelId === _model);
+  const currentComposite = currentFav
+    ? `${currentFav.modelId}:::${currentFav.providerId}`
+    : _model;
 
   return (
     <DarkSelectField
       label={_label}
-      value={_model}
+      value={currentComposite}
       options={modelOptionsFormatted}
-      onChange={(value) => _setModel((value ?? _model) as ModelOptions)}
+      onChange={(value) => {
+        if (!value) return;
+        const [modelId, providerId] = (value as string).split(':::');
+        if (_onModelChange) {
+          _onModelChange(modelId as ModelOptions, providerId as ProviderId);
+        } else {
+          _setModel(modelId as ModelOptions);
+        }
+      }}
       placeholder={t('model:provider.noModelSelected', 'No model selected') as string}
       isClearable
       className='mb-4'
@@ -141,17 +171,22 @@ export const MaxTokenSlider = ({
   _maxToken,
   _setMaxToken,
   _model,
+  _providerId,
 }: {
   _maxToken: number;
   _setMaxToken: React.Dispatch<React.SetStateAction<number>>;
   _model: ModelOptions;
+  _providerId?: ProviderId;
 }) => {
   const { t } = useTranslation('model');
   const favoriteModels = useStore((state) => state.favoriteModels) || [];
 
   const getMaxForModel = (): number => {
-    if (modelMaxToken[_model] != null) return modelMaxToken[_model];
-    const fav = favoriteModels.find((f) => f.modelId === _model);
+    const lookupMax = getModelMaxToken(_model, _providerId);
+    if (lookupMax > 0) return lookupMax;
+    const fav = _providerId
+      ? favoriteModels.find((f) => f.modelId === _model && f.providerId === _providerId)
+      : favoriteModels.find((f) => f.modelId === _model);
     if (fav?.contextLength) return fav.contextLength;
     return 128000; // sensible default
   };

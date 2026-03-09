@@ -2,8 +2,9 @@ import React, { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import { ContentInterface, isImageContent } from '@type/chat';
-import { ModelOptions } from '@utils/modelReader';
-import { modelTypes } from '@constants/modelLoader';
+import { ModelOptions } from '@type/chat';
+import type { ProviderId } from '@type/provider';
+import { useModelType } from '@utils/modelLookup';
 import TokenCount from '@components/TokenCount';
 import CommandPrompt from '../CommandPrompt';
 import BranchIcon from '@icon/BranchIcon';
@@ -28,6 +29,7 @@ const EditViewButtons = memo(
     handleImageUrlChange,
     fileInputRef,
     model,
+    providerId,
     modelValid,
     messageIndex,
     role,
@@ -50,6 +52,7 @@ const EditViewButtons = memo(
     handleImageUrlChange: () => void;
     fileInputRef: React.MutableRefObject<HTMLInputElement | null>;
     model: ModelOptions;
+    providerId?: ProviderId;
     modelValid: boolean;
     messageIndex: number;
     role?: string;
@@ -66,12 +69,13 @@ const EditViewButtons = memo(
         ? state.chats[state.currentChatIndex].messages.length - 1
         : 0
     );
+    const isImageModel = useModelType(model, providerId) === 'image';
     const isAssistant = role === 'assistant';
     const isNotLast = !sticky && messageIndex < lastMessageIndex;
 
     return (
       <div>
-        {modelTypes[model] == 'image' && (
+        {isImageModel && (
           <>
             <div className='flex justify-center'>
               <div className='flex gap-5'>

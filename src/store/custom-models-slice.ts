@@ -1,5 +1,4 @@
 import { StoreSlice } from './store';
-import { initializeModels } from '@constants/modelLoader';
 
 export interface CustomModel {
   id: string;
@@ -66,18 +65,11 @@ export const createCustomModelsSlice: StoreSlice<CustomModelsSlice> = (set) => (
         }
       ]
     }));
-    // Reload models after adding a new one
-    initializeModels();
   },
   removeCustomModel: (modelId) => {
-    set((state) => {
-      const newState = {
-        ...state,
-        customModels: state.customModels.filter((m) => m.id !== modelId)
-      };
-      // Reload models after removing one
-      initializeModels();
-      return newState;
-    });
+    set((state) => ({
+      ...state,
+      customModels: state.customModels.filter((m) => m.id !== modelId)
+    }));
   }
 });

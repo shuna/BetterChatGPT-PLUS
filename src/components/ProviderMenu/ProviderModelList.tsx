@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { FavoriteModel, ProviderConfig, ProviderId, ProviderModel } from '@type/provider';
@@ -52,6 +53,55 @@ const formatContextLength = (contextLength?: number) => {
   if (contextLength >= 1000000) return `${(contextLength / 1000000).toFixed(1)}M`;
   return `${Math.round(contextLength / 1000)}K`;
 };
+
+export function ManualModelInput({
+  selectedProvider,
+  favoriteModels,
+  onToggleFavorite,
+}: {
+  selectedProvider: ProviderId;
+  favoriteModels: FavoriteModel[];
+  onToggleFavorite: (model: FavoriteModel) => void;
+}) {
+  const { t } = useTranslation('model');
+  const [manualId, setManualId] = useState('');
+
+  const handleAdd = () => {
+    const id = manualId.trim();
+    if (!id) return;
+    const exists = favoriteModels.some(
+      (f) => f.modelId === id && f.providerId === selectedProvider
+    );
+    if (exists) return;
+    onToggleFavorite({
+      modelId: id,
+      providerId: selectedProvider,
+      modelType: 'text',
+      streamSupport: true,
+    });
+    setManualId('');
+  };
+
+  return (
+    <div className='flex items-center gap-2 px-3 py-2 border-b dark:border-gray-600'>
+      <input
+        type='text'
+        placeholder={t('provider.manualModelId', 'Enter custom model ID to add to list...') as string}
+        value={manualId}
+        onChange={(e) => setManualId(e.target.value)}
+        onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
+        className='flex-1 px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
+      />
+      <button
+        onClick={handleAdd}
+        disabled={!manualId.trim()}
+        className='px-3 py-1.5 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed'
+      >
+        {t('provider.addModel', 'Add')}
+      </button>
+    </div>
+  );
+}
 
 export default function ProviderModelList({
   search,
@@ -166,6 +216,8 @@ export default function ProviderModelList({
                     providerId: model.providerId,
                     promptPrice: model.promptPrice,
                     completionPrice: model.completionPrice,
+                    modelType: model.modelType,
+                    streamSupport: model.streamSupport,
                   })
                 }
                 className='rounded'
