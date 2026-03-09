@@ -59,12 +59,17 @@ const ChatTitle = React.memo(() => {
     setIsModelDropdownOpen(false);
   };
 
-  const getModelDisplayName = (modelId: string) => {
-    const fav = favoriteModels.find(f => f.modelId === modelId);
+  const getModelDisplayName = (modelId: string, providerId?: ProviderId) => {
+    const fav = providerId
+      ? favoriteModels.find((f) => f.modelId === modelId && f.providerId === providerId)
+      : favoriteModels.find((f) => f.modelId === modelId);
     if (fav) {
       return `${modelId} (${providers[fav.providerId]?.name || fav.providerId})`;
     }
-    return t('provider.noModelSelected', 'モデル未選択') as string;
+    if (providerId) {
+      return `${modelId} (${providers[providerId]?.name || providerId})`;
+    }
+    return modelId || (t('provider.noModelSelected', 'モデル未選択') as string);
   };
 
   // Close dropdown on outside click
@@ -106,7 +111,7 @@ const ChatTitle = React.memo(() => {
               setIsModelDropdownOpen(!isModelDropdownOpen);
             }}
           >
-            {t('model')}: {getModelDisplayName(chat.config.model)}
+            {t('model')}: {getModelDisplayName(chat.config.model, chat.config.providerId)}
             <svg className='w-3 h-3 ml-1' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
               <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
             </svg>
@@ -122,7 +127,7 @@ const ChatTitle = React.memo(() => {
                   <div
                     key={`${fav.providerId}-${fav.modelId}`}
                     className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                      chat.config.model === fav.modelId
+                      chat.config.model === fav.modelId && chat.config.providerId === fav.providerId
                         ? 'bg-gray-100 dark:bg-gray-700 font-medium'
                         : ''
                     }`}
