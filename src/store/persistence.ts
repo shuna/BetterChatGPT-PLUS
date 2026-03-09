@@ -17,10 +17,12 @@ import {
   LocalStorageInterfaceV8_2ToV9,
   LocalStorageInterfaceV10ToV11,
   LocalStorageInterfaceV11ToV12,
+  LocalStorageInterfaceV12ToV13,
 } from '@type/chat';
 import {
   migrateV10,
   migrateV11,
+  migrateV12,
   migrateV9,
   migrateV0,
   migrateV1,
@@ -50,6 +52,7 @@ type PersistedStoreState = Omit<
   | 'theme'
   | 'autoTitle'
   | 'titleModel'
+  | 'titleProviderId'
   | 'advancedMode'
   | 'prompts'
   | 'defaultChatConfig'
@@ -73,6 +76,7 @@ type PersistedStoreState = Omit<
   | 'favoriteModels'
   | 'branchClipboard'
   | 'contentStore'
+  | 'providerModelCache'
   >,
   'chats'
 > & {
@@ -81,12 +85,12 @@ type PersistedStoreState = Omit<
 
 export const PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'chats', 'apiKey', 'apiVersion', 'apiEndpoint', 'theme', 'autoTitle',
-  'titleModel', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
+  'titleModel', 'titleProviderId', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
   'hideMenuOptions', 'firstVisit', 'hideSideMenu', 'folders', 'enterToSubmit',
   'inlineLatex', 'markdownMode', 'totalTokenUsed', 'countTotalTokens',
   'displayChatSize', 'menuWidth', 'defaultImageDetail', 'autoScroll',
   'hideShareGPT', 'customModels', 'providers', 'favoriteModels',
-  'branchClipboard', 'contentStore',
+  'branchClipboard', 'contentStore', 'providerModelCache',
 ];
 
 let previousInputRefs: Partial<Record<keyof PersistedStoreState, unknown>> = {};
@@ -103,6 +107,7 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     theme: state.theme,
     autoTitle: state.autoTitle,
     titleModel: state.titleModel,
+    titleProviderId: state.titleProviderId,
     advancedMode: state.advancedMode,
     prompts: state.prompts,
     defaultChatConfig: state.defaultChatConfig,
@@ -126,6 +131,7 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     favoriteModels: state.favoriteModels,
     branchClipboard: state.branchClipboard,
     contentStore: state.contentStore,
+    providerModelCache: state.providerModelCache,
   };
 }
 
@@ -191,7 +197,8 @@ type PersistedStateVersion =
   | LocalStorageInterfaceV8_2ToV9
   | LocalStorageInterfaceV9ToV10
   | LocalStorageInterfaceV10ToV11
-  | LocalStorageInterfaceV11ToV12;
+  | LocalStorageInterfaceV11ToV12
+  | LocalStorageInterfaceV12ToV13;
 
 type MigrationEntry = {
   version: number;
@@ -213,6 +220,7 @@ const MIGRATIONS: MigrationEntry[] = [
   { version: 9, apply: (state) => migrateV9(state as LocalStorageInterfaceV9ToV10) },
   { version: 10, apply: (state) => migrateV10(state as LocalStorageInterfaceV10ToV11) },
   { version: 11, apply: (state) => migrateV11(state as LocalStorageInterfaceV11ToV12) },
+  { version: 12, apply: (state) => migrateV12(state as LocalStorageInterfaceV12ToV13) },
 ];
 
 export const migratePersistedState = (

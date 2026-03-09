@@ -1,7 +1,7 @@
 import { Tiktoken } from '@dqbd/tiktoken/lite';
 
 import { isTextContent, MessageInterface } from '@type/chat';
-import { ModelOptions } from '@utils/modelReader';
+import { ModelOptions } from '@type/chat';
 
 type InitMessage = {
   id: number;

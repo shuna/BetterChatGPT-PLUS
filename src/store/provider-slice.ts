@@ -3,6 +3,7 @@ import {
   FavoriteModel,
   ProviderConfig,
   ProviderId,
+  ProviderModel,
 } from '@type/provider';
 import { DEFAULT_PROVIDERS } from './provider-config';
 import { toggleFavoriteModelEntry, updateProviderConfig } from './provider-helpers';
@@ -10,20 +11,27 @@ import { toggleFavoriteModelEntry, updateProviderConfig } from './provider-helpe
 export interface ProviderSlice {
   providers: Record<ProviderId, ProviderConfig>;
   favoriteModels: FavoriteModel[];
+  providerModelCache: Partial<Record<ProviderId, ProviderModel[]>>;
+  showProviderMenu: boolean;
   setProviderApiKey: (id: ProviderId, key: string) => void;
   setProviderEndpoint: (id: ProviderId, endpoint: string) => void;
   toggleFavoriteModel: (model: FavoriteModel) => void;
   setFavoriteModels: (models: FavoriteModel[]) => void;
+  setProviderModelCache: (id: ProviderId, models: ProviderModel[]) => void;
+  setShowProviderMenu: (show: boolean) => void;
 }
 
 export const createProviderSlice: StoreSlice<ProviderSlice> = (set, get) => ({
   providers: { ...DEFAULT_PROVIDERS },
   favoriteModels: [],
+  providerModelCache: {},
+  showProviderMenu: false,
   setProviderApiKey: (id: ProviderId, key: string) => {
     if (get().providers[id]?.apiKey === key) return;
     set((prev: ProviderSlice) => ({
       ...prev,
       providers: updateProviderConfig(prev.providers, id, { apiKey: key }),
+      providerModelCache: { ...prev.providerModelCache, [id]: undefined },
     }));
   },
   setProviderEndpoint: (id: ProviderId, endpoint: string) => {
@@ -31,6 +39,7 @@ export const createProviderSlice: StoreSlice<ProviderSlice> = (set, get) => ({
     set((prev: ProviderSlice) => ({
       ...prev,
       providers: updateProviderConfig(prev.providers, id, { endpoint }),
+      providerModelCache: { ...prev.providerModelCache, [id]: undefined },
     }));
   },
   toggleFavoriteModel: (model: FavoriteModel) => {
@@ -46,6 +55,18 @@ export const createProviderSlice: StoreSlice<ProviderSlice> = (set, get) => ({
     set((prev: ProviderSlice) => ({
       ...prev,
       favoriteModels: models,
+    }));
+  },
+  setProviderModelCache: (id: ProviderId, models: ProviderModel[]) => {
+    set((prev: ProviderSlice) => ({
+      ...prev,
+      providerModelCache: { ...prev.providerModelCache, [id]: models },
+    }));
+  },
+  setShowProviderMenu: (show: boolean) => {
+    set((prev: ProviderSlice) => ({
+      ...prev,
+      showProviderMenu: show,
     }));
   },
 });

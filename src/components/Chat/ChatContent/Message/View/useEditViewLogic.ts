@@ -42,7 +42,7 @@ export function useEditViewLogic({
   const inputRole = useStore((state) => state.inputRole);
   const setChats = useStore((state) => state.setChats);
   var currentChatIndex = useStore((state) => state.currentChatIndex);
-  const model = useStore((state) => {
+  const { model, providerId } = useStore((state) => {
     const isInitialised =
       state.chats &&
       state.chats.length > 0 &&
@@ -52,12 +52,18 @@ export function useEditViewLogic({
       currentChatIndex = 0;
       setCurrentChatIndex(0);
     }
-    return isInitialised
-      ? state.chats![state.currentChatIndex].config.model
-      : defaultModel;
+    const config = isInitialised
+      ? state.chats![state.currentChatIndex].config
+      : undefined;
+    return {
+      model: config?.model ?? defaultModel,
+      providerId: config?.providerId,
+    };
   });
   const favoriteModels = useStore((state) => state.favoriteModels) || [];
-  const modelValid = !!model && favoriteModels.some((f) => f.modelId === model);
+  const modelValid = !!model && favoriteModels.some((f) =>
+    f.modelId === model && (providerId ? f.providerId === providerId : true)
+  );
 
   const [_content, _setContent] = useState<ContentInterface[]>(content);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -278,6 +284,7 @@ export function useEditViewLogic({
 
   return {
     model,
+    providerId,
     modelValid,
     currentChatIndex,
     _content,

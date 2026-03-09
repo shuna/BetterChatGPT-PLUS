@@ -4,7 +4,7 @@ import {
   MessageInterface,
 } from '@type/chat';
 import { isAzureEndpoint } from '@utils/api';
-import { ModelOptions } from '@utils/modelReader';
+import { ModelOptions } from '@type/chat';
 
 export const getChatCompletion = async (
   endpoint: string,

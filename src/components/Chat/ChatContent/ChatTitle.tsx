@@ -5,7 +5,8 @@ import useStore from '@store/store';
 import ConfigMenu from '@components/ConfigMenu';
 import { ChatInterface, ConfigInterface, ImageDetail } from '@type/chat';
 import { _defaultChatConfig } from '@constants/chat';
-import { ModelOptions } from '@utils/modelReader';
+import { ModelOptions } from '@type/chat';
+import type { ProviderId } from '@type/provider';
 import { cloneChatAtIndex } from '@utils/chatShallowClone';
 import { normalizeConfigStream } from '@utils/streamSupport';
 
@@ -46,13 +47,14 @@ const ChatTitle = React.memo(() => {
     setChats(updatedChats);
   };
 
-  const handleModelChange = (modelId: string) => {
+  const handleModelChange = (modelId: string, providerId?: ProviderId) => {
     const chats = useStore.getState().chats;
     if (!chats) return;
     const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
     updatedChats[currentChatIndex].config = normalizeConfigStream({
       ...updatedChats[currentChatIndex].config,
       model: modelId as ModelOptions,
+      providerId,
     });
     setChats(updatedChats);
     setIsModelDropdownOpen(false);
@@ -125,7 +127,7 @@ const ChatTitle = React.memo(() => {
                         ? 'bg-gray-100 dark:bg-gray-700 font-medium'
                         : ''
                     }`}
-                    onClick={() => handleModelChange(fav.modelId)}
+                    onClick={() => handleModelChange(fav.modelId, fav.providerId)}
                   >
                     {fav.modelId} ({providers[fav.providerId]?.name || fav.providerId})
                   </div>

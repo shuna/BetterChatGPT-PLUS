@@ -157,6 +157,9 @@ describe('executeSubmitStream', () => {
         },
       ],
       contentStore: {},
+      favoriteModels: [],
+      providerModelCache: {},
+      customModels: [],
     };
 
     mockGetChatCompletion

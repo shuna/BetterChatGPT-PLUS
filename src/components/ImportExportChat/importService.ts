@@ -14,7 +14,7 @@ import {
 import { flatMessagesToBranchTree } from '@utils/branchUtils';
 import { ensureUniqueChatIds } from '@utils/chatIdentity';
 import { ContentStoreData, addContent } from '@utils/contentStore';
-import { modelOptions } from '@constants/modelLoader';
+import { isKnownModel } from '@utils/modelLookup';
 import { BranchNodeLegacy, ChatInterface, Folder, FolderCollection } from '@type/chat';
 import { ExportV1, ExportV2, ExportV3, OpenAIChat, OpenAIPlaygroundJSON } from '@type/export';
 
@@ -83,7 +83,7 @@ const warnUnsupportedModels = (chats: unknown[], t: Translator) => {
     new Set(
       chats
         .map(extractModelId)
-        .filter((id: string | undefined) => id && !modelOptions.includes(id))
+        .filter((id: string | undefined) => id && !isKnownModel(id))
     )
   );
 

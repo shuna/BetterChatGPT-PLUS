@@ -21,8 +21,9 @@ import {
   _defaultSystemMessage,
 } from '@constants/chat';
 import { isModelStreamSupported, normalizeConfigStream } from '@utils/streamSupport';
-import { ModelOptions } from '@utils/modelReader';
+import { ModelOptions } from '@type/chat';
 import { ImageDetail } from '@type/chat';
+import type { ProviderId } from '@type/provider';
 
 const isSameConfig = (left: typeof _defaultChatConfig, right: typeof _defaultChatConfig) =>
   left.model === right.model &&
@@ -31,7 +32,8 @@ const isSameConfig = (left: typeof _defaultChatConfig, right: typeof _defaultCha
   left.top_p === right.top_p &&
   left.presence_penalty === right.presence_penalty &&
   left.frequency_penalty === right.frequency_penalty &&
-  (left.stream !== false) === (right.stream !== false);
+  (left.stream !== false) === (right.stream !== false) &&
+  left.providerId === right.providerId;
 
 const ChatConfigMenu = () => {
   const { t } = useTranslation('model');
@@ -68,6 +70,7 @@ const ChatConfigPopup = ({
     useStore.getState().defaultSystemMessage
   );
   const [_model, _setModel] = useState<ModelOptions>(config.model);
+  const [_providerId, _setProviderId] = useState<ProviderId | undefined>(config.providerId);
   const [_maxToken, _setMaxToken] = useState<number>(config.max_tokens);
   const [_temperature, _setTemperature] = useState<number>(config.temperature);
   const [_topP, _setTopP] = useState<number>(config.top_p);
@@ -83,7 +86,7 @@ const ChatConfigPopup = ({
   );
 
   const { t } = useTranslation('model');
-  const isStreamSupported = isModelStreamSupported(_model);
+  const isStreamSupported = isModelStreamSupported(_model, _providerId);
 
   React.useEffect(() => {
     if (!isStreamSupported && _stream) {
@@ -100,6 +103,7 @@ const ChatConfigPopup = ({
       presence_penalty: _presencePenalty,
       frequency_penalty: _frequencyPenalty,
       stream: _stream,
+      providerId: _providerId,
     });
 
     if (!isSameConfig(config, nextConfig)) {
@@ -116,6 +120,7 @@ const ChatConfigPopup = ({
 
   const handleReset = () => {
     _setModel(_defaultChatConfig.model);
+    _setProviderId(_defaultChatConfig.providerId);
     _setMaxToken(_defaultChatConfig.max_tokens);
     _setTemperature(_defaultChatConfig.temperature);
     _setTopP(_defaultChatConfig.top_p);
@@ -141,6 +146,11 @@ const ChatConfigPopup = ({
         <ModelSelector
           _model={_model}
           _setModel={_setModel}
+          _providerId={_providerId}
+          _onModelChange={(modelId, providerId) => {
+            _setModel(modelId);
+            _setProviderId(providerId);
+          }}
           _label={t('model')}
         />
         <StreamToggle
@@ -152,6 +162,7 @@ const ChatConfigPopup = ({
           _maxToken={_maxToken}
           _setMaxToken={_setMaxToken}
           _model={_model}
+          _providerId={_providerId}
         />
         <TemperatureSlider
           _temperature={_temperature}

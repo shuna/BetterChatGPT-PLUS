@@ -49,7 +49,7 @@ const useStore = create<StoreState>()(
       name: 'free-chat-gpt',
       storage: createJSONStorage(() => compressedStorage),
       partialize: (state) => createPartializedState(state),
-      version: 12,
+      version: 13,
       onRehydrateStorage: () => (state) => {
         if (!state) return;
         const repaired = rehydrateStoreState(state as StoreState);

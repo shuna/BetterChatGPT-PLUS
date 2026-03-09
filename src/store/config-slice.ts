@@ -2,7 +2,8 @@ import { StoreSlice } from './store';
 import { Theme } from '@type/theme';
 import { _defaultChatConfig, _defaultSystemMessage,_defaultMenuWidth, defaultModel, _defaultImageDetail, _defaultDisplayChatSize } from '@constants/chat';
 import { ConfigInterface, ImageDetail, TotalTokenUsed } from '@type/chat';
-import { ModelOptions } from '@utils/modelReader';
+import { ModelOptions } from '@type/chat';
+import type { ProviderId } from '@type/provider';
 import { normalizeConfigStream } from '@utils/streamSupport';
 
 const isSameConfig = (
@@ -22,6 +23,7 @@ export interface ConfigSlice {
   theme: Theme;
   autoTitle: boolean;
   titleModel: ModelOptions;
+  titleProviderId?: ProviderId;
   hideMenuOptions: boolean;
   advancedMode: boolean;
   defaultChatConfig: ConfigInterface;
@@ -40,7 +42,7 @@ export interface ConfigSlice {
   setOpenConfig: (openConfig: boolean) => void;
   setTheme: (theme: Theme) => void;
   setAutoTitle: (autoTitle: boolean) => void;
-  setTitleModel: (titleModel: ModelOptions) => void;
+  setTitleModel: (titleModel: ModelOptions, titleProviderId?: ProviderId) => void;
   setAdvancedMode: (advancedMode: boolean) => void;
   setDefaultChatConfig: (defaultChatConfig: ConfigInterface) => void;
   setDefaultSystemMessage: (defaultSystemMessage: string) => void;
@@ -65,6 +67,7 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
   hideSideMenu: false,
   autoTitle: false,
   titleModel: defaultModel,
+  titleProviderId: undefined,
   enterToSubmit: true,
   advancedMode: true,
   defaultChatConfig: _defaultChatConfig,
@@ -99,11 +102,12 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
       autoTitle: autoTitle,
     }));
   },
-  setTitleModel: (titleModel: ModelOptions) => {
-    if (get().titleModel === titleModel) return;
+  setTitleModel: (titleModel: ModelOptions, titleProviderId?: ProviderId) => {
+    if (get().titleModel === titleModel && get().titleProviderId === titleProviderId) return;
     set((prev: ConfigSlice) => ({
       ...prev,
-      titleModel: titleModel,
+      titleModel,
+      titleProviderId,
     }));
   },
   setAdvancedMode: (advancedMode: boolean) => {

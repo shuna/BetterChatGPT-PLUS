@@ -6,29 +6,39 @@ import useStore from '@store/store';
 import Toggle from '@components/Toggle/Toggle';
 
 import CalculatorIcon from '@icon/CalculatorIcon';
-import { modelCost } from '@constants/modelLoader';
-import { TotalTokenUsed } from '@type/chat';
-import { ModelOptions } from '@utils/modelReader';
+import { getModelCost } from '@utils/modelLookup';
+import { TotalTokenUsed, ModelOptions } from '@type/chat';
+import type { ProviderId } from '@type/provider';
 
-type CostMapping = { model: string; cost: number }[];
+type CostMapping = { label: string; cost: number }[];
+
+/** Parse composite key "modelId:::providerId" or plain "modelId" */
+const parseTokenKey = (key: string): { modelId: string; providerId?: ProviderId } => {
+  const sep = key.indexOf(':::');
+  if (sep >= 0) return { modelId: key.slice(0, sep), providerId: key.slice(sep + 3) as ProviderId };
+  return { modelId: key };
+};
 
 const tokenCostToCost = (
   tokenCost: TotalTokenUsed[ModelOptions],
-  model: ModelOptions
+  model: ModelOptions,
+  providerId?: ProviderId
 ) => {
   if (!tokenCost) return 0;
 
-  const modelCostEntry = modelCost[model as keyof typeof modelCost];
+  const costEntry = getModelCost(model, providerId);
 
-  if (!modelCostEntry) {
-    return -1; // Return -1 if the model does not exist in modelCost
+  if (!costEntry) {
+    return -1;
   }
 
-  const { prompt, completion, image } = modelCostEntry;
+  const { prompt, completion, image } = costEntry;
   const completionCost =
     (completion.price / completion.unit) * tokenCost.completionTokens;
-    const promptCost = (prompt.price / prompt.unit) * tokenCost.promptTokens;
-    const imageCost = (image.price / image.unit) * (tokenCost.imageTokens ? 1 : 0);
+  const promptCost = (prompt.price / prompt.unit) * tokenCost.promptTokens;
+  const imageCost = image
+    ? (image.price / image.unit) * tokenCost.imageTokens
+    : 0;
   return completionCost + promptCost + imageCost;
 };
 
@@ -47,9 +57,10 @@ const TotalTokenCost = () => {
 
   useEffect(() => {
     const updatedCostMapping: CostMapping = [];
-    Object.entries(totalTokenUsed).forEach(([model, tokenCost]) => {
-      const cost = tokenCostToCost(tokenCost, model as ModelOptions);
-      updatedCostMapping.push({ model, cost });
+    Object.entries(totalTokenUsed).forEach(([key, tokenCost]) => {
+      const { modelId, providerId } = parseTokenKey(key);
+      const cost = tokenCostToCost(tokenCost, modelId as ModelOptions, providerId);
+      updatedCostMapping.push({ label: key, cost });
     });
 
     setCostMapping(updatedCostMapping);
@@ -66,12 +77,12 @@ const TotalTokenCost = () => {
             </tr>
           </thead>
           <tbody>
-            {costMapping.map(({ model, cost }) => (
+            {costMapping.map(({ label, cost }) => (
               <tr
-                key={model}
+                key={label}
                 className='bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
               >
-                <td className='px-4 py-2'>{model}</td>
+                <td className='px-4 py-2'>{label.replace(':::', ' / ')}</td>
                 <td className='px-4 py-2'>{cost.toPrecision(3)}</td>
               </tr>
             ))}
@@ -125,8 +136,9 @@ export const TotalTokenCostDisplay = () => {
 
   useEffect(() => {
     let updatedTotalCost = 0;
-    Object.entries(totalTokenUsed).forEach(([model, tokenCost]) => {
-      updatedTotalCost += tokenCostToCost(tokenCost, model as ModelOptions);
+    Object.entries(totalTokenUsed).forEach(([key, tokenCost]) => {
+      const { modelId, providerId } = parseTokenKey(key);
+      updatedTotalCost += tokenCostToCost(tokenCost, modelId as ModelOptions, providerId);
     });
 
     setTotalCost(updatedTotalCost);

@@ -22,16 +22,18 @@ const TokenCount = React.memo(() => {
     shallow
   );
 
-  const model = useStore((state) =>
+  const { model, providerId } = useStore((state) =>
     state.chats
-      ? state.chats[state.currentChatIndex].config.model
-      : ''
+      ? { model: state.chats[state.currentChatIndex].config.model, providerId: state.chats[state.currentChatIndex].config.providerId }
+      : { model: '', providerId: undefined }
   );
 
   const favoriteModels = useStore((state) => state.favoriteModels) || [];
 
   const costDisplay = useMemo(() => {
-    const fav = favoriteModels.find((f) => f.modelId === model);
+    const fav = providerId
+      ? favoriteModels.find((f) => f.modelId === model && f.providerId === providerId)
+      : favoriteModels.find((f) => f.modelId === model);
     if (!fav) {
       return t('tokenCostModelNotRegistered', { defaultValue: 'cost unknown: model not registered' });
     }
@@ -41,7 +43,7 @@ const TokenCount = React.memo(() => {
     const promptCost = tokenCount * (fav.promptPrice / 1_000_000);
     const cost = promptCost.toPrecision(3);
     return `$${cost}`;
-  }, [model, tokenCount, favoriteModels, t]);
+  }, [model, providerId, tokenCount, favoriteModels, t]);
 
   useEffect(() => {
     let cancelled = false;
