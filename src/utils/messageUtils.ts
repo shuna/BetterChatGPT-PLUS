@@ -32,8 +32,10 @@ type WorkerResponse =
 let worker: Worker | null = null;
 let requestId = 0;
 let ready = false;
+let unavailable = false;
 let initPromise: Promise<void> | null = null;
 const listeners: Set<() => void> = new Set();
+const INIT_TIMEOUT_MS = 5000;
 
 const pendingRequests = new Map<
   number,
@@ -43,7 +45,26 @@ const pendingRequests = new Map<
   }
 >();
 
+const failPendingRequests = (reason: Error) => {
+  pendingRequests.forEach(({ reject }) => reject(reason));
+  pendingRequests.clear();
+};
+
+const markWorkerUnavailable = (reason: Error) => {
+  ready = false;
+  unavailable = true;
+  initPromise = null;
+  listeners.clear();
+  failPendingRequests(reason);
+  worker?.terminate();
+  worker = null;
+};
+
 const getWorker = (): Worker => {
+  if (unavailable) {
+    throw new Error('Tokenizer worker is unavailable');
+  }
+
   if (!worker) {
     worker = new Worker(new URL('../workers/tokenizerWorker.ts', import.meta.url), {
       type: 'module',
@@ -67,6 +88,12 @@ const getWorker = (): Worker => {
 
       pending.resolve(response);
     };
+    worker.onerror = () => {
+      markWorkerUnavailable(new Error('Tokenizer worker failed to initialize'));
+    };
+    worker.onmessageerror = () => {
+      markWorkerUnavailable(new Error('Tokenizer worker message handling failed'));
+    };
   }
 
   return worker;
@@ -83,14 +110,24 @@ const postToWorker = (message: WorkerPayload): Promise<WorkerResponse> => {
 };
 
 export const loadEncoder = async (): Promise<void> => {
+  if (unavailable) return;
   if (ready) return;
   if (!initPromise) {
-    initPromise = postToWorker({ type: 'init' }).then(() => undefined);
+    initPromise = Promise.race([
+      postToWorker({ type: 'init' }).then(() => undefined),
+      new Promise<void>((_, reject) => {
+        window.setTimeout(() => {
+          reject(new Error('Tokenizer worker initialization timed out'));
+        }, INIT_TIMEOUT_MS);
+      }),
+    ]).catch(() => {
+      markWorkerUnavailable(new Error('Tokenizer worker initialization failed'));
+    });
   }
   await initPromise;
 };
 
-export const isEncoderReady = (): boolean => ready;
+export const isEncoderReady = (): boolean => ready || unavailable;
 
 export const onEncoderReady = (fn: () => void): (() => void) => {
   if (ready) {
@@ -107,8 +144,14 @@ const countTokens = async (
 ): Promise<number> => {
   if (!messages || messages.length === 0) return 0;
   await loadEncoder();
-  const response = await postToWorker({ type: 'countTokens', messages, model });
-  return response.type === 'countTokensResult' ? response.count : 0;
+  if (unavailable) return 0;
+  try {
+    const response = await postToWorker({ type: 'countTokens', messages, model });
+    return response.type === 'countTokensResult' ? response.count : 0;
+  } catch {
+    unavailable = true;
+    return 0;
+  }
 };
 
 export const limitMessageTokens = async (
@@ -117,13 +160,19 @@ export const limitMessageTokens = async (
   model: ModelOptions
 ): Promise<MessageInterface[]> => {
   await loadEncoder();
-  const response = await postToWorker({
-    type: 'limitMessages',
-    messages,
-    model,
-    limit,
-  });
-  return response.type === 'limitMessagesResult' ? response.messages : messages;
+  if (unavailable) return messages;
+  try {
+    const response = await postToWorker({
+      type: 'limitMessages',
+      messages,
+      model,
+      limit,
+    });
+    return response.type === 'limitMessagesResult' ? response.messages : messages;
+  } catch {
+    unavailable = true;
+    return messages;
+  }
 };
 
 export const updateTotalTokenUsed = async (

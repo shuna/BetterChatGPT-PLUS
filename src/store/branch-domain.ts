@@ -275,9 +275,8 @@ export const appendNodeToActivePathState = (
   content: ContentInterface[],
   currentContentStore: ContentStoreData
 ) => {
-  const contentStore = { ...currentContentStore };
-  const updatedChats = cloneChatAt(chats, chatIndex);
-  const tree = updatedChats[chatIndex].branchTree!;
+  const { chats: updatedChats, chat, tree, contentStore } =
+    prepareBranchMutationState(chats, chatIndex, currentContentStore);
   const parentId = tree.activePath[tree.activePath.length - 1] ?? null;
   const newId = uuidv4();
 
@@ -289,9 +288,15 @@ export const appendNodeToActivePathState = (
     createdAt: Date.now(),
   };
   tree.activePath.push(newId);
-  updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
 
-  return { chats: updatedChats, contentStore, newId };
+  const finalized = finalizePreparedBranchMutationState({
+    chats: updatedChats,
+    chat,
+    tree,
+    contentStore,
+  });
+
+  return { ...finalized, newId };
 };
 
 export const upsertMessageAtIndexState = (

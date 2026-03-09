@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { _defaultChatConfig, _defaultImageDetail } from '@constants/chat';
 import type { BranchClipboard, ChatInterface, ContentInterface } from '@type/chat';
 import {
+  appendNodeToActivePathState,
   createBranchState,
   deleteBranchState,
   ensureBranchTreeState,
@@ -220,5 +221,22 @@ describe('branch-domain', () => {
       role: 'assistant',
       content: textContent('updated world'),
     });
+  });
+
+  it('appends into a flat chat by first materializing a branch tree', () => {
+    const updated = appendNodeToActivePathState(
+      [createChat()],
+      0,
+      'assistant',
+      textContent('follow-up'),
+      {}
+    );
+
+    expect(updated.chats[0].branchTree).toBeDefined();
+    expect(updated.chats[0].messages.at(-1)).toEqual({
+      role: 'assistant',
+      content: textContent('follow-up'),
+    });
+    expect(updated.chats[0].branchTree?.activePath).toHaveLength(3);
   });
 });
