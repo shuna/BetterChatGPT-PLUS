@@ -306,6 +306,7 @@ const ChatContent = () => {
           key={currentChatIndex}
           className='h-full'
           totalCount={items.length}
+          computeItemKey={(index) => activePath[items[index].originalIndex] ?? `${currentChatId}:${items[index].originalIndex}`}
           overscan={600}
           followOutput={handleFollowOutput}
           atBottomStateChange={setAtBottom}

@@ -20,6 +20,7 @@ const EditViewButtons = memo(
     handleBranchOnly,
     handleBranchGenerate,
     handleSave,
+    handleCancel,
     setIsModalOpen,
     setIsEdit,
     _setContent,
@@ -44,6 +45,7 @@ const EditViewButtons = memo(
     handleBranchOnly: () => void;
     handleBranchGenerate: () => void;
     handleSave: () => void;
+    handleCancel: () => void;
     setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
     setIsEdit: React.Dispatch<React.SetStateAction<boolean>>;
     _setContent: React.Dispatch<React.SetStateAction<ContentInterface[]>>;
@@ -276,7 +278,7 @@ const EditViewButtons = memo(
             {sticky || (
               <button
                 className='btn relative btn-neutral'
-                onClick={() => setIsEdit(false)}
+                onClick={handleCancel}
                 aria-label={t('cancel') as string}
               >
                 <div className='flex items-center justify-center gap-2'>
