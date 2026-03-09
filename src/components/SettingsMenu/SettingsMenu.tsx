@@ -17,7 +17,6 @@ import HideShareGPTToggle from './HideShareGPTToggle';
 import TotalTokenCost, { TotalTokenCostToggle } from './TotalTokenCost';
 import ClearConversation from '@components/Menu/MenuOptions/ClearConversation';
 import DisplayChatSizeToggle from './DisplayChatSizeToggle';
-import MigrationButton from './MigrationButton';
 import ProviderMenuButton from './ProviderMenuButton';
 
 const SettingsMenu = () => {
@@ -64,7 +63,6 @@ const SettingsMenu = () => {
             <ChatConfigMenu />
             <TotalTokenCost />
             <ProviderMenuButton />
-            <MigrationButton />
           </div>
         </PopupModal>
       )}
