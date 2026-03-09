@@ -9,7 +9,7 @@
       "nothingImported": "インポートされたデータはありません",
       "unrecognisedDataFormat": "認識できないデータ形式です。対応形式: BetterGPTエクスポート、OpenAIエクスポート、OpenAI Playground (JSON)",
       "chatsImported": "{{total}}件中{{imported}}件のチャットがインポートされました。",
-      "unsupportedModels": "非対応モデル: {{models}} は利用できません。インポート前に設定→カスタムモデルから追加してください。"
+      "unsupportedModels": "非対応モデル: {{models}} は利用できません。AIプロバイダ設定のCustomタブから追加してください。"
     },
     "reduceMessagesSuccess": "{{count}}件のメッセージが削減されました。",
     "partialImportMessages": "{{total}}件のメッセージを想定していましたが、{{count}}件しか見つかりませんでした"

@@ -99,6 +99,12 @@ export interface LocalStorageInterfaceV12ToV13
   providerModelCache: Record<string, unknown[]>;
 }
 
+export interface LocalStorageInterfaceV13ToV14
+  extends LocalStorageInterfaceV12ToV13 {
+  providerCustomModels: Record<string, unknown[]>;
+  _legacyCustomModels?: unknown[];
+}
+
 export interface LocalStorageInterfaceV10ToV11
   extends LocalStorageInterfaceV9ToV10 {
   // branchTree is inside ChatInterface, no new top-level fields

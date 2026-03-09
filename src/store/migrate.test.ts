@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { _defaultChatConfig, _defaultImageDetail } from '@constants/chat';
 import { DEFAULT_PROVIDERS } from './provider-config';
-import { migrateV9, migrateV10, migrateV11, migrateV12 } from './migrate';
+import { migrateV9, migrateV10, migrateV11, migrateV12, migrateV13 } from './migrate';
 
 // ---------------------------------------------------------------------------
 // v9 → v10: provider migration from flat apiKey/apiEndpoint
@@ -259,5 +259,54 @@ describe('migrateV12', () => {
     const state = {} as any;
     expect(() => migrateV12(state)).not.toThrow();
     expect(state.providerModelCache).toEqual({});
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v13 → v14: providerCustomModels + legacy customModels preservation
+// ---------------------------------------------------------------------------
+describe('migrateV13', () => {
+  it('initializes providerCustomModels as empty object when no customModels', () => {
+    const state = {} as any;
+    migrateV13(state);
+    expect(state.providerCustomModels).toEqual({});
+    expect(state._legacyCustomModels).toBeUndefined();
+  });
+
+  it('preserves legacy customModels in _legacyCustomModels', () => {
+    const legacy = [
+      { id: 'my-model', name: 'My Model', context_length: 4096 },
+      { id: 'another', name: 'Another' },
+    ];
+    const state = { customModels: legacy } as any;
+    migrateV13(state);
+
+    expect(state.providerCustomModels).toEqual({});
+    expect(state._legacyCustomModels).toEqual(legacy);
+    expect(state.customModels).toBeUndefined();
+  });
+
+  it('does not set _legacyCustomModels when customModels is empty array', () => {
+    const state = { customModels: [] } as any;
+    migrateV13(state);
+
+    expect(state.providerCustomModels).toEqual({});
+    expect(state._legacyCustomModels).toBeUndefined();
+    expect(state.customModels).toBeUndefined();
+  });
+
+  it('deletes customModels field after migration', () => {
+    const state = { customModels: [{ id: 'x' }] } as any;
+    migrateV13(state);
+
+    expect(state).not.toHaveProperty('customModels');
+  });
+
+  it('handles non-array customModels gracefully', () => {
+    const state = { customModels: 'invalid' } as any;
+    migrateV13(state);
+
+    expect(state.providerCustomModels).toEqual({});
+    expect(state._legacyCustomModels).toBeUndefined();
   });
 });

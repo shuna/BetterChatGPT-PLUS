@@ -12,7 +12,6 @@ import { normalizeConfigStream } from '@utils/streamSupport';
 
 const ChatTitle = React.memo(() => {
   const { t } = useTranslation('model');
-  const customModels = useStore((state) => state.customModels);
   const favoriteModels = useStore((state) => state.favoriteModels) || [];
   const providers = useStore((state) => state.providers) || {};
   const chat = useStore(

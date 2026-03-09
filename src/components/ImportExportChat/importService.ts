@@ -94,7 +94,7 @@ const warnUnsupportedModels = (chats: unknown[], t: Translator) => {
       ns: 'import',
       models: unsupportedModels.join(', '),
     }) ||
-      `Unsupported model(s): ${unsupportedModels.join(', ')}. Please add them in Settings → Custom Models before importing.`,
+      `Unsupported model(s): ${unsupportedModels.join(', ')}. Please add them in AI Provider Settings → Custom tab before importing.`,
     { autoClose: 15000 }
   );
   return true;

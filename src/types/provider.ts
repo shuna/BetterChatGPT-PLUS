@@ -31,11 +31,24 @@ export interface ProviderModel {
   streamSupport?: boolean;
 }
 
+export interface CustomProviderModel {
+  modelId: string;
+  providerId: ProviderId;
+  name?: string;
+  modelType: 'text' | 'image';
+  contextLength?: number;
+  promptPrice?: number;
+  completionPrice?: number;
+  imagePrice?: number;
+  streamSupport?: boolean;
+}
+
 export interface FavoriteModel {
   modelId: string;
   providerId: ProviderId;
   promptPrice?: number;
   completionPrice?: number;
+  imagePrice?: number;
   contextLength?: number;
   modelType?: 'text' | 'image';
   streamSupport?: boolean;

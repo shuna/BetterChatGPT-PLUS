@@ -51,7 +51,7 @@ vi.mock('@store/store', () => ({
       chats: testContext.storeState.chats,
       folders: testContext.storeState.folders,
       contentStore: testContext.storeState.contentStore,
-      customModels: [],
+      providerCustomModels: {},
       setChats: testContext.setChats,
       setFolders: testContext.setFolders,
     }),

@@ -1,5 +1,6 @@
 import { StoreSlice } from './store';
 import {
+  CustomProviderModel,
   FavoriteModel,
   ProviderConfig,
   ProviderId,
@@ -12,6 +13,8 @@ export interface ProviderSlice {
   providers: Record<ProviderId, ProviderConfig>;
   favoriteModels: FavoriteModel[];
   providerModelCache: Partial<Record<ProviderId, ProviderModel[]>>;
+  providerCustomModels: Partial<Record<ProviderId, CustomProviderModel[]>>;
+  _legacyCustomModels?: unknown[];
   showProviderMenu: boolean;
   setProviderApiKey: (id: ProviderId, key: string) => void;
   setProviderEndpoint: (id: ProviderId, endpoint: string) => void;
@@ -19,12 +22,18 @@ export interface ProviderSlice {
   setFavoriteModels: (models: FavoriteModel[]) => void;
   setProviderModelCache: (id: ProviderId, models: ProviderModel[]) => void;
   setShowProviderMenu: (show: boolean) => void;
+  addProviderCustomModel: (model: CustomProviderModel) => void;
+  updateProviderCustomModel: (providerId: ProviderId, modelId: string, patch: Partial<CustomProviderModel>) => void;
+  removeProviderCustomModel: (providerId: ProviderId, modelId: string) => void;
+  clearLegacyCustomModels: () => void;
 }
 
 export const createProviderSlice: StoreSlice<ProviderSlice> = (set, get) => ({
   providers: { ...DEFAULT_PROVIDERS },
   favoriteModels: [],
   providerModelCache: {},
+  providerCustomModels: {},
+  _legacyCustomModels: undefined,
   showProviderMenu: false,
   setProviderApiKey: (id: ProviderId, key: string) => {
     if (get().providers[id]?.apiKey === key) return;
@@ -67,6 +76,53 @@ export const createProviderSlice: StoreSlice<ProviderSlice> = (set, get) => ({
     set((prev: ProviderSlice) => ({
       ...prev,
       showProviderMenu: show,
+    }));
+  },
+  addProviderCustomModel: (model: CustomProviderModel) => {
+    set((prev: ProviderSlice) => {
+      const existing = prev.providerCustomModels[model.providerId] || [];
+      if (existing.some((m) => m.modelId === model.modelId)) return prev;
+      return {
+        ...prev,
+        providerCustomModels: {
+          ...prev.providerCustomModels,
+          [model.providerId]: [...existing, model],
+        },
+      };
+    });
+  },
+  updateProviderCustomModel: (providerId: ProviderId, modelId: string, patch: Partial<CustomProviderModel>) => {
+    set((prev: ProviderSlice) => {
+      const existing = prev.providerCustomModels[providerId];
+      if (!existing) return prev;
+      return {
+        ...prev,
+        providerCustomModels: {
+          ...prev.providerCustomModels,
+          [providerId]: existing.map((m) =>
+            m.modelId === modelId ? { ...m, ...patch, modelId, providerId } : m
+          ),
+        },
+      };
+    });
+  },
+  removeProviderCustomModel: (providerId: ProviderId, modelId: string) => {
+    set((prev: ProviderSlice) => {
+      const existing = prev.providerCustomModels[providerId];
+      if (!existing) return prev;
+      return {
+        ...prev,
+        providerCustomModels: {
+          ...prev.providerCustomModels,
+          [providerId]: existing.filter((m) => m.modelId !== modelId),
+        },
+      };
+    });
+  },
+  clearLegacyCustomModels: () => {
+    set((prev: ProviderSlice) => ({
+      ...prev,
+      _legacyCustomModels: undefined,
     }));
   },
 });

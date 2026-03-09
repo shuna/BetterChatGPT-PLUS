@@ -13,9 +13,10 @@ const useAppBootstrap = () => {
   const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
 
   useEffect(() => {
-    // Auto-open provider menu if no favorites and no custom models
-    const { favoriteModels, customModels, setShowProviderMenu } = useStore.getState();
-    if ((!favoriteModels || favoriteModels.length === 0) && (!customModels || customModels.length === 0)) {
+    // Auto-open provider menu if no favorites and no provider custom models
+    const { favoriteModels, providerCustomModels, setShowProviderMenu } = useStore.getState();
+    const hasCustomModels = Object.values(providerCustomModels).some((m) => m && m.length > 0);
+    if ((!favoriteModels || favoriteModels.length === 0) && !hasCustomModels) {
       setShowProviderMenu(true);
     }
 

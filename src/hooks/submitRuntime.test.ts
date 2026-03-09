@@ -20,7 +20,7 @@ vi.mock('@store/store', () => ({
     getState: () => ({
       generatingSessions: {},
       removeSession: mockRemoveSession,
-      customModels: [],
+      providerCustomModels: {},
       totalTokenUsed: {},
       setTotalTokenUsed: () => {},
       ...mockState,
@@ -159,7 +159,7 @@ describe('executeSubmitStream', () => {
       contentStore: {},
       favoriteModels: [],
       providerModelCache: {},
-      customModels: [],
+      providerCustomModels: {},
     };
 
     mockGetChatCompletion

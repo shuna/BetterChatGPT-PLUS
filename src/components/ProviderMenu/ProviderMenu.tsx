@@ -11,9 +11,12 @@ import {
   sortModels,
   useProviderModels,
 } from './providerMenuHelpers';
-import ProviderModelList, { ManualModelInput } from './ProviderModelList';
+import ProviderModelList from './ProviderModelList';
+import ProviderCustomModelList from './ProviderCustomModelList';
 import ProviderSettingsForm from './ProviderSettingsForm';
 import ProviderSidebar from './ProviderSidebar';
+
+type ViewMode = 'browse' | 'custom';
 
 const ProviderMenu = ({
   setIsModalOpen,
@@ -32,6 +35,7 @@ const ProviderMenu = ({
   const toggleFavoriteModel = useStore((state) => state.toggleFavoriteModel);
 
   const [selectedProvider, setSelectedProvider] = useState<ProviderId>('openrouter');
+  const [viewMode, setViewMode] = useState<ViewMode>('browse');
   const { models, loading, loadModels, refreshModels } = useProviderModels(providers);
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState<SortField>('alpha');
@@ -42,7 +46,6 @@ const ProviderMenu = ({
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortField(field);
-      // Default directions per field
       setSortDir(field === 'alpha' ? 'asc' : 'desc');
     }
   };
@@ -50,19 +53,16 @@ const ProviderMenu = ({
   const [endpointInput, setEndpointInput] = useState('');
   const [apiVersionInput, setApiVersionInput] = useState('');
 
-  // Sync inputs when provider changes
   useEffect(() => {
     setApiKeyInput(providers[selectedProvider]?.apiKey || '');
     setEndpointInput(providers[selectedProvider]?.endpoint || '');
     setApiVersionInput(apiVersion || '');
   }, [selectedProvider, providers, apiVersion]);
 
-  // Load models when provider is selected
   useEffect(() => {
     loadModels(selectedProvider);
   }, [loadModels, selectedProvider]);
 
-  // Reload models when API key changes for current provider
   const handleSaveSettings = () => {
     const currentProvider = providers[selectedProvider];
     const hasConfigChanges =
@@ -77,12 +77,10 @@ const ProviderMenu = ({
     setApiVersion(apiVersionInput);
     const providerName = providers[selectedProvider]?.name || selectedProvider;
 
-    // Show toast notification
     useStore.getState().setToastStatus('success');
     useStore.getState().setToastMessage(`${providerName}: ${t('provider.saved', '設定を保存しました')}`);
     useStore.getState().setToastShow(true);
 
-    // Re-fetch models with new key without clearing existing list
     const updatedConfig = { ...currentProvider, apiKey: apiKeyInput, endpoint: endpointInput };
     refreshModels(selectedProvider, updatedConfig);
   };
@@ -155,26 +153,54 @@ const ProviderMenu = ({
             />
 
             <div className='flex-1 flex flex-col overflow-hidden'>
-              <ProviderModelList
-                search={search}
-                onSearchChange={setSearch}
-                loading={loading}
-                selectedProvider={selectedProvider}
-                filteredModels={filteredModels}
-                providers={providers}
-                sortField={sortField}
-                sortDir={sortDir}
-                onSort={handleSort}
-                favoriteModels={favoriteModels}
-                onToggleFavorite={toggleFavoriteModel}
-              />
+              {/* Browse / Custom tabs */}
+              <div className='flex border-b dark:border-gray-600'>
+                <button
+                  className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                    viewMode === 'browse'
+                      ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                  onClick={() => setViewMode('browse')}
+                >
+                  {t('provider.tabBrowse', '公式')}
+                </button>
+                <button
+                  className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                    viewMode === 'custom'
+                      ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                  onClick={() => setViewMode('custom')}
+                >
+                  Custom
+                </button>
+              </div>
 
-              <hr className='border-gray-200 dark:border-gray-600' />
-              <ManualModelInput
-                selectedProvider={selectedProvider}
-                favoriteModels={favoriteModels}
-                onToggleFavorite={toggleFavoriteModel}
-              />
+              {viewMode === 'browse' ? (
+                <>
+                  <ProviderModelList
+                    search={search}
+                    onSearchChange={setSearch}
+                    loading={loading}
+                    selectedProvider={selectedProvider}
+                    filteredModels={filteredModels}
+                    providers={providers}
+                    sortField={sortField}
+                    sortDir={sortDir}
+                    onSort={handleSort}
+                    favoriteModels={favoriteModels}
+                    onToggleFavorite={toggleFavoriteModel}
+                  />
+
+                </>
+              ) : (
+                <ProviderCustomModelList
+                  selectedProvider={selectedProvider}
+                  favoriteModels={favoriteModels}
+                  onToggleFavorite={toggleFavoriteModel}
+                />
+              )}
 
               <ProviderSettingsForm
                 selectedProvider={selectedProvider}

@@ -12,6 +12,7 @@ import Toast from '@components/Toast';
 import { ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import VersionInfo from '@components/Footer/VersionInfo';
+import LegacyCustomModelsBanner from '@components/LegacyCustomModelsBanner';
 
 function App() {
   useAppBootstrap();
@@ -20,6 +21,7 @@ function App() {
 
   return (
     <div className='overflow-hidden w-full h-full relative'>
+      <LegacyCustomModelsBanner />
       <Menu />
       <div className={`flex h-full flex-1 flex-col`}>
         <Chat />

@@ -7,7 +7,6 @@ import { AuthSlice, createAuthSlice } from './auth-slice';
 import { ConfigSlice, createConfigSlice } from './config-slice';
 import { PromptSlice, createPromptSlice } from './prompt-slice';
 import { ToastSlice, createToastSlice } from './toast-slice';
-import { CustomModelsSlice, createCustomModelsSlice } from './custom-models-slice';
 import { ProviderSlice, createProviderSlice } from './provider-slice';
 import { BranchSlice, createBranchSlice } from './branch-slice';
 import {
@@ -23,7 +22,6 @@ export type StoreState = ChatSlice &
   ConfigSlice &
   PromptSlice &
   ToastSlice &
-  CustomModelsSlice &
   ProviderSlice &
   BranchSlice;
 
@@ -41,7 +39,6 @@ const useStore = create<StoreState>()(
       ...createConfigSlice(set, get),
       ...createPromptSlice(set, get),
       ...createToastSlice(set, get),
-      ...createCustomModelsSlice(set, get),
       ...createProviderSlice(set, get),
       ...createBranchSlice(set, get),
     }),
@@ -49,7 +46,7 @@ const useStore = create<StoreState>()(
       name: 'free-chat-gpt',
       storage: createJSONStorage(() => compressedStorage),
       partialize: (state) => createPartializedState(state),
-      version: 13,
+      version: 14,
       onRehydrateStorage: () => (state) => {
         if (!state) return;
         const repaired = rehydrateStoreState(state as StoreState);

@@ -20,6 +20,7 @@ import {
   LocalStorageInterfaceV10ToV11,
   LocalStorageInterfaceV11ToV12,
   LocalStorageInterfaceV12ToV13,
+  LocalStorageInterfaceV13ToV14,
   ContentInterface,
 } from '@type/chat';
 import { ContentStoreData, addContent } from '@utils/contentStore';
@@ -232,4 +233,17 @@ export const migrateV12 = (persistedState: LocalStorageInterfaceV12ToV13) => {
       }
     }
   }
+};
+
+export const migrateV13 = (persistedState: LocalStorageInterfaceV13ToV14) => {
+  persistedState.providerCustomModels = {};
+
+  // Legacy customModels have no providerId — cannot auto-migrate.
+  // Preserve in _legacyCustomModels so the UI can show model names
+  // and guide the user to manually re-register under the correct provider.
+  const legacy = (persistedState as unknown as { customModels?: unknown[] }).customModels;
+  if (Array.isArray(legacy) && legacy.length > 0) {
+    persistedState._legacyCustomModels = legacy;
+  }
+  delete (persistedState as unknown as { customModels?: unknown }).customModels;
 };

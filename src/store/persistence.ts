@@ -18,6 +18,7 @@ import {
   LocalStorageInterfaceV10ToV11,
   LocalStorageInterfaceV11ToV12,
   LocalStorageInterfaceV12ToV13,
+  LocalStorageInterfaceV13ToV14,
 } from '@type/chat';
 import {
   migrateV10,
@@ -35,6 +36,7 @@ import {
   migrateV8_1,
   migrateV8_1_fix,
   migrateV8_2,
+  migrateV13,
 } from './migrate';
 import type { StoreState } from './store';
 
@@ -71,12 +73,13 @@ type PersistedStoreState = Omit<
   | 'defaultImageDetail'
   | 'autoScroll'
   | 'hideShareGPT'
-  | 'customModels'
   | 'providers'
   | 'favoriteModels'
   | 'branchClipboard'
   | 'contentStore'
   | 'providerModelCache'
+  | 'providerCustomModels'
+  | '_legacyCustomModels'
   >,
   'chats'
 > & {
@@ -89,8 +92,9 @@ export const PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'hideMenuOptions', 'firstVisit', 'hideSideMenu', 'folders', 'enterToSubmit',
   'inlineLatex', 'markdownMode', 'totalTokenUsed', 'countTotalTokens',
   'displayChatSize', 'menuWidth', 'defaultImageDetail', 'autoScroll',
-  'hideShareGPT', 'customModels', 'providers', 'favoriteModels',
+  'hideShareGPT', 'providers', 'favoriteModels',
   'branchClipboard', 'contentStore', 'providerModelCache',
+  'providerCustomModels', '_legacyCustomModels',
 ];
 
 let previousInputRefs: Partial<Record<keyof PersistedStoreState, unknown>> = {};
@@ -126,12 +130,13 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     defaultImageDetail: state.defaultImageDetail,
     autoScroll: state.autoScroll,
     hideShareGPT: state.hideShareGPT,
-    customModels: state.customModels,
     providers: state.providers,
     favoriteModels: state.favoriteModels,
     branchClipboard: state.branchClipboard,
     contentStore: state.contentStore,
     providerModelCache: state.providerModelCache,
+    providerCustomModels: state.providerCustomModels,
+    _legacyCustomModels: state._legacyCustomModels,
   };
 }
 
@@ -198,7 +203,8 @@ type PersistedStateVersion =
   | LocalStorageInterfaceV9ToV10
   | LocalStorageInterfaceV10ToV11
   | LocalStorageInterfaceV11ToV12
-  | LocalStorageInterfaceV12ToV13;
+  | LocalStorageInterfaceV12ToV13
+  | LocalStorageInterfaceV13ToV14;
 
 type MigrationEntry = {
   version: number;
@@ -221,6 +227,7 @@ const MIGRATIONS: MigrationEntry[] = [
   { version: 10, apply: (state) => migrateV10(state as LocalStorageInterfaceV10ToV11) },
   { version: 11, apply: (state) => migrateV11(state as LocalStorageInterfaceV11ToV12) },
   { version: 12, apply: (state) => migrateV12(state as LocalStorageInterfaceV12ToV13) },
+  { version: 13, apply: (state) => migrateV13(state as LocalStorageInterfaceV13ToV14) },
 ];
 
 export const migratePersistedState = (

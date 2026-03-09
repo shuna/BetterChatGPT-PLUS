@@ -1,11 +1,27 @@
 import useStore from '@store/store';
-import type { ProviderId, FavoriteModel, ProviderModel } from '@type/provider';
-import type { CustomModel } from '@store/custom-models-slice';
+import type { CustomProviderModel, ProviderId, FavoriteModel, ProviderModel } from '@type/provider';
 
 export interface ModelCostEntry {
   prompt: { price: number; unit: number };
   completion: { price: number; unit: number };
   image?: { price: number; unit: number };
+}
+
+function findProviderCustomModel(
+  providerCustomModels: Partial<Record<ProviderId, CustomProviderModel[]>> | undefined,
+  modelId: string,
+  providerId?: ProviderId
+): CustomProviderModel | undefined {
+  if (!providerCustomModels) return undefined;
+  if (providerId) {
+    return providerCustomModels[providerId]?.find((m) => m.modelId === modelId);
+  }
+  for (const models of Object.values(providerCustomModels)) {
+    if (!models) continue;
+    const found = models.find((m) => m.modelId === modelId);
+    if (found) return found;
+  }
+  return undefined;
 }
 
 function findFavorite(
@@ -19,13 +35,6 @@ function findFavorite(
     );
   }
   return favorites.find((f) => f.modelId === modelId);
-}
-
-function findCustomModel(
-  customModels: CustomModel[],
-  modelId: string
-): CustomModel | undefined {
-  return customModels.find((m) => m.id === modelId);
 }
 
 function findCachedModel(
@@ -50,13 +59,11 @@ export function getModelType(
 ): 'text' | 'image' {
   const state = useStore.getState();
 
+  const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+  if (custom) return custom.modelType;
+
   const fav = findFavorite(state.favoriteModels, modelId, providerId);
   if (fav?.modelType) return fav.modelType;
-
-  const custom = findCustomModel(state.customModels, modelId);
-  if (custom) {
-    return custom.architecture.modality.includes('image') ? 'image' : 'text';
-  }
 
   const cached = findCachedModel(state.providerModelCache, modelId, providerId);
   if (cached?.modelType) return cached.modelType;
@@ -69,13 +76,11 @@ export function useModelType(
   providerId?: ProviderId
 ): 'text' | 'image' {
   return useStore((state) => {
+    const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+    if (custom) return custom.modelType;
+
     const fav = findFavorite(state.favoriteModels, modelId, providerId);
     if (fav?.modelType) return fav.modelType;
-
-    const custom = findCustomModel(state.customModels, modelId);
-    if (custom) {
-      return custom.architecture.modality.includes('image') ? 'image' : 'text';
-    }
 
     const cached = findCachedModel(
       state.providerModelCache,
@@ -94,11 +99,11 @@ export function getModelMaxToken(
 ): number {
   const state = useStore.getState();
 
+  const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+  if (custom?.contextLength) return custom.contextLength;
+
   const fav = findFavorite(state.favoriteModels, modelId, providerId);
   if (fav?.contextLength) return fav.contextLength;
-
-  const custom = findCustomModel(state.customModels, modelId);
-  if (custom) return custom.context_length;
 
   const cached = findCachedModel(state.providerModelCache, modelId, providerId);
   if (cached?.contextLength) return cached.contextLength;
@@ -112,21 +117,25 @@ export function getModelCost(
 ): ModelCostEntry | undefined {
   const state = useStore.getState();
 
+  const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+  if (custom && (custom.promptPrice != null || custom.completionPrice != null)) {
+    return {
+      prompt: { price: custom.promptPrice ?? 0, unit: 1 },
+      completion: { price: custom.completionPrice ?? 0, unit: 1 },
+      ...(custom.imagePrice != null && custom.imagePrice > 0
+        ? { image: { price: custom.imagePrice, unit: 1 } }
+        : {}),
+    };
+  }
+
   const fav = findFavorite(state.favoriteModels, modelId, providerId);
   if (fav?.promptPrice != null || fav?.completionPrice != null) {
     return {
       prompt: { price: fav.promptPrice ?? 0, unit: 1 },
       completion: { price: fav.completionPrice ?? 0, unit: 1 },
-    };
-  }
-
-  const custom = findCustomModel(state.customModels, modelId);
-  if (custom) {
-    const imagePrice = parseFloat(custom.pricing.image);
-    return {
-      prompt: { price: parseFloat(custom.pricing.prompt), unit: 1 },
-      completion: { price: parseFloat(custom.pricing.completion), unit: 1 },
-      ...(imagePrice > 0 ? { image: { price: imagePrice, unit: 1 } } : {}),
+      ...(fav.imagePrice != null && fav.imagePrice > 0
+        ? { image: { price: fav.imagePrice, unit: 1 } }
+        : {}),
     };
   }
 
@@ -147,11 +156,11 @@ export function isModelStreamSupported(
 ): boolean {
   const state = useStore.getState();
 
+  const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+  if (custom?.streamSupport != null) return custom.streamSupport;
+
   const fav = findFavorite(state.favoriteModels, modelId, providerId);
   if (fav?.streamSupport != null) return fav.streamSupport;
-
-  const custom = findCustomModel(state.customModels, modelId);
-  if (custom) return custom.is_stream_supported;
 
   const cached = findCachedModel(state.providerModelCache, modelId, providerId);
   if (cached?.streamSupport != null) return cached.streamSupport;
@@ -162,8 +171,13 @@ export function isModelStreamSupported(
 export function isKnownModel(modelId: string): boolean {
   const state = useStore.getState();
 
+  if (state.providerCustomModels) {
+    for (const models of Object.values(state.providerCustomModels)) {
+      if (models?.some((m) => m.modelId === modelId)) return true;
+    }
+  }
+
   if (state.favoriteModels.some((f) => f.modelId === modelId)) return true;
-  if (state.customModels.some((m) => m.id === modelId)) return true;
 
   for (const models of Object.values(state.providerModelCache)) {
     if (models?.some((m) => m.id === modelId)) return true;

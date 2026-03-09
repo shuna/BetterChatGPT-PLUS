@@ -23,7 +23,6 @@ const ChatViewTabs = ({
   const { t } = useTranslation('model');
   const { t: tMain } = useTranslation();
   const advancedMode = useStore((state) => state.advancedMode);
-  const customModels = useStore((state) => state.customModels);
   const favoriteModels = useStore((state) => state.favoriteModels) || [];
   const providers = useStore((state) => state.providers) || {};
   const chat = useStore(
