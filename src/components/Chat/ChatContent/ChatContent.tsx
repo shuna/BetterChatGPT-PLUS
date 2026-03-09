@@ -53,6 +53,9 @@ const ChatContent = () => {
   const currentChatId = useStore((state) =>
     state.chats?.[state.currentChatIndex]?.id ?? ''
   );
+  const activePath = useStore((state) =>
+    state.chats?.[state.currentChatIndex]?.branchTree?.activePath ?? []
+  );
   const isCurrentChatGenerating = useStore((state) =>
     Object.values(state.generatingSessions).some((s) => s.chatId === currentChatId)
   );
@@ -184,13 +187,14 @@ const ChatContent = () => {
           role={message.role}
           content={message.content}
           messageIndex={originalIndex}
+          nodeId={activePath[originalIndex]}
         />
         {!isCurrentChatGenerating && advancedMode && (
           <NewMessageButton messageIndex={originalIndex} />
         )}
       </>
     );
-  }, [items, isCurrentChatGenerating, advancedMode]);
+  }, [items, activePath, isCurrentChatGenerating, advancedMode]);
 
   const Header = useMemo(() => {
     if (!isCurrentChatGenerating && advancedMode && messages?.length === 0) {

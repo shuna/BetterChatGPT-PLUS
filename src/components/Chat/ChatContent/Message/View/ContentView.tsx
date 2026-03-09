@@ -27,11 +27,13 @@ const ContentView = memo(
     content,
     setIsEdit,
     messageIndex,
+    nodeId,
   }: {
     role: string;
     content: ContentInterface[];
     setIsEdit: React.Dispatch<React.SetStateAction<boolean>>;
     messageIndex: number;
+    nodeId?: string;
   }) => {
     const { handleSubmit, handleSubmitMidChat } = useSubmit();
 
@@ -40,12 +42,6 @@ const ContentView = memo(
     const currentChatIndex = useStore((state) => state.currentChatIndex);
     const removeMessageAtIndex = useStore((state) => state.removeMessageAtIndex);
     const moveMessage = useStore((state) => state.moveMessage);
-    const nodeId = useStore(
-      (state) =>
-        state.chats?.[state.currentChatIndex]?.branchTree?.activePath?.[
-          messageIndex
-        ]
-    );
     const lastMessageIndex = useStore((state) =>
       state.chats ? state.chats[state.currentChatIndex].messages.length - 1 : 0
     );
@@ -63,13 +59,20 @@ const ContentView = memo(
     const isCurrentChatGenerating = useStore((state) =>
       Object.values(state.generatingSessions).some((s) => s.chatId === currentChatId)
     );
+    const resolveCurrentMessageIndex = () => {
+      if (!nodeId) return messageIndex;
+      const activePath =
+        useStore.getState().chats?.[currentChatIndex]?.branchTree?.activePath ?? [];
+      const resolvedIndex = activePath.indexOf(nodeId);
+      return resolvedIndex >= 0 ? resolvedIndex : messageIndex;
+    };
 
     const handleDelete = () => {
-      removeMessageAtIndex(currentChatIndex, messageIndex);
+      removeMessageAtIndex(currentChatIndex, resolveCurrentMessageIndex());
     };
 
     const handleMove = (direction: 'up' | 'down') => {
-      moveMessage(currentChatIndex, messageIndex, direction);
+      moveMessage(currentChatIndex, resolveCurrentMessageIndex(), direction);
     };
 
     const handleMoveUp = () => {
@@ -85,7 +88,7 @@ const ContentView = memo(
 
       const plan = resolveRegenerateTarget(
         role as Role,
-        messageIndex,
+        resolveCurrentMessageIndex(),
         useStore.getState().chats![currentChatIndex].messages.length
       );
       if (!plan) return;

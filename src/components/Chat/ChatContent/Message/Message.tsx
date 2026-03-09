@@ -32,11 +32,13 @@ const Message = React.memo(
     role,
     content,
     messageIndex,
+    nodeId,
     sticky = false,
   }: {
     role: Role;
     content: ContentInterface[],
     messageIndex: number;
+    nodeId?: string;
     sticky?: boolean;
   }) => {
     const hideSideMenu = useStore((state) => state.hideSideMenu);
@@ -44,20 +46,21 @@ const Message = React.memo(
     const toggleCollapseNode = useStore((state) => state.toggleCollapseNode);
     const currentChatIndex = useStore((state) => state.currentChatIndex);
 
-    const nodeId = useStore((state) => {
+    const resolvedNodeId = useStore((state) => {
       if (sticky) return undefined;
+      if (nodeId) return nodeId;
       const chat = state.chats?.[state.currentChatIndex];
       return chat?.branchTree?.activePath?.[messageIndex] ?? String(messageIndex);
     });
 
     const isCollapsed = useStore((state) => {
-      if (sticky || !nodeId) return false;
+      if (sticky || !resolvedNodeId) return false;
       const chatIndex = state.currentChatIndex;
       const collapsedNodes =
         state.collapsedNodeMaps[String(chatIndex)] ??
         state.chats?.[chatIndex]?.collapsedNodes ??
         {};
-      return collapsedNodes[nodeId] ?? false;
+      return collapsedNodes[resolvedNodeId] ?? false;
     });
 
     const collapsedPreview = (() => {
@@ -112,6 +115,7 @@ const Message = React.memo(
                   role={role}
                   content={content}
                   messageIndex={messageIndex}
+                  nodeId={resolvedNodeId}
                   sticky={sticky}
                 />
               </>

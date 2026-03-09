@@ -9,11 +9,13 @@ const MessageContent = ({
   role,
   content,
   messageIndex,
+  nodeId,
   sticky = false,
 }: {
   role: string;
   content: ContentInterface[];
   messageIndex: number;
+  nodeId?: string;
   sticky?: boolean;
 }) => {
   const [isEdit, setIsEdit] = useState<boolean>(sticky);
@@ -28,6 +30,7 @@ const MessageContent = ({
           content={content}
           setIsEdit={setIsEdit}
           messageIndex={messageIndex}
+          nodeId={nodeId}
           sticky={sticky}
         />
       ) : (
@@ -36,6 +39,7 @@ const MessageContent = ({
           content={content}
           setIsEdit={setIsEdit}
           messageIndex={messageIndex}
+          nodeId={nodeId}
         />
       )}
     </div>

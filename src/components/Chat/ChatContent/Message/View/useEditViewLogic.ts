@@ -16,15 +16,22 @@ function isChatBusy(): boolean {
   return Object.values(state.generatingSessions).some((s) => s.chatId === chatId);
 }
 
-function isMessageBusy(messageIndex: number): boolean {
+function isNodeBusy(nodeId?: string): boolean {
+  if (!nodeId) return false;
   const state = useStore.getState();
   const chat = state.chats?.[state.currentChatIndex];
   const chatId = chat?.id ?? '';
-  const nodeId = chat?.branchTree?.activePath?.[messageIndex];
-  if (!nodeId) return false;
   return Object.values(state.generatingSessions).some(
     (s) => s.chatId === chatId && s.targetNodeId === nodeId
   );
+}
+
+function resolveMessageIndex(nodeId: string | undefined, fallbackIndex: number): number {
+  if (!nodeId) return fallbackIndex;
+  const activePath =
+    useStore.getState().chats?.[useStore.getState().currentChatIndex]?.branchTree?.activePath;
+  const resolvedIndex = activePath?.indexOf(nodeId) ?? -1;
+  return resolvedIndex >= 0 ? resolvedIndex : fallbackIndex;
 }
 
 const blobToBase64 = (blob: Blob): Promise<string> =>
@@ -39,11 +46,13 @@ export function useEditViewLogic({
   content,
   setIsEdit,
   messageIndex,
+  nodeId,
   sticky,
 }: {
   content: ContentInterface[];
   setIsEdit: React.Dispatch<React.SetStateAction<boolean>>;
   messageIndex: number;
+  nodeId?: string;
   sticky?: boolean;
 }) {
   const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
@@ -71,6 +80,13 @@ export function useEditViewLogic({
     };
   });
   const favoriteModels = useStore((state) => state.favoriteModels) || [];
+  const currentChatId = useStore((state) => state.chats?.[state.currentChatIndex]?.id ?? '');
+  const isGeneratingMessage = useStore((state) =>
+    !!nodeId &&
+    Object.values(state.generatingSessions).some(
+      (session) => session.chatId === currentChatId && session.targetNodeId === nodeId
+    )
+  );
   const modelValid = !!model && (
     favoriteModels.some((f) =>
       f.modelId === model && (providerId ? f.providerId === providerId : true)
@@ -167,7 +183,9 @@ export function useEditViewLogic({
       (c) => c.type === 'image_url'
     );
     if (sticky && !hasTextContent && !hasImageContent) return;
-    if (!sticky && isMessageBusy(messageIndex)) return;
+    if (!sticky && isNodeBusy(nodeId)) return;
+
+    const resolvedMessageIndex = resolveMessageIndex(nodeId, messageIndex);
 
     if (sticky) {
       appendNodeToActivePath(currentChatIndex, inputRole, _content);
@@ -176,8 +194,8 @@ export function useEditViewLogic({
     } else {
       upsertMessageAtIndex(
         currentChatIndex,
-        messageIndex,
-        useStore.getState().chats![currentChatIndex].messages[messageIndex].role,
+        resolvedMessageIndex,
+        useStore.getState().chats![currentChatIndex].messages[resolvedMessageIndex].role,
         _content
       );
       setIsEdit(false);
@@ -185,37 +203,44 @@ export function useEditViewLogic({
   };
 
   const handleBranchOnly = () => {
-    if (sticky || isMessageBusy(messageIndex)) return;
+    if (sticky || isNodeBusy(nodeId)) return;
     const { ensureBranchTree, createBranch } = useStore.getState();
     ensureBranchTree(currentChatIndex);
-    const tree = useStore.getState().chats![currentChatIndex].branchTree!;
-    const nodeId = tree.activePath[messageIndex];
-    if (!nodeId) return;
-    createBranch(currentChatIndex, nodeId, _content);
+    const activeNodeId =
+      nodeId ??
+      useStore.getState().chats![currentChatIndex].branchTree!.activePath[
+        resolveMessageIndex(nodeId, messageIndex)
+      ];
+    if (!activeNodeId) return;
+    createBranch(currentChatIndex, activeNodeId, _content);
     setIsEdit(false);
   };
 
   const handleBranchGenerate = () => {
-    if (isChatBusy() || !modelValid || sticky) return;
+    if (isChatBusy() || !modelValid || sticky || isNodeBusy(nodeId)) return;
     const { ensureBranchTree, createBranch } = useStore.getState();
     ensureBranchTree(currentChatIndex);
-    const tree = useStore.getState().chats![currentChatIndex].branchTree!;
-    const nodeId = tree.activePath[messageIndex];
-    if (!nodeId) return;
-    createBranch(currentChatIndex, nodeId, _content);
+    const activeNodeId =
+      nodeId ??
+      useStore.getState().chats![currentChatIndex].branchTree!.activePath[
+        resolveMessageIndex(nodeId, messageIndex)
+      ];
+    if (!activeNodeId) return;
+    createBranch(currentChatIndex, activeNodeId, _content);
     setIsEdit(false);
     handleSubmit();
   };
 
   const handleGenerateNextOnly = () => {
     if (isChatBusy() || !modelValid) return;
-    const nextIndex = messageIndex + 1;
+    const resolvedMessageIndex = resolveMessageIndex(nodeId, messageIndex);
+    const nextIndex = resolvedMessageIndex + 1;
     const chats = useStore.getState().chats!;
     const removeCount = nextIndex < chats[currentChatIndex].messages.length ? 1 : 0;
     replaceMessageAndPruneFollowing(
       currentChatIndex,
-      messageIndex,
-      chats[currentChatIndex].messages[messageIndex].role,
+      resolvedMessageIndex,
+      chats[currentChatIndex].messages[resolvedMessageIndex].role,
       _content,
       removeCount
     );
@@ -237,12 +262,16 @@ export function useEditViewLogic({
       _setContent([{ type: 'text', text: '' } as TextContentInterface]);
       resetTextAreaHeight();
     } else {
+      const resolvedMessageIndex = resolveMessageIndex(nodeId, messageIndex);
       const chats = useStore.getState().chats!;
-      const removeCount = Math.max(0, chats[currentChatIndex].messages.length - (messageIndex + 1));
+      const removeCount = Math.max(
+        0,
+        chats[currentChatIndex].messages.length - (resolvedMessageIndex + 1)
+      );
       replaceMessageAndPruneFollowing(
         currentChatIndex,
-        messageIndex,
-        chats[currentChatIndex].messages[messageIndex].role,
+        resolvedMessageIndex,
+        chats[currentChatIndex].messages[resolvedMessageIndex].role,
         _content,
         removeCount
       );
@@ -291,6 +320,7 @@ export function useEditViewLogic({
     model,
     providerId,
     modelValid,
+    isGeneratingMessage,
     currentChatIndex,
     _content,
     _setContent,

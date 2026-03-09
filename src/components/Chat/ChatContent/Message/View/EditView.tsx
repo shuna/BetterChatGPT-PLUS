@@ -12,16 +12,18 @@ const EditView = ({
   content,
   setIsEdit,
   messageIndex,
+  nodeId,
   sticky,
 }: {
   role?: string;
   content: ContentInterface[];
   setIsEdit: React.Dispatch<React.SetStateAction<boolean>>;
   messageIndex: number;
+  nodeId?: string;
   sticky?: boolean;
 }) => {
   const { t } = useTranslation();
-  const logic = useEditViewLogic({ content, setIsEdit, messageIndex, sticky });
+  const logic = useEditViewLogic({ content, setIsEdit, messageIndex, nodeId, sticky });
   const isImageModel = useModelType(logic.model, logic.providerId) === 'image';
 
   return (
@@ -86,6 +88,7 @@ const EditView = ({
         providerId={logic.providerId}
         modelValid={logic.modelValid}
         messageIndex={messageIndex}
+        isGeneratingMessage={logic.isGeneratingMessage}
         role={role}
       />
       {logic.isModalOpen && (

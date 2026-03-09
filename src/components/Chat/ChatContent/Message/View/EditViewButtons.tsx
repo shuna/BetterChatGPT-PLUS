@@ -32,6 +32,7 @@ const EditViewButtons = memo(
     providerId,
     modelValid,
     messageIndex,
+    isGeneratingMessage,
     role,
   }: {
     sticky?: boolean;
@@ -55,10 +56,11 @@ const EditViewButtons = memo(
     providerId?: ProviderId;
     modelValid: boolean;
     messageIndex: number;
+    isGeneratingMessage: boolean;
     role?: string;
   }) => {
     const { t } = useTranslation();
-    const generating = useStore((state) => {
+    const isCurrentChatGenerating = useStore((state) => {
       const chatId = state.chats?.[state.currentChatIndex]?.id ?? '';
       return Object.values(state.generatingSessions).some((s) => s.chatId === chatId);
     });
@@ -146,7 +148,7 @@ const EditViewButtons = memo(
             {sticky && (
               <button
                 className={`btn relative mr-2 btn-primary ${
-                  generating || noModel ? 'cursor-not-allowed opacity-40' : ''
+                  isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
                 }`}
                 onClick={handleGenerate}
                 disabled={noModel}
@@ -163,7 +165,7 @@ const EditViewButtons = memo(
                 <>
                   <button
                     className={`btn relative mr-2 btn-primary ${
-                      generating || noModel ? 'cursor-not-allowed opacity-40' : ''
+                      isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
                     }`}
                     onClick={handleGenerateNextOnly}
                     disabled={noModel}
@@ -177,7 +179,7 @@ const EditViewButtons = memo(
                       noModel ? 'cursor-not-allowed opacity-40' : ''
                     }`}
                     onClick={() => {
-                      !generating && !noModel && setIsModalOpen(true);
+                      !isCurrentChatGenerating && !noModel && setIsModalOpen(true);
                     }}
                     disabled={noModel}
                   >
@@ -187,7 +189,7 @@ const EditViewButtons = memo(
                   </button>
                   <button
                     className={`btn relative mr-2 btn-neutral ${
-                      generating || noModel ? 'cursor-not-allowed opacity-40' : ''
+                      isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
                     }`}
                     onClick={handleBranchGenerate}
                     disabled={noModel}
@@ -200,7 +202,7 @@ const EditViewButtons = memo(
                   </button>
                   <button
                     className={`btn relative mr-2 btn-neutral ${
-                      generating ? 'cursor-not-allowed opacity-40' : ''
+                      isGeneratingMessage ? 'cursor-not-allowed opacity-40' : ''
                     }`}
                     onClick={handleBranchOnly}
                     title={t('branchOnly') as string}
@@ -215,10 +217,10 @@ const EditViewButtons = memo(
                 <>
                   <button
                     className={`btn relative mr-2 btn-primary ${
-                      noModel ? 'cursor-not-allowed opacity-40' : ''
+                      isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
                     }`}
                     onClick={() => {
-                      !generating && !noModel && handleGenerate();
+                      !isCurrentChatGenerating && !noModel && handleGenerate();
                     }}
                     disabled={noModel}
                   >
@@ -228,7 +230,7 @@ const EditViewButtons = memo(
                   </button>
                   <button
                     className={`btn relative mr-2 btn-neutral ${
-                      generating || noModel ? 'cursor-not-allowed opacity-40' : ''
+                      isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
                     }`}
                     onClick={handleBranchGenerate}
                     disabled={noModel}
@@ -241,7 +243,7 @@ const EditViewButtons = memo(
                   </button>
                   <button
                     className={`btn relative mr-2 btn-neutral ${
-                      generating ? 'cursor-not-allowed opacity-40' : ''
+                      isGeneratingMessage ? 'cursor-not-allowed opacity-40' : ''
                     }`}
                     onClick={handleBranchOnly}
                     title={t('branchOnly') as string}
@@ -259,7 +261,7 @@ const EditViewButtons = memo(
               className={`btn relative mr-2 ${
                 sticky
                   ? `btn-neutral ${
-                      generating ? 'cursor-not-allowed opacity-40' : ''
+                      isCurrentChatGenerating ? 'cursor-not-allowed opacity-40' : ''
                     }`
                   : 'btn-neutral'
               }`}
