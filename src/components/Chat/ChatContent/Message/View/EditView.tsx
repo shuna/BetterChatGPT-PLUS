@@ -14,6 +14,7 @@ const EditView = ({
   messageIndex,
   nodeId,
   sticky,
+  editSessionKey,
 }: {
   role?: string;
   content: ContentInterface[];
@@ -21,9 +22,17 @@ const EditView = ({
   messageIndex: number;
   nodeId?: string;
   sticky?: boolean;
+  editSessionKey: string;
 }) => {
   const { t } = useTranslation();
-  const logic = useEditViewLogic({ content, setIsEdit, messageIndex, nodeId, sticky });
+  const logic = useEditViewLogic({
+    content,
+    setIsEdit,
+    messageIndex,
+    nodeId,
+    sticky,
+    editSessionKey,
+  });
   const isImageModel = useModelType(logic.model, logic.providerId) === 'image';
 
   return (
@@ -76,6 +85,7 @@ const EditView = ({
         handleBranchOnly={logic.handleBranchOnly}
         handleBranchGenerate={logic.handleBranchGenerate}
         handleSave={logic.handleSave}
+        handleCancel={logic.handleCancel}
         setIsModalOpen={logic.setIsModalOpen}
         setIsEdit={setIsEdit}
         _setContent={logic._setContent}

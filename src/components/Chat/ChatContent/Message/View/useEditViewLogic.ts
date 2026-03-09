@@ -42,18 +42,32 @@ const blobToBase64 = (blob: Blob): Promise<string> =>
     reader.readAsDataURL(blob);
   });
 
+const editDraftCache = new Map<string, ContentInterface[]>();
+
+const cloneContent = (content: ContentInterface[]): ContentInterface[] =>
+  content.map((item) =>
+    item.type === 'text'
+      ? { ...item }
+      : {
+          ...item,
+          image_url: { ...item.image_url },
+        }
+  );
+
 export function useEditViewLogic({
   content,
   setIsEdit,
   messageIndex,
   nodeId,
   sticky,
+  editSessionKey,
 }: {
   content: ContentInterface[];
   setIsEdit: React.Dispatch<React.SetStateAction<boolean>>;
   messageIndex: number;
   nodeId?: string;
   sticky?: boolean;
+  editSessionKey: string;
 }) {
   const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
   const inputRole = useStore((state) => state.inputRole);
@@ -93,11 +107,27 @@ export function useEditViewLogic({
     ) || isKnownModel(model)
   );
 
-  const [_content, _setContent] = useState<ContentInterface[]>(content);
+  const [_content, setContentState] = useState<ContentInterface[]>(
+    () => cloneContent(editDraftCache.get(editSessionKey) ?? content)
+  );
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [imageUrl, setImageUrl] = useState<string>('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const _setContent = React.useCallback<React.Dispatch<React.SetStateAction<ContentInterface[]>>>(
+    (value) => {
+      setContentState((previous) => {
+        const nextValue = typeof value === 'function' ? value(previous) : value;
+        const cloned = cloneContent(nextValue);
+        editDraftCache.set(editSessionKey, cloned);
+        return cloned;
+      });
+    },
+    [editSessionKey]
+  );
+  const clearDraft = React.useCallback(() => {
+    editDraftCache.delete(editSessionKey);
+  }, [editSessionKey]);
 
   const { handleSubmit, handleSubmitMidChat } = useSubmit();
 
@@ -190,6 +220,7 @@ export function useEditViewLogic({
     if (sticky) {
       appendNodeToActivePath(currentChatIndex, inputRole, _content);
       _setContent([{ type: 'text', text: '' } as TextContentInterface]);
+      clearDraft();
       resetTextAreaHeight();
     } else {
       upsertMessageAtIndex(
@@ -198,6 +229,7 @@ export function useEditViewLogic({
         useStore.getState().chats![currentChatIndex].messages[resolvedMessageIndex].role,
         _content
       );
+      clearDraft();
       setIsEdit(false);
     }
   };
@@ -213,6 +245,7 @@ export function useEditViewLogic({
       ];
     if (!activeNodeId) return;
     createBranch(currentChatIndex, activeNodeId, _content);
+    clearDraft();
     setIsEdit(false);
   };
 
@@ -227,6 +260,7 @@ export function useEditViewLogic({
       ];
     if (!activeNodeId) return;
     createBranch(currentChatIndex, activeNodeId, _content);
+    clearDraft();
     setIsEdit(false);
     handleSubmit();
   };
@@ -244,6 +278,7 @@ export function useEditViewLogic({
       _content,
       removeCount
     );
+    clearDraft();
     setIsEdit(false);
     handleSubmitMidChat(nextIndex);
   };
@@ -260,6 +295,7 @@ export function useEditViewLogic({
         appendNodeToActivePath(currentChatIndex, inputRole, _content);
       }
       _setContent([{ type: 'text', text: '' } as TextContentInterface]);
+      clearDraft();
       resetTextAreaHeight();
     } else {
       const resolvedMessageIndex = resolveMessageIndex(nodeId, messageIndex);
@@ -275,6 +311,7 @@ export function useEditViewLogic({
         _content,
         removeCount
       );
+      clearDraft();
       setIsEdit(false);
     }
     handleSubmit();
@@ -316,6 +353,11 @@ export function useEditViewLogic({
     (fileInputRef.current as HTMLInputElement)?.click();
   };
 
+  const handleCancel = () => {
+    clearDraft();
+    setIsEdit(false);
+  };
+
   return {
     model,
     providerId,
@@ -340,6 +382,7 @@ export function useEditViewLogic({
     handleBranchGenerate,
     handleGenerateNextOnly,
     handleGenerate,
+    handleCancel,
     handlePaste,
     handleUploadButtonClick,
   };
