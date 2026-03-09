@@ -153,7 +153,7 @@ const EditViewButtons = memo(
                   isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
                 }`}
                 onClick={handleGenerate}
-                disabled={noModel}
+                disabled={isCurrentChatGenerating || noModel}
                 aria-label={t('generate') as string}
               >
                 <div className='flex items-center justify-center gap-2'>
@@ -170,7 +170,7 @@ const EditViewButtons = memo(
                       isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
                     }`}
                     onClick={handleGenerateNextOnly}
-                    disabled={noModel}
+                    disabled={isCurrentChatGenerating || noModel}
                   >
                     <div className='flex items-center justify-center gap-2'>
                       {t('generate')}
@@ -178,12 +178,14 @@ const EditViewButtons = memo(
                   </button>
                   <button
                     className={`btn relative mr-2 btn-neutral ${
-                      noModel ? 'cursor-not-allowed opacity-40' : ''
+                      isCurrentChatGenerating || noModel
+                        ? 'cursor-not-allowed opacity-40'
+                        : ''
                     }`}
                     onClick={() => {
                       !isCurrentChatGenerating && !noModel && setIsModalOpen(true);
                     }}
-                    disabled={noModel}
+                    disabled={isCurrentChatGenerating || noModel}
                   >
                     <div className='flex items-center justify-center gap-2'>
                       {t('generateBelow')}
@@ -194,7 +196,7 @@ const EditViewButtons = memo(
                       isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
                     }`}
                     onClick={handleBranchGenerate}
-                    disabled={noModel}
+                    disabled={isCurrentChatGenerating || noModel}
                     title={t('branchGenerate') as string}
                   >
                     <div className='flex items-center justify-center gap-2'>
@@ -224,7 +226,7 @@ const EditViewButtons = memo(
                     onClick={() => {
                       !isCurrentChatGenerating && !noModel && handleGenerate();
                     }}
-                    disabled={noModel}
+                    disabled={isCurrentChatGenerating || noModel}
                   >
                     <div className='flex items-center justify-center gap-2'>
                       {t('generate')}
@@ -235,7 +237,7 @@ const EditViewButtons = memo(
                       isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
                     }`}
                     onClick={handleBranchGenerate}
-                    disabled={noModel}
+                    disabled={isCurrentChatGenerating || noModel}
                     title={t('branchGenerate') as string}
                   >
                     <div className='flex items-center justify-center gap-2'>
