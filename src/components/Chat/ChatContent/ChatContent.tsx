@@ -21,6 +21,7 @@ import { defaultModel, reduceMessagesToTotalToken } from '@constants/chat';
 import { toast } from 'react-toastify';
 
 const EMPTY_MESSAGES: never[] = [];
+const SCROLL_TO_BOTTOM_TOP = Number.MAX_SAFE_INTEGER;
 
 const ChatContent = () => {
   const { t } = useTranslation();
@@ -166,7 +167,8 @@ const ChatContent = () => {
   }, [items]);
 
   const handleScrollToBottom = useCallback(() => {
-    virtuosoRef.current?.scrollToIndex({ index: 'LAST', behavior: 'smooth' });
+    // Scroll to the actual end of the scroller so the footer/spacer is included.
+    virtuosoRef.current?.scrollTo({ top: SCROLL_TO_BOTTOM_TOP, behavior: 'smooth' });
   }, []);
 
   const handleFollowOutput = useCallback((isAtBottom: boolean) => {
