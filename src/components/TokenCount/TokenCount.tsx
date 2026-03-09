@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import countTokens from '@utils/messageUtils';
 import useTokenEncoder from '@hooks/useTokenEncoder';
 import { isTextContent, isImageContent } from '@type/chat';
+import { getModelCost } from '@utils/modelLookup';
 
 const TokenCount = React.memo(() => {
   const { t } = useTranslation();
@@ -29,21 +30,21 @@ const TokenCount = React.memo(() => {
   );
 
   const favoriteModels = useStore((state) => state.favoriteModels) || [];
+  const providerCustomModels = useStore((state) => state.providerCustomModels);
+  const providerModelCache = useStore((state) => state.providerModelCache);
 
   const costDisplay = useMemo(() => {
-    const fav = providerId
-      ? favoriteModels.find((f) => f.modelId === model && f.providerId === providerId)
-      : favoriteModels.find((f) => f.modelId === model);
-    if (!fav) {
+    const costEntry = getModelCost(model, providerId);
+    if (!costEntry) {
       return t('tokenCostModelNotRegistered', { defaultValue: 'cost unknown: model not registered' });
     }
-    if (fav.promptPrice == null) {
+    if (costEntry.prompt.price == null) {
       return t('tokenCostNoPricingData', { defaultValue: 'cost unknown: no pricing data' });
     }
-    const promptCost = tokenCount * (fav.promptPrice / 1_000_000);
+    const promptCost = tokenCount * (costEntry.prompt.price / costEntry.prompt.unit);
     const cost = promptCost.toPrecision(3);
     return `$${cost}`;
-  }, [model, providerId, tokenCount, favoriteModels, t]);
+  }, [model, providerId, tokenCount, favoriteModels, providerCustomModels, providerModelCache, t]);
 
   useEffect(() => {
     let cancelled = false;
