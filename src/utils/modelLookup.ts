@@ -120,8 +120,8 @@ export function getModelCost(
   const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
   if (custom) {
     return {
-      prompt: { price: custom.promptPrice ?? null, unit: 1 },
-      completion: { price: custom.completionPrice ?? null, unit: 1 },
+      prompt: { price: custom.promptPrice ?? null, unit: 1_000_000 },
+      completion: { price: custom.completionPrice ?? null, unit: 1_000_000 },
       image: { price: custom.imagePrice ?? null, unit: 1 },
     };
   }
@@ -129,8 +129,8 @@ export function getModelCost(
   const fav = findFavorite(state.favoriteModels, modelId, providerId);
   if (fav) {
     return {
-      prompt: { price: fav.promptPrice ?? null, unit: 1 },
-      completion: { price: fav.completionPrice ?? null, unit: 1 },
+      prompt: { price: fav.promptPrice ?? null, unit: 1_000_000 },
+      completion: { price: fav.completionPrice ?? null, unit: 1_000_000 },
       image: { price: fav.imagePrice ?? null, unit: 1 },
     };
   }
@@ -138,8 +138,8 @@ export function getModelCost(
   const cached = findCachedModel(state.providerModelCache, modelId, providerId);
   if (cached) {
     return {
-      prompt: { price: cached.promptPrice ?? null, unit: 1 },
-      completion: { price: cached.completionPrice ?? null, unit: 1 },
+      prompt: { price: cached.promptPrice ?? null, unit: 1_000_000 },
+      completion: { price: cached.completionPrice ?? null, unit: 1_000_000 },
     };
   }
 
