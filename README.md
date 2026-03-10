@@ -1,5 +1,11 @@
 # Weavelet Canvas
 
+[![License: CC0-1.0](https://img.shields.io/badge/License-CC0_1.0-lightgrey.svg)](./LICENSE)
+[![Deploy to GitHub Pages](https://github.com/shuna/weavelet-canvas/actions/workflows/deploy.yml/badge.svg)](https://github.com/shuna/weavelet-canvas/actions/workflows/deploy.yml)
+[![Cloudflare Pages](https://img.shields.io/badge/Cloudflare-Pages-F38020?logo=cloudflare&logoColor=white)](https://pages.cloudflare.com/)
+[![React](https://img.shields.io/badge/React-18-20232A?logo=react)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-4.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+
 ## English
 
 Weavelet Canvas is a visual workspace for AI conversations built on top of the BetterChatGPT and BetterChatGPT-PLUS lineage.  
