@@ -8,13 +8,49 @@
 
 ## English
 
-Weavelet Canvas is a visual workspace for AI conversations built on top of the BetterChatGPT and BetterChatGPT-PLUS lineage.  
-It focuses on local-first conversation management, visual branching, and editing workflows for OpenAI-compatible APIs.
+Weavelet Canvas is a chat workspace forked from BetterChatGPT and BetterChatGPT-PLUS, designed for editing conversations and managing branches while switching between multiple AI providers.
 
-### About This Project
+Alongside multi-conversation management, model switching, message editing, saving, and synchronization, it supports OpenRouter and other OpenAI-compatible AI providers, and includes a visual branch editor for restructuring conversations.
 
-Weavelet Canvas is an open-source client for OpenAI-compatible conversational APIs.  
-It includes multi-conversation management, model switching, message editing, saving, synchronization, and a visual branch editor for restructuring conversations.
+### Feature Highlights
+
+The screenshots below use an English sample conversation so the main workflows are easy to scan at a glance.
+
+#### Workspace Overview
+
+![Workspace overview](./assets/readme/chat-main.png)
+
+- Chat and Branch Editor are available side by side in the same workspace
+- Messages can be edited in the middle of a conversation and saved directly into the flow
+- Local-first management is combined with optional sync, export, and model/provider controls
+- OpenRouter, OpenAI, DeepSeek, Mistral, Groq, Together AI, Perplexity, xAI, Cohere, and Fireworks can be configured from AI Provider Settings
+
+#### How the Main Workflow Fits Together
+
+```mermaid
+flowchart LR
+  A["Chat Workspace"] --> B["Edit or insert a message"]
+  B --> C["Regenerate next reply or continue manually"]
+  C --> D["Open the same node in Branch Editor"]
+  D --> E["Inspect branches as a visual tree"]
+  E --> F["Compare chats, export, or sync state"]
+```
+
+#### Focused Screens
+
+**Mid-conversation editing**
+
+![Mid-conversation editing](./assets/readme/chat-detail.png)
+
+- Save edits directly into the conversation without rebuilding the whole chat from scratch
+- Regenerate controls and per-message actions stay attached to the edited node
+
+**Visual branch inspection**
+
+![Visual branch inspection](./assets/readme/branch-detail.png)
+
+- Branch Editor turns the active conversation path into a readable node graph
+- This view is useful for checking branch structure before switching chats or comparing paths
 
 ### Main Changes Merged into This Fork
 
@@ -23,19 +59,18 @@ Below is a summary organized from the pull requests that have been merged into t
 #### Major Changes
 
 - Added a Visual Branch Editor for handling conversation branches visually
-- Added an action to regenerate only the next response after edits made in the middle of a conversation
-- Added UI and related logic to regenerate from every conversation bubble
-- Added multi-conversation view to the Branch Editor
 - Added collapsible message bubbles and improved the related interaction UI
-- Added an ON/OFF toggle for streaming responses to model settings
-- Added Service Worker-based background stream recovery
-- Added PWA support
 - Introduced transparent `lz-string` compression to improve localStorage / Google Drive persistence efficiency
 - Introduced ContentStore-based deduplication for message content to reduce storage usage
-- Implemented large-scale performance improvements around initial rendering, editing, chat switching, and collapsed-message handling
 
 #### Minor Changes
 
+- Implemented performance improvements around rendering, editing, and chat switching
+- Added PWA support
+- Added an ON/OFF toggle for streaming responses to model settings
+- Added Service Worker-based background stream recovery
+- Added an action to regenerate only the next response after edits made in the middle of a conversation and made it the default flow
+- Added UI and related logic to regenerate from every conversation bubble
 - Added a toggle for ShareGPT button visibility
 - Cleaned up the visibility of About / Author related menus
 - Improved feedback when saving provider API keys
@@ -104,13 +139,44 @@ This repository inherits those improvements while continuing to improve operatio
 
 ## 日本語
 
-Weavelet Canvas は、[BetterChatGPT](https://github.com/ztjhz/BetterChatGPT) と [BetterChatGPT-PLUS](https://github.com/animalnots/BetterChatGPT-PLUS) の系譜を引き継ぐ、AI 会話向けのビジュアルワークスペースです。  
-移行期間中のため、ローカルフォルダ名や一部の内部識別子には upstream 名が残っている場合があります。
+Weavelet Canvas は、[BetterChatGPT](https://github.com/ztjhz/BetterChatGPT) と [BetterChatGPT-PLUS](https://github.com/animalnots/BetterChatGPT-PLUS) からフォークした、複数のAIプロバイダを使い分けながら、会話の編集や分岐管理ができるチャット環境です。
 
-### このプロジェクトについて
+複数会話の管理、モデル切り替え、メッセージ編集、保存・同期に加えて、OpenAI 互換 API に対応した OpenRouter ほか複数の AI プロバイダ対応と、会話を再構成するための視覚的分岐エディタを備えています。
 
-Weavelet Canvas は、OpenAI 互換 API に対応した AI 会話用のオープンソースクライアントです。  
-複数会話の管理、モデル切り替え、メッセージ編集、保存・同期に加えて、会話を再構成するための視覚的分岐エディタを備えています。
+### 主要機能
+
+#### ワークスペース全体
+
+![Workspace overview](./assets/readme/chat-main.png)
+
+- 同じワークスペース内でチャットと分岐エディタを切り替えられます
+- 会話の途中メッセージを編集し、そのまま保存・再生成できます
+- OpenRouter、OpenAI、DeepSeek、Mistral、Groq、Together AI、Perplexity、xAI、Cohere、Fireworks などの AI プロバイダを設定できます
+
+#### 主な操作の流れ
+
+```mermaid
+flowchart LR
+  A["Chat Workspace"] --> B["Edit or insert a message"]
+  B --> C["Regenerate next reply or continue manually"]
+  C --> D["Open the same node in Branch Editor"]
+  D --> E["Inspect branches as a visual tree"]
+  E --> F["Compare chats, export, or sync state"]
+```
+
+**メッセージ編集と再生成操作**
+
+![Mid-conversation editing](./assets/readme/chat-detail.png)
+
+- 会話内のメッセージを自由に編集・挿入・削除できます
+- メッセージ単位で保存や再生成を進められます
+- メッセージごとの編集操作を操作しやすいホバーメニューにまとめています
+
+**見やすい分岐エディタ**
+
+![Visual branch inspection](./assets/readme/branch-detail.png)
+
+- 分岐エディタでは会話の流れをノードとして視覚的に編集できます
 
 ### このフォークで加えた主な変更
 
@@ -119,19 +185,18 @@ Weavelet Canvas は、OpenAI 互換 API に対応した AI 会話用のオープ
 #### 大きな変更
 
 - 会話の分岐を視覚的に扱える視覚的分岐エディタを追加
-- 編集途中の文脈に対して「次だけ再生成」できる操作を追加
-- すべての会話バブルから再生成できる UI と関連ロジックを追加
-- Branch Editor に multi-conversation view を追加
 - メッセージバブルの折りたたみ機能を追加し、操作 UI も改善
-- ストリーミング応答の ON/OFF 切り替えをモデル設定に追加
-- Service Worker を利用したバックグラウンドのストリーム復旧機能を追加
-- PWA 対応を追加
 - `lz-string` による透過圧縮を導入、localStorage / Google Drive 保存を効率化
 - ContentStore によるメッセージ内容の重複排除を導入し、保存容量を削減
-- 初期表示・編集・会話切り替え・折りたたみ周辺のパフォーマンスを改善
 
 #### 小さな変更
 
+- 表示・編集・会話切替周辺のパフォーマンスを改善
+- PWA 対応を追加
+- ストリーミング応答の ON/OFF 切り替えをモデル設定に追加
+- Service Worker を利用したバックグラウンドのストリーム復旧機能を追加
+- 編集途中の文脈に対して「次だけ再生成」できる操作を追加しデフォルト化
+- すべての会話バブルから再生成できる UI と関連ロジックを追加
 - ShareGPT ボタンの表示切替を追加
 - About / Author 系メニューの表示を整理
 - Provider API Key 保存時のフィードバックを改善
