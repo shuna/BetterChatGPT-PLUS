@@ -1,7 +1,8 @@
 import { Tiktoken } from '@dqbd/tiktoken/lite';
 
-import { isTextContent, MessageInterface } from '@type/chat';
+import { MessageInterface } from '@type/chat';
 import { ModelOptions } from '@type/chat';
+import { serializeMessagesForTokenCount } from '@utils/tokenizerSerialization';
 
 type InitMessage = {
   id: number;
@@ -67,16 +68,7 @@ const getConversationEncoding = (
   const msgSep = isGpt3 ? '\n' : '';
   const roleSep = isGpt3 ? '\n' : '<|im_sep|>';
 
-  const serialized = [
-    messages
-      .map(({ role, content }) => {
-        const textContent = content[0];
-        const text = textContent && isTextContent(textContent) ? textContent.text : '';
-        return `<|im_start|>${role}${roleSep}${text}<|im_end|>`;
-      })
-      .join(msgSep),
-    `<|im_start|>assistant${roleSep}`,
-  ].join(msgSep);
+  const serialized = serializeMessagesForTokenCount(messages, model);
 
   return encoder.encode(serialized, 'all');
 };

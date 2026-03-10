@@ -34,6 +34,7 @@
   "total": "合計",
   "resetCost": "コストをリセットする",
   "countTotalTokens": "トークンの合計数をカウント",
+  "tokenCountWithImages": "トークン: {{tokens}} / 画像: {{images}} ({{cost}})",
   "morePrompts": "ここでさらにプロンプトを見つけることができます：",
   "clearPrompts": "プロンプトをクリア",
   "postOnShareGPT": {

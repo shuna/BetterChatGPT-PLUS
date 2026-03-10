@@ -1,7 +1,6 @@
 import useStore from '@store/store';
 import { countImageInputs } from '@utils/cost';
 import {
-  isTextContent,
   MessageInterface,
   TotalTokenUsed,
 } from '@type/chat';
@@ -186,14 +185,10 @@ export const updateTotalTokenUsed = async (
     JSON.stringify(useStore.getState().totalTokenUsed)
   );
 
-  const textPrompts = promptMessages.filter(
-    (e) => Array.isArray(e.content) && e.content.some(isTextContent)
-  );
-
   const newImageTokens = countImageInputs(promptMessages);
 
   const [newPromptTokens, newCompletionTokens] = await Promise.all([
-    countTokens(textPrompts, model),
+    countTokens(promptMessages, model),
     countTokens([completionMessage], model),
   ]);
 

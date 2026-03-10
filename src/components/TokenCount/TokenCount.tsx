@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next';
 
 import countTokens from '@utils/messageUtils';
 import useTokenEncoder from '@hooks/useTokenEncoder';
-import { isTextContent } from '@type/chat';
 import { countImageInputs, calculateUsageCost } from '@utils/cost';
 
 const TokenCount = React.memo(() => {
@@ -61,11 +60,8 @@ const TokenCount = React.memo(() => {
     let cancelled = false;
 
     if (!generating) {
-      const textPrompts = messages.filter(
-        (e) => Array.isArray(e.content) && e.content.some(isTextContent)
-      );
       Promise.all([
-        countTokens(textPrompts, model),
+        countTokens(messages, model),
       ]).then(([newPromptTokens]) => {
         if (cancelled) return;
         setTokenCount(newPromptTokens);
@@ -81,7 +77,15 @@ const TokenCount = React.memo(() => {
   return (
     <div className='absolute top-[-16px] right-0'>
       <div className='text-xs italic text-gray-900 dark:text-gray-300'>
-        Tokens: {tokenCount} ({costDisplay})
+        {imageTokenCount > 0
+          ? t('tokenCountWithImages', {
+              ns: 'main',
+              defaultValue: 'Tokens: {{tokens}} / Images: {{images}} ({{cost}})',
+              tokens: tokenCount,
+              images: imageTokenCount,
+              cost: costDisplay,
+            })
+          : `Tokens: ${tokenCount} (${costDisplay})`}
       </div>
     </div>
   );
