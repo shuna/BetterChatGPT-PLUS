@@ -9,6 +9,7 @@ import MenuOptions from './MenuOptions';
 import CrossIcon2 from '@icon/CrossIcon2';
 import DownArrow from '@icon/DownArrow';
 import MenuIcon from '@icon/MenuIcon';
+import useSwipeGesture from '@hooks/useSwipeGesture';
 
 const Menu = () => {
   const hideSideMenu = useStore((state) => state.hideSideMenu);
@@ -18,6 +19,10 @@ const Menu = () => {
 
   const windowWidthRef = useRef<number>(window.innerWidth);
   const isResizing = useRef<boolean>(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+
+  const { edgeHandlers, menuHandlers } = useSwipeGesture(menuRef, backdropRef);
 
   useEffect(() => {
     if (window.innerWidth < 768) setHideSideMenu(true);
@@ -61,10 +66,12 @@ const Menu = () => {
     <>
       <div
         id='menu'
+        ref={menuRef}
         className={`group/menu dark bg-gray-900 fixed md:inset-y-0 md:flex md:flex-col transition-transform z-[999] top-0 left-0 h-full max-md:w-3/4 ${
           hideSideMenu ? 'translate-x-[-100%]' : 'translate-x-[0%]'
         }`}
         style={{ width: `${menuWidth}px` }}
+        {...menuHandlers}
       >
         <div className='flex h-full min-h-0 flex-col'>
           <div className='flex h-full w-full flex-1 items-start border-white/20'>
@@ -112,12 +119,19 @@ const Menu = () => {
       </div>
       <div
         id='menu-backdrop'
+        ref={backdropRef}
         className={`${
           hideSideMenu ? 'hidden' : ''
         } md:hidden fixed top-0 left-0 h-full w-full z-[60] bg-gray-900/70`}
         onClick={() => {
           setHideSideMenu(true);
         }}
+        {...menuHandlers}
+      />
+      {/* Swipe edge zone — invisible touch target on the left edge for opening */}
+      <div
+        className='md:hidden fixed top-0 left-0 h-full w-5 z-[998]'
+        {...edgeHandlers}
       />
     </>
   );
