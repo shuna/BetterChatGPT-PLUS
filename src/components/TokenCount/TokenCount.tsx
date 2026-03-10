@@ -5,8 +5,8 @@ import { useTranslation } from 'react-i18next';
 
 import countTokens from '@utils/messageUtils';
 import useTokenEncoder from '@hooks/useTokenEncoder';
-import { isTextContent, isImageContent } from '@type/chat';
-import { getModelCost } from '@utils/modelLookup';
+import { isTextContent } from '@type/chat';
+import { countImageInputs, calculateUsageCost } from '@utils/cost';
 
 const TokenCount = React.memo(() => {
   const { t } = useTranslation();
@@ -34,17 +34,28 @@ const TokenCount = React.memo(() => {
   const providerModelCache = useStore((state) => state.providerModelCache);
 
   const costDisplay = useMemo(() => {
-    const costEntry = getModelCost(model, providerId);
-    if (!costEntry) {
-      return t('tokenCostModelNotRegistered', { defaultValue: 'cost unknown: model not registered' });
-    }
-    if (costEntry.prompt.price == null) {
+    const result = calculateUsageCost(
+      {
+        promptTokens: tokenCount,
+        completionTokens: 0,
+        imageTokens: imageTokenCount,
+      },
+      model,
+      providerId
+    );
+
+    if (result.kind === 'unknown') {
+      if (result.reason === 'model-not-registered') {
+        return t('tokenCostModelNotRegistered', { defaultValue: 'cost unknown: model not registered' });
+      }
       return t('tokenCostNoPricingData', { defaultValue: 'cost unknown: no pricing data' });
     }
-    const promptCost = tokenCount * (costEntry.prompt.price / costEntry.prompt.unit);
-    const cost = promptCost.toPrecision(3);
+    if (result.isFree) {
+      return t('free', { ns: 'main', defaultValue: 'Free' });
+    }
+    const cost = result.cost.toPrecision(3);
     return `$${cost}`;
-  }, [model, providerId, tokenCount, favoriteModels, providerCustomModels, providerModelCache, t]);
+  }, [model, providerId, tokenCount, imageTokenCount, favoriteModels, providerCustomModels, providerModelCache, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,17 +64,12 @@ const TokenCount = React.memo(() => {
       const textPrompts = messages.filter(
         (e) => Array.isArray(e.content) && e.content.some(isTextContent)
       );
-      const imgPrompts = messages.filter(
-        (e) => Array.isArray(e.content) && e.content.some(isImageContent)
-      );
-
       Promise.all([
         countTokens(textPrompts, model),
-        countTokens(imgPrompts, model),
-      ]).then(([newPromptTokens, newImageTokens]) => {
+      ]).then(([newPromptTokens]) => {
         if (cancelled) return;
         setTokenCount(newPromptTokens);
-        setImageTokenCount(newImageTokens);
+        setImageTokenCount(countImageInputs(messages));
       });
     }
 

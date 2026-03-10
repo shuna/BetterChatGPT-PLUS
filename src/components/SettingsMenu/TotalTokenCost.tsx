@@ -6,41 +6,16 @@ import useStore from '@store/store';
 import Toggle from '@components/Toggle/Toggle';
 
 import CalculatorIcon from '@icon/CalculatorIcon';
-import { getModelCost } from '@utils/modelLookup';
 import { TotalTokenUsed, ModelOptions } from '@type/chat';
-import type { ProviderId } from '@type/provider';
+import { calculateUsageCost, parseTokenKey } from '@utils/cost';
 
-type CostMapping = { label: string; cost: number }[];
-
-/** Parse composite key "modelId:::providerId" or plain "modelId" */
-const parseTokenKey = (key: string): { modelId: string; providerId?: ProviderId } => {
-  const sep = key.indexOf(':::');
-  if (sep >= 0) return { modelId: key.slice(0, sep), providerId: key.slice(sep + 3) as ProviderId };
-  return { modelId: key };
-};
-
-const tokenCostToCost = (
-  tokenCost: TotalTokenUsed[ModelOptions],
-  model: ModelOptions,
-  providerId?: ProviderId
-) => {
-  if (!tokenCost) return 0;
-
-  const costEntry = getModelCost(model, providerId);
-
-  if (!costEntry) {
-    return -1;
-  }
-
-  const { prompt, completion, image } = costEntry;
-  const completionCost =
-    (completion.price / completion.unit) * tokenCost.completionTokens;
-  const promptCost = (prompt.price / prompt.unit) * tokenCost.promptTokens;
-  const imageCost = image
-    ? (image.price / image.unit) * tokenCost.imageTokens
-    : 0;
-  return completionCost + promptCost + imageCost;
-};
+type CostMapping = {
+  label: string;
+  kind: 'known' | 'unknown';
+  cost?: number;
+  isFree?: boolean;
+  reason?: 'model-not-registered' | 'no-pricing-data';
+}[];
 
 const TotalTokenCost = () => {
   const { t } = useTranslation(['main', 'model']);
@@ -59,8 +34,12 @@ const TotalTokenCost = () => {
     const updatedCostMapping: CostMapping = [];
     Object.entries(totalTokenUsed).forEach(([key, tokenCost]) => {
       const { modelId, providerId } = parseTokenKey(key);
-      const cost = tokenCostToCost(tokenCost, modelId as ModelOptions, providerId);
-      updatedCostMapping.push({ label: key, cost });
+      const result = calculateUsageCost(
+        tokenCost,
+        modelId as ModelOptions,
+        providerId
+      );
+      updatedCostMapping.push({ label: key, ...result });
     });
 
     setCostMapping(updatedCostMapping);
@@ -77,21 +56,41 @@ const TotalTokenCost = () => {
             </tr>
           </thead>
           <tbody>
-            {costMapping.map(({ label, cost }) => (
+            {costMapping.map((entry) => (
               <tr
-                key={label}
+                key={entry.label}
                 className='bg-white border-b dark:bg-gray-800 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
               >
-                <td className='px-4 py-2'>{label.replace(':::', ' / ')}</td>
-                <td className='px-4 py-2'>{cost.toPrecision(3)}</td>
+                <td className='px-4 py-2'>{entry.label.replace(':::', ' / ')}</td>
+                <td className='px-4 py-2'>
+                  {entry.kind === 'unknown'
+                    ? entry.reason === 'model-not-registered'
+                      ? t('tokenCostModelNotRegistered', { ns: 'main' })
+                      : t('tokenCostNoPricingData', { ns: 'main' })
+                    : entry.isFree
+                      ? t('free', { ns: 'main', defaultValue: 'Free' })
+                      : entry.cost?.toPrecision(3) ?? '0.00'}
+                </td>
               </tr>
             ))}
             <tr className='bg-white border-b dark:bg-gray-800 dark:border-gray-700 font-bold'>
               <td className='px-4 py-2'>{t('total', { ns: 'main' })}</td>
               <td className='px-4 py-2'>
-                {costMapping
-                  .reduce((prev, curr) => prev + curr.cost, 0)
-                  .toPrecision(3)}
+                {costMapping.some((entry) => entry.kind === 'unknown')
+                  ? t('tokenCostNoPricingData', { ns: 'main' })
+                  : (() => {
+                      const total = costMapping.reduce(
+                        (prev, curr) => prev + (curr.cost ?? 0),
+                        0
+                      );
+                      const hasEntries = costMapping.length > 0;
+                      const allFree =
+                        hasEntries &&
+                        costMapping.every((entry) => entry.kind === 'known' && entry.isFree);
+                      return allFree
+                        ? t('free', { ns: 'main', defaultValue: 'Free' })
+                        : total.toPrecision(3);
+                    })()}
               </td>
             </tr>
           </tbody>
@@ -133,21 +132,43 @@ export const TotalTokenCostDisplay = () => {
   const totalTokenUsed = useStore((state) => state.totalTokenUsed);
 
   const [totalCost, setTotalCost] = useState<number>(0);
+  const [allFree, setAllFree] = useState<boolean>(false);
 
   useEffect(() => {
     let updatedTotalCost = 0;
+    let hasUnknownCost = false;
+    let hasEntries = false;
+    let hasOnlyFreeModels = true;
     Object.entries(totalTokenUsed).forEach(([key, tokenCost]) => {
+      hasEntries = true;
       const { modelId, providerId } = parseTokenKey(key);
-      updatedTotalCost += tokenCostToCost(tokenCost, modelId as ModelOptions, providerId);
+      const result = calculateUsageCost(
+        tokenCost,
+        modelId as ModelOptions,
+        providerId
+      );
+      if (result.kind === 'unknown') {
+        hasUnknownCost = true;
+        return;
+      }
+      if (!result.isFree) {
+        hasOnlyFreeModels = false;
+      }
+      updatedTotalCost += result.cost;
     });
 
-    setTotalCost(updatedTotalCost);
+    setTotalCost(hasUnknownCost ? Number.NaN : updatedTotalCost);
+    setAllFree(hasEntries && hasOnlyFreeModels && !hasUnknownCost);
   }, [totalTokenUsed]);
 
   return (
     <a className='flex py-2 px-2 items-center gap-3 rounded-md hover:bg-gray-500/10 transition-colors duration-200 text-white text-sm'>
       <CalculatorIcon />
-      {`USD ${totalCost.toPrecision(3)}`}
+      {Number.isNaN(totalCost)
+        ? t('tokenCostNoPricingData', { ns: 'main' })
+        : allFree
+          ? t('free', { ns: 'main', defaultValue: 'Free' })
+          : `USD ${totalCost.toPrecision(3)}`}
     </a>
   );
 };

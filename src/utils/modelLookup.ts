@@ -2,9 +2,9 @@ import useStore from '@store/store';
 import type { CustomProviderModel, ProviderId, FavoriteModel, ProviderModel } from '@type/provider';
 
 export interface ModelCostEntry {
-  prompt: { price: number; unit: number };
-  completion: { price: number; unit: number };
-  image?: { price: number; unit: number };
+  prompt: { price: number | null; unit: number };
+  completion: { price: number | null; unit: number };
+  image?: { price: number | null; unit: number };
 }
 
 function findProviderCustomModel(
@@ -118,32 +118,28 @@ export function getModelCost(
   const state = useStore.getState();
 
   const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
-  if (custom && (custom.promptPrice != null || custom.completionPrice != null)) {
+  if (custom) {
     return {
-      prompt: { price: custom.promptPrice ?? 0, unit: 1 },
-      completion: { price: custom.completionPrice ?? 0, unit: 1 },
-      ...(custom.imagePrice != null && custom.imagePrice > 0
-        ? { image: { price: custom.imagePrice, unit: 1 } }
-        : {}),
+      prompt: { price: custom.promptPrice ?? null, unit: 1 },
+      completion: { price: custom.completionPrice ?? null, unit: 1 },
+      image: { price: custom.imagePrice ?? null, unit: 1 },
     };
   }
 
   const fav = findFavorite(state.favoriteModels, modelId, providerId);
-  if (fav?.promptPrice != null || fav?.completionPrice != null) {
+  if (fav) {
     return {
-      prompt: { price: fav.promptPrice ?? 0, unit: 1 },
-      completion: { price: fav.completionPrice ?? 0, unit: 1 },
-      ...(fav.imagePrice != null && fav.imagePrice > 0
-        ? { image: { price: fav.imagePrice, unit: 1 } }
-        : {}),
+      prompt: { price: fav.promptPrice ?? null, unit: 1 },
+      completion: { price: fav.completionPrice ?? null, unit: 1 },
+      image: { price: fav.imagePrice ?? null, unit: 1 },
     };
   }
 
   const cached = findCachedModel(state.providerModelCache, modelId, providerId);
-  if (cached && (cached.promptPrice != null || cached.completionPrice != null)) {
+  if (cached) {
     return {
-      prompt: { price: cached.promptPrice ?? 0, unit: 1 },
-      completion: { price: cached.completionPrice ?? 0, unit: 1 },
+      prompt: { price: cached.promptPrice ?? null, unit: 1 },
+      completion: { price: cached.completionPrice ?? null, unit: 1 },
     };
   }
 

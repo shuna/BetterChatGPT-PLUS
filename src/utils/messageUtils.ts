@@ -1,6 +1,6 @@
 import useStore from '@store/store';
+import { countImageInputs } from '@utils/cost';
 import {
-  isImageContent,
   isTextContent,
   MessageInterface,
   TotalTokenUsed,
@@ -190,13 +190,10 @@ export const updateTotalTokenUsed = async (
     (e) => Array.isArray(e.content) && e.content.some(isTextContent)
   );
 
-  const imgPrompts = promptMessages.filter(
-    (e) => Array.isArray(e.content) && e.content.some(isImageContent)
-  );
+  const newImageTokens = countImageInputs(promptMessages);
 
-  const [newPromptTokens, newImageTokens, newCompletionTokens] = await Promise.all([
+  const [newPromptTokens, newCompletionTokens] = await Promise.all([
     countTokens(textPrompts, model),
-    countTokens(imgPrompts, model),
     countTokens([completionMessage], model),
   ]);
 
