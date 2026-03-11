@@ -295,10 +295,21 @@ export const executeSubmitStream = async ({
     let reading = true;
     let partial = '';
     const decoder = new TextDecoder();
+    const CHUNK_TIMEOUT_MS = 45_000;
+
+    function readWithTimeout() {
+      let timer: ReturnType<typeof setTimeout>;
+      return Promise.race([
+        reader.read().finally(() => clearTimeout(timer)),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('Chunk timeout: no data received for 45s')), CHUNK_TIMEOUT_MS);
+        }),
+      ]);
+    }
 
     try {
       while (reading && !abortController.signal.aborted) {
-        const { done, value } = await reader.read();
+        const { done, value } = await readWithTimeout();
         const chunk = partial + decoder.decode(value, { stream: !done });
         const parsed = parseEventSource(chunk, done);
         partial = parsed.partial;

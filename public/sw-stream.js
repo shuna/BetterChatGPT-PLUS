@@ -98,7 +98,7 @@ function extractText(events) {
 
 // --- Stream handler ---
 
-async function handleStartStream(msg, sourceClient) {
+async function handleStartStream(msg, port) {
   const { requestId, endpoint, headers, body } = msg;
   const controller = new AbortController();
   activeStreams.set(requestId, controller);
@@ -119,8 +119,8 @@ async function handleStartStream(msg, sourceClient) {
   });
 
   function postToClient(data) {
-    if (sourceClient) {
-      sourceClient.postMessage(data);
+    if (port) {
+      try { port.postMessage(data); } catch { /* port closed */ }
     }
   }
 
@@ -168,8 +168,20 @@ async function handleStartStream(msg, sourceClient) {
     let partial = '';
     let reading = true;
 
+    const CHUNK_TIMEOUT_MS = 45_000;
+
+    function readWithTimeout() {
+      let timer;
+      return Promise.race([
+        reader.read().finally(() => clearTimeout(timer)),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('Chunk timeout: no data received for 45s')), CHUNK_TIMEOUT_MS);
+        }),
+      ]);
+    }
+
     while (reading) {
-      const { done, value } = await reader.read();
+      const { done, value } = await readWithTimeout();
       const chunk = partial + decoder.decode(value, { stream: !done });
       const parsed = parseEventSource(chunk, done);
       partial = parsed.partial;
@@ -191,12 +203,22 @@ async function handleStartStream(msg, sourceClient) {
     await dbUpdate(requestId, { status: 'completed' });
     postToClient({ type: 'sw-done', requestId });
   } catch (err) {
+    // On timeout, abort the fetch so the connection is released
+    if (!controller.signal.aborted) {
+      controller.abort();
+    }
     const isAbort = err.name === 'AbortError';
+    const isTimeout = !isAbort && err.message && err.message.includes('Chunk timeout');
     const status = isAbort ? 'interrupted' : 'failed';
     const error = isAbort ? 'Cancelled' : (err.message || String(err));
     await flushBufferedText();
     await dbUpdate(requestId, { status, error });
-    postToClient({ type: isAbort ? 'sw-cancelled' : 'sw-error', requestId, error });
+    postToClient({
+      type: isAbort ? 'sw-cancelled' : 'sw-error',
+      requestId,
+      error,
+      isTimeout: isTimeout || false,
+    });
   } finally {
     if (flushTimer) {
       clearTimeout(flushTimer);
@@ -220,17 +242,19 @@ self.addEventListener('message', (event) => {
   if (!msg || !msg.type) return;
 
   if (msg.type === 'startStream') {
-    // event.source may lack an id in some browsers; resolve the client
-    // object directly so we can always post responses back.
-    const resolveClient = event.source
-      ? Promise.resolve(event.source)
-      : self.clients.matchAll({ type: 'window' }).then((all) => all[0] || null);
-
-    resolveClient.then((client) => {
-      if (client) {
-        handleStartStream(msg, client);
-      }
-    });
+    // Use dedicated MessagePort if provided (immune to extension interference).
+    // Fall back to client.postMessage for backwards compatibility.
+    const port = event.ports && event.ports[0];
+    if (port) {
+      handleStartStream(msg, port);
+    } else {
+      const resolveClient = event.source
+        ? Promise.resolve(event.source)
+        : self.clients.matchAll({ type: 'window' }).then((all) => all[0] || null);
+      resolveClient.then((client) => {
+        if (client) handleStartStream(msg, client);
+      });
+    }
   } else if (msg.type === 'cancelStream') {
     const controller = activeStreams.get(msg.requestId);
     if (controller) {

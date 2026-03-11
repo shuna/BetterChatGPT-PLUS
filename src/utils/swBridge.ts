@@ -85,9 +85,14 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
 
   const sw = navigator.serviceWorker;
 
-  function handler(event: MessageEvent) {
+  // Use a dedicated MessageChannel so responses travel over a private port,
+  // immune to interference from browser extensions listening on
+  // navigator.serviceWorker.onmessage.
+  const channel = new MessageChannel();
+
+  channel.port1.onmessage = (event: MessageEvent) => {
     const data = event.data;
-    if (!data || data.requestId !== requestId) return;
+    if (!data) return;
 
     switch (data.type) {
       case 'sw-chunk':
@@ -105,13 +110,11 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
         cleanup();
         break;
     }
-  }
+  };
 
   function cleanup() {
-    sw.removeEventListener('message', handler);
+    channel.port1.close();
   }
-
-  sw.addEventListener('message', handler);
 
   const controller = sw.controller;
   if (!controller) {
@@ -119,16 +122,19 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
     throw new Error('Service Worker controller not available');
   }
 
-  // Send startStream to SW
-  controller.postMessage({
-    type: 'startStream',
-    requestId,
-    endpoint,
-    headers,
-    body,
-    chatIndex,
-    messageIndex,
-  });
+  // Send startStream to SW with port2 transferred
+  controller.postMessage(
+    {
+      type: 'startStream',
+      requestId,
+      endpoint,
+      headers,
+      body,
+      chatIndex,
+      messageIndex,
+    },
+    [channel.port2],
+  );
 
   return {
     cancel: () => {
