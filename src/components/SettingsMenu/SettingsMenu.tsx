@@ -18,6 +18,7 @@ import TotalTokenCost, { TotalTokenCostToggle } from './TotalTokenCost';
 import ClearConversation from '@components/Menu/MenuOptions/ClearConversation';
 import DisplayChatSizeToggle from './DisplayChatSizeToggle';
 import ProviderMenuButton from './ProviderMenuButton';
+import StreamingMarkdownPolicySelect from './StreamingMarkdownPolicySelect';
 
 const SettingsMenu = () => {
   const { t } = useTranslation();
@@ -53,6 +54,7 @@ const SettingsMenu = () => {
               <EnterToSubmitToggle />
               <AutoScrollToggle />
               <InlineLatexToggle />
+              <StreamingMarkdownPolicySelect />
               <AdvancedModeToggle />
               <TotalTokenCostToggle />
               <DisplayChatSizeToggle />

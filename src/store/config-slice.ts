@@ -1,7 +1,7 @@
 import { StoreSlice } from './store';
 import { Theme } from '@type/theme';
 import { _defaultChatConfig, _defaultSystemMessage,_defaultMenuWidth, defaultModel, _defaultImageDetail, _defaultDisplayChatSize } from '@constants/chat';
-import { ConfigInterface, ImageDetail, TotalTokenUsed } from '@type/chat';
+import { ConfigInterface, ImageDetail, StreamingMarkdownPolicy, TotalTokenUsed } from '@type/chat';
 import { ModelOptions } from '@type/chat';
 import type { ProviderId } from '@type/provider';
 import { normalizeConfigStream } from '@utils/streamSupport';
@@ -33,6 +33,7 @@ export interface ConfigSlice {
   enterToSubmit: boolean;
   inlineLatex: boolean;
   markdownMode: boolean;
+  streamingMarkdownPolicy: StreamingMarkdownPolicy;
   countTotalTokens: boolean;
   totalTokenUsed: TotalTokenUsed;
   menuWidth: number;
@@ -54,6 +55,7 @@ export interface ConfigSlice {
   setEnterToSubmit: (enterToSubmit: boolean) => void;
   setInlineLatex: (inlineLatex: boolean) => void;
   setMarkdownMode: (markdownMode: boolean) => void;
+  setStreamingMarkdownPolicy: (streamingMarkdownPolicy: StreamingMarkdownPolicy) => void;
   setCountTotalTokens: (countTotalTokens: boolean) => void;
   setTotalTokenUsed: (totalTokenUsed: TotalTokenUsed) => void;
   setMenuWidth: (menuWidth: number) => void;
@@ -77,6 +79,7 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
   defaultSystemMessage: _defaultSystemMessage,
   inlineLatex: false,
   markdownMode: true,
+  streamingMarkdownPolicy: 'auto',
   countTotalTokens: false,
   totalTokenUsed: {},
   menuWidth: _defaultMenuWidth,
@@ -174,6 +177,13 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
     set((prev: ConfigSlice) => ({
       ...prev,
       markdownMode: markdownMode,
+    }));
+  },
+  setStreamingMarkdownPolicy: (streamingMarkdownPolicy: StreamingMarkdownPolicy) => {
+    if (get().streamingMarkdownPolicy === streamingMarkdownPolicy) return;
+    set((prev: ConfigSlice) => ({
+      ...prev,
+      streamingMarkdownPolicy,
     }));
   },
   setCountTotalTokens: (countTotalTokens: boolean) => {

@@ -8,6 +8,7 @@ import type { FavoriteModel, ProviderConfig, ProviderId } from './provider';
 export type Content = 'text' | 'image_url';
 export type ImageDetail = 'low' | 'high' | 'auto';
 export const imageDetails: ImageDetail[] = ['low', 'high', 'auto'];
+export type StreamingMarkdownPolicy = 'auto' | 'always' | 'never';
 export type Role = 'user' | 'assistant' | 'system';
 export const roles: Role[] = ['user', 'assistant', 'system'];
 
@@ -108,6 +109,11 @@ export interface LocalStorageInterfaceV13ToV14
 export interface LocalStorageInterfaceV14ToV15
   extends LocalStorageInterfaceV13ToV14 {
   onboardingCompleted: number | false;
+}
+
+export interface LocalStorageInterfaceV15ToV16
+  extends LocalStorageInterfaceV14ToV15 {
+  streamingMarkdownPolicy?: StreamingMarkdownPolicy;
 }
 
 export interface LocalStorageInterfaceV10ToV11

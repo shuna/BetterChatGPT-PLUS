@@ -1,5 +1,7 @@
 import React, { Suspense, memo, useDeferredValue, useEffect, useRef, useState } from 'react';
 import { perfStart, perfEnd } from '@utils/perfTrace';
+import type { StreamingMarkdownPolicy } from '@type/chat';
+import { resolveStreamingMarkdownMode } from '@utils/markdownStreamingPolicy';
 
 const MarkdownRenderer = React.lazy(() => import('./MarkdownRenderer'));
 
@@ -24,22 +26,54 @@ const MarkdownSkeleton = ({ charCount }: { charCount: number }) => {
 const ContentBody = memo(function ContentBody({
   currentTextContent,
   markdownMode,
+  streamingMarkdownPolicy,
   inlineLatex,
   isGeneratingMessage,
 }: {
   currentTextContent: string;
   markdownMode: boolean;
+  streamingMarkdownPolicy: StreamingMarkdownPolicy;
   inlineLatex: boolean;
   isGeneratingMessage: boolean;
 }) {
+  const hasCodeBlock = currentTextContent.includes('```');
+  const streamingMode = resolveStreamingMarkdownMode({
+    policy: streamingMarkdownPolicy,
+    isGeneratingMessage,
+    textLength: currentTextContent.length,
+    hasCodeBlock,
+  });
   const deferredContent = useDeferredValue(currentTextContent);
-  const isStale = deferredContent !== currentTextContent;
-
+  const [debouncedContent, setDebouncedContent] = useState(currentTextContent);
+  const renderContent = streamingMode === 'debounced' ? debouncedContent : deferredContent;
+  const isStale = renderContent !== currentTextContent;
+  const shouldShowRenderingBadge = isStale && !isGeneratingMessage;
   const [showRenderingBadge, setShowRenderingBadge] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (isStale && !isGeneratingMessage) {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+
+    if (streamingMode !== 'debounced') {
+      setDebouncedContent(currentTextContent);
+      return;
+    }
+
+    debounceRef.current = setTimeout(() => {
+      setDebouncedContent(currentTextContent);
+    }, 250);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [currentTextContent, streamingMode]);
+
+  useEffect(() => {
+    if (shouldShowRenderingBadge) {
       timerRef.current = setTimeout(() => {
         setShowRenderingBadge(true);
       }, RENDER_DELAY_THRESHOLD_MS);
@@ -53,7 +87,7 @@ const ContentBody = memo(function ContentBody({
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
-  }, [isStale, isGeneratingMessage]);
+  }, [shouldShowRenderingBadge]);
 
   const wasGenerating = useRef(false);
   useEffect(() => {
@@ -69,7 +103,7 @@ const ContentBody = memo(function ContentBody({
     <div className='markdown prose w-full md:max-w-full break-words dark:prose-invert dark share-gpt-message'>
       {markdownMode ? (
         <>
-          {isGeneratingMessage ? (
+          {isGeneratingMessage && streamingMode === 'plain' ? (
             <span className='whitespace-pre-wrap'>
               {currentTextContent}
               <span className='inline-block animate-pulse text-gray-500 dark:text-gray-400'>▌</span>
@@ -83,10 +117,13 @@ const ContentBody = memo(function ContentBody({
               )}
               <Suspense fallback={<MarkdownSkeleton charCount={currentTextContent.length} />}>
                 <MarkdownRenderer
-                  content={deferredContent}
+                  content={renderContent}
                   inlineLatex={inlineLatex}
                 />
               </Suspense>
+              {isGeneratingMessage && (
+                <span className='inline-block animate-pulse text-gray-500 dark:text-gray-400'>▌</span>
+              )}
             </>
           )}
         </>

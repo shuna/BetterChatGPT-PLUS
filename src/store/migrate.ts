@@ -24,6 +24,7 @@ import {
   LocalStorageInterfaceV13ToV14,
   ContentInterface,
   LocalStorageInterfaceV14ToV15,
+  LocalStorageInterfaceV15ToV16,
 } from '@type/chat';
 import { ContentStoreData, addContent } from '@utils/contentStore';
 import { DEFAULT_PROVIDERS } from './provider-config';
@@ -254,4 +255,8 @@ export const migrateV14 = (persistedState: LocalStorageInterfaceV14ToV15) => {
   // migrate only runs when persisted state exists, so the user is existing.
   // New users have no persisted state and get onboardingCompleted: false from defaults.
   persistedState.onboardingCompleted = STORE_VERSION;
+};
+
+export const migrateV15 = (persistedState: LocalStorageInterfaceV15ToV16) => {
+  persistedState.streamingMarkdownPolicy = 'auto';
 };

@@ -20,6 +20,7 @@ import {
   LocalStorageInterfaceV12ToV13,
   LocalStorageInterfaceV13ToV14,
   LocalStorageInterfaceV14ToV15,
+  LocalStorageInterfaceV15ToV16,
 } from '@type/chat';
 import {
   migrateV10,
@@ -39,6 +40,7 @@ import {
   migrateV8_2,
   migrateV13,
   migrateV14,
+  migrateV15,
 } from './migrate';
 import type { StoreState } from './store';
 
@@ -67,6 +69,7 @@ type PersistedStoreState = Omit<
   | 'enterToSubmit'
   | 'inlineLatex'
   | 'markdownMode'
+  | 'streamingMarkdownPolicy'
   | 'totalTokenUsed'
   | 'countTotalTokens'
   | 'displayChatSize'
@@ -92,7 +95,7 @@ export const PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'chats', 'apiKey', 'apiVersion', 'apiEndpoint', 'theme', 'autoTitle',
   'titleModel', 'titleProviderId', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
   'hideMenuOptions', 'hideSideMenu', 'folders', 'enterToSubmit',
-  'inlineLatex', 'markdownMode', 'totalTokenUsed', 'countTotalTokens',
+  'inlineLatex', 'markdownMode', 'streamingMarkdownPolicy', 'totalTokenUsed', 'countTotalTokens',
   'displayChatSize', 'menuWidth', 'defaultImageDetail', 'autoScroll',
   'hideShareGPT', 'providers', 'favoriteModels',
   'branchClipboard', 'contentStore', 'providerModelCache',
@@ -125,6 +128,7 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     enterToSubmit: state.enterToSubmit,
     inlineLatex: state.inlineLatex,
     markdownMode: state.markdownMode,
+    streamingMarkdownPolicy: state.streamingMarkdownPolicy,
     totalTokenUsed: state.totalTokenUsed,
     countTotalTokens: state.countTotalTokens,
     displayChatSize: state.displayChatSize,
@@ -208,7 +212,8 @@ type PersistedStateVersion =
   | LocalStorageInterfaceV11ToV12
   | LocalStorageInterfaceV12ToV13
   | LocalStorageInterfaceV13ToV14
-  | LocalStorageInterfaceV14ToV15;
+  | LocalStorageInterfaceV14ToV15
+  | LocalStorageInterfaceV15ToV16;
 
 type MigrationEntry = {
   version: number;
@@ -233,6 +238,7 @@ const MIGRATIONS: MigrationEntry[] = [
   { version: 12, apply: (state) => migrateV12(state as LocalStorageInterfaceV12ToV13) },
   { version: 13, apply: (state) => migrateV13(state as LocalStorageInterfaceV13ToV14) },
   { version: 14, apply: (state) => migrateV14(state as LocalStorageInterfaceV14ToV15) },
+  { version: 15, apply: (state) => migrateV15(state as LocalStorageInterfaceV15ToV16) },
 ];
 
 export const migratePersistedState = (

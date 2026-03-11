@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { _defaultChatConfig, _defaultImageDetail } from '@constants/chat';
 import { DEFAULT_PROVIDERS } from './provider-config';
-import { migrateV9, migrateV10, migrateV11, migrateV12, migrateV13, migrateV14 } from './migrate';
+import { migrateV9, migrateV10, migrateV11, migrateV12, migrateV13, migrateV14, migrateV15 } from './migrate';
 import { STORE_VERSION } from './version';
 
 // ---------------------------------------------------------------------------
@@ -317,5 +317,13 @@ describe('migrateV14', () => {
     const state = {} as any;
     migrateV14(state);
     expect(state.onboardingCompleted).toBe(STORE_VERSION);
+  });
+});
+
+describe('migrateV15', () => {
+  it('adds auto streaming markdown policy for existing users', () => {
+    const state = {} as any;
+    migrateV15(state);
+    expect(state.streamingMarkdownPolicy).toBe('auto');
   });
 });

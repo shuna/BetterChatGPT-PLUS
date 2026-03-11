@@ -66,6 +66,7 @@ const buildStoreState = () => {
     enterToSubmit: false,
     inlineLatex: false,
     markdownMode: true,
+    streamingMarkdownPolicy: 'auto',
     totalTokenUsed: {},
     countTotalTokens: false,
     displayChatSize: false,

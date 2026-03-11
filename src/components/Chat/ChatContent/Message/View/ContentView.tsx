@@ -47,6 +47,7 @@ const ContentView = memo(
     );
     const inlineLatex = useStore((state) => state.inlineLatex);
     const markdownMode = useStore((state) => state.markdownMode);
+    const streamingMarkdownPolicy = useStore((state) => state.streamingMarkdownPolicy);
     const currentChatId = useStore((state) =>
       state.chats?.[state.currentChatIndex]?.id ?? ''
     );
@@ -116,6 +117,7 @@ const ContentView = memo(
         <ContentBody
           currentTextContent={currentTextContent}
           markdownMode={markdownMode}
+          streamingMarkdownPolicy={streamingMarkdownPolicy}
           inlineLatex={inlineLatex}
           isGeneratingMessage={isGeneratingMessage}
         />
