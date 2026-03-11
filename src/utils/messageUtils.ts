@@ -144,13 +144,13 @@ const countTokens = async (
 ): Promise<number> => {
   if (!messages || messages.length === 0) return 0;
   await loadEncoder();
-  if (unavailable) return 0;
+  if (unavailable) return estimateTokensByChars(messages);
   try {
     const response = await postToWorker({ type: 'countTokens', messages, model });
-    return response.type === 'countTokensResult' ? response.count : 0;
+    return response.type === 'countTokensResult' ? response.count : estimateTokensByChars(messages);
   } catch {
     unavailable = true;
-    return 0;
+    return estimateTokensByChars(messages);
   }
 };
 
