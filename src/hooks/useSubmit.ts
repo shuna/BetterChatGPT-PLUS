@@ -99,7 +99,7 @@ const useSubmit = () => {
         chats[chatIndex].config.providerId
       );
       const completionBudget = chats[chatIndex].config.max_tokens;
-      const promptBudget = Math.max(0, modelContextLength - completionBudget);
+      const promptBudget = Math.max(Math.floor(modelContextLength * 0.1), modelContextLength - completionBudget);
       const messages = await limitMessageTokens(
         contextMessages,
         promptBudget,

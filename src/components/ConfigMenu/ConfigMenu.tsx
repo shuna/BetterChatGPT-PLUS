@@ -205,7 +205,7 @@ export const MaxTokenSlider = ({
       value={_maxToken}
       onChange={_setMaxToken}
       min={0}
-      max={maxForModel}
+      max={Math.floor(maxForModel * 0.9)}
       step={1}
       description={t('token.description')}
     />
