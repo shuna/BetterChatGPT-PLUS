@@ -9,8 +9,9 @@ const RENDER_DELAY_THRESHOLD_MS = 400;
 
 const skeletonWidths = ['w-full', 'w-5/6', 'w-4/5', 'w-3/4', 'w-full', 'w-5/6', 'w-2/3', 'w-3/4'];
 
-const MarkdownSkeleton = ({ charCount }: { charCount: number }) => {
-  const lineCount = Math.min(Math.max(Math.ceil(charCount / 80), 2), 8);
+const MarkdownSkeleton = ({ charCount, newlineCount }: { charCount: number; newlineCount: number }) => {
+  const estimatedLines = newlineCount > 0 ? newlineCount + 1 : Math.ceil(charCount / 80);
+  const lineCount = Math.max(estimatedLines, 2);
   return (
     <div className='py-1' aria-hidden='true'>
       {Array.from({ length: lineCount }, (_, i) => (
@@ -115,7 +116,7 @@ const ContentBody = memo(function ContentBody({
                   描画中...
                 </span>
               )}
-              <Suspense fallback={<MarkdownSkeleton charCount={currentTextContent.length} />}>
+              <Suspense fallback={<MarkdownSkeleton charCount={currentTextContent.length} newlineCount={(currentTextContent.match(/\n/g) || []).length} />}>
                 <MarkdownRenderer
                   content={renderContent}
                   inlineLatex={inlineLatex}
