@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { UNKNOWN_MODEL_CONTEXT_LENGTH } from './tokenBudget';
 
 vi.mock('@store/store', () => ({
   default: {
@@ -7,7 +8,7 @@ vi.mock('@store/store', () => ({
 }));
 
 import useStore from '@store/store';
-import { getModelCost } from './modelLookup';
+import { getModelContextInfo, getModelCost } from './modelLookup';
 
 describe('modelLookup cost units', () => {
   beforeEach(() => {
@@ -30,6 +31,13 @@ describe('modelLookup cost units', () => {
       prompt: { price: 5, unit: 1_000_000 },
       completion: { price: 25, unit: 1_000_000 },
       image: { price: null, unit: 1 },
+    });
+  });
+
+  it('uses a conservative fallback context length for unknown models', () => {
+    expect(getModelContextInfo('unknown-model', 'openai')).toEqual({
+      contextLength: UNKNOWN_MODEL_CONTEXT_LENGTH,
+      isFallback: true,
     });
   });
 });

@@ -20,7 +20,9 @@ import {
   _defaultImageDetail,
   _defaultSystemMessage,
 } from '@constants/chat';
+import { getModelContextInfo } from '@utils/modelLookup';
 import { isModelStreamSupported, normalizeConfigStream } from '@utils/streamSupport';
+import { clampCompletionTokens } from '@utils/tokenBudget';
 import { ModelOptions } from '@type/chat';
 import { ImageDetail } from '@type/chat';
 import type { ProviderId } from '@type/provider';
@@ -95,9 +97,10 @@ const ChatConfigPopup = ({
   }, [isStreamSupported, _stream]);
 
   const handleSave = () => {
+    const modelContextLength = getModelContextInfo(_model, _providerId).contextLength;
     const nextConfig = normalizeConfigStream({
       model: _model,
-      max_tokens: _maxToken,
+      max_tokens: clampCompletionTokens(_maxToken, modelContextLength),
       temperature: _temperature,
       top_p: _topP,
       presence_penalty: _presencePenalty,

@@ -1,5 +1,6 @@
 import useStore from '@store/store';
 import type { CustomProviderModel, ProviderId, FavoriteModel, ProviderModel } from '@type/provider';
+import { UNKNOWN_MODEL_CONTEXT_LENGTH } from './tokenBudget';
 
 export interface ModelCostEntry {
   prompt: { price: number | null; unit: number };
@@ -97,18 +98,25 @@ export function getModelMaxToken(
   modelId: string,
   providerId?: ProviderId
 ): number {
+  return getModelContextInfo(modelId, providerId).contextLength;
+}
+
+export function getModelContextInfo(
+  modelId: string,
+  providerId?: ProviderId
+): { contextLength: number; isFallback: boolean } {
   const state = useStore.getState();
 
   const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
-  if (custom?.contextLength) return custom.contextLength;
+  if (custom?.contextLength) return { contextLength: custom.contextLength, isFallback: false };
 
   const fav = findFavorite(state.favoriteModels, modelId, providerId);
-  if (fav?.contextLength) return fav.contextLength;
+  if (fav?.contextLength) return { contextLength: fav.contextLength, isFallback: false };
 
   const cached = findCachedModel(state.providerModelCache, modelId, providerId);
-  if (cached?.contextLength) return cached.contextLength;
+  if (cached?.contextLength) return { contextLength: cached.contextLength, isFallback: false };
 
-  return 128000;
+  return { contextLength: UNKNOWN_MODEL_CONTEXT_LENGTH, isFallback: true };
 }
 
 export function getModelCost(

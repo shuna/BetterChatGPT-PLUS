@@ -1,7 +1,8 @@
 import useStore from '@store/store';
 import { useTranslation } from 'react-i18next';
-import { limitMessageTokens, loadEncoder } from '@utils/messageUtils';
-import { getModelMaxToken } from '@utils/modelLookup';
+import { countTokens, limitMessageTokens, loadEncoder } from '@utils/messageUtils';
+import { getModelContextInfo } from '@utils/modelLookup';
+import { fitsContextWindow, getPromptBudgetForContext } from '@utils/tokenBudget';
 import {
   applySubmitTokenUsage,
   buildGeneratingSession,
@@ -94,18 +95,22 @@ const useSubmit = () => {
         throw new Error(t('errors.noMessagesSubmitted') as string);
 
       await loadEncoder();
-      const modelContextLength = getModelMaxToken(
+      const { contextLength: modelContextLength } = getModelContextInfo(
         chats[chatIndex].config.model,
         chats[chatIndex].config.providerId
       );
       const completionBudget = chats[chatIndex].config.max_tokens;
-      const promptBudget = Math.max(Math.floor(modelContextLength * 0.1), modelContextLength - completionBudget);
+      const promptBudget = getPromptBudgetForContext(modelContextLength, completionBudget);
       const messages = await limitMessageTokens(
         contextMessages,
         promptBudget,
         chats[chatIndex].config.model
       );
       if (messages.length === 0)
+        throw new Error(t('errors.messageExceedMaxToken') as string);
+
+      const promptTokens = await countTokens(messages, chats[chatIndex].config.model);
+      if (!fitsContextWindow(promptTokens, modelContextLength, completionBudget))
         throw new Error(t('errors.messageExceedMaxToken') as string);
 
       const resolved = resolveProviderForModel(

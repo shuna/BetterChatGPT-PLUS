@@ -138,22 +138,6 @@ export const onEncoderReady = (fn: () => void): (() => void) => {
   return () => listeners.delete(fn);
 };
 
-const countTokens = async (
-  messages: MessageInterface[],
-  model: ModelOptions
-): Promise<number> => {
-  if (!messages || messages.length === 0) return 0;
-  await loadEncoder();
-  if (unavailable) return estimateTokensByChars(messages);
-  try {
-    const response = await postToWorker({ type: 'countTokens', messages, model });
-    return response.type === 'countTokensResult' ? response.count : estimateTokensByChars(messages);
-  } catch {
-    unavailable = true;
-    return estimateTokensByChars(messages);
-  }
-};
-
 const estimateTokensByChars = (messages: MessageInterface[]): number => {
   let chars = 0;
   for (const msg of messages) {
@@ -164,6 +148,37 @@ const estimateTokensByChars = (messages: MessageInterface[]): number => {
   }
   // Conservative: ~2 chars per token (handles CJK and mixed content)
   return Math.ceil(chars / 2);
+};
+
+const hasCountableText = (messages: MessageInterface[]): boolean =>
+  messages.some((message) =>
+    message.content.some((part) => isTextContent(part) && part.text.trim().length > 0)
+  );
+
+const ensureNonZeroTokenCount = (
+  count: number,
+  messages: MessageInterface[]
+): number => {
+  if (count > 0 || !hasCountableText(messages)) return count;
+  return estimateTokensByChars(messages);
+};
+
+export const countTokens = async (
+  messages: MessageInterface[],
+  model: ModelOptions
+): Promise<number> => {
+  if (!messages || messages.length === 0) return 0;
+  await loadEncoder();
+  if (unavailable) return estimateTokensByChars(messages);
+  try {
+    const response = await postToWorker({ type: 'countTokens', messages, model });
+    return response.type === 'countTokensResult'
+      ? ensureNonZeroTokenCount(response.count, messages)
+      : estimateTokensByChars(messages);
+  } catch {
+    unavailable = true;
+    return estimateTokensByChars(messages);
+  }
 };
 
 const fallbackLimitMessages = (
@@ -239,3 +254,14 @@ export const updateTotalTokenUsed = async (
 };
 
 export default countTokens;
+
+export const resetTokenizerWorkerForTests = () => {
+  worker?.terminate();
+  worker = null;
+  requestId = 0;
+  ready = false;
+  unavailable = false;
+  initPromise = null;
+  listeners.clear();
+  pendingRequests.clear();
+};

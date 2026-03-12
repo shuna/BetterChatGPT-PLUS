@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
 import { ConfigInterface, ImageDetail } from '@type/chat';
-import { getModelMaxToken } from '@utils/modelLookup';
+import { getModelContextInfo } from '@utils/modelLookup';
 import { ModelOptions } from '@type/chat';
 import { isModelStreamSupported, normalizeConfigStream } from '@utils/streamSupport';
+import { clampCompletionTokens, getMaxCompletionTokensForContext } from '@utils/tokenBudget';
 import useStore from '@store/store';
 import { ProviderId } from '@type/provider';
 import {
@@ -50,8 +51,9 @@ const ConfigMenu = ({
   }, [isStreamSupported, _stream]);
 
   const handleConfirm = () => {
+    const modelContextLength = getModelContextInfo(_model, _providerId).contextLength;
     setConfig(normalizeConfigStream({
-      max_tokens: _maxToken,
+      max_tokens: clampCompletionTokens(_maxToken, modelContextLength),
       model: _model,
       temperature: _temperature,
       presence_penalty: _presencePenalty,
@@ -182,22 +184,23 @@ export const MaxTokenSlider = ({
   const favoriteModels = useStore((state) => state.favoriteModels) || [];
 
   const getMaxForModel = (): number => {
-    const lookupMax = getModelMaxToken(_model, _providerId);
+    const lookupMax = getModelContextInfo(_model, _providerId).contextLength;
     if (lookupMax > 0) return lookupMax;
     const fav = _providerId
       ? favoriteModels.find((f) => f.modelId === _model && f.providerId === _providerId)
       : favoriteModels.find((f) => f.modelId === _model);
     if (fav?.contextLength) return fav.contextLength;
-    return 128000; // sensible default
+    return getModelContextInfo(_model, _providerId).contextLength;
   };
 
   const maxForModel = getMaxForModel();
+  const maxCompletionForModel = getMaxCompletionTokensForContext(maxForModel);
 
   useEffect(() => {
-    if (_maxToken > maxForModel) {
-      _setMaxToken(maxForModel);
+    if (_maxToken > maxCompletionForModel) {
+      _setMaxToken(maxCompletionForModel);
     }
-  }, [_maxToken, _setMaxToken, maxForModel]);
+  }, [_maxToken, _setMaxToken, maxCompletionForModel]);
 
   return (
     <RangeField
@@ -205,7 +208,7 @@ export const MaxTokenSlider = ({
       value={_maxToken}
       onChange={_setMaxToken}
       min={0}
-      max={Math.floor(maxForModel * 0.9)}
+      max={maxCompletionForModel}
       step={1}
       description={t('token.description')}
     />
