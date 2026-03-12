@@ -136,28 +136,62 @@ const firestoreStorage: PersistStorage<S> = {
 | **欠点** | CouchDBサーバーの運用コスト/複雑さ。ドキュメント指向DBへのデータモデル変換が必要 |
 | **実装見通し** | 現在のZustandストアをPouchDBドキュメントとしてモデリング。`PouchDB.sync(remoteDb, {live: true})`で自動同期 |
 
-### C2. CRDTs (Yjs / Automerge)
+### C2. CRDTs (Yjs + y-webrtc)
 
 | 項目 | 内容 |
 |------|------|
 | **方式** | CRDT（Conflict-free Replicated Data Type）による分散データ構造 |
-| **npm** | `yjs` (~15KB gzip) + `y-indexeddb` + プロバイダー |
+| **npm** | `yjs` (~18-20KB gzip) + `y-webrtc` (~15-25KB) + `y-indexeddb` + `zustand-middleware-yjs` |
 | **実装難易度** | ★★★★ 高（データモデルの根本的な再設計が必要） |
-| **リアルタイム** | 各種プロバイダーで実現（y-webrtc, y-websocket等） |
-| **利点** | サーバーレスP2P同期が可能（y-webrtc）。同時編集にも対応。オフライン対応が完全 |
-| **欠点** | **データモデルの大幅な変更が必要**。学習コストが高い。シグナリングサーバーは別途必要 |
+| **リアルタイム** | y-webrtcで直接P2P同期。同一ブラウザ内タブはBroadcastChannelで自動同期 |
+| **利点** | サーバーレスP2P同期が可能。同時編集にも対応。オフライン対応が完全（y-indexeddb）。`zustand-middleware-yjs`でZustandとの統合ミドルウェアが存在 |
+| **欠点** | **データモデルの大幅な変更が必要**（JSON→Y.Map/Y.Array）。学習コストが高い。`zustand-middleware-yjs`は単一メンテナー。Automergeは200-400KB gzip(WASM)でさらに重い |
 | **実装見通し** | 現行のZustand + JSON構造からYjsのY.Map/Y.Arrayへの移行が大規模。ROI低い |
+
+```typescript
+// 概念例: Zustand + Yjs統合（zustand-middleware-yjsを使用）
+import yjs from 'zustand-middleware-yjs'
+import * as Y from 'yjs'
+import { WebrtcProvider } from 'y-webrtc'
+
+const ydoc = new Y.Doc()
+const provider = new WebrtcProvider('weavelet-room', ydoc, {
+  signaling: ['wss://signaling.yjs.dev'],
+  password: 'optional-encryption-key',
+})
+
+const useStore = create(
+  yjs(ydoc, 'shared', (set) => ({
+    chats: [],
+    // ... シリアライズ可能なステートのみ同期
+  }))
+)
+```
 
 ### C3. WebRTC DataChannel（直接P2P）
 
 | 項目 | 内容 |
 |------|------|
 | **方式** | WebRTC DataChannelで2デバイス間を直接接続しデータ転送 |
-| **npm** | `peerjs` (~25KB gzip) or `simple-peer` |
+| **npm** | `peerjs` (~60-70KB gzip, 13.2k stars) or `trystero` (シグナリングサーバー不要) |
 | **実装難易度** | ★★★ 中 |
-| **利点** | サーバー不要（シグナリング除く）。高速な直接転送。プライバシー性が高い |
-| **欠点** | **両デバイスが同時にオンラインである必要**がある。NAT越えの問題。シグナリングサーバーが別途必要 |
+| **利点** | 高速な直接転送。プライバシー性が高い。E2E暗号化 |
+| **欠点** | **両デバイスが同時にオンラインである必要**。NAT越えで~10-20%の接続がTURNリレー必要。コンフリクト解決は自前実装 |
 | **実装見通し** | PeerJSの公開シグナリングサーバー or 自前。QRコードでPeer IDを共有。接続後にステート全体を送信 |
+
+#### 注目: Trystero（サーバーレスP2P）
+
+[Trystero](https://github.com/dmotz/trystero)は既存の分散インフラ（BitTorrentトラッカー、Nostrリレー、MQTTブローカー等）をシグナリングに利用し、**自前サーバー完全不要**でP2P接続を確立する:
+
+```typescript
+import { joinRoom } from 'trystero/nostr' // or /torrent, /mqtt, /supabase, /firebase
+const room = joinRoom({ appId: 'weavelet-canvas' }, 'room-id')
+const [sendState, getState] = room.makeAction('sync')
+sendState(compressedState)              // 全ピアに送信
+getState((data, peerId) => { ... })     // ピアからの受信
+```
+
+各ストラテジーは個別importでtree-shake可能。データはE2E暗号化され、シグナリング媒体にはデータ本体が流れない。
 
 ---
 
@@ -179,11 +213,11 @@ const firestoreStorage: PersistStorage<S> = {
 | 項目 | 内容 |
 |------|------|
 | **方式** | データをQRコードにエンコードし、他デバイスのカメラで読み取り |
-| **npm** | `qrcode` (~30KB) + `html5-qrcode` (~100KB) |
+| **npm** | `qrcode` (~4.3K dependents) + `qr-scanner` (~16KB gzip、WebWorkerベース) |
 | **実装難易度** | ★★☆ 低〜中 |
 | **利点** | ネットワーク不要。直感的なUX |
-| **欠点** | QRコードの容量制限（最大約3KB）。大きなデータには連続スキャンが必要で非現実的 |
-| **実装見通し** | 同期URLの共有（Firebase等と組み合わせ）には使えるが、ステート全体の転送には不向き |
+| **欠点** | QRコードの容量制限（最大~2,953バイト）。実用的なスキャン距離ではさらに小さい。ステート全体の転送は不可能 |
+| **実装見通し** | 同期URL/トークンの共有（Firebase等と組み合わせ）には使えるが、データ本体の転送には使えない |
 
 ### D3. Web Share API + クリップボード
 
