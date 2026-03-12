@@ -11,6 +11,12 @@
       "chatsImported": "{{total}}件中{{imported}}件のチャットがインポートされました。",
       "unsupportedModels": "非対応モデル: {{models}} は利用できません。AIプロバイダ設定のCustomタブから追加してください。"
     },
+    "mode": {
+      "append": "既存データに追加",
+      "replace": "ローカルデータを全置換"
+    },
+    "replaceWarning": "全置換を選ぶと、ローカルの会話と設定は初期化され、インポート内容で置き換えられます。",
+    "confirmReplaceAll": "ローカルの会話および設定をすべて削除して、インポート内容で置き換えます。続行しますか？",
     "reduceMessagesSuccess": "{{count}}件のメッセージが削減されました。",
     "partialImportMessages": "{{total}}件のメッセージを想定していましたが、{{count}}件しか見つかりませんでした"
   }

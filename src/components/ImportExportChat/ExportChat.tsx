@@ -15,7 +15,7 @@ type ExportFormat = 'v3' | 'v1';
 const ExportChat = () => {
   const { t } = useTranslation();
   const [format, setFormat] = useState<ExportFormat>('v3');
-  const [useGzip, setUseGzip] = useState(false);
+  const [useGzip, setUseGzip] = useState(true);
 
   const handleExport = async () => {
     const chats = useStore.getState().chats;

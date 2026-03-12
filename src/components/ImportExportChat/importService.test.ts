@@ -7,14 +7,23 @@ import { PartialImportError } from '@utils/import';
 const testContext = vi.hoisted(() => {
   const toastInfo = vi.fn();
   const toastWarning = vi.fn();
+  const initialStoreState = {
+    chats: [] as ChatInterface[],
+    folders: {} as FolderCollection,
+    contentStore: {} as Record<string, unknown>,
+    apiKey: undefined as string | undefined,
+    theme: 'dark',
+    currentChatIndex: -1,
+  };
   const storeState: {
     chats: ChatInterface[];
     folders: FolderCollection;
     contentStore: Record<string, unknown>;
+    apiKey?: string;
+    theme: string;
+    currentChatIndex: number;
   } & Record<string, unknown> = {
-    chats: [],
-    folders: {},
-    contentStore: {},
+    ...initialStoreState,
   };
   const setChats = vi.fn((chats: ChatInterface[]) => {
     storeState.chats = chats;
@@ -22,19 +31,32 @@ const testContext = vi.hoisted(() => {
   const setFolders = vi.fn((folders: FolderCollection) => {
     storeState.folders = folders;
   });
+  const setCurrentChatIndex = vi.fn((currentChatIndex: number) => {
+    storeState.currentChatIndex = currentChatIndex;
+  });
   const setState = vi.fn((patch: Record<string, unknown>) => {
     Object.assign(storeState, patch);
   });
   const importOpenAIChatExportMock = vi.fn();
+  const createPartializedState = vi.fn((state: typeof storeState) => ({
+    chats: state.chats,
+    folders: state.folders,
+    contentStore: state.contentStore,
+    apiKey: state.apiKey,
+    theme: state.theme,
+  }));
 
   return {
     toastInfo,
     toastWarning,
+    initialStoreState,
     storeState,
     setChats,
     setFolders,
+    setCurrentChatIndex,
     setState,
     importOpenAIChatExportMock,
+    createPartializedState,
   };
 });
 
@@ -51,12 +73,20 @@ vi.mock('@store/store', () => ({
       chats: testContext.storeState.chats,
       folders: testContext.storeState.folders,
       contentStore: testContext.storeState.contentStore,
+      apiKey: testContext.storeState.apiKey,
+      theme: testContext.storeState.theme,
+      currentChatIndex: testContext.storeState.currentChatIndex,
       providerCustomModels: {},
       setChats: testContext.setChats,
       setFolders: testContext.setFolders,
+      setCurrentChatIndex: testContext.setCurrentChatIndex,
+    }),
+    getInitialState: () => ({
+      ...testContext.initialStoreState,
     }),
     setState: testContext.setState,
   },
+  createPartializedState: testContext.createPartializedState,
 }));
 
 vi.mock('@utils/import', async () => {
@@ -107,12 +137,17 @@ describe('importService', () => {
     testContext.storeState.chats = [createChat('existing-chat', 'Existing')];
     testContext.storeState.folders = {};
     testContext.storeState.contentStore = {};
+    testContext.storeState.apiKey = 'existing-key';
+    testContext.storeState.theme = 'light';
+    testContext.storeState.currentChatIndex = 0;
     testContext.setChats.mockClear();
     testContext.setFolders.mockClear();
+    testContext.setCurrentChatIndex.mockClear();
     testContext.setState.mockClear();
     testContext.toastInfo.mockClear();
     testContext.toastWarning.mockClear();
     testContext.importOpenAIChatExportMock.mockReset();
+    testContext.createPartializedState.mockClear();
     vi.mocked(window.confirm).mockReset();
   });
 
@@ -231,6 +266,30 @@ describe('importService', () => {
     });
     expect(testContext.storeState.chats[0].id).toBe('dup-chat');
     expect(testContext.storeState.chats[1].id).not.toBe('dup-chat');
+  });
+
+  it('replaces local conversations and settings when mode is replace', async () => {
+    const file = new File([
+      JSON.stringify({
+        version: 3,
+        folders: {},
+        contentStore: { abc: { value: 'hello', refCount: 1 } },
+        chats: [createChat('imported-chat', 'Imported')],
+      }),
+    ], 'replace-v3.json', {
+      type: 'application/json',
+    });
+
+    const result = await importChatFromFile(file, t, 'replace');
+
+    expect(result).toEqual({
+      success: true,
+      message: 'notifications.successfulImport',
+    });
+    expect(testContext.storeState.chats).toEqual([createChat('imported-chat', 'Imported')]);
+    expect(testContext.storeState.apiKey).toBeUndefined();
+    expect(testContext.storeState.theme).toBe('dark');
+    expect(testContext.storeState.currentChatIndex).toBe(0);
   });
 
   it('quota retry for OpenAI array pops chats until success', async () => {

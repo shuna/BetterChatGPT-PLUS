@@ -11,6 +11,12 @@
       "chatsImported": "{{imported}} chats were imported out of {{total}}.",
       "unsupportedModels": "Unsupported model(s): {{models}} are not available. Add them in AI Provider Settings → Custom tab before importing."
     },
+    "mode": {
+      "append": "Append to existing data",
+      "replace": "Replace all local data"
+    },
+    "replaceWarning": "Replace all resets local conversations and settings before applying the imported data.",
+    "confirmReplaceAll": "This will delete all local conversations and settings, then replace them with the imported data. Continue?",
     "reduceMessagesSuccess": "{{count}} messages were reduced.",
     "partialImportMessages": "expected {{total}} messages but found {{count}}"
   }

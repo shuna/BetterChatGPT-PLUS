@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'react-toastify';
 
 import useStore from '@store/store';
+import { createPartializedState } from '@store/store';
 import {
   importOpenAIChatExport,
   isLegacyImport,
@@ -23,6 +24,8 @@ export type ImportResult = {
   message: string;
 };
 
+export type ImportMode = 'append' | 'replace';
+
 type Translator = (key: string, opts?: Record<string, unknown>) => string;
 type ImportType =
   | 'OpenAIContent'
@@ -33,12 +36,13 @@ type ImportType =
   | '';
 
 type StoreSnapshot = {
-  chats: ChatInterface[] | undefined;
-  folders: FolderCollection;
-  contentStore: ContentStoreData;
+  persistedState: ReturnType<typeof createPartializedState>;
+  currentChatIndex: number;
 };
 
 const cloneState = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
+const deepClone = <T,>(value: T): T =>
+  typeof structuredClone === 'function' ? structuredClone(value) : cloneState(value);
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 const extractModelId = (chat: unknown): string | undefined => {
@@ -49,15 +53,21 @@ const extractModelId = (chat: unknown): string | undefined => {
 };
 
 const takeSnapshot = (): StoreSnapshot => ({
-  chats: cloneState(useStore.getState().chats),
-  folders: cloneState(useStore.getState().folders),
-  contentStore: cloneState(useStore.getState().contentStore ?? {}),
+  persistedState: deepClone(createPartializedState(useStore.getState())),
+  currentChatIndex: useStore.getState().currentChatIndex,
 });
 
 const restoreSnapshot = (snapshot: StoreSnapshot) => {
-  useStore.getState().setChats(snapshot.chats ?? []);
-  useStore.getState().setFolders(snapshot.folders);
-  useStore.setState({ contentStore: snapshot.contentStore });
+  useStore.setState(snapshot.persistedState);
+  useStore.getState().setCurrentChatIndex(snapshot.currentChatIndex);
+};
+
+const resetPersistedStateForReplace = () => {
+  const initialState = deepClone(
+    createPartializedState(useStore.getInitialState())
+  );
+  useStore.setState(initialState);
+  useStore.getState().setCurrentChatIndex(initialState.chats?.length ? 0 : -1);
 };
 
 const mergeChats = (chatsToImport: ChatInterface[]) => {
@@ -323,7 +333,8 @@ const importParsedData = async (
   originalParsedData: unknown,
   type: ImportType,
   t: Translator,
-  shouldAllowPartialImport: boolean
+  shouldAllowPartialImport: boolean,
+  mode: ImportMode
 ): Promise<ImportResult> => {
   let chatsToImport = parsedData;
   let removedChatsCount = 0;
@@ -331,6 +342,10 @@ const importParsedData = async (
 
   while (true) {
     try {
+      if (mode === 'replace') {
+        resetPersistedStateForReplace();
+      }
+
       switch (type) {
         case 'OpenAIContent':
           return importOpenAIData(
@@ -410,7 +425,8 @@ const importParsedData = async (
 
 export const importChatFromFile = async (
   file: File,
-  t: Translator
+  t: Translator,
+  mode: ImportMode = 'append'
 ): Promise<ImportResult> => {
   const snapshot = takeSnapshot();
 
@@ -424,11 +440,15 @@ export const importChatFromFile = async (
       originalParsedData,
       type,
       t,
-      false
+      false,
+      mode
     );
 
     if (!result.success) {
       restoreSnapshot(snapshot);
+    } else if (mode === 'replace') {
+      const chats = useStore.getState().chats;
+      useStore.getState().setCurrentChatIndex(chats && chats.length > 0 ? 0 : -1);
     }
 
     return result;
