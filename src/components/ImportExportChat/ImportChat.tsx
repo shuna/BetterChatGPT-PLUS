@@ -16,10 +16,14 @@ const ImportChat = () => {
     if (!inputRef || !inputRef.current) return;
     const file = inputRef.current.files?.[0];
     if (!file) return;
+    const replaceConfirmation = t('confirmReplaceAll', {
+      ns: 'import',
+      defaultValue: 'Replace all existing chats with the imported file?',
+    }) as string;
 
     if (
       mode === 'replace' &&
-      !window.confirm(t('confirmReplaceAll', { ns: 'import' }))
+      !window.confirm(replaceConfirmation)
     ) {
       return;
     }

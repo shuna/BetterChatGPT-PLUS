@@ -285,10 +285,17 @@ const ChatContent = () => {
 
   const handleFollowOutput = useCallback((isAtBottom: boolean) => {
     if (!autoScroll) return false;
+
+    // Avoid restarting smooth follow animations while streaming content is still changing height.
+    if (isCurrentChatGenerating) {
+      if (bottomLockRef.current) return true;
+      return isAtBottom ? true : false;
+    }
+
     // Bottom lock forces follow regardless of current position
     if (bottomLockRef.current) return 'smooth' as const;
     return isAtBottom ? 'smooth' as const : false;
-  }, [autoScroll]);
+  }, [autoScroll, isCurrentChatGenerating]);
 
   const handleAtBottomStateChange = useCallback((bottom: boolean) => {
     setAtBottom(bottom);
@@ -375,8 +382,13 @@ const ChatContent = () => {
         sticky
       />
 
-      {isCurrentChatGenerating && (
-        <div className='flex justify-center my-2'>
+      <div
+        className={`flex justify-center my-2 min-h-[40px] ${
+          isCurrentChatGenerating ? '' : 'invisible pointer-events-none'
+        }`}
+        aria-hidden={!isCurrentChatGenerating}
+      >
+        {isCurrentChatGenerating && (
           <button
             className='btn relative btn-neutral border-0 md:border'
             onClick={() => {
@@ -402,8 +414,8 @@ const ChatContent = () => {
               {t('stopGenerating')}
             </div>
           </button>
-        </div>
-      )}
+        )}
+      </div>
 
       {error !== '' && (
         <div className='relative py-2 px-3 w-3/5 mt-3 max-md:w-11/12 border rounded-md border-red-500 bg-red-500/10'>
@@ -438,13 +450,20 @@ const ChatContent = () => {
             : 'md:max-w-3xl lg:max-w-3xl xl:max-w-4xl'
         }`}
       >
-        {isCurrentChatGenerating || (
-          <div className='md:w-[calc(100%-50px)] flex gap-4 flex-wrap justify-center'>
-            <DownloadChat visibleMessages={items} />
-            {!hideShareGPT && <Suspense fallback={null}><ShareGPT /></Suspense>}
-            <CloneChat />
-          </div>
-        )}
+        <div
+          className={`md:w-[calc(100%-50px)] flex gap-4 flex-wrap justify-center min-h-[40px] ${
+            isCurrentChatGenerating ? 'invisible pointer-events-none' : ''
+          }`}
+          aria-hidden={isCurrentChatGenerating}
+        >
+          {!isCurrentChatGenerating && (
+            <>
+              <DownloadChat visibleMessages={items} />
+              {!hideShareGPT && <Suspense fallback={null}><ShareGPT /></Suspense>}
+              <CloneChat />
+            </>
+          )}
+        </div>
       </div>
       <div className='w-full h-36'></div>
     </div>
@@ -470,7 +489,7 @@ const ChatContent = () => {
           overscan={600}
           followOutput={handleFollowOutput}
           atBottomStateChange={handleAtBottomStateChange}
-          atBottomThreshold={50}
+          atBottomThreshold={150}
           itemContent={itemContent}
           components={components}
           rangeChanged={handleRangeChanged}

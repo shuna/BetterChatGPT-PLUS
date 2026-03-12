@@ -40,6 +40,10 @@ type StoreSnapshot = {
   currentChatIndex: number;
 };
 
+const applyPersistedState = (persistedState: ReturnType<typeof createPartializedState>) => {
+  useStore.setState(persistedState as Partial<ReturnType<typeof useStore.getState>>);
+};
+
 const cloneState = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
 const deepClone = <T,>(value: T): T =>
   typeof structuredClone === 'function' ? structuredClone(value) : cloneState(value);
@@ -58,7 +62,7 @@ const takeSnapshot = (): StoreSnapshot => ({
 });
 
 const restoreSnapshot = (snapshot: StoreSnapshot) => {
-  useStore.setState(snapshot.persistedState);
+  applyPersistedState(snapshot.persistedState);
   useStore.getState().setCurrentChatIndex(snapshot.currentChatIndex);
 };
 
@@ -66,7 +70,7 @@ const resetPersistedStateForReplace = () => {
   const initialState = deepClone(
     createPartializedState(useStore.getInitialState())
   );
-  useStore.setState(initialState);
+  applyPersistedState(initialState);
   useStore.getState().setCurrentChatIndex(initialState.chats?.length ? 0 : -1);
 };
 
