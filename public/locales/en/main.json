@@ -37,6 +37,8 @@
   "resetCost": "Reset Costs",
   "countTotalTokens": "Count total tokens",
   "tokenCountWithImages": "Tokens: {{tokens}} / Images: {{images}} ({{cost}})",
+  "liveTokenCount": "Input: {{prompt}} / Output: {{completion}} ({{cost}})",
+  "liveTokenCountWithImages": "Input: {{prompt}} / Output: {{completion}} / Images: {{images}} ({{cost}})",
   "displayChatSize": "Display chat size in title",
   "defaultImageDetail": "Image detail (auto, high, low resolution)",
   "morePrompts": "You can find more prompts here: ",
