@@ -10,6 +10,7 @@ interface NodeContextMenuProps {
   y: number;
   onClose: () => void;
   onDiff: (pathA: string[]) => void;
+  onNavigateToChat: (chatIndex: number, nodeId: string) => void;
 }
 
 const NodeContextMenu = ({
@@ -19,6 +20,7 @@ const NodeContextMenu = ({
   y,
   onClose,
   onDiff,
+  onNavigateToChat,
 }: NodeContextMenuProps) => {
   const { t } = useTranslation();
   const deleteBranch = useStore((state) => state.deleteBranch);
@@ -91,6 +93,15 @@ const NodeContextMenu = ({
           onClick={handleDiff}
         >
           {t('compareBranches')}
+        </button>
+        <button
+          className='w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700'
+          onClick={() => {
+            onNavigateToChat(chatIndex, nodeId);
+            onClose();
+          }}
+        >
+          {t('navigateToMessage')}
         </button>
         <hr className='my-1 border-gray-200 dark:border-gray-700' />
         <button

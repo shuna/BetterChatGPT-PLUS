@@ -25,6 +25,11 @@ import {
   updateLastNodeContentState,
 } from './branch-domain';
 
+export interface PendingChatFocus {
+  chatIndex: number;
+  nodeId: string;
+}
+
 export interface BranchSlice {
   contentStore: ContentStoreData;
   setContentStore: (contentStore: ContentStoreData) => void;
@@ -34,6 +39,9 @@ export interface BranchSlice {
   setBranchEditorFocusNodeId: (nodeId: string | null) => void;
   chatActiveView: 'chat' | 'branch-editor';
   setChatActiveView: (view: 'chat' | 'branch-editor') => void;
+  pendingChatFocus: PendingChatFocus | null;
+  setPendingChatFocus: (focus: PendingChatFocus | null) => void;
+  clearPendingChatFocus: () => void;
 
   // Multi-view state
   isMultiView: boolean;
@@ -133,6 +141,14 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   setChatActiveView: (view) => {
     if (get().chatActiveView === view) return;
     set({ chatActiveView: view });
+  },
+  pendingChatFocus: null,
+  setPendingChatFocus: (focus) => {
+    set({ pendingChatFocus: focus });
+  },
+  clearPendingChatFocus: () => {
+    if (get().pendingChatFocus === null) return;
+    set({ pendingChatFocus: null });
   },
 
   isMultiView: false,

@@ -71,6 +71,7 @@
   "deleteBranch": "Delete branch",
   "renameBranch": "Rename branch",
   "compareBranches": "Compare branches",
+  "navigateToMessage": "Go to message",
   "copyMessages": "Copy messages",
   "pasteMessages": "Paste messages here",
   "clipboardEmpty": "Nothing in branch clipboard",

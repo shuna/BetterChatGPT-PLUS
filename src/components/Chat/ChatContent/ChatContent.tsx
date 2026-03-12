@@ -162,6 +162,28 @@ const ChatContent = () => {
     return result;
   }, [messagesLimited, advancedMode]);
 
+  // Scroll to a specific message when navigating from branch editor
+  const pendingChatFocus = useStore((state) => state.pendingChatFocus);
+  const clearPendingChatFocus = useStore((state) => state.clearPendingChatFocus);
+
+  useEffect(() => {
+    if (!pendingChatFocus || pendingChatFocus.chatIndex !== currentChatIndex) return;
+    const nodeId = pendingChatFocus.nodeId;
+
+    const pathIndex = activePath.indexOf(nodeId);
+    if (pathIndex < 0) return;
+
+    const itemIndex = items.findIndex((item) => item.originalIndex === pathIndex);
+    if (itemIndex < 0) return;
+
+    clearPendingChatFocus();
+
+    // Delay to let Virtuoso mount after view switch
+    requestAnimationFrame(() => {
+      virtuosoRef.current?.scrollToIndex({ index: itemIndex, behavior: 'smooth', align: 'center' });
+    });
+  }, [pendingChatFocus, currentChatIndex, activePath, items, clearPendingChatFocus]);
+
   useEffect(() => {
     perfStart('chat-render');
   }, [currentChatIndex]);

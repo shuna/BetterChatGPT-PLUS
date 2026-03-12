@@ -59,6 +59,7 @@
   "deleteBranch": "ブランチを削除",
   "renameBranch": "ブランチ名を変更",
   "compareBranches": "ブランチを比較",
+  "navigateToMessage": "メッセージに移動",
   "copyMessages": "メッセージをコピー",
   "pasteMessages": "ここにメッセージを貼り付け",
   "clipboardEmpty": "クリップボードは空です",

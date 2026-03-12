@@ -22,6 +22,7 @@ import MessageNode from './nodes/MessageNode';
 import ConversationHeaderNode from './nodes/ConversationHeaderNode';
 import NodeContextMenu from './NodeContextMenu';
 import BranchDiffModal from './BranchDiffModal';
+import MessageDetailModal from './MessageDetailModal';
 import { buildPathToLeaf } from '@utils/branchUtils';
 import { perfStart, perfEnd } from '@utils/perfTrace';
 
@@ -41,6 +42,10 @@ const BranchEditorCanvas = ({
   const switchActivePath = useStore((state) => state.switchActivePath);
   const focusNodeId = useStore((state) => state.branchEditorFocusNodeId);
   const setBranchEditorFocusNodeId = useStore((state) => state.setBranchEditorFocusNodeId);
+  const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
+  const setChatActiveView = useStore((state) => state.setChatActiveView);
+  const ensureBranchTree = useStore((state) => state.ensureBranchTree);
+  const setPendingChatFocus = useStore((state) => state.setPendingChatFocus);
 
   // Build layout entries from chat indices (memoized to avoid re-renders)
   const entries: MultiLayoutEntry[] = React.useMemo(() =>
@@ -135,6 +140,11 @@ const BranchEditorCanvas = ({
     y: number;
   } | null>(null);
 
+  const [selectedNodeForModal, setSelectedNodeForModal] = useState<{
+    nodeId: string;
+    chatIndex: number;
+  } | null>(null);
+
   const [diffPaths, setDiffPaths] = useState<{
     pathA: string[];
     pathB: string[];
@@ -182,6 +192,21 @@ const BranchEditorCanvas = ({
     }
   }, [focusNodeId, rfNodes, setBranchEditorFocusNodeId]);
 
+  const navigateToChat = useCallback(
+    (chatIndex: number, nodeId: string) => {
+      ensureBranchTree(chatIndex);
+      const chat = chats?.[chatIndex];
+      if (chat?.branchTree) {
+        const newPath = buildPathToLeaf(chat.branchTree, nodeId);
+        switchActivePath(chatIndex, newPath);
+      }
+      setCurrentChatIndex(chatIndex);
+      setChatActiveView('chat');
+      setPendingChatFocus({ chatIndex, nodeId });
+    },
+    [chats, ensureBranchTree, switchActivePath, setCurrentChatIndex, setChatActiveView, setPendingChatFocus]
+  );
+
   const onNodeClick = useCallback(
     (_: React.MouseEvent, node: Node<MessageNodeData>) => {
       const nodeChatIndex = node.data.chatIndex >= 0 ? node.data.chatIndex : primaryChatIndex;
@@ -189,8 +214,17 @@ const BranchEditorCanvas = ({
       if (!chat?.branchTree) return;
       const newPath = buildPathToLeaf(chat.branchTree, node.id);
       switchActivePath(nodeChatIndex, newPath);
+      setSelectedNodeForModal({ nodeId: node.id, chatIndex: nodeChatIndex });
     },
     [chats, primaryChatIndex, switchActivePath]
+  );
+
+  const onNodeDoubleClick = useCallback(
+    (_: React.MouseEvent, node: Node<MessageNodeData>) => {
+      const nodeChatIndex = node.data.chatIndex >= 0 ? node.data.chatIndex : primaryChatIndex;
+      navigateToChat(nodeChatIndex, node.id);
+    },
+    [primaryChatIndex, navigateToChat]
   );
 
   const onNodeContextMenu = useCallback(
@@ -326,6 +360,7 @@ const BranchEditorCanvas = ({
         onEdgesChange={onEdgesChange}
         onInit={(instance) => { reactFlowInstance.current = instance; }}
         onNodeClick={onNodeClick}
+        onNodeDoubleClick={onNodeDoubleClick}
         onNodeContextMenu={onNodeContextMenu}
         onNodeDragStart={onNodeDragStart}
         onNodeDragStop={onNodeDragStop}
@@ -348,6 +383,14 @@ const BranchEditorCanvas = ({
         />
       </ReactFlow>
 
+      {selectedNodeForModal && (
+        <MessageDetailModal
+          chatIndex={selectedNodeForModal.chatIndex}
+          nodeId={selectedNodeForModal.nodeId}
+          onClose={() => setSelectedNodeForModal(null)}
+        />
+      )}
+
       {contextMenu && (
         <NodeContextMenu
           chatIndex={contextMenu.chatIndex}
@@ -356,6 +399,7 @@ const BranchEditorCanvas = ({
           y={contextMenu.y}
           onClose={() => setContextMenu(null)}
           onDiff={handleDiff}
+          onNavigateToChat={navigateToChat}
         />
       )}
 
