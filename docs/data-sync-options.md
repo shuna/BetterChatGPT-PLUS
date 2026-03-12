@@ -38,12 +38,13 @@
 | 項目 | 内容 |
 |------|------|
 | **方式** | OAuth2 PKCE → Dropbox HTTP API v2でファイル読み書き |
-| **npm** | `dropbox` (公式SDK、~50KB gzip) |
+| **npm** | `dropbox` (公式SDK v10.34、~150-200KB gzip。**3年以上未更新**) |
 | **無料枠** | 2GB ストレージ（本アプリには十分すぎる） |
 | **実装難易度** | ★★☆ 低〜中（Google Driveとほぼ同じパターン） |
 | **CORS** | Dropbox APIはCORS対応済み、SPA直接呼び出し可 |
 | **利点** | Google Drive実装とほぼ同構造でコード再利用可能。ユーザー母数が大きい |
-| **欠点** | APIの制限（1ユーザーあたり月数万リクエスト）。PKCE対応必須 |
+| **欠点** | SDKが3年以上未メンテナンス。バンドルサイズ大（~150-200KB gzip、tree-shake不可）。APIの制限（150 req/min/user）。PKCE対応必須 |
+| **注意** | SDKの代わりにfetch直接呼び出しも検討すべき（APIはシンプルなREST） |
 | **実装見通し** | `GoogleCloudStorage.ts`をベースに`DropboxCloudStorage.ts`を作成。OAuth2 PKCEフロー + `/files/upload`、`/files/download`エンドポイント使用 |
 
 ### A2. OneDrive (Microsoft Graph API)
@@ -51,12 +52,12 @@
 | 項目 | 内容 |
 |------|------|
 | **方式** | MSAL.js (OAuth2 PKCE) → Microsoft Graph APIでファイル操作 |
-| **npm** | `@azure/msal-browser` (~30KB gzip) + fetch |
+| **npm** | `@azure/msal-browser` (~55-70KB gzip、tree-shake困難) + fetch |
 | **無料枠** | 5GB (個人) / 1TB (Microsoft 365) |
-| **実装難易度** | ★★★ 中（Azure ADアプリ登録が必要、MSALのセットアップがやや複雑） |
+| **実装難易度** | ★★★ 中〜高（Azure ADアプリ登録が必要、MSALのセットアップが複雑） |
 | **CORS** | Graph APIはCORS対応済み |
-| **利点** | Windowsユーザーの多くが利用可能。大容量 |
-| **欠点** | Azure AD登録の管理が面倒。MSALライブラリがやや重い |
+| **利点** | Windowsユーザーの多くが利用可能。大容量。企業アカウント対応 |
+| **欠点** | Azure AD登録の管理が面倒。MSALライブラリが重い。**SPAタイプのリフレッシュトークンは24時間で失効**（再認証が必要） |
 | **実装見通し** | Google Driveと同パターン。`/me/drive/root:/weavelet-canvas.json:/content`でファイル操作 |
 
 ### A3. GitHub Gist
@@ -81,8 +82,8 @@
 | 項目 | 内容 |
 |------|------|
 | **方式** | Firebase SDK → Firestore or Realtime Database |
-| **npm** | `firebase` (~80KB gzip、tree-shakable) |
-| **無料枠** | Spark Plan: Firestore 1GB保存 + 50K読み取り/日 + 20K書き込み/日 |
+| **npm** | `firebase` (モジュラーSDK v10+: Firestore ~61KB + Auth ~20KB gzip、tree-shakable) |
+| **無料枠** | Spark Plan: Firestore 1GB保存 + 50K読み取り/日 + 20K書き込み/日 + Auth 50K MAU |
 | **実装難易度** | ★★☆ 低〜中（SDK充実、ドキュメント豊富） |
 | **リアルタイム** | Firestoreの`onSnapshot`で変更をリアルタイム受信可能 |
 | **利点** | **リアルタイム同期**が可能（他デバイスの変更を即座に反映）。オフライン対応内蔵。匿名認証も使える。バックエンドサーバー不要 |
@@ -110,12 +111,12 @@ const firestoreStorage: PersistStorage<S> = {
 | 項目 | 内容 |
 |------|------|
 | **方式** | Supabase SDK → PostgreSQL + Realtime |
-| **npm** | `@supabase/supabase-js` (~15KB gzip) |
-| **無料枠** | 500MB DB + 1GB Storage + 50K月間アクティブユーザー |
+| **npm** | `@supabase/supabase-js` (~35-50KB gzip、tree-shakable) |
+| **無料枠** | 500MB DB + 1GB Storage + 50K MAU（**7日間非アクティブで自動停止**） |
 | **実装難易度** | ★★☆ 低〜中 |
-| **リアルタイム** | PostgreSQL LISTEN/NOTIFY ベースのリアルタイムサブスクリプション |
-| **利点** | オープンソース。SDKが軽量。PostgreSQL標準。Row Level Securityで認証統合。セルフホスト可能 |
-| **欠点** | 無料枠のDB容量が小さめ。大きなJSONステートの保存にはStorage APIの方が適切 |
+| **リアルタイム** | PostgreSQL LISTEN/NOTIFY ベースのWebSocketリアルタイムサブスクリプション |
+| **利点** | オープンソース。PostgreSQL標準（SQL/JOIN可）。Row Level Securityで認証統合。セルフホスト可能 |
+| **欠点** | **無料枠は7日間DBアクセスがないとプロジェクトが自動停止**。DB容量500MBと小さめ。バックアップ/SLAなし |
 | **実装見通し** | テーブル`user_state(user_id, key, value_json, updated_at)`を作成。Realtime subscriptionで他デバイスの変更を検知 |
 
 ---
@@ -198,7 +199,18 @@ const firestoreStorage: PersistStorage<S> = {
 
 ## E. ブラウザネイティブ / その他
 
-### E1. remoteStorage
+### E1. Cloudflare Workers KV / D1
+
+| 項目 | 内容 |
+|------|------|
+| **方式** | Cloudflare Worker（薄いバックエンド）経由でKV or D1（SQLite）にアクセス |
+| **npm** | 不要（fetch + Worker。開発時は`wrangler` CLI） |
+| **無料枠** | Workers 100K req/日 + D1 5GB + 5M行読取/日 + 100K行書込/日 |
+| **実装難易度** | ★★★ 中（**クライアントオンリーではなくWorkerの実装・デプロイが必要**） |
+| **利点** | 無料枠が非常に寛大。グローバルエッジ配信で低レイテンシ。エグレス費用なし |
+| **欠点** | **SPAオンリーの前提に反してバックエンドが必要**。KVは結果整合性（書込反映に最大60秒）。リアルタイム同期にはDurable Objects（有料）が必要。認証機構を自前で実装する必要あり |
+
+### E2. remoteStorage
 
 | 項目 | 内容 |
 |------|------|
@@ -208,7 +220,18 @@ const firestoreStorage: PersistStorage<S> = {
 | **利点** | ベンダー非依存。ユーザーが自分のストレージサーバーを選べる。オフラインファーストが組み込み |
 | **欠点** | 普及率が低い（対応サーバーが少ない）。一般ユーザーのハードルが高い |
 
-### E2. OPFS (Origin Private File System)
+### E3. WebDAV
+
+| 項目 | 内容 |
+|------|------|
+| **方式** | WebDAVプロトコルでNextcloud等のサーバーにファイル読み書き |
+| **npm** | `webdav` (~30KB gzip、ブラウザ用に`webdav/web`をimport) |
+| **実装難易度** | ★★★★ 高 |
+| **利点** | オープン標準。既存のNextcloud/ownCloudユーザーが利用可能 |
+| **欠点** | **CORSがほぼショーストッパー**（Nextcloud等のWebDAVサーバーがCORSヘッダーを返さない）。サーバー側のCORS設定が必要だがユーザーが制御できないケースが多い。リアルタイム/オフライン対応なし |
+| **実装見通し** | CORSの問題から**ブラウザSPAでの実用は非現実的**。Electronアプリ限定なら可能 |
+
+### E4. OPFS (Origin Private File System)
 
 | 項目 | 内容 |
 |------|------|
@@ -225,7 +248,7 @@ const firestoreStorage: PersistStorage<S> = {
 
 | 方式 | 実装コスト | リアルタイム | オフライン | プライバシー | ユーザー母数 | 推奨度 |
 |------|-----------|------------|-----------|-------------|------------|--------|
-| **Dropbox API** | 低 | - | - | ○ | 大 | ★★★★★ |
+| **Dropbox API** | 低 | - | - | ○ | 大 | ★★★★☆ |
 | **OneDrive** | 中 | - | - | ○ | 大 | ★★★★☆ |
 | **GitHub Gist** | 低 | - | - | △ | 中（開発者） | ★★★☆☆ |
 | **Firebase** | 低〜中 | ★★★ | ★★★ | △ | 大 | ★★★★★ |
@@ -234,6 +257,8 @@ const firestoreStorage: PersistStorage<S> = {
 | **CRDTs (Yjs)** | 高 | ★★★ | ★★★ | ★★★ | - | ★★☆☆☆ |
 | **WebRTC P2P** | 中 | ★★☆ | - | ★★★ | - | ★★☆☆☆ |
 | **File Export強化** | 最低 | - | ★★★ | ★★★ | 全員 | ★★★★☆ |
+| **Cloudflare D1** | 中 | - | - | ○ | - | ★★★☆☆ |
+| **WebDAV** | 高 | - | - | ○ | 小 | ★☆☆☆☆ |
 | **remoteStorage** | 中 | ★☆☆ | ★★★ | ★★★ | 極小 | ★★☆☆☆ |
 
 ---
@@ -241,15 +266,15 @@ const firestoreStorage: PersistStorage<S> = {
 ## 段階的実装の提案
 
 ### Phase 1（低コスト・高効果）
-1. **Dropbox API同期** — Google Drive実装のコードをほぼ流用可能
-2. **File Export/Import強化** — File System Access APIで自動保存対応
+1. **File Export/Import強化** — File System Access APIで自動保存対応。依存ゼロで最もリスクが低い
+2. **Dropbox API同期** — Google Drive実装のコードをほぼ流用可能（SDK未メンテのためfetch直接推奨）
 
 ### Phase 2（リアルタイム同期）
-3. **Firebase Firestore** — リアルタイム双方向同期。複数デバイスの変更を即座に反映
-4. **Supabase** — Firebaseのオープンソース代替
+3. **Firebase Firestore** — リアルタイム双方向同期。複数デバイスの変更を即座に反映。最も成熟したBaaS
+4. **Supabase** — Firebaseのオープンソース代替（7日停止制限に注意）
 
-### Phase 3（先進的）
-5. **OneDrive** — Windows/Officeユーザー向け
+### Phase 3（ユーザー層拡大）
+5. **OneDrive** — Windows/Officeユーザー向け（24hトークン失効の制限あり）
 6. **GitHub Gist** — 開発者コミュニティ向けニッチオプション
 
 ---
