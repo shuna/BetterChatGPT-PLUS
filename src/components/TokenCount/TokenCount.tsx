@@ -57,17 +57,17 @@ const TokenCount = React.memo(() => {
   }, [model, providerId, tokenCount, imageTokenCount, favoriteModels, providerCustomModels, providerModelCache, t]);
 
   useEffect(() => {
+    if (generating) return;
+
     let cancelled = false;
 
-    if (!generating) {
-      Promise.all([
-        countTokens(messages, model),
-      ]).then(([newPromptTokens]) => {
-        if (cancelled) return;
-        setTokenCount(newPromptTokens);
-        setImageTokenCount(countImageInputs(messages));
-      });
-    }
+    Promise.all([
+      countTokens(messages, model),
+    ]).then(([newPromptTokens]) => {
+      if (cancelled) return;
+      setTokenCount(newPromptTokens);
+      setImageTokenCount(countImageInputs(messages));
+    });
 
     return () => {
       cancelled = true;
