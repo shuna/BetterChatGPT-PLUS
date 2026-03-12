@@ -30,6 +30,12 @@ export interface PendingChatFocus {
   nodeId: string;
 }
 
+export interface ScrollAnchor {
+  firstVisibleItemIndex: number;
+  offsetWithinItem: number;
+  wasAtBottom: boolean;
+}
+
 export interface BranchSlice {
   contentStore: ContentStoreData;
   setContentStore: (contentStore: ContentStoreData) => void;
@@ -42,6 +48,11 @@ export interface BranchSlice {
   pendingChatFocus: PendingChatFocus | null;
   setPendingChatFocus: (focus: PendingChatFocus | null) => void;
   clearPendingChatFocus: () => void;
+
+  chatScrollAnchors: Record<string, ScrollAnchor>;
+  saveChatScrollAnchor: (chatId: string, anchor: ScrollAnchor) => void;
+  getChatScrollAnchor: (chatId: string) => ScrollAnchor | null;
+  clearChatScrollAnchor: (chatId: string) => void;
 
   // Multi-view state
   isMultiView: boolean;
@@ -149,6 +160,20 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   clearPendingChatFocus: () => {
     if (get().pendingChatFocus === null) return;
     set({ pendingChatFocus: null });
+  },
+
+  chatScrollAnchors: {},
+  saveChatScrollAnchor: (chatId, anchor) => {
+    set((prev) => ({
+      chatScrollAnchors: { ...prev.chatScrollAnchors, [chatId]: anchor },
+    }));
+  },
+  getChatScrollAnchor: (chatId) => {
+    return get().chatScrollAnchors[chatId] ?? null;
+  },
+  clearChatScrollAnchor: (chatId) => {
+    const { [chatId]: _, ...rest } = get().chatScrollAnchors;
+    set({ chatScrollAnchors: rest });
   },
 
   isMultiView: false,

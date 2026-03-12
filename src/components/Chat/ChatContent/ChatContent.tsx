@@ -1,5 +1,5 @@
 import React, { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
+import { ListRange, Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import useStore from '@store/store';
 import { useTranslation } from 'react-i18next';
 
@@ -150,7 +150,19 @@ const ChatContent = () => {
 
   // Virtuoso state
   const virtuosoRef = useRef<VirtuosoHandle>(null);
+  const scrollerRef = useRef<HTMLElement | null>(null);
   const [atBottom, setAtBottom] = useState(true);
+
+  // Scroll anchor tracking (local refs, saved to store on departure)
+  const saveChatScrollAnchor = useStore((state) => state.saveChatScrollAnchor);
+  const getChatScrollAnchor = useStore((state) => state.getChatScrollAnchor);
+  const anchorRef = useRef({ firstVisibleItemIndex: 0, offsetWithinItem: 0, wasAtBottom: true });
+  const atBottomRef = useRef(true);
+
+  // Bottom lock mode
+  const bottomLockRef = useRef(false);
+  const bottomLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastScrollTopRef = useRef(0);
 
   // Build visible items list, filtering hidden system messages
   const items = useMemo(() => {
@@ -162,27 +174,91 @@ const ChatContent = () => {
     return result;
   }, [messagesLimited, advancedMode]);
 
-  // Scroll to a specific message when navigating from branch editor
+  // Track visible range for anchor
+  const handleRangeChanged = useCallback((range: ListRange) => {
+    anchorRef.current.firstVisibleItemIndex = range.startIndex;
+    // Compute offsetWithinItem from scroller
+    if (scrollerRef.current) {
+      const scroller = scrollerRef.current;
+      const firstItem = scroller.querySelector(`[data-item-index="${range.startIndex}"]`);
+      if (firstItem) {
+        const scrollerRect = scroller.getBoundingClientRect();
+        const itemRect = firstItem.getBoundingClientRect();
+        anchorRef.current.offsetWithinItem = scrollerRect.top - itemRect.top;
+      }
+    }
+  }, []);
+
+  // Save scroll anchor to store (called on chat departure / unmount)
+  const saveCurrentAnchor = useCallback(() => {
+    if (!currentChatId) return;
+    saveChatScrollAnchor(currentChatId, {
+      ...anchorRef.current,
+      wasAtBottom: atBottomRef.current,
+    });
+  }, [currentChatId, saveChatScrollAnchor]);
+
+  // Save anchor when chat changes or component unmounts
+  const prevChatIdRef = useRef(currentChatId);
+  useEffect(() => {
+    if (prevChatIdRef.current && prevChatIdRef.current !== currentChatId) {
+      // Chat changed — save anchor for the previous chat
+      saveChatScrollAnchor(prevChatIdRef.current, {
+        ...anchorRef.current,
+        wasAtBottom: atBottomRef.current,
+      });
+      // Reset bottom lock so it doesn't bleed into the new chat
+      bottomLockRef.current = false;
+      if (bottomLockTimerRef.current) {
+        clearTimeout(bottomLockTimerRef.current);
+        bottomLockTimerRef.current = null;
+      }
+    }
+    prevChatIdRef.current = currentChatId;
+  }, [currentChatId, saveChatScrollAnchor]);
+
+  useEffect(() => {
+    return () => {
+      saveCurrentAnchor();
+    };
+  }, [saveCurrentAnchor]);
+
+  // Restore scroll anchor on mount (after Virtuoso renders)
   const pendingChatFocus = useStore((state) => state.pendingChatFocus);
   const clearPendingChatFocus = useStore((state) => state.clearPendingChatFocus);
 
+  // Handle pendingChatFocus — reacts to focus changes (including same-chat branch editor return)
   useEffect(() => {
     if (!pendingChatFocus || pendingChatFocus.chatIndex !== currentChatIndex) return;
     const nodeId = pendingChatFocus.nodeId;
-
     const pathIndex = activePath.indexOf(nodeId);
     if (pathIndex < 0) return;
-
     const itemIndex = items.findIndex((item) => item.originalIndex === pathIndex);
     if (itemIndex < 0) return;
 
     clearPendingChatFocus();
-
-    // Delay to let Virtuoso mount after view switch
     requestAnimationFrame(() => {
       virtuosoRef.current?.scrollToIndex({ index: itemIndex, behavior: 'smooth', align: 'center' });
     });
   }, [pendingChatFocus, currentChatIndex, activePath, items, clearPendingChatFocus]);
+
+  // Restore saved scroll anchor on chat switch (when no pendingChatFocus)
+  useEffect(() => {
+    // Skip if pendingChatFocus will handle scrolling
+    if (pendingChatFocus && pendingChatFocus.chatIndex === currentChatIndex) return;
+
+    const anchor = getChatScrollAnchor(currentChatId);
+    if (!anchor) return; // first visit — Virtuoso defaults to bottom
+    if (anchor.wasAtBottom) return; // was at bottom — Virtuoso defaults correctly
+
+    requestAnimationFrame(() => {
+      virtuosoRef.current?.scrollToIndex({
+        index: anchor.firstVisibleItemIndex,
+        align: 'start',
+        offset: -anchor.offsetWithinItem,
+      });
+    });
+  }, [currentChatIndex]); // intentionally only on chat switch (mount)
 
   useEffect(() => {
     perfStart('chat-render');
@@ -192,14 +268,86 @@ const ChatContent = () => {
   }, [items]);
 
   const handleScrollToBottom = useCallback(() => {
-    // Scroll to the actual end of the scroller so the footer/spacer is included.
+    bottomLockRef.current = true;
+    // Clear any pending unlock timer
+    if (bottomLockTimerRef.current) clearTimeout(bottomLockTimerRef.current);
     virtuosoRef.current?.scrollTo({ top: SCROLL_TO_BOTTOM_TOP, behavior: 'smooth' });
+    // Retry scroll for a few frames to handle pending height changes
+    let retries = 3;
+    const retryScroll = () => {
+      if (retries-- > 0 && bottomLockRef.current) {
+        virtuosoRef.current?.scrollTo({ top: SCROLL_TO_BOTTOM_TOP });
+        requestAnimationFrame(retryScroll);
+      }
+    };
+    requestAnimationFrame(retryScroll);
   }, []);
 
   const handleFollowOutput = useCallback((isAtBottom: boolean) => {
     if (!autoScroll) return false;
+    // Bottom lock forces follow regardless of current position
+    if (bottomLockRef.current) return 'smooth' as const;
     return isAtBottom ? 'smooth' as const : false;
   }, [autoScroll]);
+
+  const handleAtBottomStateChange = useCallback((bottom: boolean) => {
+    setAtBottom(bottom);
+    atBottomRef.current = bottom;
+
+    // Bottom lock release: require stable atBottom for 500ms
+    if (bottom && bottomLockRef.current) {
+      if (bottomLockTimerRef.current) clearTimeout(bottomLockTimerRef.current);
+      bottomLockTimerRef.current = setTimeout(() => {
+        bottomLockRef.current = false;
+        bottomLockTimerRef.current = null;
+      }, 500);
+    } else if (!bottom && bottomLockTimerRef.current) {
+      // Not at bottom — cancel pending unlock
+      clearTimeout(bottomLockTimerRef.current);
+      bottomLockTimerRef.current = null;
+    }
+  }, []);
+
+  // Detect manual upward scroll to release bottom lock
+  const scrollListenerCleanupRef = useRef<(() => void) | null>(null);
+
+  const handleScrollerRef = useCallback((ref: HTMLElement | Window | null) => {
+    // Clean up previous listener
+    if (scrollListenerCleanupRef.current) {
+      scrollListenerCleanupRef.current();
+      scrollListenerCleanupRef.current = null;
+    }
+
+    if (ref && ref instanceof HTMLElement) {
+      scrollerRef.current = ref;
+      const onScroll = () => {
+        const currentTop = ref.scrollTop;
+        // User scrolled up manually — release bottom lock
+        if (bottomLockRef.current && currentTop < lastScrollTopRef.current - 10) {
+          bottomLockRef.current = false;
+          if (bottomLockTimerRef.current) {
+            clearTimeout(bottomLockTimerRef.current);
+            bottomLockTimerRef.current = null;
+          }
+        }
+        lastScrollTopRef.current = currentTop;
+      };
+      ref.addEventListener('scroll', onScroll, { passive: true });
+      scrollListenerCleanupRef.current = () => ref.removeEventListener('scroll', onScroll);
+    } else {
+      scrollerRef.current = null;
+    }
+  }, []);
+
+  // Cleanup scroll listener on unmount
+  useEffect(() => {
+    return () => {
+      if (scrollListenerCleanupRef.current) {
+        scrollListenerCleanupRef.current();
+        scrollListenerCleanupRef.current = null;
+      }
+    };
+  }, []);
 
   const itemContent = useCallback((index: number) => {
     const { message, originalIndex } = items[index];
@@ -321,10 +469,12 @@ const ChatContent = () => {
           computeItemKey={(index) => activePath[items[index].originalIndex] ?? `${currentChatId}:${items[index].originalIndex}`}
           overscan={600}
           followOutput={handleFollowOutput}
-          atBottomStateChange={setAtBottom}
+          atBottomStateChange={handleAtBottomStateChange}
           atBottomThreshold={50}
           itemContent={itemContent}
           components={components}
+          rangeChanged={handleRangeChanged}
+          scrollerRef={handleScrollerRef}
         />
       </div>
     </div>
