@@ -34,6 +34,8 @@
   "total": "Total",
   "resetCost": "Reset Costs",
   "countTotalTokens": "Count total tokens",
+  "liveTokenCount": "Input: {{prompt}} / Output: {{completion}} ({{cost}})",
+  "liveTokenCountWithImages": "Input: {{prompt}} / Output: {{completion}} / Images: {{images}} ({{cost}})",
   "morePrompts": "You can find more prompts here: ",
   "clearPrompts": "Clear prompts",
   "postOnShareGPT": {

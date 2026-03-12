@@ -6,15 +6,17 @@ import { useTranslation } from 'react-i18next';
 import countTokens from '@utils/messageUtils';
 import useTokenEncoder from '@hooks/useTokenEncoder';
 import { countImageInputs, calculateUsageCost } from '@utils/cost';
+import { isTextContent } from '@type/chat';
 
 const TokenCount = React.memo(() => {
   const { t } = useTranslation();
-  const [tokenCount, setTokenCount] = useState<number>(0);
+  const [promptTokenCount, setPromptTokenCount] = useState<number>(0);
+  const [completionTokenCount, setCompletionTokenCount] = useState<number>(0);
   const [imageTokenCount, setImageTokenCount] = useState<number>(0);
   const encoderReady = useTokenEncoder();
-  const generating = useStore((state) => {
+  const generatingSession = useStore((state) => {
     const chatId = state.chats?.[state.currentChatIndex]?.id ?? '';
-    return Object.values(state.generatingSessions).some((s) => s.chatId === chatId);
+    return Object.values(state.generatingSessions).find((s) => s.chatId === chatId);
   });
   const messages = useStore(
     (state) =>
@@ -35,8 +37,8 @@ const TokenCount = React.memo(() => {
   const costDisplay = useMemo(() => {
     const result = calculateUsageCost(
       {
-        promptTokens: tokenCount,
-        completionTokens: 0,
+        promptTokens: promptTokenCount,
+        completionTokens: completionTokenCount,
         imageTokens: imageTokenCount,
       },
       model,
@@ -54,38 +56,82 @@ const TokenCount = React.memo(() => {
     }
     const cost = result.cost.toPrecision(3);
     return `$${cost}`;
-  }, [model, providerId, tokenCount, imageTokenCount, favoriteModels, providerCustomModels, providerModelCache, t]);
+  }, [
+    model,
+    providerId,
+    promptTokenCount,
+    completionTokenCount,
+    imageTokenCount,
+    favoriteModels,
+    providerCustomModels,
+    providerModelCache,
+    t,
+  ]);
 
   useEffect(() => {
-    if (generating) return;
-
     let cancelled = false;
+    const countLiveTokens = async () => {
+      if (generatingSession) {
+        const promptMessages = messages.slice(0, generatingSession.messageIndex);
+        const completionMessage = messages[generatingSession.messageIndex];
+        const hasTextCompletion =
+          completionMessage && isTextContent(completionMessage.content[0]);
 
-    Promise.all([
-      countTokens(messages, model),
-    ]).then(([newPromptTokens]) => {
+        const [newPromptTokens, newCompletionTokens] = await Promise.all([
+          countTokens(promptMessages, model),
+          hasTextCompletion ? countTokens([completionMessage], model) : Promise.resolve(0),
+        ]);
+
+        if (cancelled) return;
+        setPromptTokenCount(newPromptTokens);
+        setCompletionTokenCount(newCompletionTokens);
+        setImageTokenCount(countImageInputs(promptMessages));
+        return;
+      }
+
+      const newPromptTokens = await countTokens(messages, model);
       if (cancelled) return;
-      setTokenCount(newPromptTokens);
+      setPromptTokenCount(newPromptTokens);
+      setCompletionTokenCount(0);
       setImageTokenCount(countImageInputs(messages));
-    });
+    };
+
+    countLiveTokens();
 
     return () => {
       cancelled = true;
     };
-  }, [messages, generating, model, encoderReady]);
+  }, [messages, generatingSession, model, encoderReady]);
 
   return (
     <div className='absolute top-[-16px] right-0'>
       <div className='text-xs italic text-gray-900 dark:text-gray-300'>
-        {imageTokenCount > 0
+        {generatingSession
+          ? imageTokenCount > 0
+            ? t('liveTokenCountWithImages', {
+                ns: 'main',
+                defaultValue: 'Input: {{prompt}} / Output: {{completion}} / Images: {{images}} ({{cost}})',
+                prompt: promptTokenCount,
+                completion: completionTokenCount,
+                images: imageTokenCount,
+                cost: costDisplay,
+              })
+            : t('liveTokenCount', {
+                ns: 'main',
+                defaultValue: 'Input: {{prompt}} / Output: {{completion}} ({{cost}})',
+                prompt: promptTokenCount,
+                completion: completionTokenCount,
+                cost: costDisplay,
+              })
+          : imageTokenCount > 0
           ? t('tokenCountWithImages', {
               ns: 'main',
               defaultValue: 'Tokens: {{tokens}} / Images: {{images}} ({{cost}})',
-              tokens: tokenCount,
+              tokens: promptTokenCount,
               images: imageTokenCount,
               cost: costDisplay,
             })
-          : `Tokens: ${tokenCount} (${costDisplay})`}
+          : `Tokens: ${promptTokenCount} (${costDisplay})`}
       </div>
     </div>
   );
