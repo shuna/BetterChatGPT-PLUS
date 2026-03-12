@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import useStore from '@store/store';
@@ -134,6 +134,8 @@ export const TotalTokenCostDisplay = () => {
 
   const [totalCost, setTotalCost] = useState<number>(0);
   const [allFree, setAllFree] = useState<boolean>(false);
+  const [isDisplayRefreshing, setIsDisplayRefreshing] = useState(false);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let updatedTotalCost = 0;
@@ -162,14 +164,36 @@ export const TotalTokenCostDisplay = () => {
     setAllFree(hasEntries && hasOnlyFreeModels && !hasUnknownCost);
   }, [totalTokenUsed]);
 
+  useEffect(() => {
+    setIsDisplayRefreshing(true);
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current);
+    }
+    refreshTimerRef.current = setTimeout(() => {
+      setIsDisplayRefreshing(false);
+    }, 180);
+
+    return () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current);
+      }
+    };
+  }, [totalCost, allFree]);
+
   return (
-    <a className='flex py-2 px-2 items-center gap-3 rounded-md hover:bg-gray-500/10 transition-colors duration-200 text-white text-sm'>
+    <a
+      className={`flex items-center gap-3 rounded-md py-2 px-2 text-sm text-white transition-all duration-200 hover:bg-gray-500/10 ${
+        isDisplayRefreshing ? 'opacity-80' : 'opacity-100'
+      }`}
+    >
       <CalculatorIcon />
-      {Number.isNaN(totalCost)
-        ? t('tokenCostNoPricingData', { ns: 'main' })
-        : allFree
-          ? t('free', { ns: 'main', defaultValue: 'Free' })
-          : `USD ${totalCost.toPrecision(3)}`}
+      <span className='tabular-nums'>
+        {Number.isNaN(totalCost)
+          ? t('tokenCostNoPricingData', { ns: 'main' })
+          : allFree
+            ? t('free', { ns: 'main', defaultValue: 'Free' })
+            : `USD ${totalCost.toPrecision(3)}`}
+      </span>
     </a>
   );
 };

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { throttle } from 'lodash';
 import useStore from '@store/store';
 import countTokens from '@utils/messageUtils';
 import useTokenEncoder from '@hooks/useTokenEncoder';
@@ -7,6 +8,10 @@ import {
   countImageInputs,
   mergeTotalTokenUsed,
 } from '@utils/cost';
+import {
+  LIVE_TOKEN_RECOUNT_THROTTLE_MS,
+  buildPromptCountCacheKey,
+} from '@utils/liveTokenUsage';
 import type { TotalTokenUsed } from '@type/chat';
 import { isTextContent } from '@type/chat';
 
@@ -16,71 +21,135 @@ const useLiveTotalTokenUsed = (): TotalTokenUsed => {
   const chats = useStore((state) => state.chats);
   const generatingSessions = useStore((state) => state.generatingSessions);
   const [liveTokenUsed, setLiveTokenUsed] = useState<TotalTokenUsed>({});
+  const latestInputRef = useRef({ chats, generatingSessions });
+  const requestVersionRef = useRef(0);
+  const mountedRef = useRef(true);
+  const throttledCalculationRef = useRef<ReturnType<typeof throttle> | null>(null);
+  const promptCacheRef = useRef<
+    Map<string, { promptTokens: number; imageTokens: number }>
+  >(new Map());
+
+  const calculateCurrentLiveUsage = async (version: number) => {
+    const snapshot = latestInputRef.current;
+    const sessions = Object.values(snapshot.generatingSessions);
+
+    if (!snapshot.chats || sessions.length === 0) {
+      if (mountedRef.current && version === requestVersionRef.current) {
+        setLiveTokenUsed({});
+      }
+      return;
+    }
+
+    const activeCacheKeys = new Set<string>();
+    const chatMap = new Map(snapshot.chats.map((chat) => [chat.id, chat]));
+    const liveUsageEntries = await Promise.all(
+      sessions.map(async (session) => {
+        const chat = chatMap.get(session.chatId);
+        if (!chat) return null;
+
+        const completionMessage = chat.messages[session.messageIndex];
+        if (!completionMessage) return null;
+
+        const promptMessages = chat.messages.slice(0, session.messageIndex);
+        const promptCacheKey = buildPromptCountCacheKey(
+          session.sessionId,
+          chat.config.model,
+          session.messageIndex
+        );
+        activeCacheKeys.add(promptCacheKey);
+
+        let cachedPrompt = promptCacheRef.current.get(promptCacheKey);
+        if (!cachedPrompt) {
+          const promptTokens = await countTokens(promptMessages, chat.config.model);
+          cachedPrompt = {
+            promptTokens,
+            imageTokens: countImageInputs(promptMessages),
+          };
+          promptCacheRef.current.set(promptCacheKey, cachedPrompt);
+        }
+
+        const completionTokens = isTextContent(completionMessage.content[0])
+          ? await countTokens([completionMessage], chat.config.model)
+          : 0;
+
+        return {
+          key: buildTokenUsageKey(chat.config.model, chat.config.providerId),
+          usage: {
+            promptTokens: cachedPrompt.promptTokens,
+            completionTokens,
+            imageTokens: cachedPrompt.imageTokens,
+          },
+        };
+      })
+    );
+
+    if (!mountedRef.current || version !== requestVersionRef.current) return;
+
+    promptCacheRef.current.forEach((_, cacheKey) => {
+      if (!activeCacheKeys.has(cacheKey)) {
+        promptCacheRef.current.delete(cacheKey);
+      }
+    });
+
+    const nextLiveUsage = liveUsageEntries.reduce<TotalTokenUsed>((acc, entry) => {
+      if (!entry) return acc;
+      const current = acc[entry.key] ?? {
+        promptTokens: 0,
+        completionTokens: 0,
+        imageTokens: 0,
+      };
+
+      acc[entry.key] = {
+        promptTokens: current.promptTokens + entry.usage.promptTokens,
+        completionTokens: current.completionTokens + entry.usage.completionTokens,
+        imageTokens: current.imageTokens + entry.usage.imageTokens,
+      };
+      return acc;
+    }, {});
+
+    setLiveTokenUsed(nextLiveUsage);
+  };
+
+  latestInputRef.current = { chats, generatingSessions };
 
   useEffect(() => {
-    let cancelled = false;
-
-    const calculateLiveUsage = async () => {
-      const sessions = Object.values(generatingSessions);
-      if (!chats || sessions.length === 0) {
-        if (!cancelled) setLiveTokenUsed({});
-        return;
-      }
-
-      const chatMap = new Map(chats.map((chat) => [chat.id, chat]));
-      const liveUsageEntries = await Promise.all(
-        sessions.map(async (session) => {
-          const chat = chatMap.get(session.chatId);
-          if (!chat) return null;
-
-          const completionMessage = chat.messages[session.messageIndex];
-          if (!completionMessage) return null;
-
-          const promptMessages = chat.messages.slice(0, session.messageIndex);
-          const [promptTokens, completionTokens] = await Promise.all([
-            countTokens(promptMessages, chat.config.model),
-            isTextContent(completionMessage.content[0])
-              ? countTokens([completionMessage], chat.config.model)
-              : Promise.resolve(0),
-          ]);
-
-          return {
-            key: buildTokenUsageKey(chat.config.model, chat.config.providerId),
-            usage: {
-              promptTokens,
-              completionTokens,
-              imageTokens: countImageInputs(promptMessages),
-            },
-          };
-        })
-      );
-
-      if (cancelled) return;
-
-      const nextLiveUsage = liveUsageEntries.reduce<TotalTokenUsed>((acc, entry) => {
-        if (!entry) return acc;
-        const current = acc[entry.key] ?? {
-          promptTokens: 0,
-          completionTokens: 0,
-          imageTokens: 0,
-        };
-
-        acc[entry.key] = {
-          promptTokens: current.promptTokens + entry.usage.promptTokens,
-          completionTokens: current.completionTokens + entry.usage.completionTokens,
-          imageTokens: current.imageTokens + entry.usage.imageTokens,
-        };
-        return acc;
-      }, {});
-
-      setLiveTokenUsed(nextLiveUsage);
-    };
-
-    calculateLiveUsage();
+    throttledCalculationRef.current = throttle(
+      () => {
+        const version = requestVersionRef.current;
+        void calculateCurrentLiveUsage(version).finally(() => {
+          if (
+            mountedRef.current &&
+            version !== requestVersionRef.current &&
+            Object.keys(latestInputRef.current.generatingSessions).length > 0
+          ) {
+            throttledCalculationRef.current?.();
+          }
+        });
+      },
+      LIVE_TOKEN_RECOUNT_THROTTLE_MS,
+      { leading: true, trailing: true }
+    );
 
     return () => {
-      cancelled = true;
+      mountedRef.current = false;
+      throttledCalculationRef.current?.cancel();
     };
+  }, []);
+
+  useEffect(() => {
+    if (!encoderReady) return;
+
+    requestVersionRef.current += 1;
+    const sessions = Object.values(generatingSessions);
+
+    if (!chats || sessions.length === 0) {
+      throttledCalculationRef.current?.cancel();
+      promptCacheRef.current.clear();
+      setLiveTokenUsed({});
+      return;
+    }
+
+    throttledCalculationRef.current?.();
   }, [chats, generatingSessions, encoderReady]);
 
   return useMemo(
