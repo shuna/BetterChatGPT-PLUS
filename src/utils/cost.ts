@@ -31,6 +31,35 @@ export const countImageInputs = (messages: MessageInterface[]): number =>
     0
   );
 
+export const buildTokenUsageKey = (
+  modelId: string,
+  providerId?: ProviderId
+): string => (providerId ? `${modelId}:::${providerId}` : modelId);
+
+export const mergeTotalTokenUsed = (
+  base: TotalTokenUsed,
+  increment: TotalTokenUsed
+): TotalTokenUsed => {
+  const merged: TotalTokenUsed = { ...base };
+
+  Object.entries(increment).forEach(([key, usage]) => {
+    if (!usage) return;
+    const existing = merged[key] ?? {
+      promptTokens: 0,
+      completionTokens: 0,
+      imageTokens: 0,
+    };
+
+    merged[key] = {
+      promptTokens: existing.promptTokens + usage.promptTokens,
+      completionTokens: existing.completionTokens + usage.completionTokens,
+      imageTokens: existing.imageTokens + usage.imageTokens,
+    };
+  });
+
+  return merged;
+};
+
 const resolveUnitCost = (
   priceEntry: ModelCostEntry['prompt'] | ModelCostEntry['image'] | undefined,
   usage: number

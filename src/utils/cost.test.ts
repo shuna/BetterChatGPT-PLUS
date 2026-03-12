@@ -5,7 +5,13 @@ vi.mock('@utils/modelLookup', () => ({
   isKnownModel: vi.fn(),
 }));
 
-import { calculateUsageCost, countImageInputs, parseTokenKey } from './cost';
+import {
+  buildTokenUsageKey,
+  calculateUsageCost,
+  countImageInputs,
+  mergeTotalTokenUsed,
+  parseTokenKey,
+} from './cost';
 import { getModelCost, isKnownModel } from '@utils/modelLookup';
 
 describe('cost utils', () => {
@@ -15,6 +21,8 @@ describe('cost utils', () => {
       providerId: 'openai',
     });
     expect(parseTokenKey('gpt-4o')).toEqual({ modelId: 'gpt-4o' });
+    expect(buildTokenUsageKey('gpt-4o', 'openai')).toBe('gpt-4o:::openai');
+    expect(buildTokenUsageKey('gpt-4o')).toBe('gpt-4o');
   });
 
   it('counts image inputs by image content entries', () => {
@@ -84,5 +92,42 @@ describe('cost utils', () => {
         'unknown-model'
       )
     ).toEqual({ kind: 'unknown', reason: 'model-not-registered' });
+  });
+
+  it('merges persisted and live usage by composite model key', () => {
+    expect(
+      mergeTotalTokenUsed(
+        {
+          'gpt-4o:::openai': {
+            promptTokens: 100,
+            completionTokens: 50,
+            imageTokens: 1,
+          },
+        },
+        {
+          'gpt-4o:::openai': {
+            promptTokens: 20,
+            completionTokens: 10,
+            imageTokens: 0,
+          },
+          'gpt-4.1:::openai': {
+            promptTokens: 30,
+            completionTokens: 5,
+            imageTokens: 0,
+          },
+        }
+      )
+    ).toEqual({
+      'gpt-4o:::openai': {
+        promptTokens: 120,
+        completionTokens: 60,
+        imageTokens: 1,
+      },
+      'gpt-4.1:::openai': {
+        promptTokens: 30,
+        completionTokens: 5,
+        imageTokens: 0,
+      },
+    });
   });
 });

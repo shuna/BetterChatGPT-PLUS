@@ -2,11 +2,12 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import useStore from '@store/store';
+import useLiveTotalTokenUsed from '@hooks/useLiveTotalTokenUsed';
 
 import Toggle from '@components/Toggle/Toggle';
 
 import CalculatorIcon from '@icon/CalculatorIcon';
-import { TotalTokenUsed, ModelOptions } from '@type/chat';
+import { ModelOptions } from '@type/chat';
 import { calculateUsageCost, parseTokenKey } from '@utils/cost';
 
 type CostMapping = {
@@ -20,7 +21,7 @@ type CostMapping = {
 const TotalTokenCost = () => {
   const { t } = useTranslation(['main', 'model']);
 
-  const totalTokenUsed = useStore((state) => state.totalTokenUsed);
+  const totalTokenUsed = useLiveTotalTokenUsed();
   const setTotalTokenUsed = useStore((state) => state.setTotalTokenUsed);
   const countTotalTokens = useStore((state) => state.countTotalTokens);
 
@@ -129,7 +130,7 @@ export const TotalTokenCostToggle = () => {
 
 export const TotalTokenCostDisplay = () => {
   const { t } = useTranslation();
-  const totalTokenUsed = useStore((state) => state.totalTokenUsed);
+  const totalTokenUsed = useLiveTotalTokenUsed();
 
   const [totalCost, setTotalCost] = useState<number>(0);
   const [allFree, setAllFree] = useState<boolean>(false);
