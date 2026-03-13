@@ -203,6 +203,15 @@ const importLegacyChats = (
   }, {} as FolderCollection);
 
   shiftAndMergeFolders(newFolders);
+
+  const contentStore = { ...useStore.getState().contentStore };
+  for (const chat of chatsToImport) {
+    if (!chat.branchTree) {
+      chat.branchTree = flatMessagesToBranchTree(chat.messages, contentStore);
+    }
+  }
+  useStore.setState({ contentStore });
+
   mergeChats(chatsToImport);
 
   if (removedChatsCount > 0) {
@@ -301,7 +310,15 @@ const importExportV1 = (
   }
 
   shiftAndMergeFolders(parsedData.folders);
+
   if (parsedData.chats) {
+    const contentStore = { ...useStore.getState().contentStore };
+    for (const chat of parsedData.chats) {
+      if (!chat.branchTree) {
+        chat.branchTree = flatMessagesToBranchTree(chat.messages, contentStore);
+      }
+    }
+    useStore.setState({ contentStore });
     mergeChats(parsedData.chats);
   }
 
@@ -330,6 +347,15 @@ const importOpenAIData = (
   t: Translator
 ): ImportResult => {
   const chats = importOpenAIChatExport(chatsToImport, shouldAllowPartialImport);
+
+  const contentStore = { ...useStore.getState().contentStore };
+  for (const chat of chats) {
+    if (!chat.branchTree) {
+      chat.branchTree = flatMessagesToBranchTree(chat.messages, contentStore);
+    }
+  }
+  useStore.setState({ contentStore });
+
   mergeChats(chats);
 
   if (removedChatsCount > 0) {
