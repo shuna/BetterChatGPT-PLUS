@@ -2,6 +2,7 @@ import { listDriveFiles } from '@api/google-api';
 
 import useStore, { createPartializedState } from '@store/store';
 import useCloudAuthStore from '@store/cloud-auth-store';
+import { STORE_VERSION } from '@store/version';
 
 export const getFiles = async (googleAccessToken: string) => {
   try {
@@ -26,8 +27,12 @@ export const getFileID = async (
 
 export const stateToFile = () => {
   const partializedState = createPartializedState(useStore.getState());
+  const snapshot = {
+    state: partializedState,
+    version: STORE_VERSION,
+  };
 
-  const blob = new Blob([JSON.stringify(partializedState)], {
+  const blob = new Blob([JSON.stringify(snapshot)], {
     type: 'application/json',
   });
   const file = new File([blob], 'better-chatgpt.json', {

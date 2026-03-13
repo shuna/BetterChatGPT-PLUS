@@ -92,6 +92,33 @@ const formatFileSize = (value: string | undefined, locale?: string): string => {
 const actionButtonClass =
   'btn btn-primary disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 disabled:saturate-50';
 
+const normalizeRemotePersistedState = (
+  snapshot: unknown
+): {
+  state: Partial<PersistedStoreState>;
+  version: number;
+} => {
+  if (!snapshot || typeof snapshot !== 'object') {
+    return { state: {}, version: 0 };
+  }
+
+  if ('state' in snapshot) {
+    const wrapped = snapshot as {
+      state?: Partial<PersistedStoreState>;
+      version?: number;
+    };
+    return {
+      state: (wrapped.state ?? {}) as Partial<PersistedStoreState>,
+      version: wrapped.version ?? 0,
+    };
+  }
+
+  return {
+    state: snapshot as Partial<PersistedStoreState>,
+    version: 0,
+  };
+};
+
 const SyncDirectionOverlay = ({
   direction,
 }: {
@@ -361,9 +388,10 @@ const GooglePopup = ({
       setSyncStatus('syncing');
       activateCloudSyncTarget(_fileId);
       const remoteStorageValue = await getDriveFileTyped(_fileId, googleAccessToken);
+      const normalizedRemote = normalizeRemotePersistedState(remoteStorageValue);
       const remotePersistedState = migratePersistedState(
-        structuredClone(remoteStorageValue.state ?? {}),
-        remoteStorageValue.version ?? 0
+        structuredClone(normalizedRemote.state),
+        normalizedRemote.version
       ) as Partial<PersistedStoreState>;
       const hydratedState = hydrateFromPersistedStoreState(
         useStore.getState(),
