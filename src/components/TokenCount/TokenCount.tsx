@@ -20,14 +20,21 @@ type TokenCounts = {
 };
 
 const DISPLAY_REFRESH_MS = 180;
+const tokenCountCache = new Map<string, TokenCounts>();
 
 const TokenCount = React.memo(() => {
   const { t } = useTranslation();
+  const currentChatId = useStore((state) => state.chats?.[state.currentChatIndex]?.id ?? '');
+  const cachedCounts = tokenCountCache.get(currentChatId) ?? {
+    promptTokenCount: 0,
+    completionTokenCount: 0,
+    imageTokenCount: 0,
+  };
   const [{ promptTokenCount, completionTokenCount, imageTokenCount }, setTokenCounts] =
     useState<TokenCounts>({
-      promptTokenCount: 0,
-      completionTokenCount: 0,
-      imageTokenCount: 0,
+      promptTokenCount: cachedCounts.promptTokenCount,
+      completionTokenCount: cachedCounts.completionTokenCount,
+      imageTokenCount: cachedCounts.imageTokenCount,
     });
   const [isDisplayRefreshing, setIsDisplayRefreshing] = useState(false);
   const encoderReady = useTokenEncoder();
@@ -78,6 +85,9 @@ const TokenCount = React.memo(() => {
     if (!hasChanged) return;
 
     currentCountsRef.current = nextCounts;
+    if (currentChatId) {
+      tokenCountCache.set(currentChatId, nextCounts);
+    }
     setTokenCounts(nextCounts);
     setIsDisplayRefreshing(true);
 
@@ -138,6 +148,17 @@ const TokenCount = React.memo(() => {
     }
 
     if (!mountedRef.current || version !== requestVersionRef.current) return;
+    if (
+      snapshot.messages.length === 0 &&
+      (currentCountsRef.current.promptTokenCount > 0 ||
+        currentCountsRef.current.completionTokenCount > 0 ||
+        currentCountsRef.current.imageTokenCount > 0) &&
+      nextCounts.promptTokenCount === 0 &&
+      nextCounts.completionTokenCount === 0 &&
+      nextCounts.imageTokenCount === 0
+    ) {
+      return;
+    }
     applyTokenCounts(nextCounts);
   };
 
@@ -188,6 +209,16 @@ const TokenCount = React.memo(() => {
       imageTokenCount,
     };
   }, [promptTokenCount, completionTokenCount, imageTokenCount]);
+
+  useEffect(() => {
+    const nextCounts = tokenCountCache.get(currentChatId) ?? {
+      promptTokenCount: 0,
+      completionTokenCount: 0,
+      imageTokenCount: 0,
+    };
+    currentCountsRef.current = nextCounts;
+    setTokenCounts(nextCounts);
+  }, [currentChatId]);
 
   useEffect(() => {
     throttledCountRef.current = throttle(
