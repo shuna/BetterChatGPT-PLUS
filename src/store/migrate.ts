@@ -222,9 +222,9 @@ export const migrateV11 = (persistedState: LocalStorageInterfaceV11ToV12) => {
         }
       }
     }
-  }
 
-  persistedState.contentStore = contentStore;
+    persistedState.contentStore = contentStore;
+  }
 };
 
 export const migrateV12 = (persistedState: LocalStorageInterfaceV12ToV13) => {

@@ -212,17 +212,33 @@ describe('persistence', () => {
   });
 
   it('does not crash when migrating an old snapshot without chats', () => {
-    expect(() =>
-      migratePersistedState(
-        {
-          theme: 'light',
-          prompts: [],
-          foldersName: [],
-          foldersExpanded: [],
-        },
-        0
-      )
-    ).not.toThrow();
+    const snapshot = {
+      theme: 'light',
+      prompts: [],
+      foldersName: [],
+      foldersExpanded: [],
+    };
+
+    expect(() => migratePersistedState(snapshot, 0)).not.toThrow();
+    expect(snapshot).not.toHaveProperty('contentStore');
+  });
+
+  it('preserves branch content when migrating an old snapshot without chats', () => {
+    const baseState = buildStoreState();
+    const migrated = migratePersistedState(
+      {
+        theme: 'light',
+        prompts: [],
+        foldersName: [],
+        foldersExpanded: [],
+      },
+      0
+    ) as unknown as Partial<ReturnType<typeof buildStoreState>>;
+
+    const hydrated = hydrateFromPersistedStoreState(baseState as never, migrated as never);
+
+    expect(hydrated.chats).toHaveLength(2);
+    expect(hydrated.contentStore).toEqual(baseState.contentStore);
   });
 
   it('deduplicates persisted chat ids during rehydration', () => {
