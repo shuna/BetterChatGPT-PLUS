@@ -171,6 +171,13 @@ const validateAndFixChatConfig = (config: unknown): config is ConfigInterface =>
 export const isLegacyImport = (importedData: unknown): importedData is unknown[] =>
   Array.isArray(importedData);
 
+export const isSingleChatImport = (importedData: unknown): importedData is ChatInterface =>
+  isRecord(importedData) &&
+  hasOwn(importedData, 'messages') &&
+  Array.isArray(importedData.messages) &&
+  hasOwn(importedData, 'config') &&
+  isRecord(importedData.config);
+
 export const validateFolders = (
   folders: FolderCollection
 ): folders is FolderCollection => {
@@ -243,7 +250,16 @@ const isOpenAIDataExport = (content: unknown): content is OpenAIChat[] => {
 const isOpenAIPlaygroundJSON = (
   content: unknown
 ): content is OpenAIPlaygroundJSON => {
-  return isRecord(content) && hasOwn(content, 'messages') && Array.isArray(content.messages);
+  if (!isRecord(content) || !hasOwn(content, 'messages') || !Array.isArray(content.messages)) {
+    return false;
+  }
+  // Exclude ChatInterface objects (nested `config` object) and versioned
+  // export wrappers (`version` field).  OpenAI Playground JSON carries config
+  // values (model, temperature, …) at the top level, never nested.
+  if (hasOwn(content, 'config') || hasOwn(content, 'version')) {
+    return false;
+  }
+  return true;
 };
 
 // Define the custom error class

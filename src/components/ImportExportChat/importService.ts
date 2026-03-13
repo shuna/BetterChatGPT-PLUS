@@ -8,6 +8,7 @@ import {
   importOpenAIChatExport,
   isLegacyImport,
   isOpenAIContent,
+  isSingleChatImport,
   PartialImportError,
   validateAndFixChats,
   validateExportV1,
@@ -31,6 +32,7 @@ type Translator = (key: string, opts?: Record<string, unknown>) => string;
 type ImportType =
   | 'OpenAIContent'
   | 'LegacyImport'
+  | 'SingleChat'
   | 'ExportV1'
   | 'ExportV2'
   | 'ExportV3'
@@ -139,11 +141,15 @@ const readImportFile = async (file: File): Promise<string> => {
 };
 
 const detectImportType = (parsedData: unknown): ImportType => {
-  if (isOpenAIContent(parsedData)) return 'OpenAIContent';
-  if (isLegacyImport(parsedData)) return 'LegacyImport';
+  // Check versioned exports first — they are the most specific (have a
+  // numeric `version` field) and must not be swallowed by the broader
+  // OpenAI / legacy checks that follow.
   if (isRecord(parsedData) && parsedData.version === 3) return 'ExportV3';
   if (isRecord(parsedData) && parsedData.version === 2) return 'ExportV2';
   if (isRecord(parsedData) && parsedData.version === 1) return 'ExportV1';
+  if (isOpenAIContent(parsedData)) return 'OpenAIContent';
+  if (isLegacyImport(parsedData)) return 'LegacyImport';
+  if (isSingleChatImport(parsedData)) return 'SingleChat';
   return '';
 };
 
@@ -197,6 +203,15 @@ const importLegacyChats = (
   }, {} as FolderCollection);
 
   shiftAndMergeFolders(newFolders);
+
+  const contentStore = { ...useStore.getState().contentStore };
+  for (const chat of chatsToImport) {
+    if (!chat.branchTree) {
+      chat.branchTree = flatMessagesToBranchTree(chat.messages, contentStore);
+    }
+  }
+  useStore.setState({ contentStore });
+
   mergeChats(chatsToImport);
 
   if (removedChatsCount > 0) {
@@ -295,7 +310,15 @@ const importExportV1 = (
   }
 
   shiftAndMergeFolders(parsedData.folders);
+
   if (parsedData.chats) {
+    const contentStore = { ...useStore.getState().contentStore };
+    for (const chat of parsedData.chats) {
+      if (!chat.branchTree) {
+        chat.branchTree = flatMessagesToBranchTree(chat.messages, contentStore);
+      }
+    }
+    useStore.setState({ contentStore });
     mergeChats(parsedData.chats);
   }
 
@@ -324,6 +347,15 @@ const importOpenAIData = (
   t: Translator
 ): ImportResult => {
   const chats = importOpenAIChatExport(chatsToImport, shouldAllowPartialImport);
+
+  const contentStore = { ...useStore.getState().contentStore };
+  for (const chat of chats) {
+    if (!chat.branchTree) {
+      chat.branchTree = flatMessagesToBranchTree(chat.messages, contentStore);
+    }
+  }
+  useStore.setState({ contentStore });
+
   mergeChats(chats);
 
   if (removedChatsCount > 0) {
@@ -367,6 +399,13 @@ const importParsedData = async (
             shouldAllowPartialImport,
             removedChatsCount,
             originalParsedData as OpenAIChat[],
+            t
+          );
+        case 'SingleChat':
+          return importLegacyChats(
+            [chatsToImport],
+            removedChatsCount,
+            [originalParsedData],
             t
           );
         case 'LegacyImport':
