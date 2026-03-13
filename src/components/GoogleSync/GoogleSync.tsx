@@ -24,6 +24,7 @@ import {
   PersistedStoreState,
 } from '@store/persistence';
 import { saveChatData } from '@store/storage/IndexedDbStorage';
+import { STORE_VERSION } from '@store/version';
 
 import GoogleSyncButton, { GoogleSyncButtonHandle } from './GoogleSyncButton';
 import PopupModal from '@components/PopupModal';
@@ -115,7 +116,7 @@ const normalizeRemotePersistedState = (
 
   return {
     state: snapshot as Partial<PersistedStoreState>,
-    version: 0,
+    version: STORE_VERSION,
   };
 };
 
