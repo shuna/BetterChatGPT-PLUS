@@ -1,16 +1,54 @@
 {
-  "name": "Google Sync",
-  "tagline": "Effortlessly synchronize your chats and settings with Google Drive.",
+  "name": "Google Drive Sync",
+  "tagline": "会話と設定を Google Drive とスムーズに同期します。",
   "button": {
-    "sync": "Sync your chats",
-    "stop": "Stop syncing",
-    "create": "Create new file",
-    "confirm": "Confirm selection"
+    "sync": "Google Drive と同期する",
+    "stop": "同期を停止する",
+    "create": "新しいファイルを作成",
+    "confirm": "選択を確定",
+    "pull": "選択したクラウドを読み込む",
+    "push": "ローカル状態でクラウドを上書き"
+  },
+  "labels": {
+    "localState": "現在のローカルデータ",
+    "selectedFile": "選択中のクラウドファイル",
+    "fileSelection": "クラウドファイルの選択",
+    "operation": "実行する操作",
+    "currentTarget": "現在の同期対象",
+    "syncingFileId": "同期中のファイルID",
+    "updatedAt": "更新日時",
+    "fileId": "ファイルID",
+    "fileName": "ファイル名",
+    "fileSize": "ファイルサイズ",
+    "unknownDate": "不明",
+    "unknownSize": "不明",
+    "noFiles": "利用可能なクラウドファイルがありません"
+  },
+  "operations": {
+    "connect": "Google Drive と同期する",
+    "reconnect": "Google Drive に再ログイン",
+    "create": "新規ファイル作成",
+    "pull": "クラウド状態でローカルを上書き",
+    "push": "ローカル状態でクラウドを上書き",
+    "disconnect": "同期を停止"
+  },
+  "actions": {
+    "connectDescription": "Google Drive に接続して、この端末の会話と設定を同期できるようにします。",
+    "reconnectDescription": "Google セッションが切れているため、再ログインして同期を再開します。",
+    "createDescription": "現在のローカル状態から新しい Google Drive ファイルを作成し、そのファイルを同期対象にします。",
+    "pullTitle": "選択した Google Drive ファイルをこの端末に読み込みます",
+    "pullDescription": "現在のローカルの会話と設定は、選択したクラウドファイルの内容で置き換えられます。その後はそのファイルを同期対象として使い続けます。",
+    "pushTitle": "この端末のローカル状態で、選択した Google Drive ファイルを強制上書きします",
+    "pushDescription": "ローカル側を正として、クラウド側をただちに置き換えたいときに使います。",
+    "disconnectTitle": "Google Drive Sync を切断する",
+    "disconnectDescription": "これは同期を停止して、このアプリの Google ログイン状態を外すだけです。ローカルの会話データはこの端末に残り、Google Drive 上のファイルも削除・クリアされません。"
   },
   "notice": "注意：Googleアカウントのセッションが有効な間、自動的にトークンが更新されます。セッションが切れた場合のみ再ログインが必要です。クラウドデータの上書きを避けるため、同時に複数のデバイスで使用しないでください。",
   "privacy": "プライバシーは非常に重要です。そのため Weavelet Canvas は非機密の権限のみを要求し、自身のファイルとフォルダの作成・表示・管理だけを行います。",
   "toast": {
-    "sync": "Sync successful!",
-    "stop": "Syncing stopped"
+    "sync": "同期しました。",
+    "stop": "同期を停止しました。",
+    "pull": "クラウドの内容をこの端末に読み込みました。",
+    "push": "クラウドファイルをローカル状態で上書きしました。"
   }
 }

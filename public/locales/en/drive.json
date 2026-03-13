@@ -1,16 +1,54 @@
 {
-  "name": "Google Sync",
+  "name": "Google Drive Sync",
   "tagline": "Effortlessly synchronize your chats and settings with Google Drive.",
   "button": {
     "sync": "Sync your chats",
     "stop": "Stop syncing",
     "create": "Create new file",
-    "confirm": "Confirm selection"
+    "confirm": "Confirm selection",
+    "pull": "Load selected cloud file",
+    "push": "Overwrite cloud with local data"
+  },
+  "labels": {
+    "localState": "Current local data",
+    "selectedFile": "Selected cloud file",
+    "fileSelection": "Cloud file selection",
+    "operation": "Action to run",
+    "currentTarget": "Current sync target",
+    "syncingFileId": "Syncing file ID",
+    "updatedAt": "Updated",
+    "fileId": "File ID",
+    "fileName": "File name",
+    "fileSize": "File size",
+    "unknownDate": "Unknown",
+    "unknownSize": "Unknown",
+    "noFiles": "No cloud files available"
+  },
+  "operations": {
+    "connect": "Connect Google Drive Sync",
+    "reconnect": "Re-login to Google Drive",
+    "create": "Create new file",
+    "pull": "Overwrite local with cloud state",
+    "push": "Overwrite cloud with local state",
+    "disconnect": "Stop syncing"
+  },
+  "actions": {
+    "connectDescription": "Connect Google Drive so this device can sync chats and settings.",
+    "reconnectDescription": "Your Google session has expired. Sign in again to resume syncing.",
+    "createDescription": "Create a new Google Drive file from the current local state and make it the sync target.",
+    "pullTitle": "Load the selected Google Drive file into this device",
+    "pullDescription": "This replaces the current local chats and settings with the selected cloud file, then continues syncing with that file.",
+    "pushTitle": "Force overwrite the selected Google Drive file with this device's local data",
+    "pushDescription": "Use this when the local state is the source of truth and you want to replace the cloud copy immediately.",
+    "disconnectTitle": "Disconnect Google Drive Sync",
+    "disconnectDescription": "This only stops syncing and signs out of Google for this app. Your local chats remain on this device, and your Google Drive files are not deleted or cleared."
   },
   "notice": "Note: Your session will be automatically refreshed while your Google account is active. You may need to re-login if your Google session expires. To avoid your cloud data being overwritten, do not use Weavelet Canvas on more than one device at the same time.",
   "privacy": "Your privacy is important to us. To protect it, Weavelet Canvas only requests non-sensitive access, which means it can only create, view, and manage its own files and folders.",
   "toast": {
     "sync": "Sync successful!",
-    "stop": "Syncing stopped"
+    "stop": "Syncing stopped",
+    "pull": "Loaded cloud data into this device.",
+    "push": "Cloud file overwritten with local data."
   }
 }
