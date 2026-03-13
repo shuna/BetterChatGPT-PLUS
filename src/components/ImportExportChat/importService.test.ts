@@ -359,6 +359,23 @@ describe('importService', () => {
     expect(window.confirm).toHaveBeenCalledTimes(1);
   });
 
+  it('imports a single chat object (not wrapped in array)', async () => {
+    const singleChat = createChat('single-chat', 'My Single Chat');
+    const file = new File([JSON.stringify(singleChat)], 'single.json', {
+      type: 'application/json',
+    });
+
+    const result = await importChatFromFile(file, t);
+
+    expect(result).toEqual({
+      success: true,
+      message: 'notifications.successfulImport',
+    });
+    expect(testContext.storeState.chats[0].id).toBe('single-chat');
+    expect(testContext.storeState.chats[0].title).toBe('My Single Chat');
+    expect(testContext.storeState.chats[1].id).toBe('existing-chat');
+  });
+
   it('quota retry returns failure when all chats are exhausted', async () => {
     const openAIExport = [
       {

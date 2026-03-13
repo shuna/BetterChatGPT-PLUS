@@ -8,6 +8,7 @@ import {
   importOpenAIChatExport,
   isLegacyImport,
   isOpenAIContent,
+  isSingleChatImport,
   PartialImportError,
   validateAndFixChats,
   validateExportV1,
@@ -31,6 +32,7 @@ type Translator = (key: string, opts?: Record<string, unknown>) => string;
 type ImportType =
   | 'OpenAIContent'
   | 'LegacyImport'
+  | 'SingleChat'
   | 'ExportV1'
   | 'ExportV2'
   | 'ExportV3'
@@ -144,6 +146,7 @@ const detectImportType = (parsedData: unknown): ImportType => {
   if (isRecord(parsedData) && parsedData.version === 3) return 'ExportV3';
   if (isRecord(parsedData) && parsedData.version === 2) return 'ExportV2';
   if (isRecord(parsedData) && parsedData.version === 1) return 'ExportV1';
+  if (isSingleChatImport(parsedData)) return 'SingleChat';
   return '';
 };
 
@@ -367,6 +370,13 @@ const importParsedData = async (
             shouldAllowPartialImport,
             removedChatsCount,
             originalParsedData as OpenAIChat[],
+            t
+          );
+        case 'SingleChat':
+          return importLegacyChats(
+            [chatsToImport],
+            removedChatsCount,
+            [originalParsedData],
             t
           );
         case 'LegacyImport':

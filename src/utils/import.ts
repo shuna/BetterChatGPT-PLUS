@@ -171,6 +171,13 @@ const validateAndFixChatConfig = (config: unknown): config is ConfigInterface =>
 export const isLegacyImport = (importedData: unknown): importedData is unknown[] =>
   Array.isArray(importedData);
 
+export const isSingleChatImport = (importedData: unknown): importedData is ChatInterface =>
+  isRecord(importedData) &&
+  hasOwn(importedData, 'messages') &&
+  Array.isArray(importedData.messages) &&
+  hasOwn(importedData, 'config') &&
+  isRecord(importedData.config);
+
 export const validateFolders = (
   folders: FolderCollection
 ): folders is FolderCollection => {
@@ -243,7 +250,12 @@ const isOpenAIDataExport = (content: unknown): content is OpenAIChat[] => {
 const isOpenAIPlaygroundJSON = (
   content: unknown
 ): content is OpenAIPlaygroundJSON => {
-  return isRecord(content) && hasOwn(content, 'messages') && Array.isArray(content.messages);
+  return (
+    isRecord(content) &&
+    hasOwn(content, 'messages') &&
+    Array.isArray(content.messages) &&
+    !hasOwn(content, 'config')
+  );
 };
 
 // Define the custom error class
