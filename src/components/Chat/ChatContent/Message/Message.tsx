@@ -16,13 +16,15 @@ const CollapseToggle = ({
   isCollapsed: boolean;
   onClick: () => void;
 }) => (
-  <div
-    className={`absolute left-1.5 top-2 bottom-2 z-10 cursor-pointer transition-all duration-200 rounded-full ${
+  <button
+    type='button'
+    className={`collapse-toggle absolute left-0 top-2 bottom-2 z-10 w-5 rounded-full transition-all duration-200 ${
       isCollapsed
-        ? 'w-1.5 bg-gray-300/50 dark:bg-gray-500/40 hover:bg-gray-400/60 dark:hover:bg-gray-400/50'
-        : 'w-1 bg-transparent hover:w-1.5 hover:bg-gray-400/40 dark:hover:bg-gray-300/25'
+        ? 'before:absolute before:left-1.5 before:top-0 before:bottom-0 before:w-1.5 before:rounded-full before:bg-gray-300/50 dark:before:bg-gray-500/40 hover:before:bg-gray-400/60 dark:hover:before:bg-gray-400/50'
+        : 'bg-transparent'
     }`}
     onClick={onClick}
+    aria-label={isCollapsed ? 'Expand message' : 'Collapse message'}
     title={isCollapsed ? 'Expand' : 'Collapse'}
   />
 );
