@@ -11,15 +11,17 @@ const ImportChat = () => {
     message: string;
     success: boolean;
   } | null>(null);
+  const translate = (key: string, opts?: Record<string, unknown>) =>
+    String(t(key, opts as any) ?? '');
 
   const handleFileUpload = () => {
     if (!inputRef || !inputRef.current) return;
     const file = inputRef.current.files?.[0];
     if (!file) return;
-    const replaceConfirmation = t('confirmReplaceAll', {
+    const replaceConfirmation = translate('confirmReplaceAll', {
       ns: 'import',
       defaultValue: 'Replace all existing chats with the imported file?',
-    }) as string;
+    });
 
     if (
       mode === 'replace' &&
@@ -28,7 +30,7 @@ const ImportChat = () => {
       return;
     }
 
-    importChatFromFile(file, t, mode).then((result) => {
+    importChatFromFile(file, translate, mode).then((result) => {
       if (result.success) {
         toast.success(result.message);
       } else {
@@ -79,7 +81,7 @@ const ImportChat = () => {
       <button
         className='btn btn-small btn-primary mt-3'
         onClick={handleFileUpload}
-        aria-label={t('import') as string}
+        aria-label={translate('import')}
       >
         {t('import')}
       </button>

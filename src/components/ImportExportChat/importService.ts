@@ -3,6 +3,7 @@ import { toast } from 'react-toastify';
 
 import useStore from '@store/store';
 import { createPartializedState } from '@store/store';
+import type { StoreState } from '@store/store';
 import {
   importOpenAIChatExport,
   isLegacyImport,
@@ -41,7 +42,16 @@ type StoreSnapshot = {
 };
 
 const applyPersistedState = (persistedState: ReturnType<typeof createPartializedState>) => {
-  useStore.setState(persistedState as Partial<ReturnType<typeof useStore.getState>>);
+  const currentState = useStore.getState();
+  const nextState: StoreState = {
+    ...currentState,
+    ...persistedState,
+    chats: persistedState.chats?.map((chat) => ({
+      ...chat,
+      messages: chat.messages ?? [],
+    })) ?? currentState.chats,
+  };
+  useStore.setState(nextState);
 };
 
 const cloneState = <T,>(value: T): T => JSON.parse(JSON.stringify(value));
