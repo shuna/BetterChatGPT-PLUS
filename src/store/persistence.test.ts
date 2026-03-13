@@ -184,6 +184,21 @@ describe('persistence', () => {
     expect(hydrated.theme).toBe('light');
   });
 
+  it('preserves existing chat payloads when a snapshot omits them', () => {
+    const baseState = buildStoreState();
+    localStorage.setItem('currentChatIndex', '1');
+
+    const hydrated = hydrateFromPersistedStoreState(baseState as never, {
+      theme: 'light',
+    });
+
+    expect(hydrated.chats).toHaveLength(2);
+    expect(hydrated.contentStore).toEqual(baseState.contentStore);
+    expect(hydrated.branchClipboard).toEqual(baseState.branchClipboard);
+    expect(hydrated.currentChatIndex).toBe(1);
+    expect(hydrated.theme).toBe('light');
+  });
+
   it('migrates persisted chat data using the store version pipeline', () => {
     const state = buildStoreState();
     const migrated = migratePersistedChatDataState(

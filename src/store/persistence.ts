@@ -314,15 +314,28 @@ export const hydrateFromPersistedStoreState = (
   baseState: StoreState,
   persistedState: Partial<PersistedStoreState>
 ): Partial<StoreState> => {
+  const hasChats = Object.prototype.hasOwnProperty.call(persistedState, 'chats');
+  const hasContentStore = Object.prototype.hasOwnProperty.call(
+    persistedState,
+    'contentStore'
+  );
+  const hasBranchClipboard = Object.prototype.hasOwnProperty.call(
+    persistedState,
+    'branchClipboard'
+  );
   const nextState = {
     ...baseState,
     ...persistedState,
   } as StoreState;
 
   applyPersistedChatDataState(nextState, {
-    chats: persistedState.chats,
-    contentStore: persistedState.contentStore ?? {},
-    branchClipboard: persistedState.branchClipboard ?? null,
+    chats: hasChats ? persistedState.chats : baseState.chats,
+    contentStore: hasContentStore
+      ? persistedState.contentStore ?? {}
+      : baseState.contentStore,
+    branchClipboard: hasBranchClipboard
+      ? persistedState.branchClipboard ?? null
+      : baseState.branchClipboard,
   });
 
   const currentChatIndex =

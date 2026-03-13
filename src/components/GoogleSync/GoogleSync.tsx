@@ -387,7 +387,6 @@ const GooglePopup = ({
     try {
       setBusyActivity('downloading');
       setSyncStatus('syncing');
-      activateCloudSyncTarget(_fileId);
       const remoteStorageValue = await getDriveFileTyped(_fileId, googleAccessToken);
       const normalizedRemote = normalizeRemotePersistedState(remoteStorageValue);
       const remotePersistedState = migratePersistedState(
@@ -401,6 +400,7 @@ const GooglePopup = ({
 
       useStore.setState(hydratedState);
       await saveChatData(createPersistedChatDataState(useStore.getState()));
+      activateCloudSyncTarget(_fileId);
       setToastStatus('success');
       setToastMessage(t('toast.pull'));
       setToastShow(true);

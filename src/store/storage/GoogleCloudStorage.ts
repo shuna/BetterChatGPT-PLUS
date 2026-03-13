@@ -10,15 +10,26 @@ import {
 } from '@api/google-api';
 
 const CLOUD_SYNC_IDLE_MS = 5000;
+const MAX_CLOUD_SYNC_JSON_BYTES = 2_000_000;
+const MAX_CLOUD_SYNC_COMPRESSED_BYTES = 1_000_000;
+const MIN_DESTRUCTIVE_SIZE_RATIO = 0.2;
 
 type PendingCloudUpload = {
   value: unknown;
+};
+
+type CloudSyncMetrics = {
+  jsonBytes: number;
+  compressedBytes: number;
+  chatCount: number | null;
+  contentEntryCount: number | null;
 };
 
 let pendingUpload: PendingCloudUpload | null = null;
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 let flushInFlight: Promise<void> | null = null;
 let listenersRegistered = false;
+let lastSuccessfulUploadMetrics: CloudSyncMetrics | null = null;
 
 const clearFlushTimer = () => {
   if (!flushTimer) return;
@@ -26,8 +37,7 @@ const clearFlushTimer = () => {
   flushTimer = null;
 };
 
-const buildCloudSyncFile = (value: unknown) => {
-  const compressed = compress(JSON.stringify(value));
+const buildCloudSyncFile = (compressed: string) => {
   const blob = new Blob([compressed], {
     type: 'application/octet-stream',
   });
@@ -47,6 +57,96 @@ const getActiveCloudSyncTarget = () => {
     accessToken: googleAccessToken,
     fileId,
   };
+};
+
+const getSnapshotState = (value: unknown): Record<string, unknown> | null => {
+  if (!value || typeof value !== 'object') return null;
+  if ('state' in value && value.state && typeof value.state === 'object') {
+    return value.state as Record<string, unknown>;
+  }
+  return value as Record<string, unknown>;
+};
+
+const computeCloudSyncMetrics = (value: unknown): CloudSyncMetrics => {
+  const json = JSON.stringify(value);
+  const compressed = compress(json) ?? '';
+  const state = getSnapshotState(value);
+  const chats = state?.chats;
+  const contentStore = state?.contentStore;
+
+  return {
+    jsonBytes: new Blob([json]).size,
+    compressedBytes: new Blob([compressed]).size,
+    chatCount: Array.isArray(chats) ? chats.length : null,
+    contentEntryCount:
+      contentStore && typeof contentStore === 'object'
+        ? Object.keys(contentStore).length
+        : null,
+  };
+};
+
+const getCloudSyncGuardMessage = (
+  value: unknown,
+  metrics: CloudSyncMetrics
+): string | null => {
+  if (metrics.jsonBytes > MAX_CLOUD_SYNC_JSON_BYTES) {
+    return 'Cloud sync skipped because the snapshot is too large to upload safely.';
+  }
+
+  if (metrics.compressedBytes > MAX_CLOUD_SYNC_COMPRESSED_BYTES) {
+    return 'Cloud sync skipped because the compressed snapshot is too large to upload safely.';
+  }
+
+  if (metrics.chatCount === 0) {
+    return 'Cloud sync skipped because the snapshot would erase all chats.';
+  }
+
+  const state = getSnapshotState(value);
+  const stateChats = state?.['chats'];
+  const chats = Array.isArray(stateChats) ? stateChats : null;
+  if (
+    metrics.contentEntryCount === 0 &&
+    chats &&
+    chats.some(
+      (chat) =>
+        chat &&
+        typeof chat === 'object' &&
+        'branchTree' in chat &&
+        chat.branchTree &&
+        typeof chat.branchTree === 'object'
+    )
+  ) {
+    return 'Cloud sync skipped because branch data is missing from the snapshot.';
+  }
+
+  if (
+    lastSuccessfulUploadMetrics &&
+    metrics.chatCount !== null &&
+    lastSuccessfulUploadMetrics.chatCount !== null &&
+    lastSuccessfulUploadMetrics.chatCount > 0 &&
+    metrics.chatCount < lastSuccessfulUploadMetrics.chatCount &&
+    metrics.chatCount === 0
+  ) {
+    return 'Cloud sync skipped because the snapshot removes every synced chat.';
+  }
+
+  if (
+    lastSuccessfulUploadMetrics &&
+    lastSuccessfulUploadMetrics.compressedBytes > 0 &&
+    metrics.compressedBytes <
+      lastSuccessfulUploadMetrics.compressedBytes * MIN_DESTRUCTIVE_SIZE_RATIO
+  ) {
+    return 'Cloud sync skipped because the snapshot shrank too much compared with the last successful sync.';
+  }
+
+  return null;
+};
+
+const notifyCloudSyncGuard = (message: string) => {
+  useStore.getState().setToastMessage(message);
+  useStore.getState().setToastShow(true);
+  useStore.getState().setToastStatus('error');
+  useCloudAuthStore.getState().setSyncStatus('synced');
 };
 
 const scheduleFlush = (delayMs: number = CLOUD_SYNC_IDLE_MS) => {
@@ -97,13 +197,23 @@ export const flushPendingCloudSync = async (): Promise<void> => {
       return;
     }
 
+    const metrics = computeCloudSyncMetrics(nextUpload.value);
+    const guardMessage = getCloudSyncGuardMessage(nextUpload.value, metrics);
+    if (guardMessage) {
+      notifyCloudSyncGuard(guardMessage);
+      return;
+    }
+
+    const compressed = compress(JSON.stringify(nextUpload.value)) ?? '';
+
     try {
       useCloudAuthStore.getState().setSyncStatus('syncing');
       await updateDriveFile(
-        buildCloudSyncFile(nextUpload.value),
+        buildCloudSyncFile(compressed),
         target.fileId,
         target.accessToken
       );
+      lastSuccessfulUploadMetrics = metrics;
       useCloudAuthStore.getState().setSyncStatus('synced');
     } catch (e: unknown) {
       useStore.getState().setToastMessage((e as Error).message);
@@ -125,6 +235,7 @@ export const resetPendingCloudSyncForTests = () => {
   pendingUpload = null;
   clearFlushTimer();
   flushInFlight = null;
+  lastSuccessfulUploadMetrics = null;
 };
 
 const createGoogleCloudStorage = <S>(): PersistStorage<S> | undefined => {
@@ -150,6 +261,7 @@ const createGoogleCloudStorage = <S>(): PersistStorage<S> | undefined => {
         if (!accessToken || !fileId) return null;
 
         const data: StorageValue<S> = await getDriveFile(fileId, accessToken);
+        lastSuccessfulUploadMetrics = computeCloudSyncMetrics(data);
         useCloudAuthStore.getState().setSyncStatus('synced');
         return data;
       } catch (e: unknown) {

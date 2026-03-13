@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   cloudState,
   toastState,
+  getDriveFileMock,
   updateDriveFileMock,
   validateTokenMock,
 } = vi.hoisted(() => ({
@@ -23,6 +24,7 @@ const {
     setToastShow: vi.fn(),
     setToastStatus: vi.fn(),
   },
+  getDriveFileMock: vi.fn(),
   updateDriveFileMock: vi.fn(async () => ({ id: 'file-1' })),
   validateTokenMock: vi.fn(() => true),
 }));
@@ -41,7 +43,7 @@ vi.mock('@store/store', () => ({
 
 vi.mock('@api/google-api', () => ({
   deleteDriveFile: vi.fn(),
-  getDriveFile: vi.fn(),
+  getDriveFile: getDriveFileMock,
   updateDriveFile: updateDriveFileMock,
   validateGoogleOath2AccessToken: validateTokenMock,
 }));
@@ -67,6 +69,7 @@ describe('GoogleCloudStorage', () => {
     toastState.setToastMessage.mockClear();
     toastState.setToastShow.mockClear();
     toastState.setToastStatus.mockClear();
+    getDriveFileMock.mockClear();
     updateDriveFileMock.mockClear();
     validateTokenMock.mockClear();
   });
@@ -176,5 +179,52 @@ describe('GoogleCloudStorage', () => {
     await flushPendingCloudSync();
 
     expect(updateDriveFileMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks destructive uploads that would erase all chats', async () => {
+    const storage = createGoogleCloudStorage<any>();
+    expect(storage).toBeDefined();
+
+    getDriveFileMock.mockResolvedValueOnce({
+      state: {
+        chats: [{ id: 'chat-1' }],
+        contentStore: { hash: { content: [{ type: 'text', text: 'x' }], refCount: 1 } },
+      },
+      version: 1,
+    });
+
+    await storage!.getItem('test');
+    await storage!.setItem('test', {
+      state: { chats: [], contentStore: {} },
+      version: 1,
+    });
+    await flushPendingCloudSync();
+
+    expect(updateDriveFileMock).not.toHaveBeenCalled();
+    expect(toastState.setToastMessage).toHaveBeenCalledWith(
+      'Cloud sync skipped because the snapshot would erase all chats.'
+    );
+    expect(cloudState.setSyncStatus).toHaveBeenLastCalledWith('synced');
+  });
+
+  it('blocks oversized uploads', async () => {
+    const storage = createGoogleCloudStorage<any>();
+    expect(storage).toBeDefined();
+
+    const hugeText = 'x'.repeat(2_100_000);
+
+    await storage!.setItem('test', {
+      state: {
+        chats: [{ id: 'chat-1', messages: [{ role: 'user', content: hugeText }] }],
+        contentStore: {},
+      },
+      version: 1,
+    });
+    await flushPendingCloudSync();
+
+    expect(updateDriveFileMock).not.toHaveBeenCalled();
+    expect(toastState.setToastMessage).toHaveBeenCalledWith(
+      'Cloud sync skipped because the snapshot is too large to upload safely.'
+    );
   });
 });
