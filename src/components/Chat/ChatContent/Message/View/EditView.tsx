@@ -58,6 +58,7 @@ const EditView = ({
           )}
           <textarea
             ref={logic.textareaRef}
+            data-message-editing={!sticky ? 'true' : undefined}
             className={`m-0 resize-none rounded-lg bg-transparent overflow-y-hidden focus:ring-0 focus-visible:ring-0 leading-7 w-full placeholder:text-gray-500/40 pr-10 ${
               isImageModel ? 'pl-7' : ''
             }`}

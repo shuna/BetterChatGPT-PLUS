@@ -24,6 +24,29 @@ const EMPTY_MESSAGES: never[] = [];
 const SCROLL_TO_BOTTOM_TOP = Number.MAX_SAFE_INTEGER;
 const SCROLL_ALIGN_TOLERANCE = 0.5;
 type ScrollBehaviorMode = 'auto' | 'smooth';
+const MESSAGE_EDIT_TEXTAREA_SELECTOR = 'textarea[data-message-editing="true"]';
+
+type ActiveElementLike = {
+  tagName?: string;
+  matches?: (selector: string) => boolean;
+} | null;
+
+export function isEditingMessageInScroller(scroller: HTMLElement | null): boolean {
+  if (!scroller || typeof document === 'undefined') return false;
+  return isEditingMessageElement(scroller, document.activeElement);
+}
+
+export function isEditingMessageElement(
+  scroller: Pick<HTMLElement, 'contains'> | null,
+  activeElement: ActiveElementLike
+): boolean {
+  if (!scroller || !activeElement) return false;
+  return !!(
+    activeElement.tagName === 'TEXTAREA' &&
+    activeElement.matches(MESSAGE_EDIT_TEXTAREA_SELECTOR) &&
+    scroller.contains(activeElement)
+  );
+}
 
 const ChatContent = () => {
   const { t } = useTranslation();
@@ -387,6 +410,7 @@ const ChatContent = () => {
 
   const handleFollowOutput = useCallback((isAtBottom: boolean) => {
     if (!autoScroll) return false;
+    if (isEditingMessageInScroller(scrollerRef.current)) return false;
 
     // Avoid restarting smooth follow animations while streaming content is still changing height.
     if (isCurrentChatGenerating) {
