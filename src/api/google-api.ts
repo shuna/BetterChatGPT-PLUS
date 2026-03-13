@@ -12,6 +12,13 @@ import PersistStorageState from '@type/persist';
 
 import { createMultipartRelatedBody } from './helper';
 
+export const isGoogleAuthError = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error);
+  return /(?:^|\s)(401|403)(?:\s|$)|unauthorized|forbidden|invalid[_\s-]?token|invalid[_\s-]?grant|login required/i.test(
+    message
+  );
+};
+
 export const createDriveFile = async (
   file: File,
   accessToken: string
@@ -189,7 +196,9 @@ export const updateDriveFileDebounced = debounce(
       useStore.getState().setToastMessage((e as Error).message);
       useStore.getState().setToastShow(true);
       useStore.getState().setToastStatus('error');
-      useCloudAuthStore.getState().setSyncStatus('unauthenticated');
+      useCloudAuthStore.getState().setSyncStatus(
+        isGoogleAuthError(e) ? 'unauthenticated' : 'synced'
+      );
     }
   },
   5000
