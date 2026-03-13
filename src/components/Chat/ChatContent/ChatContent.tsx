@@ -31,18 +31,29 @@ type ActiveElementLike = {
   matches?: (selector: string) => boolean;
 } | null;
 
+type ScrollerLike = {
+  contains: (element: any) => boolean;
+} | null;
+
 export function isEditingMessageInScroller(scroller: HTMLElement | null): boolean {
   if (!scroller || typeof document === 'undefined') return false;
   return isEditingMessageElement(scroller, document.activeElement);
 }
 
 export function isEditingMessageElement(
-  scroller: Pick<HTMLElement, 'contains'> | null,
+  scroller: ScrollerLike,
   activeElement: ActiveElementLike
 ): boolean {
-  if (!scroller || !activeElement) return false;
+  if (
+    !scroller ||
+    !activeElement ||
+    activeElement.tagName !== 'TEXTAREA' ||
+    typeof activeElement.matches !== 'function'
+  ) {
+    return false;
+  }
+
   return !!(
-    activeElement.tagName === 'TEXTAREA' &&
     activeElement.matches(MESSAGE_EDIT_TEXTAREA_SELECTOR) &&
     scroller.contains(activeElement)
   );
