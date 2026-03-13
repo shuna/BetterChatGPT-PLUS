@@ -50,6 +50,7 @@
   "newFolder": "New Folder",
   "cloneChat": "Clone Chat",
   "cloned": "Cloned",
+  "exportVisibleBranchOnly": "Include only the currently visible branch",
   "enterToSubmit": "Enter to submit",
   "autoScroll": "Auto scroll to bottom",
   "animateBubbleNavigation": "Animate bubble navigation",

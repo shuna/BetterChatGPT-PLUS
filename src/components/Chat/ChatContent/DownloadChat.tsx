@@ -16,6 +16,8 @@ import downloadFile from '@utils/downloadFile';
 import { createRoot } from 'react-dom/client';
 import Message from './Message';
 import { MessageInterface } from '@type/chat';
+import { ExportV3 } from '@type/export';
+import { prepareChatForExport } from '@utils/chatExport';
 
 const renderAllMessagesForCapture = (
   visibleMessages: Array<{ message: MessageInterface; originalIndex: number }>
@@ -69,6 +71,7 @@ const DownloadChat = React.memo(
   ({ visibleMessages }: { visibleMessages: Array<{ message: MessageInterface; originalIndex: number }> }) => {
     const { t } = useTranslation();
     const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+    const [visibleBranchOnly, setVisibleBranchOnly] = useState<boolean>(false);
     return (
       <>
         <button
@@ -86,7 +89,17 @@ const DownloadChat = React.memo(
             title={t('downloadChat') as string}
             cancelButton={false}
           >
-            <div className='p-6 border-b border-gray-200 dark:border-gray-600 flex gap-4'>
+            <div className='p-6 border-b border-gray-200 dark:border-gray-600 flex flex-col gap-4'>
+              <label className='flex items-center gap-2 text-sm text-gray-900 dark:text-gray-300 cursor-pointer'>
+                <input
+                  type='checkbox'
+                  checked={visibleBranchOnly}
+                  onChange={(e) => setVisibleBranchOnly(e.target.checked)}
+                  className='rounded'
+                />
+                {t('exportVisibleBranchOnly')}
+              </label>
+              <div className='flex gap-4'>
               <button
                 className='btn btn-neutral gap-2'
                 aria-label='image'
@@ -126,8 +139,15 @@ const DownloadChat = React.memo(
                 onClick={async () => {
                   const chats = useStore.getState().chats;
                   if (chats) {
+                    const exportChat = visibleBranchOnly
+                      ? prepareChatForExport(
+                          chats[useStore.getState().currentChatIndex],
+                          useStore.getState().contentStore,
+                          { visibleBranchOnly: true }
+                        ).chat
+                      : chats[useStore.getState().currentChatIndex];
                     const markdown = chatToMarkdown(
-                      chats[useStore.getState().currentChatIndex]
+                      exportChat
                     );
                     downloadMarkdown(
                       markdown,
@@ -149,14 +169,25 @@ const DownloadChat = React.memo(
                 onClick={async () => {
                   const chats = useStore.getState().chats;
                   if (chats) {
-                    const chat = chats[useStore.getState().currentChatIndex];
-                    downloadFile([chat], chat.title);
+                    const prepared = prepareChatForExport(
+                      chats[useStore.getState().currentChatIndex],
+                      useStore.getState().contentStore,
+                      { visibleBranchOnly }
+                    );
+                    const fileData = {
+                      chats: [prepared.chat],
+                      contentStore: prepared.contentStore,
+                      folders: {},
+                      version: 3,
+                    } satisfies ExportV3;
+                    downloadFile(fileData, prepared.chat.title);
                   }
                 }}
               >
                 <JsonIcon />
                 JSON
               </button>
+              </div>
             </div>
           </PopupModal>
         )}

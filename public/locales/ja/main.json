@@ -46,6 +46,7 @@
   "newFolder": "新しいフォルダー",
   "cloneChat": "チャットのコピーを作成",
   "cloned": "完了しました",
+  "exportVisibleBranchOnly": "現在表示中の分岐のみを含める",
   "enterToSubmit": "Enterキーを押して送信",
   "animateBubbleNavigation": "会話バブル移動をアニメーション表示",
   "submitPlaceholder": "メッセージを入力するか、[/] をクリックしてプロンプトを表示します...",
