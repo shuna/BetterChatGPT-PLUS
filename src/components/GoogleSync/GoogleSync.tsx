@@ -9,6 +9,7 @@ import {
   createDriveFile,
   deleteDriveFile,
   getDriveFileTyped,
+  isGoogleAuthError,
   updateDriveFile,
   updateDriveFileName,
   validateGoogleOath2AccessToken,
@@ -92,6 +93,9 @@ const formatFileSize = (value: string | undefined, locale?: string): string => {
 
 const actionButtonClass =
   'btn btn-primary disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 disabled:saturate-50';
+
+const resolveGoogleSyncErrorStatus = (error: unknown): SyncStatus =>
+  isGoogleAuthError(error) ? 'unauthenticated' : 'synced';
 
 const normalizeRemotePersistedState = (
   snapshot: unknown
@@ -375,7 +379,7 @@ const GooglePopup = ({
       }
       setSyncStatus('synced');
     } catch (e: unknown) {
-      setSyncStatus('unauthenticated');
+      setSyncStatus(resolveGoogleSyncErrorStatus(e));
       setToastMessage((e as Error).message);
       setToastShow(true);
       setToastStatus('error');
@@ -407,7 +411,7 @@ const GooglePopup = ({
       setIsModalOpen(false);
       setSyncStatus('synced');
     } catch (e: unknown) {
-      setSyncStatus('unauthenticated');
+      setSyncStatus(resolveGoogleSyncErrorStatus(e));
       setToastMessage((e as Error).message);
       setToastShow(true);
       setToastStatus('error');
@@ -428,7 +432,7 @@ const GooglePopup = ({
       setToastShow(true);
       setSyncStatus('synced');
     } catch (e: unknown) {
-      setSyncStatus('unauthenticated');
+      setSyncStatus(resolveGoogleSyncErrorStatus(e));
       setToastMessage((e as Error).message);
       setToastShow(true);
       setToastStatus('error');
@@ -446,7 +450,7 @@ const GooglePopup = ({
       activateCloudSyncTarget(createdFile.id);
       setSyncStatus('synced');
     } catch (e: unknown) {
-      setSyncStatus('unauthenticated');
+      setSyncStatus(resolveGoogleSyncErrorStatus(e));
       setToastMessage((e as Error).message);
       setToastShow(true);
       setToastStatus('error');
@@ -755,7 +759,7 @@ const FileSelector = ({
       if (updatedFiles) onFilesChange(updatedFiles);
       setSyncStatus('synced');
     } catch (e: unknown) {
-      setSyncStatus('unauthenticated');
+      setSyncStatus(resolveGoogleSyncErrorStatus(e));
       setToastMessage((e as Error).message);
       setToastShow(true);
       setToastStatus('error');
@@ -779,7 +783,7 @@ const FileSelector = ({
       }
       setSyncStatus('synced');
     } catch (e: unknown) {
-      setSyncStatus('unauthenticated');
+      setSyncStatus(resolveGoogleSyncErrorStatus(e));
       setToastMessage((e as Error).message);
       setToastShow(true);
       setToastStatus('error');

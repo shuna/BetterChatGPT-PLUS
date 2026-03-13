@@ -1,4 +1,4 @@
-import { listDriveFiles } from '@api/google-api';
+import { isGoogleAuthError, listDriveFiles } from '@api/google-api';
 
 import useStore, { createPartializedState } from '@store/store';
 import useCloudAuthStore from '@store/cloud-auth-store';
@@ -9,7 +9,9 @@ export const getFiles = async (googleAccessToken: string) => {
     const driveFiles = await listDriveFiles(googleAccessToken);
     return driveFiles.files;
   } catch (e: unknown) {
-    useCloudAuthStore.getState().setSyncStatus('unauthenticated');
+    useCloudAuthStore.getState().setSyncStatus(
+      isGoogleAuthError(e) ? 'unauthenticated' : 'synced'
+    );
     useStore.getState().setToastMessage((e as Error).message);
     useStore.getState().setToastShow(true);
     useStore.getState().setToastStatus('error');

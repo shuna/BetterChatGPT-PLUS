@@ -5,6 +5,7 @@ import useStore from '@store/store';
 import {
   deleteDriveFile,
   getDriveFile,
+  isGoogleAuthError,
   updateDriveFile,
   validateGoogleOath2AccessToken,
 } from '@api/google-api';
@@ -219,7 +220,9 @@ export const flushPendingCloudSync = async (): Promise<void> => {
       useStore.getState().setToastMessage((e as Error).message);
       useStore.getState().setToastShow(true);
       useStore.getState().setToastStatus('error');
-      useCloudAuthStore.getState().setSyncStatus('unauthenticated');
+      useCloudAuthStore.getState().setSyncStatus(
+        isGoogleAuthError(e) ? 'unauthenticated' : 'synced'
+      );
     } finally {
       flushInFlight = null;
       if (pendingUpload) {
@@ -265,7 +268,9 @@ const createGoogleCloudStorage = <S>(): PersistStorage<S> | undefined => {
         useCloudAuthStore.getState().setSyncStatus('synced');
         return data;
       } catch (e: unknown) {
-        useCloudAuthStore.getState().setSyncStatus('unauthenticated');
+        useCloudAuthStore.getState().setSyncStatus(
+          isGoogleAuthError(e) ? 'unauthenticated' : 'synced'
+        );
         useStore.getState().setToastMessage((e as Error).message);
         useStore.getState().setToastShow(true);
         useStore.getState().setToastStatus('error');

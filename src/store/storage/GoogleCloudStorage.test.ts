@@ -44,6 +44,9 @@ vi.mock('@store/store', () => ({
 vi.mock('@api/google-api', () => ({
   deleteDriveFile: vi.fn(),
   getDriveFile: getDriveFileMock,
+  isGoogleAuthError: (error: unknown) => /(?:^|\s)(401|403)(?:\s|$)|unauthorized|forbidden/i.test(
+    error instanceof Error ? error.message : String(error)
+  ),
   updateDriveFile: updateDriveFileMock,
   validateGoogleOath2AccessToken: validateTokenMock,
 }));
@@ -226,5 +229,33 @@ describe('GoogleCloudStorage', () => {
     expect(toastState.setToastMessage).toHaveBeenCalledWith(
       'Cloud sync skipped because the snapshot is too large to upload safely.'
     );
+  });
+
+  it('keeps the session on non-auth upload failures', async () => {
+    updateDriveFileMock.mockRejectedValueOnce(
+      new Error('Error uploading file: 500 Internal Server Error')
+    );
+
+    const storage = createGoogleCloudStorage<{ count: number }>();
+    expect(storage).toBeDefined();
+
+    await storage!.setItem('test', { state: { count: 3 }, version: 1 });
+    await flushPendingCloudSync();
+
+    expect(cloudState.setSyncStatus).toHaveBeenLastCalledWith('synced');
+  });
+
+  it('marks the session unauthenticated on auth failures', async () => {
+    updateDriveFileMock.mockRejectedValueOnce(
+      new Error('Error uploading file: 401 Unauthorized')
+    );
+
+    const storage = createGoogleCloudStorage<{ count: number }>();
+    expect(storage).toBeDefined();
+
+    await storage!.setItem('test', { state: { count: 3 }, version: 1 });
+    await flushPendingCloudSync();
+
+    expect(cloudState.setSyncStatus).toHaveBeenLastCalledWith('unauthenticated');
   });
 });
