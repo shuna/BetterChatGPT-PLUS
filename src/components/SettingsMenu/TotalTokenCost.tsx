@@ -182,7 +182,7 @@ export const TotalTokenCostDisplay = () => {
 
   return (
     <a
-      className={`flex items-center gap-3 rounded-md py-2 px-2 text-sm text-white transition-all duration-200 hover:bg-gray-500/10 ${
+      className={`flex items-center gap-3 rounded-md px-2 py-2 text-sm text-gray-700 transition-all duration-200 hover:bg-gray-100 dark:text-white dark:hover:bg-gray-500/10 ${
         isDisplayRefreshing ? 'opacity-80' : 'opacity-100'
       }`}
     >

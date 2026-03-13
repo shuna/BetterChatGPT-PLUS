@@ -7,7 +7,7 @@ const CollapseOptions = () => {
 
   return (
     <div
-      className={`fill-white hover:bg-gray-500/10 transition-colors duration-200 px-3 rounded-md cursor-pointer flex justify-center`}
+      className='flex cursor-pointer justify-center rounded-md px-3 text-gray-600 transition-colors duration-200 hover:bg-gray-100 hover:text-gray-800 dark:text-gray-300 dark:hover:bg-gray-500/10 dark:hover:text-white'
       onClick={() => setHideMenuOptions(!hideMenuOptions)}
     >
       <ArrowBottom
