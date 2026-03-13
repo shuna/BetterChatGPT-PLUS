@@ -15,9 +15,13 @@ import LegacyCustomModelsBanner from '@components/LegacyCustomModelsBanner';
 import OnboardingModal from '@components/Onboarding/OnboardingModal';
 
 function App() {
-  useAppBootstrap();
+  const isBootstrapped = useAppBootstrap();
   useStreamRecovery();
   useIosStatusBarScroll();
+
+  if (!isBootstrapped) {
+    return <div className='h-full w-full bg-white dark:bg-gray-900' />;
+  }
 
   return (
     <div className='overflow-hidden w-full h-full relative'>

@@ -86,6 +86,7 @@
   "changed": "Changed",
   "stopGenerating": "Stop generating",
   "retry": "Retry",
+  "storageQuotaExceeded": "Storage quota exceeded. Your changes could not be saved",
   "searchDisabledDuringGeneration": "Generating...",
   "onboarding": {
     "welcome": {

@@ -2,6 +2,7 @@ import { compressToUTF16, decompressFromUTF16 } from 'lz-string';
 import { StateStorage } from 'zustand/middleware';
 import type { CompressResponse } from './compress.worker';
 import { perfStart, perfEnd } from '@utils/perfTrace';
+import { setLocalStorageItem } from './storageErrors';
 
 const DEBOUNCE_MS = 500;
 
@@ -38,7 +39,7 @@ if (typeof window !== 'undefined') {
       }
       // Only apply if this is still the latest request for this key
       if (latestRequestId[name] === id) {
-        localStorage.setItem(name, compressed);
+        setLocalStorageItem(name, compressed);
       }
     };
 
@@ -65,7 +66,7 @@ function flushPending() {
     delete pending[name];
     if (pendingValues[name] !== undefined) {
       const value = pendingValues[name];
-      localStorage.setItem(name, compressToUTF16(value));
+      setLocalStorageItem(name, compressToUTF16(value));
       delete pendingValues[name];
     }
   }
@@ -132,7 +133,7 @@ const compressedStorage: StateStorage = {
       } else {
         // Synchronous fallback
         perfStart('persist-compress');
-        localStorage.setItem(name, compressToUTF16(latest));
+        setLocalStorageItem(name, compressToUTF16(latest));
         perfEnd('persist-compress');
       }
     }, DEBOUNCE_MS);

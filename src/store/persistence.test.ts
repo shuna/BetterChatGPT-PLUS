@@ -3,8 +3,16 @@ import { describe, expect, it } from 'vitest';
 import { _defaultChatConfig, _defaultImageDetail } from '@constants/chat';
 import type { ChatInterface } from '@type/chat';
 import { addContent } from '@utils/contentStore';
-import { createPartializedState, rehydrateStoreState } from './persistence';
+import {
+  applyPersistedChatDataState,
+  createLocalStoragePartializedState,
+  createPartializedState,
+  createPersistedChatDataState,
+  migratePersistedChatDataState,
+  rehydrateStoreState,
+} from './persistence';
 import { DEFAULT_PROVIDERS } from './provider-config';
+import { STORE_VERSION } from './version';
 
 const buildStoreState = () => {
   const contentStore = {};
@@ -77,7 +85,19 @@ const buildStoreState = () => {
     providers: { ...DEFAULT_PROVIDERS },
     providerCustomModels: {},
     favoriteModels: [],
-    branchClipboard: null,
+    branchClipboard: {
+      nodeIds: ['node-1'],
+      sourceChat: 'chat-1',
+      nodes: {
+        'node-1': {
+          id: 'node-1',
+          parentId: null,
+          role: 'user',
+          contentHash: userHash,
+          createdAt: 1,
+        },
+      },
+    },
     contentStore,
     currentChatIndex: -1,
   };
@@ -102,6 +122,17 @@ describe('persistence', () => {
     expect(second).toBe(first);
   });
 
+  it('omits chat payloads from localStorage partialized state', () => {
+    const state = buildStoreState();
+
+    const partialized = createLocalStoragePartializedState(state as never);
+
+    expect('chats' in partialized).toBe(false);
+    expect('contentStore' in partialized).toBe(false);
+    expect('branchClipboard' in partialized).toBe(false);
+    expect(partialized.prompts).toEqual(state.prompts);
+  });
+
   it('rehydrates current chat index and materializes branch-tree messages', () => {
     const state = buildStoreState();
     localStorage.setItem('currentChatIndex', '1');
@@ -114,6 +145,36 @@ describe('persistence', () => {
       { role: 'user', content: [{ type: 'text', text: 'hello' }] },
       { role: 'assistant', content: [{ type: 'text', text: 'world' }] },
     ]);
+  });
+
+  it('round-trips persisted chat data independently from localStorage state', () => {
+    const state = buildStoreState();
+    const chatData = createPersistedChatDataState(state as never);
+    const targetState = buildStoreState();
+
+    (targetState as { chats?: ChatInterface[] }).chats = undefined;
+    targetState.contentStore = {};
+
+    applyPersistedChatDataState(targetState as never, chatData);
+
+    expect(targetState.chats?.[0].messages).toEqual([
+      { role: 'user', content: [{ type: 'text', text: 'hello' }] },
+      { role: 'assistant', content: [{ type: 'text', text: 'world' }] },
+    ]);
+    expect(Object.keys(targetState.contentStore)).not.toHaveLength(0);
+    expect(targetState.branchClipboard).toEqual(chatData.branchClipboard);
+  });
+
+  it('migrates persisted chat data using the store version pipeline', () => {
+    const state = buildStoreState();
+    const migrated = migratePersistedChatDataState(
+      state as never,
+      createPersistedChatDataState(state as never),
+      STORE_VERSION - 1
+    );
+
+    expect(migrated.branchClipboard).toEqual(state.branchClipboard);
+    expect(migrated.contentStore).toEqual(state.contentStore);
   });
 
   it('deduplicates persisted chat ids during rehydration', () => {

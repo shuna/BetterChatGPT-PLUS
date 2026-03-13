@@ -74,6 +74,7 @@
   "changed": "変更",
   "stopGenerating": "生成を停止",
   "retry": "再試行",
+  "storageQuotaExceeded": "保存容量の上限に達したため、保存できませんでした",
   "searchDisabledDuringGeneration": "生成中...",
   "onboarding": {
     "welcome": {

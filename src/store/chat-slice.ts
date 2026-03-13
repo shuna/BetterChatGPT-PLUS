@@ -1,6 +1,6 @@
 import { StoreSlice } from './store';
 import { ChatInterface, FolderCollection, GeneratingSession, MessageInterface } from '@type/chat';
-import { toast } from 'react-toastify';
+import { notifyStorageError, setLocalStorageItem } from './storage/storageErrors';
 
 export interface ChatSlice {
   messages: MessageInterface[];
@@ -90,8 +90,7 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
             : buildCollapsedNodeMaps(chats),
         }));
       } catch (e: unknown) {
-        // Notify if storage quota exceeded
-        toast((e as Error).message);
+        notifyStorageError(e);
         throw e;
       }
     },
@@ -102,7 +101,7 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
         currentChatIndex: currentChatIndex,
       }));
       // Persist separately to avoid triggering heavy main-store serialization
-      localStorage.setItem('currentChatIndex', String(currentChatIndex));
+      setLocalStorageItem('currentChatIndex', String(currentChatIndex));
     },
     setLastSubmitContext: (
       mode: 'append' | 'midchat' | null,

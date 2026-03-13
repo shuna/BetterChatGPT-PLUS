@@ -11,6 +11,7 @@ import { ProviderSlice, createProviderSlice } from './provider-slice';
 import { BranchSlice, createBranchSlice } from './branch-slice';
 import { STORE_VERSION } from './version';
 import {
+  createLocalStoragePartializedState,
   createPartializedState,
   migratePersistedState,
   rehydrateStoreState,
@@ -46,7 +47,7 @@ const useStore = create<StoreState>()(
     {
       name: 'free-chat-gpt',
       storage: createJSONStorage(() => compressedStorage),
-      partialize: (state) => createPartializedState(state),
+      partialize: (state) => createLocalStoragePartializedState(state),
       version: STORE_VERSION,
       onRehydrateStorage: () => (state) => {
         if (!state) return;

@@ -43,12 +43,13 @@ import {
   migrateV15,
 } from './migrate';
 import type { StoreState } from './store';
+import { STORE_VERSION } from './version';
 
 type PersistedChat = Omit<ChatInterface, 'messages'> & {
   messages?: ChatInterface['messages'];
 };
 
-type PersistedStoreState = Omit<
+export type PersistedStoreState = Omit<
   Pick<
   StoreState,
   | 'chats'
@@ -92,7 +93,17 @@ type PersistedStoreState = Omit<
   chats?: PersistedChat[];
 };
 
-export const PERSIST_KEYS: (keyof PersistedStoreState)[] = [
+export type PersistedChatData = Pick<
+  PersistedStoreState,
+  'chats' | 'contentStore' | 'branchClipboard'
+>;
+
+type LocalStoragePersistedState = Omit<
+  PersistedStoreState,
+  'chats' | 'contentStore' | 'branchClipboard'
+>;
+
+const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'chats', 'apiKey', 'apiVersion', 'apiEndpoint', 'theme', 'autoTitle',
   'titleModel', 'titleProviderId', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
   'hideMenuOptions', 'hideSideMenu', 'folders', 'enterToSubmit',
@@ -104,14 +115,32 @@ export const PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'onboardingCompleted',
 ];
 
-let previousInputRefs: Partial<Record<keyof PersistedStoreState, unknown>> = {};
-let previousResult: PersistedStoreState | null = null;
+const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
+  'apiKey', 'apiVersion', 'apiEndpoint', 'theme', 'autoTitle',
+  'titleModel', 'titleProviderId', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
+  'hideMenuOptions', 'hideSideMenu', 'folders', 'enterToSubmit',
+  'inlineLatex', 'markdownMode', 'streamingMarkdownPolicy', 'totalTokenUsed', 'countTotalTokens',
+  'displayChatSize', 'menuWidth', 'defaultImageDetail', 'autoScroll', 'animateBubbleNavigation',
+  'hideShareGPT', 'providers', 'favoriteModels',
+  'providerModelCache',
+  'providerCustomModels', '_legacyCustomModels',
+  'onboardingCompleted',
+];
+
+let previousFullInputRefs: Partial<Record<keyof PersistedStoreState, unknown>> = {};
+let previousFullResult: PersistedStoreState | null = null;
+
+let previousLocalInputRefs: Partial<Record<keyof LocalStoragePersistedState, unknown>> = {};
+let previousLocalResult: LocalStoragePersistedState | null = null;
+
+const buildPersistedChats = (state: StoreState): PersistedChat[] | undefined =>
+  state.chats?.map(({ messages, ...rest }) =>
+    rest.branchTree ? rest : { ...rest, messages }
+  );
 
 function buildPartializedState(state: StoreState): PersistedStoreState {
   return {
-    chats: state.chats?.map(({ messages, ...rest }) =>
-      rest.branchTree ? rest : { ...rest, messages }
-    ),
+    chats: buildPersistedChats(state),
     apiKey: state.apiKey,
     apiVersion: state.apiVersion,
     apiEndpoint: state.apiEndpoint,
@@ -149,12 +178,51 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
   };
 }
 
+function buildLocalStoragePartializedState(
+  state: StoreState
+): LocalStoragePersistedState {
+  return {
+    apiKey: state.apiKey,
+    apiVersion: state.apiVersion,
+    apiEndpoint: state.apiEndpoint,
+    theme: state.theme,
+    autoTitle: state.autoTitle,
+    titleModel: state.titleModel,
+    titleProviderId: state.titleProviderId,
+    advancedMode: state.advancedMode,
+    prompts: state.prompts,
+    defaultChatConfig: state.defaultChatConfig,
+    defaultSystemMessage: state.defaultSystemMessage,
+    hideMenuOptions: state.hideMenuOptions,
+    hideSideMenu: state.hideSideMenu,
+    folders: state.folders,
+    enterToSubmit: state.enterToSubmit,
+    inlineLatex: state.inlineLatex,
+    markdownMode: state.markdownMode,
+    streamingMarkdownPolicy: state.streamingMarkdownPolicy,
+    totalTokenUsed: state.totalTokenUsed,
+    countTotalTokens: state.countTotalTokens,
+    displayChatSize: state.displayChatSize,
+    menuWidth: state.menuWidth,
+    defaultImageDetail: state.defaultImageDetail,
+    autoScroll: state.autoScroll,
+    animateBubbleNavigation: state.animateBubbleNavigation,
+    hideShareGPT: state.hideShareGPT,
+    providers: state.providers,
+    favoriteModels: state.favoriteModels,
+    providerModelCache: state.providerModelCache,
+    providerCustomModels: state.providerCustomModels,
+    _legacyCustomModels: state._legacyCustomModels,
+    onboardingCompleted: state.onboardingCompleted,
+  };
+}
+
 export const createPartializedState = (state: StoreState): PersistedStoreState => {
-  let changed = !previousResult;
+  let changed = !previousFullResult;
 
   if (!changed) {
-    for (const key of PERSIST_KEYS) {
-      if (state[key] !== previousInputRefs[key]) {
+    for (const key of FULL_PERSIST_KEYS) {
+      if (state[key] !== previousFullInputRefs[key]) {
         changed = true;
         break;
       }
@@ -162,15 +230,41 @@ export const createPartializedState = (state: StoreState): PersistedStoreState =
   }
 
   if (changed) {
-    previousResult = buildPartializedState(state);
+    previousFullResult = buildPartializedState(state);
     const refs: Partial<Record<keyof PersistedStoreState, unknown>> = {};
-    for (const key of PERSIST_KEYS) {
+    for (const key of FULL_PERSIST_KEYS) {
       refs[key] = state[key];
     }
-    previousInputRefs = refs;
+    previousFullInputRefs = refs;
   }
 
-  return previousResult!;
+  return previousFullResult!;
+};
+
+export const createLocalStoragePartializedState = (
+  state: StoreState
+): LocalStoragePersistedState => {
+  let changed = !previousLocalResult;
+
+  if (!changed) {
+    for (const key of LOCAL_STORAGE_PERSIST_KEYS) {
+      if (state[key] !== previousLocalInputRefs[key]) {
+        changed = true;
+        break;
+      }
+    }
+  }
+
+  if (changed) {
+    previousLocalResult = buildLocalStoragePartializedState(state);
+    const refs: Partial<Record<keyof LocalStoragePersistedState, unknown>> = {};
+    for (const key of LOCAL_STORAGE_PERSIST_KEYS) {
+      refs[key] = state[key];
+    }
+    previousLocalInputRefs = refs;
+  }
+
+  return previousLocalResult!;
 };
 
 export const rehydrateStoreState = (state: StoreState) => {
@@ -195,6 +289,50 @@ export const rehydrateStoreState = (state: StoreState) => {
 
   createPartializedState(state);
   return repaired;
+};
+
+export const createPersistedChatDataState = (
+  state: StoreState
+): PersistedChatData => ({
+  chats: buildPersistedChats(state),
+  contentStore: state.contentStore,
+  branchClipboard: state.branchClipboard,
+});
+
+export const applyPersistedChatDataState = (
+  state: StoreState,
+  persistedChatData: PersistedChatData
+) => {
+  state.chats = persistedChatData.chats as ChatInterface[] | undefined;
+  state.contentStore = persistedChatData.contentStore ?? {};
+  state.branchClipboard = persistedChatData.branchClipboard ?? null;
+  return rehydrateStoreState(state);
+};
+
+export const migratePersistedChatDataState = (
+  baseState: StoreState,
+  persistedChatData: PersistedChatData,
+  version: number
+): PersistedChatData => {
+  if (version >= STORE_VERSION) {
+    return persistedChatData;
+  }
+
+  const mergedState = JSON.parse(
+    JSON.stringify({
+      ...createPartializedState(baseState),
+      chats: persistedChatData.chats,
+      contentStore: persistedChatData.contentStore,
+      branchClipboard: persistedChatData.branchClipboard,
+    })
+  ) as PersistedStoreState;
+
+  const migrated = migratePersistedState(mergedState, version) as PersistedStoreState;
+  return {
+    chats: migrated.chats,
+    contentStore: migrated.contentStore ?? {},
+    branchClipboard: migrated.branchClipboard ?? null,
+  };
 };
 
 type PersistedStateVersion =
