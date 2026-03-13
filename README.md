@@ -116,6 +116,14 @@ npm run dev
 yarn build
 ```
 
+#### Google Drive Sync Setup
+
+Google Drive sync requires your own Google OAuth Web client ID via `VITE_GOOGLE_CLIENT_ID`.
+
+- The shared/demo deployment may show `403: access_denied` if the OAuth app is still in Google's Testing state and your Google account is not registered as a test user.
+- If you deploy this fork yourself, create your own OAuth client in Google Cloud, add your site URL to Authorized JavaScript origins, and configure the OAuth consent screen for the Google Drive scope used by this app.
+- This app requests `https://www.googleapis.com/auth/drive.file` for Drive sync.
+
 ### Acknowledgements
 
 Deep thanks to the authors and contributors of [BetterChatGPT](https://github.com/ztjhz/BetterChatGPT), which provided the starting point for this project.  

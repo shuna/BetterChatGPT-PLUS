@@ -79,7 +79,7 @@ export const listDriveFiles = async (
   accessToken: string
 ): Promise<GoogleFileList> => {
   const response = await fetch(
-    'https://www.googleapis.com/drive/v3/files?orderBy=createdTime desc',
+    'https://www.googleapis.com/drive/v3/files?orderBy=modifiedTime desc&fields=nextPageToken,kind,incompleteSearch,files(id,kind,name,mimeType,modifiedTime,size)',
     {
       method: 'GET',
       headers: {
