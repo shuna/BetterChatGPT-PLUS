@@ -6,7 +6,6 @@ import NewFolder from './NewFolder';
 import ChatHistoryList from './ChatHistoryList';
 import MenuOptions from './MenuOptions';
 
-import CrossIcon2 from '@icon/CrossIcon2';
 import MenuIcon from '@icon/MenuIcon';
 import useSwipeGesture from '@hooks/useSwipeGesture';
 
@@ -93,17 +92,6 @@ const Menu = () => {
               <MenuOptions />
             </nav>
           </div>
-        </div>
-        <div
-          id='menu-close'
-          className={`${
-            hideSideMenu ? 'hidden' : ''
-          } absolute right-0 top-10 z-[999] translate-x-full cursor-pointer bg-gray-100 p-2 text-gray-700 hover:bg-gray-200 dark:bg-gray-900 dark:text-white dark:hover:bg-black md:hidden`}
-          onClick={() => {
-            setHideSideMenu(true);
-          }}
-        >
-          <CrossIcon2 />
         </div>
         <div
           className='absolute top-0 right-0 h-full w-2 cursor-ew-resize'

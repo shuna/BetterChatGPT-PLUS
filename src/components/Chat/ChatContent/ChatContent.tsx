@@ -19,6 +19,7 @@ import countTokens, { limitMessageTokens } from '@utils/messageUtils';
 import { perfStart, perfEnd } from '@utils/perfTrace';
 import { defaultModel, reduceMessagesToTotalToken } from '@constants/chat';
 import { toast } from 'react-toastify';
+import useIsDesktop from '@hooks/useIsDesktop';
 
 const EMPTY_MESSAGES: never[] = [];
 const SCROLL_TO_BOTTOM_TOP = Number.MAX_SAFE_INTEGER;
@@ -86,6 +87,8 @@ const ChatContent = () => {
   const autoScroll = useStore((state) => state.autoScroll);
   const animateBubbleNavigation = useStore((state) => state.animateBubbleNavigation);
   const hideShareGPT = useStore((state) => state.hideShareGPT);
+  const isDesktop = useIsDesktop();
+  const isDesktopMenuExpanded = isDesktop && !hideSideMenu;
 
   const currentChatId = useStore((state) =>
     state.chats?.[state.currentChatIndex]?.id ?? ''
@@ -584,10 +587,10 @@ const ChatContent = () => {
         </div>
       )}
       <div
-        className={`mt-4 w-full m-auto  ${
-          hideSideMenu
-            ? 'md:max-w-5xl lg:max-w-5xl xl:max-w-6xl'
-            : 'md:max-w-3xl lg:max-w-3xl xl:max-w-4xl'
+        className={`mt-4 w-full m-auto ${
+          isDesktopMenuExpanded
+            ? 'md:max-w-3xl lg:max-w-3xl xl:max-w-4xl'
+            : 'md:max-w-5xl lg:max-w-5xl xl:max-w-6xl'
         }`}
       >
         <div
@@ -607,7 +610,7 @@ const ChatContent = () => {
       </div>
       <div className='w-full h-36'></div>
     </div>
-  ), [inputRole, stickyIndex, isCurrentChatGenerating, currentChatId, error, lastSubmitMode, handleRetry, hideSideMenu, hideShareGPT, t, setError, setLastSubmitContext]);
+  ), [inputRole, stickyIndex, isCurrentChatGenerating, currentChatId, error, lastSubmitMode, handleRetry, isDesktopMenuExpanded, hideShareGPT, t, setError, setLastSubmitContext]);
 
   const components = useMemo(() => ({ Footer }), [Footer]);
 

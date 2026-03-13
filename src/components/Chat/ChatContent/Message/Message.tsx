@@ -6,6 +6,7 @@ import MessageContent from './MessageContent';
 
 import { ContentInterface, Role, isTextContent } from '@type/chat';
 import RoleSelector from './RoleSelector';
+import useIsDesktop from '@hooks/useIsDesktop';
 
 const backgroundStyle = ['dark:bg-gray-800', 'bg-gray-50 dark:bg-gray-650'];
 
@@ -47,6 +48,8 @@ const Message = React.memo(
     const advancedMode = useStore((state) => state.advancedMode);
     const toggleCollapseNode = useStore((state) => state.toggleCollapseNode);
     const currentChatIndex = useStore((state) => state.currentChatIndex);
+    const isDesktop = useIsDesktop();
+    const isDesktopMenuExpanded = isDesktop && !hideSideMenu;
 
     const resolvedNodeId = useStore((state) => {
       if (sticky) return undefined;
@@ -92,9 +95,9 @@ const Message = React.memo(
         )}
         <div
           className={`text-base gap-2.5 md:gap-4 m-auto p-4 pl-7 md:py-6 flex transition-all ease-in-out ${
-            hideSideMenu
-              ? 'md:max-w-5xl lg:max-w-5xl xl:max-w-6xl'
-              : 'md:max-w-3xl lg:max-w-3xl xl:max-w-4xl'
+            isDesktopMenuExpanded
+              ? 'md:max-w-3xl lg:max-w-3xl xl:max-w-4xl'
+              : 'md:max-w-5xl lg:max-w-5xl xl:max-w-6xl'
           }`}
         >
           <Avatar role={role} />

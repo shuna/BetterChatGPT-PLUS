@@ -5,6 +5,7 @@ import ChatContent from './ChatContent';
 import MobileBar from '../MobileBar';
 
 import ChatViewTabs from './ChatViewTabs';
+import useIsDesktop from '@hooks/useIsDesktop';
 
 const BranchEditorView = React.lazy(
   () => import('@components/BranchEditor/BranchEditorView')
@@ -15,12 +16,11 @@ const Chat = () => {
   const menuWidth = useStore((state) => state.menuWidth);
   const activeView = useStore((state) => state.chatActiveView);
   const setActiveView = useStore((state) => state.setChatActiveView);
+  const isDesktop = useIsDesktop();
+  const desktopOffset = isDesktop && !hideSideMenu ? `${menuWidth}px` : '0';
 
   return (
-    <div
-      className={`flex h-full flex-1 flex-col`}
-      style={{ paddingLeft: hideSideMenu ? '0' : `${menuWidth}px` }}
-    >
+    <div className='flex h-full flex-1 flex-col' style={{ paddingLeft: desktopOffset }}>
       <MobileBar />
       <main className='relative h-full w-full transition-width flex flex-col overflow-hidden items-stretch flex-1'>
         <ChatViewTabs activeView={activeView} setActiveView={setActiveView} />
