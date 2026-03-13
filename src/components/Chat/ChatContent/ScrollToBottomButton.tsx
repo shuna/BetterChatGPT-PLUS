@@ -24,7 +24,7 @@ const ScrollToBottomButton = React.memo(({
   scrollToBottom,
 }: ScrollToBottomButtonProps) => {
   return (
-    <div className='absolute right-6 bottom-[60px] z-10 flex flex-col gap-1.5'>
+    <div className='absolute right-6 bottom-[84px] z-10 flex flex-col gap-1.5'>
       <button
         className={baseButtonClass}
         aria-label='scroll to previous bubble'
