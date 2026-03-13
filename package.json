@@ -2,6 +2,7 @@
   "name": "weavelet-canvas",
   "private": true,
   "version": "1.27.0",
+  "packageManager": "yarn@1.22.22",
   "type": "module",
   "homepage": "./",
   "main": "electron/index.cjs",
