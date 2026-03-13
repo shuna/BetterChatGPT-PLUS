@@ -10,9 +10,9 @@ const BaseButton = ({
   buttonProps?: React.ButtonHTMLAttributes<HTMLButtonElement>;
 }) => {
   return (
-    <div className='text-gray-400 flex self-end lg:self-center justify-center gap-3 md:gap-4  visible'>
+    <div className='visible flex self-end justify-center gap-3 text-gray-600 lg:self-center md:gap-4 dark:text-gray-400'>
       <button
-        className='p-1 rounded-md hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 md:invisible md:group-hover:visible'
+        className='rounded-md p-1 hover:bg-gray-200 hover:text-gray-950 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-gray-200 disabled:dark:hover:text-gray-400 md:invisible md:group-hover:visible'
         onClick={onClick}
         {...buttonProps}
       >

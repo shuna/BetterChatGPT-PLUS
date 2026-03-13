@@ -66,36 +66,36 @@ const NodeContextMenu = ({
     <>
       <div className='fixed inset-0 z-40' onClick={onClose} />
       <div
-        className='fixed z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[180px]'
+        className='fixed z-50 min-w-[180px] rounded-lg border border-gray-200 bg-white py-1 text-gray-800 shadow-lg dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100'
         style={{ left: x, top: y }}
       >
         <button
-          className='w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700'
+          className='w-full px-4 py-2 text-left text-sm text-inherit hover:bg-gray-100 dark:hover:bg-gray-700'
           onClick={handleCopyFrom}
         >
           {t('copyMessages')}
         </button>
         {branchClipboard && (
           <button
-            className='w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700'
+            className='w-full px-4 py-2 text-left text-sm text-inherit hover:bg-gray-100 dark:hover:bg-gray-700'
             onClick={handlePaste}
           >
             {t('pasteMessages')}
             {clipboardSourceTitle && (
-              <span className='ml-1 text-xs text-gray-400'>
+              <span className='ml-1 text-xs text-gray-500 dark:text-gray-400'>
                 ({clipboardSourceTitle})
               </span>
             )}
           </button>
         )}
         <button
-          className='w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700'
+          className='w-full px-4 py-2 text-left text-sm text-inherit hover:bg-gray-100 dark:hover:bg-gray-700'
           onClick={handleDiff}
         >
           {t('compareBranches')}
         </button>
         <button
-          className='w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700'
+          className='w-full px-4 py-2 text-left text-sm text-inherit hover:bg-gray-100 dark:hover:bg-gray-700'
           onClick={() => {
             onNavigateToChat(chatIndex, nodeId);
             onClose();
@@ -105,7 +105,7 @@ const NodeContextMenu = ({
         </button>
         <hr className='my-1 border-gray-200 dark:border-gray-700' />
         <button
-          className='w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20'
+          className='w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20'
           onClick={handleDelete}
         >
           {t('deleteBranch')}

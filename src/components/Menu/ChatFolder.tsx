@@ -161,7 +161,7 @@ const ChatFolder = ({
   return (
     <div
       className={`w-full transition-colors group/folder ${
-        isHover ? 'bg-gray-800/40' : ''
+        isHover ? 'bg-gray-200/70 dark:bg-gray-800/40' : ''
       }`}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
@@ -170,8 +170,8 @@ const ChatFolder = ({
       <div
         style={{ background: color || '' }}
         className={`${
-          color ? '' : 'hover:bg-gray-850'
-        } transition-colors flex py-2 pl-2 pr-1 items-center gap-3 relative rounded-md break-all cursor-pointer parent-sibling`}
+          color ? '' : 'bg-gray-50 hover:bg-gray-100 dark:bg-transparent dark:hover:bg-gray-850'
+        } parent-sibling relative flex cursor-pointer items-center gap-3 break-all rounded-md py-2 pl-2 pr-1 text-gray-700 transition-colors dark:text-gray-100`}
         onClick={toggleExpanded}
         ref={folderRef}
         onMouseEnter={() => {
@@ -217,20 +217,20 @@ const ChatFolder = ({
           )}
         </div>
         <div
-          className='flex text-gray-300'
+          className='flex text-gray-500 dark:text-gray-300'
           onClick={(e) => e.stopPropagation()}
         >
           {isDelete || isEdit ? (
             <>
               <button
-                className='p-1 hover:text-white'
+                className='p-1 hover:text-gray-900 dark:hover:text-white'
                 onClick={handleTick}
                 aria-label='confirm'
               >
                 <TickIcon />
               </button>
               <button
-                className='p-1 hover:text-white'
+                className='p-1 hover:text-gray-900 dark:hover:text-white'
                 onClick={handleCross}
                 aria-label='cancel'
               >
@@ -244,7 +244,7 @@ const ChatFolder = ({
                 ref={paletteRef}
               >
                 <button
-                  className='p-1 hover:text-white'
+                  className='p-1 hover:text-gray-900 dark:hover:text-white'
                   onClick={() => {
                     setShowPalette((prev) => !prev);
                   }}
@@ -253,7 +253,7 @@ const ChatFolder = ({
                   <ColorPaletteIcon />
                 </button>
                 {showPalette && (
-                  <div className='absolute left-0 bottom-0 translate-y-full p-2 z-20 bg-gray-900 rounded border border-gray-600 flex flex-col gap-2 items-center'>
+                  <div className='absolute bottom-0 left-0 z-20 flex translate-y-full flex-col items-center gap-2 rounded border border-gray-200 bg-white p-2 text-gray-700 shadow-lg dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100'>
                     <>
                       {folderColorOptions.map((c) => (
                         <button
@@ -280,21 +280,21 @@ const ChatFolder = ({
               </div>
 
               <button
-                className='p-1 hover:text-white md:hidden group-hover/folder:md:inline'
+                className='p-1 hover:text-gray-900 dark:hover:text-white md:hidden group-hover/folder:md:inline'
                 onClick={() => setIsEdit(true)}
                 aria-label='edit folder title'
               >
                 <EditIcon />
               </button>
               <button
-                className='p-1 hover:text-white md:hidden group-hover/folder:md:inline'
+                className='p-1 hover:text-gray-900 dark:hover:text-white md:hidden group-hover/folder:md:inline'
                 onClick={() => setIsDelete(true)}
                 aria-label='delete folder'
               >
                 <DeleteIcon />
               </button>
               <button
-                className='p-1 hover:text-white'
+                className='p-1 hover:text-gray-900 dark:hover:text-white'
                 onClick={toggleExpanded}
                 aria-label='expand folder'
               >
@@ -308,7 +308,7 @@ const ChatFolder = ({
           )}
         </div>
       </div>
-      <div className='ml-3 pl-1 border-l-2 border-gray-700 flex flex-col gap-1 parent'>
+      <div className='parent ml-3 flex flex-col gap-1 border-l-2 border-gray-200 pl-1 dark:border-gray-700'>
         {isExpanded && <NewChat folder={folderId} />}
         {isExpanded &&
           folderChats.map((chat) => (

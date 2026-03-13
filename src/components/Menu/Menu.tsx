@@ -7,7 +7,6 @@ import ChatHistoryList from './ChatHistoryList';
 import MenuOptions from './MenuOptions';
 
 import CrossIcon2 from '@icon/CrossIcon2';
-import DownArrow from '@icon/DownArrow';
 import MenuIcon from '@icon/MenuIcon';
 import useSwipeGesture from '@hooks/useSwipeGesture';
 
@@ -67,7 +66,7 @@ const Menu = () => {
       <div
         id='menu'
         ref={menuRef}
-        className={`group/menu dark bg-gray-900 fixed md:inset-y-0 md:flex md:flex-col overflow-visible transition-transform z-[999] top-0 left-0 h-full max-md:w-3/4 ${
+        className={`group/menu fixed top-0 left-0 z-[999] h-full overflow-visible bg-gray-50 text-gray-800 transition-transform dark:bg-gray-900 dark:text-gray-100 md:inset-y-0 md:flex md:flex-col max-md:w-3/4 ${
           hideSideMenu ? 'translate-x-[-100%]' : 'translate-x-[0%]'
         }`}
         style={{ width: `${menuWidth}px` }}
@@ -77,6 +76,16 @@ const Menu = () => {
           <div className='flex h-full w-full flex-1 items-start border-white/20'>
             <nav className='flex h-full flex-1 flex-col space-y-1 px-2 pt-2'>
               <div className='flex gap-2'>
+                <button
+                  className='mb-2 inline-flex shrink-0 items-center justify-center rounded-md border border-gray-300 bg-gray-200 px-2 py-2 text-gray-900 shadow-sm transition-colors duration-200 hover:bg-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600'
+                  onClick={() => {
+                    setHideSideMenu(true);
+                  }}
+                  aria-label='hide menu'
+                  title='hide menu'
+                >
+                  <MenuIcon className='h-4 w-4' />
+                </button>
                 <NewChat />
                 <NewFolder />
               </div>
@@ -89,28 +98,12 @@ const Menu = () => {
           id='menu-close'
           className={`${
             hideSideMenu ? 'hidden' : ''
-          } md:hidden absolute z-[999] right-0 translate-x-full top-10 bg-gray-900 p-2 cursor-pointer hover:bg-black text-white`}
+          } absolute right-0 top-10 z-[999] translate-x-full cursor-pointer bg-gray-100 p-2 text-gray-700 hover:bg-gray-200 dark:bg-gray-900 dark:text-white dark:hover:bg-black md:hidden`}
           onClick={() => {
             setHideSideMenu(true);
           }}
         >
           <CrossIcon2 />
-        </div>
-        <div
-          className={`${
-            hideSideMenu ? 'opacity-100' : 'opacity-30'
-          } md:group-hover/menu:opacity-100 max-md:hidden transition-opacity absolute z-[999] right-0 translate-x-full top-10 bg-gray-900 p-2 cursor-pointer hover:bg-black hover:opacity-100 text-white ${
-            hideSideMenu ? '' : 'rotate-90'
-          }`}
-          onClick={() => {
-            setHideSideMenu(!hideSideMenu);
-          }}
-        >
-          {hideSideMenu ? (
-            <MenuIcon className='h-4 w-4' />
-          ) : (
-            <DownArrow className='h-4 w-4' />
-          )}
         </div>
         <div
           className='absolute top-0 right-0 h-full w-2 cursor-ew-resize'

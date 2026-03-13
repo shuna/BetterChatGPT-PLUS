@@ -42,7 +42,7 @@ const NewFolder = () => {
 
   return (
     <a
-      className='flex py-3 px-3 items-center gap-3 rounded-md hover:bg-gray-500/10 transition-colors duration-200 text-white text-sm mb-2 flex-shrink-0 border border-white/20 cursor-pointer opacity-100'
+      className='mb-2 flex flex-shrink-0 cursor-pointer items-center gap-3 rounded-md border border-gray-200 px-3 py-3 text-sm text-gray-700 opacity-100 transition-colors duration-200 hover:bg-gray-100 dark:border-white/20 dark:text-white dark:hover:bg-gray-500/10'
       onClick={() => {
         addFolder();
       }}

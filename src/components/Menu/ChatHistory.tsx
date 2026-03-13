@@ -17,13 +17,13 @@ import { BranchNode } from '@type/chat';
 
 const ChatHistoryClass = {
   normal:
-    'flex py-2 px-2 items-center gap-3 relative rounded-md bg-gray-900 hover:bg-gray-850 break-all hover:pr-4 group transition-opacity',
+    'group relative flex items-center gap-3 break-all rounded-md bg-gray-50 px-2 py-2 text-gray-700 transition-opacity hover:bg-gray-100 hover:pr-4 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-850',
   active:
-    'flex py-2 px-2 items-center gap-3 relative rounded-md break-all pr-14 bg-gray-800 hover:bg-gray-800 group transition-opacity',
+    'group relative flex items-center gap-3 break-all rounded-md bg-gray-200 px-2 py-2 pr-14 text-gray-800 transition-opacity hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-800',
   normalGradient:
-    'absolute inset-y-0 right-0 w-8 z-10 bg-gradient-to-l from-gray-900 group-hover:from-gray-850',
+    'absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-gray-50 group-hover:from-gray-100 dark:from-gray-900 dark:group-hover:from-gray-850',
   activeGradient:
-    'absolute inset-y-0 right-0 w-8 z-10 bg-gradient-to-l from-gray-800',
+    'absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-gray-200 dark:from-gray-800',
 };
 
 const ChatHistory = React.memo(
@@ -262,18 +262,18 @@ const ChatHistory = React.memo(
           )}
         </div>
         {active && (
-          <div className='absolute flex right-1 z-10 text-gray-300 visible'>
+          <div className='visible absolute right-1 z-10 flex text-gray-500 dark:text-gray-300'>
             {isDelete || isEdit ? (
               <>
                 <button
-                  className='p-1 hover:text-white'
+                  className='p-1 hover:text-gray-900 dark:hover:text-white'
                   onClick={handleTick}
                   aria-label='confirm'
                 >
                   <TickIcon />
                 </button>
                 <button
-                  className='p-1 hover:text-white'
+                  className='p-1 hover:text-gray-900 dark:hover:text-white'
                   onClick={handleCross}
                   aria-label='cancel'
                 >
@@ -283,21 +283,21 @@ const ChatHistory = React.memo(
             ) : (
               <>
                 <button
-                  className='p-1 hover:text-white'
+                  className='p-1 hover:text-gray-900 dark:hover:text-white'
                   onClick={() => setIsEdit(true)}
                   aria-label='edit chat title'
                 >
                   <EditIcon />
                 </button>
                 <button
-                  className='p-1 hover:text-white'
+                  className='p-1 hover:text-gray-900 dark:hover:text-white'
                   onClick={handleClone}
                   aria-label='clone chat'
                 >
                   <CloneIcon />
                 </button>
                 <button
-                  className='p-1 hover:text-white'
+                  className='p-1 hover:text-gray-900 dark:hover:text-white'
                   onClick={() => setIsDelete(true)}
                   aria-label='delete chat'
                 >

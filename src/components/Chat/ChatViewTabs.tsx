@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { shallow } from 'zustand/shallow';
 import useStore from '@store/store';
 import BranchIcon from '@icon/BranchIcon';
+import MenuIcon from '@icon/MenuIcon';
 import ConfigMenu from '@components/ConfigMenu';
 import { ChatInterface, ConfigInterface, ImageDetail } from '@type/chat';
 import { _defaultChatConfig } from '@constants/chat';
@@ -37,6 +38,8 @@ const ChatViewTabs = ({
   );
   const setChats = useStore((state) => state.setChats);
   const currentChatIndex = useStore((state) => state.currentChatIndex);
+  const hideSideMenu = useStore((state) => state.hideSideMenu);
+  const setHideSideMenu = useStore((state) => state.setHideSideMenu);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState<boolean>(false);
   const [isCompact, setIsCompact] = useState<boolean>(false);
@@ -117,12 +120,30 @@ const ChatViewTabs = ({
     }
   }, [currentChatIndex]);
 
+  const menuToggleLabel = String(
+    hideSideMenu
+      ? tMain('showMenu', 'メニューを開く')
+      : tMain('hideMenu', 'メニューを閉じる')
+  );
+
   return (
     <>
       <div ref={containerRef} className='flex items-center border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 z-10 px-2 min-h-[40px]'>
-        {/* Left: Model dropdown & options */}
-        {advancedMode && chat && (
-          <div className='flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300 min-w-0'>
+        <div className='flex min-w-0 items-center gap-2'>
+          {hideSideMenu && (
+            <button
+              className='hidden shrink-0 items-center justify-center rounded-md border border-gray-200 bg-gray-100 p-1.5 text-gray-600 transition-colors hover:bg-gray-200 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-300 dark:hover:bg-gray-700 dark:hover:text-gray-100 md:inline-flex'
+              onClick={() => setHideSideMenu(false)}
+              aria-label={menuToggleLabel}
+              title={menuToggleLabel}
+            >
+              <MenuIcon className='h-4 w-4' />
+            </button>
+          )}
+
+          {/* Left: Model dropdown & options */}
+          {advancedMode && chat && (
+            <div className='flex min-w-0 items-center gap-2 text-sm text-gray-600 dark:text-gray-300'>
             <div className='relative min-w-0' ref={dropdownRef}>
               <div
                 ref={modelRef}
@@ -170,8 +191,9 @@ const ChatViewTabs = ({
               </svg>
               {!isCompact && tMain('modelOptions')}
             </div>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
 
         {/* Right: View tabs */}
         <div className='flex ml-auto shrink-0 whitespace-nowrap'>
