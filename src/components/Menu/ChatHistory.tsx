@@ -17,11 +17,11 @@ import { BranchNode } from '@type/chat';
 
 const ChatHistoryClass = {
   normal:
-    'group relative flex items-center gap-3 break-all rounded-md bg-gray-50 px-2 py-2 text-gray-700 transition-opacity hover:bg-gray-100 hover:pr-4 dark:bg-gray-900 dark:text-gray-100 dark:hover:bg-gray-850',
+    'group relative flex items-center gap-3 break-all rounded-md bg-transparent px-2 py-2 text-gray-700 transition-opacity hover:bg-gray-50 hover:pr-4 dark:bg-transparent dark:text-gray-100 dark:hover:bg-gray-850',
   active:
     'group relative flex items-center gap-3 break-all rounded-md bg-gray-200 px-2 py-2 pr-14 text-gray-800 transition-opacity hover:bg-gray-200 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-800',
   normalGradient:
-    'absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-gray-50 group-hover:from-gray-100 dark:from-gray-900 dark:group-hover:from-gray-850',
+    'absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-transparent group-hover:from-gray-50 dark:from-transparent dark:group-hover:from-gray-850',
   activeGradient:
     'absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-gray-200 dark:from-gray-800',
 };
