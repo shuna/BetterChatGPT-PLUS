@@ -40,6 +40,7 @@ export interface ConfigSlice {
   displayChatSize: boolean;
   defaultImageDetail: ImageDetail;
   autoScroll: boolean;
+  animateBubbleNavigation: boolean;
   hideShareGPT: boolean;
   onboardingCompleted: number | false; // false = not completed, number = store version when completed
   setOnboardingCompleted: (completed: boolean) => void;
@@ -62,6 +63,7 @@ export interface ConfigSlice {
   setDisplayChatSize: (displayChatSize: boolean) => void;
   setDefaultImageDetail: (imageDetail: ImageDetail) => void;
   setAutoScroll: (autoScroll: boolean) => void;
+  setAnimateBubbleNavigation: (animateBubbleNavigation: boolean) => void;
   setHideShareGPT: (hideShareGPT: boolean) => void;
 }
 
@@ -86,6 +88,7 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
   displayChatSize: _defaultDisplayChatSize,
   defaultImageDetail: _defaultImageDetail,
   autoScroll: true,
+  animateBubbleNavigation: true,
   hideShareGPT: true,
   onboardingCompleted: false,
   setOnboardingCompleted: (completed: boolean) => {
@@ -226,6 +229,13 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
     set((prev: ConfigSlice) => ({
       ...prev,
       autoScroll: autoScroll,
+    }));
+  },
+  setAnimateBubbleNavigation: (animateBubbleNavigation: boolean) => {
+    if (get().animateBubbleNavigation === animateBubbleNavigation) return;
+    set((prev: ConfigSlice) => ({
+      ...prev,
+      animateBubbleNavigation,
     }));
   },
   setHideShareGPT: (hideShareGPT: boolean) => {

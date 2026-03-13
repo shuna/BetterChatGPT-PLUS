@@ -76,6 +76,7 @@ type PersistedStoreState = Omit<
   | 'menuWidth'
   | 'defaultImageDetail'
   | 'autoScroll'
+  | 'animateBubbleNavigation'
   | 'hideShareGPT'
   | 'providers'
   | 'favoriteModels'
@@ -96,7 +97,7 @@ export const PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'titleModel', 'titleProviderId', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
   'hideMenuOptions', 'hideSideMenu', 'folders', 'enterToSubmit',
   'inlineLatex', 'markdownMode', 'streamingMarkdownPolicy', 'totalTokenUsed', 'countTotalTokens',
-  'displayChatSize', 'menuWidth', 'defaultImageDetail', 'autoScroll',
+  'displayChatSize', 'menuWidth', 'defaultImageDetail', 'autoScroll', 'animateBubbleNavigation',
   'hideShareGPT', 'providers', 'favoriteModels',
   'branchClipboard', 'contentStore', 'providerModelCache',
   'providerCustomModels', '_legacyCustomModels',
@@ -135,6 +136,7 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     menuWidth: state.menuWidth,
     defaultImageDetail: state.defaultImageDetail,
     autoScroll: state.autoScroll,
+    animateBubbleNavigation: state.animateBubbleNavigation,
     hideShareGPT: state.hideShareGPT,
     providers: state.providers,
     favoriteModels: state.favoriteModels,

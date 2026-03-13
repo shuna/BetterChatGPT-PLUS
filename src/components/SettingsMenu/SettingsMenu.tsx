@@ -13,6 +13,7 @@ import PromptLibraryMenu from '@components/PromptLibraryMenu';
 import ChatConfigMenu from '@components/ChatConfigMenu';
 import EnterToSubmitToggle from './EnterToSubmitToggle';
 import AutoScrollToggle from './AutoScrollToggle';
+import AnimateBubbleNavigationToggle from './AnimateBubbleNavigationToggle';
 import HideShareGPTToggle from './HideShareGPTToggle';
 import TotalTokenCost, { TotalTokenCostToggle } from './TotalTokenCost';
 import ClearConversation from '@components/Menu/MenuOptions/ClearConversation';
@@ -53,6 +54,7 @@ const SettingsMenu = () => {
               <AutoTitleToggle />
               <EnterToSubmitToggle />
               <AutoScrollToggle />
+              <AnimateBubbleNavigationToggle />
               <InlineLatexToggle />
               <StreamingMarkdownPolicySelect />
               <AdvancedModeToggle />

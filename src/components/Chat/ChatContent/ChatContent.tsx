@@ -22,6 +22,8 @@ import { toast } from 'react-toastify';
 
 const EMPTY_MESSAGES: never[] = [];
 const SCROLL_TO_BOTTOM_TOP = Number.MAX_SAFE_INTEGER;
+const SCROLL_ALIGN_TOLERANCE = 0.5;
+type ScrollBehaviorMode = 'auto' | 'smooth';
 
 const ChatContent = () => {
   const { t } = useTranslation();
@@ -48,6 +50,7 @@ const ChatContent = () => {
   const advancedMode = useStore((state) => state.advancedMode);
   const hideSideMenu = useStore((state) => state.hideSideMenu);
   const autoScroll = useStore((state) => state.autoScroll);
+  const animateBubbleNavigation = useStore((state) => state.animateBubbleNavigation);
   const hideShareGPT = useStore((state) => state.hideShareGPT);
 
   const currentChatId = useStore((state) =>
@@ -152,6 +155,10 @@ const ChatContent = () => {
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const scrollerRef = useRef<HTMLElement | null>(null);
   const [atBottom, setAtBottom] = useState(true);
+  const [bubbleNavigationState, setBubbleNavigationState] = useState({
+    canMoveUp: false,
+    canMoveDown: false,
+  });
 
   // Scroll anchor tracking (local refs, saved to store on departure)
   const saveChatScrollAnchor = useStore((state) => state.saveChatScrollAnchor);
@@ -175,19 +182,71 @@ const ChatContent = () => {
   }, [messagesLimited, advancedMode]);
 
   // Track visible range for anchor
-  const handleRangeChanged = useCallback((range: ListRange) => {
-    anchorRef.current.firstVisibleItemIndex = range.startIndex;
-    // Compute offsetWithinItem from scroller
-    if (scrollerRef.current) {
-      const scroller = scrollerRef.current;
-      const firstItem = scroller.querySelector(`[data-item-index="${range.startIndex}"]`);
-      if (firstItem) {
-        const scrollerRect = scroller.getBoundingClientRect();
-        const itemRect = firstItem.getBoundingClientRect();
-        anchorRef.current.offsetWithinItem = scrollerRect.top - itemRect.top;
+  const refreshAnchorOffsetWithinItem = useCallback(() => {
+    if (!scrollerRef.current || items.length === 0) return;
+    const anchorIndex = Math.min(
+      Math.max(anchorRef.current.firstVisibleItemIndex, 0),
+      items.length - 1
+    );
+    const firstItem = scrollerRef.current.querySelector(`[data-item-index="${anchorIndex}"]`);
+    if (!firstItem) return;
+
+    const scrollerRect = scrollerRef.current.getBoundingClientRect();
+    const itemRect = firstItem.getBoundingClientRect();
+    anchorRef.current.offsetWithinItem = scrollerRect.top - itemRect.top;
+  }, [items.length]);
+
+  const getViewportBubbleState = useCallback(() => {
+    if (!scrollerRef.current || items.length === 0) {
+      return { currentIndex: -1, insideBubble: false };
+    }
+
+    const scrollerRect = scrollerRef.current.getBoundingClientRect();
+    const viewportTop = scrollerRect.top + SCROLL_ALIGN_TOLERANCE;
+    const renderedItems = Array.from(
+      scrollerRef.current.querySelectorAll<HTMLElement>('[data-item-index]')
+    );
+
+    for (const item of renderedItems) {
+      const itemIndex = Number(item.dataset.itemIndex);
+      if (Number.isNaN(itemIndex)) continue;
+      const itemRect = item.getBoundingClientRect();
+      if (itemRect.top <= viewportTop && itemRect.bottom > viewportTop) {
+        return {
+          currentIndex: Math.min(Math.max(itemIndex, 0), items.length - 1),
+          insideBubble: viewportTop - itemRect.top > SCROLL_ALIGN_TOLERANCE,
+        };
       }
     }
-  }, []);
+
+    const fallbackIndex = Math.min(
+      Math.max(anchorRef.current.firstVisibleItemIndex, 0),
+      items.length - 1
+    );
+    return {
+      currentIndex: fallbackIndex,
+      insideBubble: anchorRef.current.offsetWithinItem > SCROLL_ALIGN_TOLERANCE,
+    };
+  }, [items.length]);
+
+  const updateBubbleNavigationState = useCallback(() => {
+    const { currentIndex, insideBubble } = getViewportBubbleState();
+    if (currentIndex < 0) {
+      setBubbleNavigationState({ canMoveUp: false, canMoveDown: false });
+      return;
+    }
+
+    setBubbleNavigationState({
+      canMoveUp: currentIndex > 0 || (currentIndex === 0 && insideBubble),
+      canMoveDown: currentIndex < items.length - 1,
+    });
+  }, [getViewportBubbleState, items.length]);
+
+  const handleRangeChanged = useCallback((range: ListRange) => {
+    anchorRef.current.firstVisibleItemIndex = range.startIndex;
+    refreshAnchorOffsetWithinItem();
+    updateBubbleNavigationState();
+  }, [refreshAnchorOffsetWithinItem, updateBubbleNavigationState]);
 
   // Save scroll anchor to store (called on chat departure / unmount)
   const saveCurrentAnchor = useCallback(() => {
@@ -267,11 +326,16 @@ const ChatContent = () => {
     perfEnd('chat-render');
   }, [items]);
 
+  useEffect(() => {
+    updateBubbleNavigationState();
+  }, [currentChatIndex, items.length, updateBubbleNavigationState]);
+
   const handleScrollToBottom = useCallback(() => {
     bottomLockRef.current = true;
+    const scrollBehavior: ScrollBehaviorMode = animateBubbleNavigation ? 'smooth' : 'auto';
     // Clear any pending unlock timer
     if (bottomLockTimerRef.current) clearTimeout(bottomLockTimerRef.current);
-    virtuosoRef.current?.scrollTo({ top: SCROLL_TO_BOTTOM_TOP, behavior: 'smooth' });
+    virtuosoRef.current?.scrollTo({ top: SCROLL_TO_BOTTOM_TOP, behavior: scrollBehavior });
     // Retry scroll for a few frames to handle pending height changes
     let retries = 3;
     const retryScroll = () => {
@@ -281,7 +345,45 @@ const ChatContent = () => {
       }
     };
     requestAnimationFrame(retryScroll);
-  }, []);
+  }, [animateBubbleNavigation]);
+
+  const scrollToBubbleAtIndex = useCallback((index: number) => {
+    if (index < 0 || index >= items.length) return;
+    virtuosoRef.current?.scrollToIndex({
+      index,
+      align: 'start',
+      behavior: animateBubbleNavigation ? 'smooth' : 'auto',
+    });
+  }, [animateBubbleNavigation, items.length]);
+
+  const getAnchorBubbleIndex = useCallback(() => {
+    if (items.length === 0) return -1;
+    const anchorIndex = Math.min(
+      Math.max(anchorRef.current.firstVisibleItemIndex, 0),
+      items.length - 1
+    );
+    return anchorIndex;
+  }, [items.length]);
+
+  const getTopAlignedBubbleIndex = useCallback(() => {
+    const { currentIndex, insideBubble } = getViewportBubbleState();
+    if (currentIndex < 0) return -1;
+    return insideBubble ? Math.min(currentIndex + 1, items.length - 1) : currentIndex;
+  }, [getViewportBubbleState, items.length]);
+
+  const handleScrollToPreviousBubble = useCallback(() => {
+    const topAlignedIndex = getTopAlignedBubbleIndex();
+    if (topAlignedIndex <= 0) return;
+    scrollToBubbleAtIndex(topAlignedIndex - 1);
+  }, [getTopAlignedBubbleIndex, scrollToBubbleAtIndex]);
+
+  const handleScrollToNextBubble = useCallback(() => {
+    const topAlignedIndex = getTopAlignedBubbleIndex();
+    if (topAlignedIndex < 0 || topAlignedIndex >= items.length - 1) return;
+    scrollToBubbleAtIndex(topAlignedIndex + 1);
+  }, [getTopAlignedBubbleIndex, items.length, scrollToBubbleAtIndex]);
+
+  const { canMoveUp, canMoveDown } = bubbleNavigationState;
 
   const handleFollowOutput = useCallback((isAtBottom: boolean) => {
     if (!autoScroll) return false;
@@ -338,13 +440,16 @@ const ChatContent = () => {
           }
         }
         lastScrollTopRef.current = currentTop;
+        updateBubbleNavigationState();
       };
       ref.addEventListener('scroll', onScroll, { passive: true });
       scrollListenerCleanupRef.current = () => ref.removeEventListener('scroll', onScroll);
+      updateBubbleNavigationState();
     } else {
       scrollerRef.current = null;
+      updateBubbleNavigationState();
     }
-  }, []);
+  }, [updateBubbleNavigationState]);
 
   // Cleanup scroll listener on unmount
   useEffect(() => {
@@ -476,6 +581,10 @@ const ChatContent = () => {
       <div className='h-full dark:bg-gray-800 relative'>
         <ScrollToBottomButton
           atBottom={atBottom}
+          canMoveUp={canMoveUp}
+          canMoveDown={canMoveDown}
+          scrollToPreviousBubble={handleScrollToPreviousBubble}
+          scrollToNextBubble={handleScrollToNextBubble}
           scrollToBottom={handleScrollToBottom}
         />
         <CollapseAllButtons />

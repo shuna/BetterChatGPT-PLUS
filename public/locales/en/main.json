@@ -52,6 +52,7 @@
   "cloned": "Cloned",
   "enterToSubmit": "Enter to submit",
   "autoScroll": "Auto scroll to bottom",
+  "animateBubbleNavigation": "Animate bubble navigation",
   "showShareGPT": "Show ShareGPT button",
   "submitPlaceholder": "Type a message or click [/] for prompts...",
   "stopNonStreamGenerationWarning": "Stopping generation is not recommended for non-stream models. Only use it if UI is stuck. Do you want to proceed?",

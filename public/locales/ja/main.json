@@ -47,6 +47,7 @@
   "cloneChat": "チャットのコピーを作成",
   "cloned": "完了しました",
   "enterToSubmit": "Enterキーを押して送信",
+  "animateBubbleNavigation": "会話バブル移動をアニメーション表示",
   "submitPlaceholder": "メッセージを入力するか、[/] をクリックしてプロンプトを表示します...",
   "showShareGPT": "ShareGPTボタンを表示",
   "tokenCostModelNotRegistered": "料金不明: モデル未登録",
