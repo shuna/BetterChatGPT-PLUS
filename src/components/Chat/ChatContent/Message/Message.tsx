@@ -100,7 +100,7 @@ const Message = React.memo(
             className='w-[calc(100%-50px)]'
           >
             {isCollapsed ? (
-              <div className='py-1 text-sm leading-6 text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words'>
+              <div className='h-[4.5rem] overflow-hidden py-0 text-sm leading-6 text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words line-clamp-3'>
                 {collapsedPreview}
               </div>
             ) : (
