@@ -19,6 +19,13 @@ const useAppBootstrap = () => {
   const setApiKey = useStore((state) => state.setApiKey);
   const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
 
+  const showBootstrapWarning = (message: string) => {
+    const store = useStore.getState();
+    store.setToastStatus('warning');
+    store.setToastMessage(message);
+    store.setToastShow(true);
+  };
+
   useEffect(() => {
     // Auto-open provider menu if no favorites and no provider custom models
     // (only if onboarding is already completed — otherwise the onboarding flow handles it)
@@ -82,6 +89,8 @@ const useAppBootstrap = () => {
     const bootstrap = async () => {
       await useStore.persist.rehydrate();
 
+      const persistedFolderCount = Object.keys(useStore.getState().folders).length;
+
       const oldChats = localStorage.getItem('chats');
       const legacyApiKey = localStorage.getItem('apiKey');
       const legacyTheme = localStorage.getItem('theme');
@@ -106,9 +115,11 @@ const useAppBootstrap = () => {
       }
 
       let indexedDbChatData = null;
+      let indexedDbLoadFailed = false;
       try {
         indexedDbChatData = await loadChatData(useStore.getState());
       } catch (error) {
+        indexedDbLoadFailed = true;
         notifyStorageError(error);
       }
       if (cancelled) return;
@@ -147,6 +158,26 @@ const useAppBootstrap = () => {
       localStorage.removeItem('chats');
 
       const { chats, currentChatIndex } = useStore.getState();
+      const missingChatDataWhileFoldersRemain =
+        persistedFolderCount > 0 &&
+        (!chats || chats.length === 0) &&
+        !(legacyChats && legacyChats.length > 0) &&
+        !indexedDbChatData?.chats?.length;
+
+      if (missingChatDataWhileFoldersRemain) {
+        showBootstrapWarning(
+          indexedDbLoadFailed
+            ? i18n.t('storage.folderOnlyWarningLoadFailed', {
+                defaultValue:
+                  'フォルダは復元されましたが、会話データの読み込みに失敗しました。モバイルブラウザの保存制限が原因の可能性があります。',
+              })
+            : i18n.t('storage.folderOnlyWarningMissingChats', {
+                defaultValue:
+                  'フォルダは復元されましたが、会話データが見つかりませんでした。保存状態が不整合になっている可能性があります。',
+              })
+        );
+      }
+
       if (!chats || chats.length === 0) {
         initialiseNewChat();
       } else if (!(currentChatIndex >= 0 && currentChatIndex < chats.length)) {
