@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
+import { isBranchEditorVisible } from '@type/chat';
 import BranchEditorCanvas from './BranchEditorCanvas';
 
 const BranchEditorView = () => {
@@ -16,7 +17,7 @@ const BranchEditorView = () => {
 
   // Ensure branch tree for current chat — only when branch editor is visible
   useEffect(() => {
-    if (activeView !== 'branch-editor') return;
+    if (!isBranchEditorVisible(activeView)) return;
     if (currentChatIndex >= 0 && !branchTree) {
       ensureBranchTree(currentChatIndex);
     }
@@ -24,7 +25,7 @@ const BranchEditorView = () => {
 
   // Ensure branch trees for all multi-view chats — only when branch editor is visible
   useEffect(() => {
-    if (activeView !== 'branch-editor') return;
+    if (!isBranchEditorVisible(activeView)) return;
     if (multiViewChatIndices.length > 1) {
       multiViewChatIndices.forEach((idx) => {
         if (chats?.[idx] && !chats[idx].branchTree) {

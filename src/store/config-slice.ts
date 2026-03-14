@@ -65,6 +65,10 @@ export interface ConfigSlice {
   setAutoScroll: (autoScroll: boolean) => void;
   setAnimateBubbleNavigation: (animateBubbleNavigation: boolean) => void;
   setHideShareGPT: (hideShareGPT: boolean) => void;
+  splitPanelRatio: number;
+  splitPanelSwapped: boolean;
+  setSplitPanelRatio: (ratio: number) => void;
+  setSplitPanelSwapped: (swapped: boolean) => void;
 }
 
 export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
@@ -243,6 +247,23 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
     set((prev: ConfigSlice) => ({
       ...prev,
       hideShareGPT: hideShareGPT,
+    }));
+  },
+  splitPanelRatio: 0.5,
+  splitPanelSwapped: false,
+  setSplitPanelRatio: (ratio: number) => {
+    const clamped = Math.max(0.2, Math.min(0.8, ratio));
+    if (get().splitPanelRatio === clamped) return;
+    set((prev: ConfigSlice) => ({
+      ...prev,
+      splitPanelRatio: clamped,
+    }));
+  },
+  setSplitPanelSwapped: (swapped: boolean) => {
+    if (get().splitPanelSwapped === swapped) return;
+    set((prev: ConfigSlice) => ({
+      ...prev,
+      splitPanelSwapped: swapped,
     }));
   },
 });

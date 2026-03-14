@@ -3,6 +3,14 @@ import { Prompt } from './prompt';
 import { Theme } from './theme';
 import type { FavoriteModel, ProviderConfig, ProviderId } from './provider';
 
+export type ChatView = 'chat' | 'branch-editor' | 'split-horizontal' | 'split-vertical';
+
+export const isSplitView = (view: ChatView): boolean =>
+  view === 'split-horizontal' || view === 'split-vertical';
+
+export const isBranchEditorVisible = (view: ChatView): boolean =>
+  view === 'branch-editor' || isSplitView(view);
+
 // The types in this file must mimick the structure of the the API request
 
 export type Content = 'text' | 'image_url';

@@ -2,8 +2,10 @@ import { StoreSlice } from './store';
 import {
   BranchClipboard,
   ChatInterface,
+  ChatView,
   ContentInterface,
   Role,
+  isSplitView,
 } from '@type/chat';
 import { ContentStoreData, addContent } from '@utils/contentStore';
 import {
@@ -78,8 +80,9 @@ export interface BranchSlice {
   branchClipboard: BranchClipboard | null;
   branchEditorFocusNodeId: string | null;
   setBranchEditorFocusNodeId: (nodeId: string | null) => void;
-  chatActiveView: 'chat' | 'branch-editor';
-  setChatActiveView: (view: 'chat' | 'branch-editor') => void;
+  chatActiveView: ChatView;
+  setChatActiveView: (view: ChatView) => void;
+  navigateToBranchEditor: () => void;
   pendingChatFocus: PendingChatFocus | null;
   setPendingChatFocus: (focus: PendingChatFocus | null) => void;
   clearPendingChatFocus: () => void;
@@ -183,10 +186,20 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     if (get().branchEditorFocusNodeId === nodeId) return;
     set({ branchEditorFocusNodeId: nodeId });
   },
-  chatActiveView: 'chat' as 'chat' | 'branch-editor',
+  chatActiveView: 'chat' as ChatView,
   setChatActiveView: (view) => {
     if (get().chatActiveView === view) return;
     set({ chatActiveView: view });
+  },
+  navigateToBranchEditor: () => {
+    const current = get().chatActiveView;
+    if (current === 'branch-editor') return;
+    if (isSplitView(current)) {
+      // On desktop, branch editor is already visible in split — just focus
+      const isDesktop = window.matchMedia('(min-width: 768px)').matches;
+      if (isDesktop) return;
+    }
+    set({ chatActiveView: 'branch-editor' });
   },
   pendingChatFocus: null,
   setPendingChatFocus: (focus) => {

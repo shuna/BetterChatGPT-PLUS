@@ -42,7 +42,7 @@ const CollapseAllButtons = React.memo(() => {
             const state = useStore.getState();
             state.ensureBranchTree(currentChatIndex);
             state.setBranchEditorFocusNodeId(focusOrphanNode);
-            state.setChatActiveView('branch-editor');
+            state.navigateToBranchEditor();
           }}
         >
           <span className='flex h-4 w-4 items-center justify-center text-[11px] font-semibold leading-none'>

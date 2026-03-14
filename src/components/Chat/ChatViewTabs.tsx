@@ -5,14 +5,13 @@ import useStore from '@store/store';
 import BranchIcon from '@icon/BranchIcon';
 import MenuIcon from '@icon/MenuIcon';
 import ConfigMenu from '@components/ConfigMenu';
-import { ChatInterface, ConfigInterface, ImageDetail } from '@type/chat';
+import { ChatInterface, ChatView, ConfigInterface, ImageDetail, isSplitView } from '@type/chat';
 import { _defaultChatConfig } from '@constants/chat';
 import { ModelOptions } from '@type/chat';
 import type { ProviderId } from '@type/provider';
 import { cloneChatAtIndex } from '@utils/chatShallowClone';
 import { normalizeConfigStream } from '@utils/streamSupport';
-
-export type ChatView = 'chat' | 'branch-editor';
+import useIsDesktop from '@hooks/useIsDesktop';
 
 const ChatViewTabs = ({
   activeView,
@@ -40,12 +39,17 @@ const ChatViewTabs = ({
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const hideSideMenu = useStore((state) => state.hideSideMenu);
   const setHideSideMenu = useStore((state) => state.setHideSideMenu);
+  const isDesktop = useIsDesktop();
+  const splitPanelSwapped = useStore((state) => state.splitPanelSwapped);
+  const setSplitPanelSwapped = useStore((state) => state.setSplitPanelSwapped);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState<boolean>(false);
+  const [isLayoutDropdownOpen, setIsLayoutDropdownOpen] = useState<boolean>(false);
   const [isCompact, setIsCompact] = useState<boolean>(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const modelRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const layoutDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -108,6 +112,18 @@ const ChatViewTabs = ({
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isModelDropdownOpen]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (layoutDropdownRef.current && !layoutDropdownRef.current.contains(e.target as Node)) {
+        setIsLayoutDropdownOpen(false);
+      }
+    };
+    if (isLayoutDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isLayoutDropdownOpen]);
 
   useEffect(() => {
     const chats = useStore.getState().chats;
@@ -195,32 +211,114 @@ const ChatViewTabs = ({
           )}
         </div>
 
-        {/* Right: View tabs */}
-        <div className='flex ml-auto shrink-0 whitespace-nowrap'>
-          <button
-            className={`px-4 py-2 text-sm font-medium transition-colors flex items-center gap-1.5 ${
-              activeView === 'chat'
-                ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-            }`}
-            onClick={() => setActiveView('chat')}
-          >
-            <svg className='w-3.5 h-3.5' stroke='currentColor' fill='none' strokeWidth='2' viewBox='0 0 24 24' strokeLinecap='round' strokeLinejoin='round'>
-              <path d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'></path>
-            </svg>
-            {!isCompact && tMain('chat')}
-          </button>
-          <button
-            className={`px-4 py-2 text-sm font-medium transition-colors flex items-center gap-1.5 ${
-              activeView === 'branch-editor'
-                ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
-                : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-            }`}
-            onClick={() => setActiveView('branch-editor')}
-          >
-            <BranchIcon className='w-3.5 h-3.5' />
-            {!isCompact && tMain('branchEditor')}
-          </button>
+        {/* Right: View tabs + layout selector */}
+        <div className='flex ml-auto shrink-0 whitespace-nowrap items-center'>
+          {!isSplitView(activeView) && (
+            <>
+              <button
+                className={`px-4 py-2 text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                  activeView === 'chat'
+                    ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+                onClick={() => setActiveView('chat')}
+              >
+                <svg className='w-3.5 h-3.5' stroke='currentColor' fill='none' strokeWidth='2' viewBox='0 0 24 24' strokeLinecap='round' strokeLinejoin='round'>
+                  <path d='M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'></path>
+                </svg>
+                {!isCompact && tMain('chat')}
+              </button>
+              <button
+                className={`px-4 py-2 text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                  activeView === 'branch-editor'
+                    ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                    : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+                onClick={() => setActiveView('branch-editor')}
+              >
+                <BranchIcon className='w-3.5 h-3.5' />
+                {!isCompact && tMain('branchEditor')}
+              </button>
+            </>
+          )}
+          {isSplitView(activeView) && (
+            <span className='px-3 py-2 text-sm text-gray-500 dark:text-gray-400'>
+              {activeView === 'split-horizontal' ? tMain('splitHorizontal', 'Left/Right') : tMain('splitVertical', 'Top/Bottom')}
+            </span>
+          )}
+          {isDesktop && (
+            <div className='relative' ref={layoutDropdownRef}>
+              <button
+                className={`p-1.5 ml-1 rounded-md transition-colors ${
+                  isLayoutDropdownOpen || isSplitView(activeView)
+                    ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                    : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700'
+                }`}
+                onClick={() => setIsLayoutDropdownOpen(!isLayoutDropdownOpen)}
+                title={String(tMain('tabView', 'Layout'))}
+              >
+                <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24' strokeWidth='2'>
+                  <rect x='3' y='3' width='18' height='18' rx='2' />
+                  <line x1='12' y1='3' x2='12' y2='21' />
+                </svg>
+              </button>
+              {isLayoutDropdownOpen && (
+                <div className='absolute top-full right-0 mt-1 min-w-[160px] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg z-[100] py-1'>
+                  <button
+                    className={`w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                      !isSplitView(activeView) ? 'font-medium text-blue-600 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'
+                    }`}
+                    onClick={() => { setActiveView('chat'); setIsLayoutDropdownOpen(false); }}
+                  >
+                    <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24' strokeWidth='2'>
+                      <rect x='3' y='3' width='18' height='18' rx='2' />
+                    </svg>
+                    {tMain('tabView', 'Tab View')}
+                  </button>
+                  <button
+                    className={`w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                      activeView === 'split-horizontal' ? 'font-medium text-blue-600 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'
+                    }`}
+                    onClick={() => { setActiveView('split-horizontal'); setIsLayoutDropdownOpen(false); }}
+                  >
+                    <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24' strokeWidth='2'>
+                      <rect x='3' y='3' width='18' height='18' rx='2' />
+                      <line x1='12' y1='3' x2='12' y2='21' />
+                    </svg>
+                    {tMain('splitHorizontal', 'Left/Right')}
+                  </button>
+                  <button
+                    className={`w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                      activeView === 'split-vertical' ? 'font-medium text-blue-600 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'
+                    }`}
+                    onClick={() => { setActiveView('split-vertical'); setIsLayoutDropdownOpen(false); }}
+                  >
+                    <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24' strokeWidth='2'>
+                      <rect x='3' y='3' width='18' height='18' rx='2' />
+                      <line x1='3' y1='12' x2='21' y2='12' />
+                    </svg>
+                    {tMain('splitVertical', 'Top/Bottom')}
+                  </button>
+                  {isSplitView(activeView) && (
+                    <>
+                      <div className='my-1 border-t border-gray-200 dark:border-gray-600' />
+                      <button
+                        className='w-full px-3 py-2 text-sm text-left flex items-center gap-2 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300'
+                        onClick={() => { setSplitPanelSwapped(!splitPanelSwapped); setIsLayoutDropdownOpen(false); }}
+                      >
+                        <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+                          <path d='M7 16l-4-4 4-4' />
+                          <path d='M17 8l4 4-4 4' />
+                          <line x1='3' y1='12' x2='21' y2='12' />
+                        </svg>
+                        {tMain('swapPanels', 'Swap Panels')}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
       {isModalOpen && chat && (

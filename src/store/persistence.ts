@@ -95,6 +95,9 @@ export type PersistedStoreState = Omit<
   | 'providerCustomModels'
   | '_legacyCustomModels'
   | 'onboardingCompleted'
+  | 'splitPanelRatio'
+  | 'splitPanelSwapped'
+  | 'chatActiveView'
   >,
   'chats'
 > & {
@@ -121,6 +124,7 @@ const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'branchClipboard', 'contentStore', 'providerModelCache',
   'providerCustomModels', '_legacyCustomModels',
   'onboardingCompleted',
+  'splitPanelRatio', 'splitPanelSwapped', 'chatActiveView',
 ];
 
 const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
@@ -133,6 +137,7 @@ const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
   'providerModelCache',
   'providerCustomModels', '_legacyCustomModels',
   'onboardingCompleted',
+  'splitPanelRatio', 'splitPanelSwapped', 'chatActiveView',
 ];
 
 let previousFullInputRefs: Partial<Record<keyof PersistedStoreState, unknown>> = {};
@@ -208,6 +213,9 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     providerCustomModels: state.providerCustomModels,
     _legacyCustomModels: state._legacyCustomModels,
     onboardingCompleted: state.onboardingCompleted,
+    splitPanelRatio: state.splitPanelRatio,
+    splitPanelSwapped: state.splitPanelSwapped,
+    chatActiveView: state.chatActiveView,
   };
 }
 
@@ -247,6 +255,9 @@ function buildLocalStoragePartializedState(
     providerCustomModels: state.providerCustomModels,
     _legacyCustomModels: state._legacyCustomModels,
     onboardingCompleted: state.onboardingCompleted,
+    splitPanelRatio: state.splitPanelRatio,
+    splitPanelSwapped: state.splitPanelSwapped,
+    chatActiveView: state.chatActiveView,
   };
 }
 

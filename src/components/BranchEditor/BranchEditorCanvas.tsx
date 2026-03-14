@@ -11,7 +11,7 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 
 import useStore from '@store/store';
-import { BranchTree } from '@type/chat';
+import { BranchTree, isSplitView } from '@type/chat';
 import {
   useMultiBranchEditorLayout,
   MultiLayoutEntry,
@@ -201,7 +201,10 @@ const BranchEditorCanvas = ({
         switchActivePath(chatIndex, newPath);
       }
       setCurrentChatIndex(chatIndex);
-      setChatActiveView('chat');
+      const currentView = useStore.getState().chatActiveView;
+      if (!isSplitView(currentView)) {
+        setChatActiveView('chat');
+      }
       setPendingChatFocus({ chatIndex, nodeId });
     },
     [chats, ensureBranchTree, switchActivePath, setCurrentChatIndex, setChatActiveView, setPendingChatFocus]

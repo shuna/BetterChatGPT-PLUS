@@ -275,4 +275,23 @@ describe('persistence', () => {
     expect(state.chats[1].id).not.toBe('chat-1');
     expect(state.chats[1].id).toEqual(expect.any(String));
   });
+
+  it('persists and restores splitPanelRatio and splitPanelSwapped', () => {
+    const state = buildStoreState();
+    (state as any).splitPanelRatio = 0.7;
+    (state as any).splitPanelSwapped = true;
+    (state as any).chatActiveView = 'split-horizontal';
+
+    const partialized = createPartializedState(state as never);
+
+    expect(partialized.splitPanelRatio).toBe(0.7);
+    expect(partialized.splitPanelSwapped).toBe(true);
+    expect(partialized.chatActiveView).toBe('split-horizontal');
+
+    const localPartialized = createLocalStoragePartializedState(state as never);
+
+    expect(localPartialized.splitPanelRatio).toBe(0.7);
+    expect(localPartialized.splitPanelSwapped).toBe(true);
+    expect(localPartialized.chatActiveView).toBe('split-horizontal');
+  });
 });

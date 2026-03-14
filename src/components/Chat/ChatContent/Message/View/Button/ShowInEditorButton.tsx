@@ -20,7 +20,7 @@ const ShowInEditorButton = memo(
       if (!nodeId) return;
 
       state.setBranchEditorFocusNodeId(nodeId);
-      state.setChatActiveView('branch-editor');
+      state.navigateToBranchEditor();
     };
 
     return (
