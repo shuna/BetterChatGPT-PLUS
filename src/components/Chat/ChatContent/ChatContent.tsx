@@ -260,6 +260,9 @@ const ChatContent = () => {
 
   // Virtuoso state
   const virtuosoRef = useRef<VirtuosoHandle>(null);
+  // Keep both a ref and state copy of the scroller:
+  // - scrollerRef is for synchronous reads inside callbacks like followOutput.
+  // - scrollerElement drives effects that need to react to the mounted element changing.
   const scrollerRef = useRef<HTMLElement | null>(null);
   const [scrollerElement, setScrollerElement] = useState<HTMLElement | null>(null);
   const [atBottom, setAtBottom] = useState(true);
@@ -280,6 +283,7 @@ const ChatContent = () => {
   const bottomLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastScrollTopRef = useRef(0);
   const lockTargetRef = useRef<LockTarget | null>(null);
+  const pendingEditStateSyncRef = useRef<number | null>(null);
 
   // Build visible items list, filtering hidden system messages
   const items = useMemo(() => {
@@ -581,6 +585,11 @@ const ChatContent = () => {
     if (!scrollerElement) return;
 
     const onFocusIn = (event: FocusEvent) => {
+      if (pendingEditStateSyncRef.current != null) {
+        cancelAnimationFrame(pendingEditStateSyncRef.current);
+        pendingEditStateSyncRef.current = null;
+      }
+
       const target = event.target;
       if (
         target instanceof HTMLTextAreaElement &&
@@ -601,7 +610,10 @@ const ChatContent = () => {
         return;
       }
 
-      requestAnimationFrame(() => {
+      // Re-check after the browser settles focus. This avoids unlocking during
+      // transitions where focus briefly leaves the textarea and then returns.
+      pendingEditStateSyncRef.current = requestAnimationFrame(() => {
+        pendingEditStateSyncRef.current = null;
         setIsEditingInScroller(isEditingMessageInScroller(scrollerElement));
       });
     };
@@ -610,6 +622,10 @@ const ChatContent = () => {
     scrollerElement.addEventListener('focusout', onFocusOut);
 
     return () => {
+      if (pendingEditStateSyncRef.current != null) {
+        cancelAnimationFrame(pendingEditStateSyncRef.current);
+        pendingEditStateSyncRef.current = null;
+      }
       scrollerElement.removeEventListener('focusin', onFocusIn);
       scrollerElement.removeEventListener('focusout', onFocusOut);
     };
