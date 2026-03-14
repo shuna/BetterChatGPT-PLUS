@@ -7,7 +7,6 @@ import type { ProviderId } from '@type/provider';
 import { useModelType } from '@utils/modelLookup';
 import TokenCount from '@components/TokenCount';
 import CommandPrompt from '../CommandPrompt';
-import BranchIcon from '@icon/BranchIcon';
 
 const EditViewButtons = memo(
   ({
@@ -17,12 +16,9 @@ const EditViewButtons = memo(
     handleRemoveImage,
     handleGenerate,
     handleGenerateNextOnly,
-    handleBranchOnly,
-    handleBranchGenerate,
     handleSave,
     handleCancel,
     setIsModalOpen,
-    setIsEdit,
     _setContent,
     _content,
     imageUrl,
@@ -33,7 +29,6 @@ const EditViewButtons = memo(
     providerId,
     modelValid,
     messageIndex,
-    isGeneratingMessage,
     role,
   }: {
     sticky?: boolean;
@@ -42,12 +37,9 @@ const EditViewButtons = memo(
     handleRemoveImage: (index: number) => void;
     handleGenerate: () => void;
     handleGenerateNextOnly: () => void;
-    handleBranchOnly: () => void;
-    handleBranchGenerate: () => void;
     handleSave: () => void;
     handleCancel: () => void;
     setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
-    setIsEdit: React.Dispatch<React.SetStateAction<boolean>>;
     _setContent: React.Dispatch<React.SetStateAction<ContentInterface[]>>;
     _content: ContentInterface[];
     imageUrl: string;
@@ -58,7 +50,6 @@ const EditViewButtons = memo(
     providerId?: ProviderId;
     modelValid: boolean;
     messageIndex: number;
-    isGeneratingMessage: boolean;
     role?: string;
   }) => {
     const { t } = useTranslation();
@@ -75,6 +66,7 @@ const EditViewButtons = memo(
     );
     const isImageModel = useModelType(model, providerId) === 'image';
     const isAssistant = role === 'assistant';
+    const isUser = role === 'user';
     const isNotLast = !sticky && messageIndex < lastMessageIndex;
 
     return (
@@ -162,7 +154,7 @@ const EditViewButtons = memo(
               </button>
             )}
 
-            {!sticky && !isAssistant && (
+            {!sticky && isUser && (
               isNotLast ? (
                 <>
                   <button
@@ -171,9 +163,10 @@ const EditViewButtons = memo(
                     }`}
                     onClick={handleGenerateNextOnly}
                     disabled={isCurrentChatGenerating || noModel}
+                    title={t('regenerateNextTooltip') as string}
                   >
                     <div className='flex items-center justify-center gap-2'>
-                      {t('generate')}
+                      {t('regenerateNext')}
                     </div>
                   </button>
                   <button
@@ -186,34 +179,10 @@ const EditViewButtons = memo(
                       !isCurrentChatGenerating && !noModel && setIsModalOpen(true);
                     }}
                     disabled={isCurrentChatGenerating || noModel}
+                    title={t('regenerateBelowTooltip') as string}
                   >
                     <div className='flex items-center justify-center gap-2'>
-                      {t('generateBelow')}
-                    </div>
-                  </button>
-                  <button
-                    className={`btn relative mr-2 btn-neutral ${
-                      isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
-                    }`}
-                    onClick={handleBranchGenerate}
-                    disabled={isCurrentChatGenerating || noModel}
-                    title={t('branchGenerate') as string}
-                  >
-                    <div className='flex items-center justify-center gap-2'>
-                      <BranchIcon />
-                      {t('branchGenerate')}
-                    </div>
-                  </button>
-                  <button
-                    className={`btn relative mr-2 btn-neutral ${
-                      isGeneratingMessage ? 'cursor-not-allowed opacity-40' : ''
-                    }`}
-                    onClick={handleBranchOnly}
-                    title={t('branchOnly') as string}
-                  >
-                    <div className='flex items-center justify-center gap-2'>
-                      <BranchIcon />
-                      {t('branchOnly')}
+                      {t('regenerateBelow')}
                     </div>
                   </button>
                 </>
@@ -227,34 +196,10 @@ const EditViewButtons = memo(
                       !isCurrentChatGenerating && !noModel && handleGenerate();
                     }}
                     disabled={isCurrentChatGenerating || noModel}
+                    title={t('regenerateNextTooltip') as string}
                   >
                     <div className='flex items-center justify-center gap-2'>
-                      {t('generate')}
-                    </div>
-                  </button>
-                  <button
-                    className={`btn relative mr-2 btn-neutral ${
-                      isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
-                    }`}
-                    onClick={handleBranchGenerate}
-                    disabled={isCurrentChatGenerating || noModel}
-                    title={t('branchGenerate') as string}
-                  >
-                    <div className='flex items-center justify-center gap-2'>
-                      <BranchIcon />
-                      {t('branchGenerate')}
-                    </div>
-                  </button>
-                  <button
-                    className={`btn relative mr-2 btn-neutral ${
-                      isGeneratingMessage ? 'cursor-not-allowed opacity-40' : ''
-                    }`}
-                    onClick={handleBranchOnly}
-                    title={t('branchOnly') as string}
-                  >
-                    <div className='flex items-center justify-center gap-2'>
-                      <BranchIcon />
-                      {t('branchOnly')}
+                      {t('regenerateNext')}
                     </div>
                   </button>
                 </>

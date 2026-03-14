@@ -762,7 +762,11 @@ const ChatContent = () => {
           nodeId={activePath[originalIndex]}
         />
         {!isCurrentChatGenerating && advancedMode && (
-          <NewMessageButton messageIndex={originalIndex} />
+          <NewMessageButton
+            messageIndex={originalIndex}
+            nodeId={activePath[originalIndex]}
+            role={message.role}
+          />
         )}
       </>
     );
