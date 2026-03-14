@@ -47,6 +47,16 @@ export default function useIosStatusBarScroll() {
     const onScroll = () => {
       if (window.scrollY !== 0) return;
 
+      if (
+        document.body.classList.contains('sidebar-swiping') ||
+        document.documentElement.classList.contains('sidebar-swiping')
+      ) {
+        requestAnimationFrame(() => {
+          window.scrollTo(0, 1);
+        });
+        return;
+      }
+
       // Suppress when the soft keyboard is (or was just) open.
       //
       // Two independent signals, either of which is sufficient:
