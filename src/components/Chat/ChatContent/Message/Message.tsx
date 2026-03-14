@@ -22,7 +22,7 @@ const CollapseToggle = ({
 }) => (
   <button
     type='button'
-    className={`collapse-toggle absolute left-2 top-2 bottom-2 z-10 w-7 rounded-full touch-manipulation transition-all duration-200 md:left-0 md:w-5 ${
+    className={`collapse-toggle absolute left-2 top-[4.2rem] bottom-2 z-10 w-7 rounded-full touch-manipulation transition-all duration-200 md:left-0 md:top-2 md:w-5 ${
       isCollapsed
         ? 'before:absolute before:left-2.5 before:top-0 before:bottom-0 before:w-1.5 before:rounded-full before:bg-gray-300/50 dark:before:bg-gray-500/40 hover:before:bg-gray-400/60 dark:hover:before:bg-gray-400/50 md:before:left-1.5'
         : canHover
@@ -87,6 +87,10 @@ const Message = React.memo(
       }
     }, [currentChatIndex, messageIndex, sticky, toggleCollapseNode]);
 
+    const maxWidthClass = isDesktopMenuExpanded
+      ? 'md:max-w-3xl lg:max-w-3xl xl:max-w-4xl'
+      : 'md:max-w-5xl lg:max-w-5xl xl:max-w-6xl';
+
     return (
       <div
         className={`w-full border-b border-black/10 dark:border-gray-900/50 text-gray-800 dark:text-gray-100 group relative ${
@@ -101,28 +105,23 @@ const Message = React.memo(
           />
         )}
         <div
-          className={`text-base gap-2.5 md:gap-4 m-auto p-4 py-6 pl-10 md:py-8 md:pl-7 flex transition-all ease-in-out ${
-            isDesktopMenuExpanded
-              ? 'md:max-w-3xl lg:max-w-3xl xl:max-w-4xl'
-              : 'md:max-w-5xl lg:max-w-5xl xl:max-w-6xl'
-          }`}
+          className={`text-base gap-2.5 md:gap-4 m-auto px-3 py-6 md:py-8 md:pl-7 md:pr-4 flex transition-all ease-in-out ${
+            sticky ? 'flex-col' : ''
+          } ${maxWidthClass}`}
         >
-          <Avatar role={role} />
-          <div
-            className='w-[calc(100%-50px)]'
-          >
-            {isCollapsed ? (
-              <div className='h-[4.5rem] overflow-hidden py-0 text-sm leading-6 text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words line-clamp-3'>
-                {collapsedPreview}
-              </div>
-            ) : (
-              <>
-                {advancedMode &&
+          {sticky ? (
+            <>
+              <div className='flex items-center gap-2.5'>
+                <Avatar role={role} />
+                {advancedMode && (
                   <RoleSelector
                     role={role}
                     messageIndex={messageIndex}
                     sticky={sticky}
-                  />}
+                  />
+                )}
+              </div>
+              <div className='w-full'>
                 <MessageContent
                   role={role}
                   content={content}
@@ -130,9 +129,37 @@ const Message = React.memo(
                   nodeId={resolvedNodeId}
                   sticky={sticky}
                 />
-              </>
-            )}
-          </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <Avatar role={role} />
+              <div className='flex-1 min-w-0'>
+                {isCollapsed ? (
+                  <div className='h-[4.5rem] overflow-hidden py-0 text-sm leading-6 text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words line-clamp-3'>
+                    {collapsedPreview}
+                  </div>
+                ) : (
+                  <>
+                    {advancedMode && (
+                      <RoleSelector
+                        role={role}
+                        messageIndex={messageIndex}
+                        sticky={sticky}
+                      />
+                    )}
+                    <MessageContent
+                      role={role}
+                      content={content}
+                      messageIndex={messageIndex}
+                      nodeId={resolvedNodeId}
+                      sticky={sticky}
+                    />
+                  </>
+                )}
+              </div>
+            </>
+          )}
         </div>
         {isCollapsed && (
           <div className='absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-white/90 dark:from-gray-800/90 to-transparent pointer-events-none' />
