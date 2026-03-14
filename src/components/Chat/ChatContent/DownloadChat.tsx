@@ -183,13 +183,15 @@ const DownloadChat = React.memo(
                       useStore.getState().contentStore,
                       { visibleBranchOnly }
                     );
+                    const exportedChat = { ...prepared.chat };
+                    delete exportedChat.folder;
                     const fileData = {
-                      chats: [prepared.chat],
+                      chats: [exportedChat],
                       contentStore: prepared.contentStore,
                       folders: {},
                       version: 3,
                     } satisfies ExportV3;
-                    downloadFile(fileData, prepared.chat.title);
+                    downloadFile(fileData, exportedChat.title);
                   }
                 }}
               >

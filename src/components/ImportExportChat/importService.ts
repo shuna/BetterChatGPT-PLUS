@@ -95,6 +95,19 @@ const mergeChats = (chatsToImport: ChatInterface[]) => {
   }
 };
 
+const clearMissingFolderReferences = (
+  chats: ChatInterface[] | undefined,
+  folders: FolderCollection
+) => {
+  if (!chats) return;
+
+  chats.forEach((chat) => {
+    if (chat.folder && !folders[chat.folder]) {
+      delete chat.folder;
+    }
+  });
+};
+
 const shiftAndMergeFolders = (folders: FolderCollection) => {
   const offset = Object.keys(folders).length;
   const currentFolders = useStore.getState().folders;
@@ -238,6 +251,7 @@ const importExportV3 = (parsedData: ExportV3, t: Translator): ImportResult => {
   }
 
   ensureUniqueChatIds(parsedData.chats);
+  clearMissingFolderReferences(parsedData.chats, parsedData.folders);
 
   shiftAndMergeFolders(parsedData.folders);
 
@@ -265,6 +279,7 @@ const importExportV2 = (parsedData: ExportV2, t: Translator): ImportResult => {
     );
   }
 
+  clearMissingFolderReferences(parsedData.chats, parsedData.folders);
   shiftAndMergeFolders(parsedData.folders);
 
   const contentStore = { ...useStore.getState().contentStore };
@@ -309,6 +324,7 @@ const importExportV1 = (
     );
   }
 
+  clearMissingFolderReferences(parsedData.chats, parsedData.folders);
   shiftAndMergeFolders(parsedData.folders);
 
   if (parsedData.chats) {

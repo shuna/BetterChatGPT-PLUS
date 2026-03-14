@@ -268,6 +268,31 @@ describe('importService', () => {
     expect(testContext.storeState.chats[1].id).not.toBe('dup-chat');
   });
 
+  it('clears orphaned folder references when importing a single-chat export v3 file', async () => {
+    const orphanedFolderChat: ChatInterface = {
+      ...createChat('orphaned-folder-chat', 'Imported Folderless'),
+      folder: 'missing-folder-id',
+    };
+    const file = new File([
+      JSON.stringify({
+        version: 3,
+        folders: {},
+        contentStore: {},
+        chats: [orphanedFolderChat],
+      }),
+    ], 'orphaned-folder-v3.json', {
+      type: 'application/json',
+    });
+
+    const result = await importChatFromFile(file, t);
+
+    expect(result).toEqual({
+      success: true,
+      message: 'notifications.successfulImport',
+    });
+    expect(testContext.storeState.chats[0].folder).toBeUndefined();
+  });
+
   it('replaces local conversations and settings when mode is replace', async () => {
     const file = new File([
       JSON.stringify({

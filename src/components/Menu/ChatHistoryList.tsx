@@ -64,9 +64,8 @@ const ChatHistoryList = () => {
       chats.forEach((chat, index) => {
         const _filterLowerCase = filterRef.current.toLowerCase();
         const _chatTitle = chat.title.toLowerCase();
-        const _chatFolderName = chat.folder
-          ? folders[chat.folder].name.toLowerCase()
-          : '';
+        const folder = chat.folder ? folders[chat.folder] : undefined;
+        const _chatFolderName = folder?.name.toLowerCase() ?? '';
 
         if (
           !_chatTitle.includes(_filterLowerCase) &&
@@ -98,9 +97,32 @@ const ChatHistoryList = () => {
                   0
                 ),
           });
-        } else {
-          if (!_folders[chat.folder]) _folders[_chatFolderName] = [];
+        } else if (folder) {
+          if (!_folders[chat.folder]) _folders[chat.folder] = [];
           _folders[chat.folder].push({
+            title: chat.title,
+            index: index,
+            id: chat.id,
+            chatSize: !displayChatSize
+              ? undefined
+              : chat.messages.reduce(
+                  (prev, current) =>
+                    prev +
+                    current.content.reduce(
+                      (prevInner, currCont) =>
+                        prevInner +
+                        (isTextContent(currCont)
+                          ? currCont.text.length
+                          : isImageContent(currCont)
+                          ? currCont.image_url.url.length
+                          : 0),
+                      0
+                    ),
+                  0
+                ),
+          });
+        } else {
+          _noFolders.push({
             title: chat.title,
             index: index,
             id: chat.id,
