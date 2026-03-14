@@ -11,7 +11,6 @@ import CopyButton from './Button/CopyButton';
 import EditButton from './Button/EditButton';
 import DeleteButton from './Button/DeleteButton';
 import MarkdownModeButton from './Button/MarkdownModeButton';
-import ShowInEditorButton from './Button/ShowInEditorButton';
 import BranchSwitcher from '../BranchSwitcher';
 
 type ContentActionsProps = {
@@ -76,7 +75,6 @@ export default function ContentActions({
             <MarkdownModeButton />
             <CopyButton onClick={onCopy} />
             {!isGeneratingMessage && <EditButton setIsEdit={setIsEdit} />}
-            <ShowInEditorButton messageIndex={messageIndex} />
             <DeleteButton setIsDelete={setIsDelete} />
           </>
         )}
