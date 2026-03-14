@@ -253,12 +253,20 @@ yarn build
 
 #### JSON.parse/stringify による手動ディープクローン
 
-`src/components/Menu/ChatFolder.tsx` および `ChatHistory.tsx` で `JSON.parse(JSON.stringify(...))` を使用している。既に `src/utils/chatShallowClone.ts` にクローンユーティリティが存在するため、統一が可能。
+メニュー周辺では `src/components/Menu/ChatFolder.tsx`、`ChatHistoryList.tsx`、`NewFolder.tsx` で `JSON.parse(JSON.stringify(...))` を使用している。`ChatHistory.tsx` は既に `src/utils/chatShallowClone.ts` に移行済みだが、folders 更新用の浅い不変更新ヘルパーがまだ存在しない。
+
+また、`src/components/ImportExportChat/importService.ts` と `src/utils/chatExport.ts` にも `JSON.parse/stringify` ベースのクローン処理が残っている。現状は動作しているが、`undefined` や非 JSON 値を落とす前提のため、将来的には `structuredClone` か用途別ユーティリティへの置き換え余地がある。
 
 #### モーダルの状態管理パターン
 
-15 以上のコンポーネントで `useState<boolean>(false)` + `setIsModalOpen` の同一パターンが繰り返されている。`useModal()` カスタムフックに抽出可能。
+14 コンポーネントで `useState<boolean>(false)` + `setIsModalOpen` の同一パターンが繰り返されている。`useModal()` カスタムフックに抽出可能。
+
+#### 直接ミューテーションを含む更新処理
+
+`src/components/ImportExportChat/importService.ts` の `shiftAndMergeFolders()` では、`useStore.getState().folders` 内の `folder.order` を直接更新してから `setFolders()` している。現状の Zustand 運用では大きな不具合は出ていないが、参照共有前提の最適化や将来のリファクタで副作用源になりやすい。
 
 #### レガシーコード
 
-`src/components/LegacyCustomModelsBanner.tsx` が `App.tsx` でまだレンダリングされている。移行期間が終わっていれば削除可能。対応する `_legacyCustomModels` / `clearLegacyCustomModels()` も `provider-slice.ts` に残存。
+`src/components/LegacyCustomModelsBanner.tsx` が `App.tsx` でまだレンダリングされている。これは旧 `customModels` を v13 migration で `_legacyCustomModels` に退避し、手動再登録を促す導線になっている。
+
+移行期間が十分に終わっていれば削除候補だが、その場合は UI だけでなく `provider-slice.ts` の `_legacyCustomModels` / `clearLegacyCustomModels()`、`migrate.ts` の v13 migration、`persistence.ts` の保存対象も合わせて整理する必要がある。
