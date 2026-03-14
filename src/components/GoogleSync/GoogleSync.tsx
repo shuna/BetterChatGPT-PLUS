@@ -482,7 +482,7 @@ const GooglePopup = ({
   const availableOperations: SyncOperation[] = !cloudSync
     ? ['connect']
     : needsReconnect
-      ? ['reconnect']
+      ? ['reconnect', 'disconnect']
       : ['create', 'pull', 'push', 'disconnect'];
 
   useEffect(() => {
