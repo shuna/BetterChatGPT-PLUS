@@ -141,7 +141,8 @@ export function useEditViewLogic({
       /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|playbook|silk/i.test(
         navigator.userAgent
       );
-    if (e.key === 'Enter' && !isMobile && !e.nativeEvent.isComposing) {
+    const isComposing = (e as any).nativeEvent?.isComposing ?? (e as any).isComposing ?? false;
+    if (e.key === 'Enter' && !isMobile && !isComposing) {
       const enterToSubmit = useStore.getState().enterToSubmit;
       if (e.ctrlKey && e.shiftKey) {
         e.preventDefault();

@@ -6,6 +6,7 @@ import { ModelOptions } from '@type/chat';
 import type { ProviderId } from '@type/provider';
 import { useModelType } from '@utils/modelLookup';
 import { hasMeaningfulContent } from '@utils/contentValidation';
+import AttachmentIcon from '@icon/AttachmentIcon';
 import CommandPrompt from '../CommandPrompt';
 
 const EditViewButtons = memo(
@@ -18,6 +19,7 @@ const EditViewButtons = memo(
     handleGenerateNextOnly,
     handleSave,
     handleCancel,
+    handleUploadButtonClick,
     setIsModalOpen,
     _setContent,
     _content,
@@ -39,6 +41,7 @@ const EditViewButtons = memo(
     handleGenerateNextOnly: () => void;
     handleSave: () => void;
     handleCancel: () => void;
+    handleUploadButtonClick: () => void;
     setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
     _setContent: React.Dispatch<React.SetStateAction<ContentInterface[]>>;
     _content: ContentInterface[];
@@ -70,7 +73,7 @@ const EditViewButtons = memo(
     const canSubmitDraft = hasMeaningfulContent(_content);
 
     return (
-      <div>
+      <div className='w-full'>
         {isImageModel && (
           <>
             <div className='flex justify-center'>
@@ -137,8 +140,23 @@ const EditViewButtons = memo(
           </>
         )}
 
-        <div className='flex'>
-          <div className='flex-1 text-center mt-2 flex justify-center'>
+        <div className='flex items-center mt-1'>
+          <div className='flex items-center gap-1'>
+            {isImageModel && (
+              <button
+                className='btn btn-neutral btn-small'
+                onClick={handleUploadButtonClick}
+                aria-label='Upload Images'
+              >
+                <AttachmentIcon />
+              </button>
+            )}
+            <CommandPrompt _setContent={_setContent} />
+          </div>
+
+          <div className='flex-1' />
+
+          <div className='flex items-center'>
             {sticky && (
               <button
                 className={`btn relative mr-2 btn-primary ${
@@ -236,8 +254,6 @@ const EditViewButtons = memo(
               </button>
             )}
           </div>
-
-          <CommandPrompt _setContent={_setContent} />
         </div>
       </div>
     );

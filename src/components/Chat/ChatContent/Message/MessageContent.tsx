@@ -1,8 +1,8 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import useStore from '@store/store';
 
-import ContentView from './View/ContentView';
 import EditView from './View/EditView';
+import UnifiedMessageView from './View/UnifiedMessageView';
 import { ContentInterface } from '@type/chat';
 
 const editStateCache = new Map<string, boolean>();
@@ -69,7 +69,7 @@ const MessageContent = ({
   return (
     <div className='relative flex flex-col gap-2 md:gap-3 lg:w-[calc(100%-115px)]'>
       {advancedMode && <div className='flex flex-grow flex-col gap-3'></div>}
-      {isEditState ? (
+      {sticky ? (
         <EditView
           role={role}
           content={content}
@@ -80,12 +80,14 @@ const MessageContent = ({
           editSessionKey={editSessionKey}
         />
       ) : (
-        <ContentView
+        <UnifiedMessageView
           role={role}
           content={content}
           setIsEdit={setIsEdit}
           messageIndex={messageIndex}
           nodeId={nodeId}
+          isEditState={isEditState}
+          editSessionKey={editSessionKey}
         />
       )}
     </div>

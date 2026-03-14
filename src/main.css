@@ -287,3 +287,26 @@
 .hljs-title {
   color: #f22c3d;
 }
+
+/* OverType editor integration - blend with app styles */
+.overtype-container {
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  font-family: inherit !important;
+}
+
+.overtype-wrapper {
+  padding: 0 !important;
+  border: none !important;
+  font-family: inherit !important;
+}
+
+.overtype-wrapper .overtype-input,
+.overtype-wrapper .overtype-preview,
+.overtype-container[data-mode="preview"] .overtype-wrapper .overtype-preview,
+.overtype-container[data-mode="normal"] .overtype-wrapper .overtype-preview,
+.overtype-container[data-mode="normal"] .overtype-wrapper .overtype-input {
+  font-family: inherit !important;
+  color: inherit !important;
+}
