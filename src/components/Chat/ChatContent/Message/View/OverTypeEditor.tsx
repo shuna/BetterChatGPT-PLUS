@@ -143,7 +143,7 @@ const OverTypeEditor: React.FC<OverTypeEditorProps> = ({
       fontSize: '16px',
       lineHeight: 1.75,
       padding: '0',
-      placeholder,
+      placeholder: placeholder || '',
       autofocus: autoFocus,
       autoResize,
       minHeight,

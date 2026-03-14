@@ -1,5 +1,8 @@
 {
   "save": "保存",
+  "selectFile": "ファイルを選択",
+  "add_image_url": "読込",
+  "enter_image_url_placeholder": "画像URLを入力",
   "generate": "生成",
   "generateBelow": "以下全て生成",
   "cancel": "キャンセル",
