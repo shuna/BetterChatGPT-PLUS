@@ -14,12 +14,11 @@ import OverTypeEditor from './OverTypeEditor';
 import ContentActions from './ContentActions';
 import ContentAttachments from './ContentAttachments';
 import EditViewButtons from './EditViewButtons';
+import ContentBody from './ContentBody';
 import PopupModal from '@components/PopupModal';
 import { useTranslation } from 'react-i18next';
 import { useModelType } from '@utils/modelLookup';
 import { TextContentInterface } from '@type/chat';
-
-const MARKDOWN_SYNTAX_PATTERN = /(^|\n)\s{0,3}(#{1,6}\s|[-*+]\s|\d+\.\s|>\s)|(\*\*|__|~~|`|\[.+?\]\(.+?\)|!\[.*?\]\(.+?\)|\|.+\|)/m;
 
 const UnifiedMessageView = memo(
   ({
@@ -49,6 +48,9 @@ const UnifiedMessageView = memo(
     const lastMessageIndex = useStore((state) =>
       state.chats ? state.chats[state.currentChatIndex].messages.length - 1 : 0
     );
+    const inlineLatex = useStore((state) => state.inlineLatex);
+    const markdownMode = useStore((state) => state.markdownMode);
+    const streamingMarkdownPolicy = useStore((state) => state.streamingMarkdownPolicy);
     const currentChatId = useStore((state) =>
       state.chats?.[state.currentChatIndex]?.id ?? ''
     );
@@ -119,37 +121,36 @@ const UnifiedMessageView = memo(
     const displayValue = isEditState
       ? (editLogic._content[0] as TextContentInterface).text
       : currentTextContent;
-    const usesMarkdownPreview = MARKDOWN_SYNTAX_PATTERN.test(displayValue);
 
     return (
       <>
-        {isEditState || usesMarkdownPreview ? (
+        {isEditState ? (
           <OverTypeEditor
             value={displayValue}
-            mode={isEditState ? 'edit' : 'preview'}
-            onChange={
-              isEditState
-                ? (val) => {
-                    editLogic._setContent((prev) => [
-                      { type: 'text', text: val },
-                      ...prev.slice(1),
-                    ]);
-                  }
-                : undefined
-            }
-            onKeyDown={isEditState ? (e) => {
+            mode='edit'
+            onChange={(val) => {
+              editLogic._setContent((prev) => [
+                { type: 'text', text: val },
+                ...prev.slice(1),
+              ]);
+            }}
+            onKeyDown={(e) => {
               // Convert native KeyboardEvent to React-compatible format for handleKeyDown
               editLogic.handleKeyDown(e as unknown as React.KeyboardEvent<HTMLTextAreaElement>);
-            } : undefined}
-            onPaste={isEditState ? (e) => {
+            }}
+            onPaste={(e) => {
               editLogic.handlePaste(e as unknown as React.ClipboardEvent<HTMLTextAreaElement>);
-            } : undefined}
-            autoFocus={isEditState}
+            }}
+            autoFocus
           />
         ) : (
-          <div className='whitespace-pre-wrap break-words leading-6'>
-            {displayValue}
-          </div>
+          <ContentBody
+            currentTextContent={currentTextContent}
+            markdownMode={markdownMode}
+            streamingMarkdownPolicy={streamingMarkdownPolicy}
+            inlineLatex={inlineLatex}
+            isGeneratingMessage={isGeneratingMessage}
+          />
         )}
         <ContentAttachments images={isEditState ? [] : validImageContents} />
         <div className='min-h-[68px] mt-3 flex items-end'>
