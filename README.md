@@ -244,5 +244,21 @@ yarn build
 このプロジェクトの出発点となった [BetterChatGPT](https://github.com/ztjhz/BetterChatGPT) の作者・コントリビューターの皆様に深く感謝します。  
 ローカル主導の会話ワークスペースを拡張できる優れた土台があったからこそ、本フォークでの改善を積み重ねることができました。
 
-また、数多くの実用的な拡張を加えた [BetterChatGPT-PLUS](https://github.com/animalnots/BetterChatGPT-PLUS) の作者・コントリビューターの皆様にも感謝します。  
+また、数多くの実用的な拡張を加えた [BetterChatGPT-PLUS](https://github.com/animalnots/BetterChatGPT-PLUS) の作者・コントリビューターの皆様にも感謝します。
 本リポジトリはその成果を受け継ぎながら、さらに運用上の改善、UI 調整、分岐編集まわりの機能強化、パフォーマンス改善を継続している派生プロジェクトです。
+
+---
+
+### Known Technical Debt
+
+#### JSON.parse/stringify による手動ディープクローン
+
+`src/components/Menu/ChatFolder.tsx` および `ChatHistory.tsx` で `JSON.parse(JSON.stringify(...))` を使用している。既に `src/utils/chatShallowClone.ts` にクローンユーティリティが存在するため、統一が可能。
+
+#### モーダルの状態管理パターン
+
+15 以上のコンポーネントで `useState<boolean>(false)` + `setIsModalOpen` の同一パターンが繰り返されている。`useModal()` カスタムフックに抽出可能。
+
+#### レガシーコード
+
+`src/components/LegacyCustomModelsBanner.tsx` が `App.tsx` でまだレンダリングされている。移行期間が終わっていれば削除可能。対応する `_legacyCustomModels` / `clearLegacyCustomModels()` も `provider-slice.ts` に残存。
