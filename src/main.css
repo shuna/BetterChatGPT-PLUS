@@ -94,6 +94,12 @@
     scrollbar-width: none; /* Firefox */
   }
 
+  /* Lock chat scroll while sidebar swipe is in progress */
+  .sidebar-swiping [data-virtuoso-scroller='true'] {
+    overflow-y: hidden !important;
+    touch-action: none !important;
+  }
+
   ::-webkit-scrollbar-thumb {
     --tw-border-opacity: 1;
     background-color: rgba(217, 217, 227, 0.8);

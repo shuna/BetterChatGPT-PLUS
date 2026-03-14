@@ -41,8 +41,13 @@ export default function useSwipeGesture(
     [menuRef, backdropRef, getEffectiveWidth]
   );
 
+  const setBodySwiping = useCallback((active: boolean) => {
+    document.body.classList.toggle('sidebar-swiping', active);
+  }, []);
+
   const finishSwipe = useCallback(
     (shouldOpen: boolean) => {
+      setBodySwiping(false);
       const menu = menuRef.current;
       const backdrop = backdropRef.current;
 
@@ -70,7 +75,7 @@ export default function useSwipeGesture(
       menu?.addEventListener('transitionend', cleanup, { once: true });
       setTimeout(cleanup, 350);
     },
-    [menuRef, backdropRef, setHideSideMenu]
+    [menuRef, backdropRef, setHideSideMenu, setBodySwiping]
   );
 
   const onTouchMove = useCallback(
@@ -87,6 +92,7 @@ export default function useSwipeGesture(
         ) {
           lockedRef.current = true;
           horizontalRef.current = Math.abs(dx) > Math.abs(dy);
+          if (horizontalRef.current) setBodySwiping(true);
         }
         return;
       }
@@ -101,14 +107,17 @@ export default function useSwipeGesture(
         applyTransform(Math.max(1 + dx / width, 0));
       }
     },
-    [getEffectiveWidth, applyTransform]
+    [getEffectiveWidth, applyTransform, setBodySwiping]
   );
 
   const onTouchEnd = useCallback(
     (e: React.TouchEvent) => {
       if (!trackingRef.current) return;
       trackingRef.current = false;
-      if (!lockedRef.current || !horizontalRef.current) return;
+      if (!lockedRef.current || !horizontalRef.current) {
+        setBodySwiping(false);
+        return;
+      }
 
       const touch = e.changedTouches[0];
       const dx = touch.clientX - startXRef.current;
@@ -120,7 +129,7 @@ export default function useSwipeGesture(
         finishSwipe(Math.abs(dx) / width <= SWIPE_THRESHOLD);
       }
     },
-    [getEffectiveWidth, finishSwipe]
+    [getEffectiveWidth, finishSwipe, setBodySwiping]
   );
 
   const onEdgeTouchStart = useCallback(
