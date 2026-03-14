@@ -6,6 +6,7 @@ import { ModelOptions } from '@type/chat';
 import type { ProviderId } from '@type/provider';
 import { useModelType } from '@utils/modelLookup';
 import { hasMeaningfulContent } from '@utils/contentValidation';
+import useHideOnOutsideClick from '@hooks/useHideOnOutsideClick';
 import AttachmentIcon from '@icon/AttachmentIcon';
 import CommandPrompt from '../CommandPrompt';
 
@@ -71,6 +72,7 @@ const EditViewButtons = memo(
     const isUser = role === 'user';
     const isNotLast = !sticky && messageIndex < lastMessageIndex;
     const canSubmitDraft = hasMeaningfulContent(_content);
+    const [attachDropDown, setAttachDropDown, attachDropDownRef] = useHideOnOutsideClick();
 
     return (
       <div className='w-full'>
@@ -114,22 +116,6 @@ const EditViewButtons = memo(
                 ))}
               </div>
             </div>
-            <div className='flex justify-center mt-4'>
-              <input
-                type='text'
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
-                placeholder={t('enter_image_url_placeholder') as string}
-                className='input input-bordered w-full max-w-xs text-gray-800 dark:text-white p-3  border-none bg-gray-200 dark:bg-gray-600 rounded-md m-0 w-full mr-0 h-10 focus:outline-none'
-              />
-              <button
-                className='btn btn-neutral ml-2'
-                onClick={handleImageUrlChange}
-                aria-label={t('add_image_url') as string}
-              >
-                {t('add_image_url')}
-              </button>
-            </div>
             <input
               type='file'
               ref={fileInputRef}
@@ -143,13 +129,49 @@ const EditViewButtons = memo(
         <div className='flex items-center mt-1'>
           <div className='flex items-center gap-1'>
             {isImageModel && (
-              <button
-                className='btn btn-neutral btn-small'
-                onClick={handleUploadButtonClick}
-                aria-label='Upload Images'
-              >
-                <AttachmentIcon />
-              </button>
+              <div className='relative' ref={attachDropDownRef}>
+                <button
+                  className='btn btn-neutral btn-small'
+                  onClick={() => setAttachDropDown(!attachDropDown)}
+                  aria-label='Attach files'
+                >
+                  <AttachmentIcon />
+                </button>
+                <div
+                  className={`${
+                    attachDropDown ? '' : 'hidden'
+                  } absolute bottom-full left-0 mb-1 z-10 bg-white rounded-lg shadow-xl border-b border-black/10 dark:border-gray-900/50 text-gray-800 dark:text-gray-100 dark:bg-gray-800 opacity-90 w-max`}
+                >
+                  <button
+                    className='px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white cursor-pointer text-start w-full text-sm'
+                    onClick={() => {
+                      handleUploadButtonClick();
+                      setAttachDropDown(false);
+                    }}
+                  >
+                    {t('selectFile') as string}
+                  </button>
+                  <div className='px-4 py-2 flex items-center gap-2'>
+                    <input
+                      type='text'
+                      value={imageUrl}
+                      onChange={(e) => setImageUrl(e.target.value)}
+                      placeholder={t('enter_image_url_placeholder') as string}
+                      className='text-gray-800 dark:text-white p-2 text-sm border-none bg-gray-200 dark:bg-gray-600 rounded-md h-8 focus:outline-none w-48'
+                    />
+                    <button
+                      className='btn btn-neutral text-sm px-2 py-1'
+                      onClick={() => {
+                        handleImageUrlChange();
+                        setAttachDropDown(false);
+                      }}
+                      aria-label={t('add_image_url') as string}
+                    >
+                      {t('add_image_url')}
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
             <CommandPrompt _setContent={_setContent} />
           </div>
