@@ -24,8 +24,11 @@ import useIsDesktop from '@hooks/useIsDesktop';
 const EMPTY_MESSAGES: never[] = [];
 const SCROLL_TO_BOTTOM_TOP = Number.MAX_SAFE_INTEGER;
 const SCROLL_ALIGN_TOLERANCE = 0.5;
+const KEYBOARD_VIEWPORT_DELTA_THRESHOLD = 50;
 type ScrollBehaviorMode = 'auto' | 'smooth';
 const MESSAGE_EDIT_TEXTAREA_SELECTOR = 'textarea[data-message-editing="true"]';
+const VIRTUOSO_ITEM_SELECTOR = '[data-item-index]';
+const VIRTUOSO_LIST_SELECTOR = '[data-test-id="virtuoso-item-list"]';
 
 type ActiveElementLike = {
   tagName?: string;
@@ -35,6 +38,11 @@ type ActiveElementLike = {
 type ScrollerLike = {
   contains: (element: any) => boolean;
 } | null;
+
+type LockTarget = {
+  element: HTMLElement;
+  topOffset: number;
+};
 
 export function isEditingMessageInScroller(scroller: HTMLElement | null): boolean {
   if (!scroller || typeof document === 'undefined') return false;
@@ -58,6 +66,68 @@ export function isEditingMessageElement(
     activeElement.matches(MESSAGE_EDIT_TEXTAREA_SELECTOR) &&
     scroller.contains(activeElement)
   );
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLInputElement ||
+    target.isContentEditable
+  );
+}
+
+function getViewportLockTarget(scroller: HTMLElement): LockTarget | null {
+  const scrollerRect = scroller.getBoundingClientRect();
+  const items = scroller.querySelectorAll<HTMLElement>(VIRTUOSO_ITEM_SELECTOR);
+
+  for (const item of items) {
+    const rect = item.getBoundingClientRect();
+    if (rect.top <= scrollerRect.top && rect.bottom > scrollerRect.top) {
+      return {
+        element: item,
+        topOffset: rect.top - scrollerRect.top,
+      };
+    }
+    if (rect.top > scrollerRect.top) {
+      return {
+        element: item,
+        topOffset: rect.top - scrollerRect.top,
+      };
+    }
+  }
+
+  return null;
+}
+
+function getEditingLockTarget(scroller: HTMLElement): LockTarget | null {
+  const activeTextarea = scroller.querySelector<HTMLElement>(
+    `${MESSAGE_EDIT_TEXTAREA_SELECTOR}:focus`
+  );
+  if (!activeTextarea) return null;
+
+  const bubble = activeTextarea.closest<HTMLElement>(VIRTUOSO_ITEM_SELECTOR);
+  if (!bubble) return null;
+
+  const scrollerRect = scroller.getBoundingClientRect();
+  return {
+    element: bubble,
+    topOffset: bubble.getBoundingClientRect().top - scrollerRect.top,
+  };
+}
+
+function getLockTarget(scroller: HTMLElement, isEditing: boolean): LockTarget | null {
+  return isEditing ? getEditingLockTarget(scroller) : getViewportLockTarget(scroller);
+}
+
+function getVirtuosoListContainer(scroller: HTMLElement): HTMLElement | null {
+  const listContainer = scroller.querySelector<HTMLElement>(VIRTUOSO_LIST_SELECTOR);
+  if (listContainer) return listContainer;
+
+  const firstItem = scroller.querySelector<HTMLElement>(VIRTUOSO_ITEM_SELECTOR);
+  if (firstItem?.parentElement instanceof HTMLElement) return firstItem.parentElement;
+
+  return scroller.firstElementChild instanceof HTMLElement ? scroller.firstElementChild : null;
 }
 
 const ChatContent = () => {
@@ -191,7 +261,9 @@ const ChatContent = () => {
   // Virtuoso state
   const virtuosoRef = useRef<VirtuosoHandle>(null);
   const scrollerRef = useRef<HTMLElement | null>(null);
+  const [scrollerElement, setScrollerElement] = useState<HTMLElement | null>(null);
   const [atBottom, setAtBottom] = useState(true);
+  const [isEditingInScroller, setIsEditingInScroller] = useState(false);
   const [bubbleNavigationState, setBubbleNavigationState] = useState({
     canMoveUp: false,
     canMoveDown: false,
@@ -207,6 +279,7 @@ const ChatContent = () => {
   const bottomLockRef = useRef(false);
   const bottomLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastScrollTopRef = useRef(0);
+  const lockTargetRef = useRef<LockTarget | null>(null);
 
   // Build visible items list, filtering hidden system messages
   const items = useMemo(() => {
@@ -421,6 +494,7 @@ const ChatContent = () => {
   }, [getTopAlignedBubbleIndex, items.length, scrollToBubbleAtIndex]);
 
   const { canMoveUp, canMoveDown } = bubbleNavigationState;
+  const shouldLockViewport = isEditingInScroller || (isCurrentChatGenerating && !atBottom);
 
   const handleFollowOutput = useCallback((isAtBottom: boolean) => {
     if (!autoScroll) return false;
@@ -467,6 +541,8 @@ const ChatContent = () => {
 
     if (ref && ref instanceof HTMLElement) {
       scrollerRef.current = ref;
+      setScrollerElement(ref);
+      setIsEditingInScroller(isEditingMessageInScroller(ref));
       const onScroll = () => {
         const currentTop = ref.scrollTop;
         // User scrolled up manually — release bottom lock
@@ -485,6 +561,8 @@ const ChatContent = () => {
       updateBubbleNavigationState();
     } else {
       scrollerRef.current = null;
+      setScrollerElement(null);
+      setIsEditingInScroller(false);
       updateBubbleNavigationState();
     }
   }, [updateBubbleNavigationState]);
@@ -498,6 +576,164 @@ const ChatContent = () => {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (!scrollerElement) return;
+
+    const onFocusIn = (event: FocusEvent) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLTextAreaElement &&
+        target.matches(MESSAGE_EDIT_TEXTAREA_SELECTOR) &&
+        scrollerElement.contains(target)
+      ) {
+        setIsEditingInScroller(true);
+      }
+    };
+
+    const onFocusOut = (event: FocusEvent) => {
+      const next = event.relatedTarget;
+      if (
+        next instanceof HTMLTextAreaElement &&
+        next.matches(MESSAGE_EDIT_TEXTAREA_SELECTOR) &&
+        scrollerElement.contains(next)
+      ) {
+        return;
+      }
+
+      requestAnimationFrame(() => {
+        setIsEditingInScroller(isEditingMessageInScroller(scrollerElement));
+      });
+    };
+
+    scrollerElement.addEventListener('focusin', onFocusIn);
+    scrollerElement.addEventListener('focusout', onFocusOut);
+
+    return () => {
+      scrollerElement.removeEventListener('focusin', onFocusIn);
+      scrollerElement.removeEventListener('focusout', onFocusOut);
+    };
+  }, [scrollerElement]);
+
+  useEffect(() => {
+    if (!scrollerElement) return;
+
+    if (shouldLockViewport) {
+      lockTargetRef.current = getLockTarget(scrollerElement, isEditingInScroller);
+      return;
+    }
+
+    lockTargetRef.current = null;
+  }, [scrollerElement, shouldLockViewport, isEditingInScroller]);
+
+  useEffect(() => {
+    if (!scrollerElement || !shouldLockViewport) return;
+
+    const observeTarget = getVirtuosoListContainer(scrollerElement);
+    if (!observeTarget) return;
+
+    const observer = new ResizeObserver(() => {
+      const lockTarget = lockTargetRef.current;
+      if (!lockTarget) return;
+
+      if (!lockTarget.element.isConnected) {
+        lockTargetRef.current = getLockTarget(scrollerElement, isEditingInScroller);
+        return;
+      }
+
+      const scrollerRect = scrollerElement.getBoundingClientRect();
+      const currentTop = lockTarget.element.getBoundingClientRect().top - scrollerRect.top;
+      const drift = currentTop - lockTarget.topOffset;
+
+      if (Math.abs(drift) > 1) {
+        scrollerElement.scrollTop += drift;
+      }
+    });
+
+    observer.observe(observeTarget);
+    return () => observer.disconnect();
+  }, [scrollerElement, shouldLockViewport, isEditingInScroller]);
+
+  useEffect(() => {
+    if (!scrollerElement || !shouldLockViewport || isEditingInScroller) return;
+
+    let rafId: number | null = null;
+    const onScroll = () => {
+      if (rafId != null) return;
+
+      rafId = requestAnimationFrame(() => {
+        lockTargetRef.current = getLockTarget(scrollerElement, false);
+        rafId = null;
+      });
+    };
+
+    scrollerElement.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      scrollerElement.removeEventListener('scroll', onScroll);
+      if (rafId != null) cancelAnimationFrame(rafId);
+    };
+  }, [scrollerElement, shouldLockViewport, isEditingInScroller]);
+
+  useEffect(() => {
+    if (!scrollerElement || typeof window === 'undefined') return;
+
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
+    let prevHeight = viewport.height;
+
+    const onResize = () => {
+      const delta = viewport.height - prevHeight;
+      prevHeight = viewport.height;
+
+      if (Math.abs(delta) < KEYBOARD_VIEWPORT_DELTA_THRESHOLD) return;
+
+      const activeElement = document.activeElement;
+      const isEditingMessage =
+        activeElement instanceof HTMLElement &&
+        activeElement.matches(MESSAGE_EDIT_TEXTAREA_SELECTOR);
+
+      if (delta < 0 && isEditingMessage) {
+        requestAnimationFrame(() => {
+          activeElement.scrollIntoView({
+            block: 'center',
+            behavior: 'auto',
+          });
+        });
+        return;
+      }
+
+      if (delta > 0) {
+        const savedScrollTop = scrollerElement.scrollTop;
+        requestAnimationFrame(() => {
+          if (scrollerElement.scrollTop !== savedScrollTop) {
+            scrollerElement.scrollTop = savedScrollTop;
+          }
+        });
+      }
+    };
+
+    viewport.addEventListener('resize', onResize);
+    return () => viewport.removeEventListener('resize', onResize);
+  }, [scrollerElement]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return;
+      if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+      if (isEditingInScroller || isEditableTarget(event.target)) return;
+
+      event.preventDefault();
+      if (event.key === 'ArrowUp') {
+        handleScrollToPreviousBubble();
+      } else {
+        handleScrollToNextBubble();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [handleScrollToNextBubble, handleScrollToPreviousBubble, isEditingInScroller]);
 
   const itemContent = useCallback((index: number) => {
     const { message, originalIndex } = items[index];

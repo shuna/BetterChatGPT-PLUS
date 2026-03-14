@@ -5,7 +5,11 @@ import {
   ContentInterface,
   Role,
 } from '@type/chat';
-import { ContentStoreData } from '@utils/contentStore';
+import { ContentStoreData, addContent } from '@utils/contentStore';
+import {
+  finalizeStreamingBuffer,
+  isStreamingContentHash,
+} from '@utils/streamingBuffer';
 import {
   appendNodeToActivePathState,
   copyBranchSequenceState,
@@ -24,6 +28,37 @@ import {
   upsertMessageAtIndexState,
   updateLastNodeContentState,
 } from './branch-domain';
+import { cloneChatAt } from './branch-domain';
+
+/**
+ * Finalize any streaming nodes in the given chat, mutating contentStore in place.
+ * Returns updated chats array if any streaming nodes were found, otherwise the original.
+ */
+function finalizeStreamingNodesInChat(
+  chats: ChatInterface[],
+  chatIndex: number,
+  contentStore: ContentStoreData
+): ChatInterface[] {
+  const chat = chats[chatIndex];
+  const tree = chat.branchTree;
+  if (!tree) return chats;
+
+  const streamingNodes = Object.values(tree.nodes).filter((n) =>
+    isStreamingContentHash(n.contentHash)
+  );
+  if (streamingNodes.length === 0) return chats;
+
+  const updatedChats = cloneChatAt(chats, chatIndex);
+  const updatedTree = updatedChats[chatIndex].branchTree!;
+  for (const node of streamingNodes) {
+    const content = finalizeStreamingBuffer(node.id);
+    updatedTree.nodes[node.id] = {
+      ...updatedTree.nodes[node.id],
+      contentHash: addContent(contentStore, content),
+    };
+  }
+  return updatedChats;
+}
 
 export interface PendingChatFocus {
   chatIndex: number;
@@ -246,14 +281,20 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   },
 
   switchBranchAtNode: (chatIndex, nodeId) => {
-    get().setChats(
-      switchBranchAtNodeState(get().chats!, chatIndex, nodeId, get().contentStore)
+    const contentStore = { ...get().contentStore };
+    const chats = finalizeStreamingNodesInChat(get().chats!, chatIndex, contentStore);
+    get().applyBranchState(
+      switchBranchAtNodeState(chats, chatIndex, nodeId, contentStore),
+      contentStore
     );
   },
 
   switchActivePath: (chatIndex, newPath) => {
-    get().setChats(
-      switchActivePathState(get().chats!, chatIndex, newPath, get().contentStore)
+    const contentStore = { ...get().contentStore };
+    const chats = finalizeStreamingNodesInChat(get().chats!, chatIndex, contentStore);
+    get().applyBranchState(
+      switchActivePathState(chats, chatIndex, newPath, contentStore),
+      contentStore
     );
   },
 

@@ -1,4 +1,9 @@
 import { ContentInterface } from '@type/chat';
+import {
+  getStreamingNodeIdFromHash,
+  isStreamingContentHash,
+  peekBufferedContent,
+} from './streamingBuffer';
 
 /**
  * ContentStore: content-addressable storage for message content.
@@ -54,6 +59,7 @@ export function addContent(
  * Increment the reference count for a given hash.
  */
 export function retainContent(store: ContentStoreData, hash: string): void {
+  if (isStreamingContentHash(hash)) return;
   if (store[hash]) {
     store[hash].refCount++;
   }
@@ -63,6 +69,7 @@ export function retainContent(store: ContentStoreData, hash: string): void {
  * Decrement refCount. If it reaches 0, delete the entry (GC).
  */
 export function releaseContent(store: ContentStoreData, hash: string): void {
+  if (isStreamingContentHash(hash)) return;
   if (!store[hash]) return;
   store[hash].refCount--;
   if (store[hash].refCount <= 0) {
@@ -77,5 +84,9 @@ export function resolveContent(
   store: ContentStoreData,
   hash: string
 ): ContentInterface[] {
+  if (isStreamingContentHash(hash)) {
+    const nodeId = getStreamingNodeIdFromHash(hash);
+    return nodeId ? peekBufferedContent(nodeId) ?? [] : [];
+  }
   return store[hash]?.content ?? [];
 }

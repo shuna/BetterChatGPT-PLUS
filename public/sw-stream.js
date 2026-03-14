@@ -4,6 +4,7 @@
 const DB_NAME = 'sw-stream-db';
 const STORE_NAME = 'requests';
 const DB_VERSION = 1;
+const FLUSH_INTERVAL_MS = 800;
 
 const activeStreams = new Map();
 
@@ -144,7 +145,7 @@ async function handleStartStream(msg, port) {
     if (flushTimer) return;
     flushTimer = setTimeout(() => {
       flushBufferedText();
-    }, 200);
+    }, FLUSH_INTERVAL_MS);
   }
 
   try {
