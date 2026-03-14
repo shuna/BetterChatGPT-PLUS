@@ -19,6 +19,7 @@ import PopupModal from '@components/PopupModal';
 import { useTranslation } from 'react-i18next';
 import { useModelType } from '@utils/modelLookup';
 import { TextContentInterface } from '@type/chat';
+import { useStreamingText } from '@hooks/useStreamingText';
 
 const UnifiedMessageView = memo(
   ({
@@ -109,7 +110,8 @@ const UnifiedMessageView = memo(
       }
     };
 
-    const currentTextContent = isTextContent(content[0]) ? content[0].text : '';
+    const streamingText = useStreamingText(isGeneratingMessage ? nodeId : undefined);
+    const currentTextContent = streamingText ?? (isTextContent(content[0]) ? content[0].text : '');
     const handleCopy = () => {
       navigator.clipboard.writeText(currentTextContent);
     };
