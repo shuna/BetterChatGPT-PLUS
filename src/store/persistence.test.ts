@@ -1,8 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { _defaultChatConfig, _defaultImageDetail } from '@constants/chat';
 import type { ChatInterface } from '@type/chat';
 import { addContent } from '@utils/contentStore';
+import {
+  clearStreamingBuffersForTest,
+  createStreamingContentHash,
+  initializeStreamingBuffer,
+} from '@utils/streamingBuffer';
 import {
   applyPersistedChatDataState,
   createLocalStoragePartializedState,
@@ -106,6 +111,24 @@ const buildStoreState = () => {
 };
 
 describe('persistence', () => {
+  beforeEach(() => {
+    clearStreamingBuffersForTest();
+  });
+
+  it('finalizes streaming marker nodes when building a full snapshot', () => {
+    const state = buildStoreState();
+    state.chats[0].branchTree!.nodes['node-2'].contentHash = createStreamingContentHash('node-2');
+    initializeStreamingBuffer('node-2', [{ type: 'text', text: 'streamed' }]);
+
+    const partialized = createPartializedState(state as never);
+    const persistedNode = partialized.chats?.[0].branchTree?.nodes['node-2'];
+
+    expect(persistedNode?.contentHash.startsWith('__streaming:')).toBe(false);
+    expect(partialized.contentStore?.[persistedNode!.contentHash].content).toEqual([
+      { type: 'text', text: 'streamed' },
+    ]);
+  });
+
   it('omits messages for chats that already have branch trees', () => {
     const state = buildStoreState();
 

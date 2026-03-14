@@ -10,14 +10,22 @@ import { cloneChatAt } from '@store/branch-domain';
 import { upsertActivePathMessage } from '@utils/branchUtils';
 import { materializeActivePath } from '@utils/branchUtils';
 import { addContent, releaseContent, resolveContent } from '@utils/contentStore';
+import { getStreamingMarkdownEnvironment } from '@utils/markdownStreamingPolicy';
 import { deleteRequest as deleteStreamRecord } from '@utils/streamDb';
+import {
+  appendToStreamingBuffer,
+  createStreamingContentHash,
+  finalizeStreamingBuffer,
+  initializeStreamingBuffer,
+  isBufferingNode,
+  isStreamingContentHash,
+} from '@utils/streamingBuffer';
 import { getEffectiveStreamEnabled } from '@utils/streamSupport';
 import * as swBridge from '@utils/swBridge';
 import {
   ConfigInterface,
   MessageInterface,
   TextContentInterface,
-  isTextContent,
 } from '@type/chat';
 import type { ResolvedProvider } from './submitHelpers';
 
@@ -26,7 +34,9 @@ const swCancellers = new Map<string, () => void>();
 const sessionChunkTargets = new Map<string, { chatId: string; targetNodeId: string }>();
 const pendingChunkBuffers = new Map<string, string>();
 const pendingChunkTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const STREAM_FLUSH_INTERVAL_MS = 32;
+const STREAM_FLUSH_INTERVAL_MS = getStreamingMarkdownEnvironment().isDesktopLike
+  ? 32
+  : 80;
 const SYSTEM_MESSAGE_UNSUPPORTED_PATTERNS = [
   /does not support.*system/i,
   /system.*not supported/i,
@@ -73,6 +83,7 @@ export const clearSubmitSessionRuntime = (sessionId: string) => {
     useStore.getState().generatingSessions[sessionId];
   if (chunkTarget) {
     discardQueuedChunks(chunkTarget.chatId, chunkTarget.targetNodeId);
+    finalizeStreamingNode(chunkTarget.chatId, chunkTarget.targetNodeId);
     sessionChunkTargets.delete(sessionId);
   }
   abortControllers.delete(sessionId);
@@ -114,35 +125,48 @@ export const writeChunkToStore = (
     if (chatIndex < 0) return state;
 
     const updatedChats = cloneChatAt(chats, chatIndex);
-    const updatedContentStore = { ...state.contentStore };
     const updatedChat = updatedChats[chatIndex];
     const tree = updatedChat.branchTree;
 
     if (tree?.nodes[targetNodeId]) {
+      let updatedContentStore = state.contentStore;
       const node = tree.nodes[targetNodeId];
-      const currentContent = resolveContent(updatedContentStore, node.contentHash);
-      const currentText = isTextContent(currentContent[0]) ? currentContent[0].text : '';
-      const nextContent = [
-        { type: 'text', text: currentText + text } as TextContentInterface,
-        ...currentContent.slice(1),
-      ];
 
-      releaseContent(updatedContentStore, node.contentHash);
-      tree.nodes[targetNodeId] = {
-        ...node,
-        contentHash: addContent(updatedContentStore, nextContent),
-      };
+      if (!isStreamingContentHash(node.contentHash)) {
+        updatedContentStore = { ...state.contentStore };
+        initializeStreamingBuffer(
+          targetNodeId,
+          resolveContent(updatedContentStore, node.contentHash)
+        );
+        releaseContent(updatedContentStore, node.contentHash);
+        tree.nodes[targetNodeId] = {
+          ...node,
+          contentHash: createStreamingContentHash(targetNodeId),
+        };
+      } else if (!isBufferingNode(targetNodeId)) {
+        initializeStreamingBuffer(targetNodeId, []);
+      }
 
-      if (tree.activePath.includes(targetNodeId)) {
-        updatedChat.messages = materializeActivePath(tree, updatedContentStore);
+      appendToStreamingBuffer(targetNodeId, text);
+
+      const pathIndex = tree.activePath.indexOf(targetNodeId);
+      if (pathIndex >= 0) {
+        updatedChat.messages[pathIndex] = {
+          role: tree.nodes[targetNodeId].role,
+          content: resolveContent(updatedContentStore, tree.nodes[targetNodeId].contentHash),
+        };
       }
 
       return {
         ...state,
         chats: updatedChats,
-        contentStore: updatedContentStore,
+        ...(updatedContentStore !== state.contentStore
+          ? { contentStore: updatedContentStore }
+          : {}),
       };
     }
+
+    const updatedContentStore = { ...state.contentStore };
 
     const messageIndex = updatedChat.messages.findIndex(
       (_, index) => updatedChat.branchTree?.activePath?.[index] === targetNodeId
@@ -161,6 +185,44 @@ export const writeChunkToStore = (
 
     updatedChat.messages[messageIndex] = updatedMessage;
     upsertActivePathMessage(updatedChat, messageIndex, updatedMessage, updatedContentStore);
+
+    return {
+      ...state,
+      chats: updatedChats,
+      contentStore: updatedContentStore,
+    };
+  });
+};
+
+export const finalizeStreamingNode = (chatId: string, targetNodeId: string) => {
+  useStore.setState((state) => {
+    const chats = state.chats;
+    if (!chats) return state;
+
+    const chatIndex = chats.findIndex((chat) => chat.id === chatId);
+    if (chatIndex < 0) return state;
+
+    const chat = chats[chatIndex];
+    const tree = chat.branchTree;
+    const node = tree?.nodes[targetNodeId];
+    if (!tree || !node || !isStreamingContentHash(node.contentHash)) {
+      return state;
+    }
+
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    const updatedChat = updatedChats[chatIndex];
+    const updatedTree = updatedChat.branchTree!;
+    const updatedContentStore = { ...state.contentStore };
+    const finalizedContent = finalizeStreamingBuffer(targetNodeId);
+
+    updatedTree.nodes[targetNodeId] = {
+      ...updatedTree.nodes[targetNodeId],
+      contentHash: addContent(updatedContentStore, finalizedContent),
+    };
+
+    if (updatedTree.activePath.includes(targetNodeId)) {
+      updatedChat.messages = materializeActivePath(updatedTree, updatedContentStore);
+    }
 
     return {
       ...state,
@@ -405,5 +467,6 @@ export const executeSubmitStream = async ({
     await runRequest(removeSystemMessages(messages));
   } finally {
     flushQueuedChunks(chatId, targetNodeId);
+    finalizeStreamingNode(chatId, targetNodeId);
   }
 };

@@ -8,7 +8,9 @@ import {
   stopSubmitSession,
   flushQueuedChunks,
   writeChunkToStore,
+  finalizeStreamingNode,
 } from './submitRuntime';
+import { clearStreamingBuffersForTest } from '@utils/streamingBuffer';
 
 // ---------------------------------------------------------------------------
 // Mock zustand store
@@ -59,6 +61,7 @@ beforeEach(() => {
   mockRemoveSession.mockClear();
   mockGetChatCompletion.mockReset();
   mockState = {};
+  clearStreamingBuffersForTest();
   vi.useRealTimers();
 });
 
@@ -137,7 +140,7 @@ describe('abort controller lifecycle', () => {
     createSubmitAbortController('sess-3');
     queueChunkToStore('chat-1', 'node-assistant', 'partial');
     stopSubmitSession('sess-3');
-    vi.advanceTimersByTime(32);
+    vi.advanceTimersByTime(100);
 
     expect((mockState as any).chats[0].messages[1].content[0].text).toBe('');
   });
@@ -283,7 +286,7 @@ describe('writeChunkToStore', () => {
 
     expect((mockState as any).chats[0].messages[1].content[0].text).toBe('');
 
-    vi.advanceTimersByTime(32);
+    vi.advanceTimersByTime(100);
 
     expect((mockState as any).chats[0].messages[1].content[0].text).toBe('Hello');
   });
@@ -330,6 +333,52 @@ describe('writeChunkToStore', () => {
     flushQueuedChunks('chat-1', 'node-assistant');
 
     expect((mockState as any).chats[0].messages[1].content[0].text).toBe('partial');
+  });
+
+  it('finalizes buffered content into contentStore once streaming completes', () => {
+    mockState = {
+      chats: [
+        {
+          id: 'chat-1',
+          branchTree: {
+            rootId: 'node-user',
+            activePath: ['node-user', 'node-assistant'],
+            nodes: {
+              'node-user': {
+                id: 'node-user',
+                parentId: null,
+                role: 'user',
+                contentHash: 'user-hash',
+                createdAt: 1,
+              },
+              'node-assistant': {
+                id: 'node-assistant',
+                parentId: 'node-user',
+                role: 'assistant',
+                contentHash: 'assistant-hash',
+                createdAt: 2,
+              },
+            },
+          },
+          messages: [
+            { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+            { role: 'assistant', content: [{ type: 'text', text: '' }] },
+          ],
+        },
+      ],
+      contentStore: {
+        'user-hash': { content: [{ type: 'text', text: 'hi' }], refCount: 1 },
+        'assistant-hash': { content: [{ type: 'text', text: '' }], refCount: 1 },
+      },
+    };
+
+    writeChunkToStore('chat-1', 'node-assistant', 'Hello');
+    finalizeStreamingNode('chat-1', 'node-assistant');
+
+    const state = mockState as any;
+    const nodeHash = state.chats[0].branchTree.nodes['node-assistant'].contentHash;
+    expect(nodeHash.startsWith('__streaming:')).toBe(false);
+    expect(state.contentStore[nodeHash].content[0].text).toBe('Hello');
   });
 });
 

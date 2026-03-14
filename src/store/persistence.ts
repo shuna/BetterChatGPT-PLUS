@@ -1,7 +1,14 @@
 import { materializeActivePath } from '@utils/branchUtils';
 import { ensureUniqueChatIds } from '@utils/chatIdentity';
 import { ContentStoreData } from '@utils/contentStore';
-import { ChatInterface } from '@type/chat';
+import {
+  finalizeStreamingSnapshotState,
+  hasActiveStreamingBuffers,
+  isStreamingContentHash,
+} from '@utils/streamingBuffer';
+import { addContent } from '@utils/contentStore';
+import { getBufferedContent } from '@utils/streamingBuffer';
+import { BranchClipboard, ChatInterface } from '@type/chat';
 import {
   LocalStorageInterfaceV9ToV10,
   LocalStorageInterfaceV0ToV1,
@@ -139,9 +146,34 @@ const buildPersistedChats = (state: StoreState): PersistedChat[] | undefined =>
     rest.branchTree ? rest : { ...rest, messages }
   );
 
+function sanitizeClipboard(
+  clipboard: BranchClipboard | null,
+  contentStore: ContentStoreData
+): BranchClipboard | null {
+  if (!clipboard) return null;
+  const streamingNodes = Object.values(clipboard.nodes).filter((n) =>
+    isStreamingContentHash(n.contentHash)
+  );
+  if (streamingNodes.length === 0) return clipboard;
+  const updatedNodes = { ...clipboard.nodes };
+  for (const node of streamingNodes) {
+    const nodeId = node.id;
+    const content = getBufferedContent(nodeId) ?? [];
+    updatedNodes[nodeId] = {
+      ...updatedNodes[nodeId],
+      contentHash: addContent(contentStore, content),
+    };
+  }
+  return { ...clipboard, nodes: updatedNodes };
+}
+
 function buildPartializedState(state: StoreState): PersistedStoreState {
+  const snapshot = finalizeStreamingSnapshotState(state.chats, state.contentStore);
   return {
-    chats: buildPersistedChats(state),
+    chats: buildPersistedChats({
+      ...state,
+      chats: snapshot.chats,
+    } as StoreState),
     apiKey: state.apiKey,
     apiVersion: state.apiVersion,
     apiEndpoint: state.apiEndpoint,
@@ -170,8 +202,8 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     hideShareGPT: state.hideShareGPT,
     providers: state.providers,
     favoriteModels: state.favoriteModels,
-    branchClipboard: state.branchClipboard,
-    contentStore: state.contentStore,
+    branchClipboard: sanitizeClipboard(state.branchClipboard, snapshot.contentStore),
+    contentStore: snapshot.contentStore,
     providerModelCache: state.providerModelCache,
     providerCustomModels: state.providerCustomModels,
     _legacyCustomModels: state._legacyCustomModels,
@@ -219,7 +251,7 @@ function buildLocalStoragePartializedState(
 }
 
 export const createPartializedState = (state: StoreState): PersistedStoreState => {
-  let changed = !previousFullResult;
+  let changed = !previousFullResult || hasActiveStreamingBuffers();
 
   if (!changed) {
     for (const key of FULL_PERSIST_KEYS) {
@@ -283,8 +315,16 @@ export const rehydrateStoreState = (state: StoreState) => {
   const contentStore: ContentStoreData = state.contentStore ?? {};
   state.chats?.forEach((chat: ChatInterface) => {
     if (!chat.messages) chat.messages = [];
-    if (chat.branchTree && chat.branchTree.activePath.length > 0) {
-      chat.messages = materializeActivePath(chat.branchTree, contentStore);
+    if (chat.branchTree) {
+      // Replace orphaned streaming markers (from interrupted streams) with empty content
+      for (const node of Object.values(chat.branchTree.nodes)) {
+        if (isStreamingContentHash(node.contentHash)) {
+          node.contentHash = addContent(contentStore, []);
+        }
+      }
+      if (chat.branchTree.activePath.length > 0) {
+        chat.messages = materializeActivePath(chat.branchTree, contentStore);
+      }
     }
   });
 
@@ -294,11 +334,17 @@ export const rehydrateStoreState = (state: StoreState) => {
 
 export const createPersistedChatDataState = (
   state: StoreState
-): PersistedChatData => ({
-  chats: buildPersistedChats(state),
-  contentStore: state.contentStore,
-  branchClipboard: state.branchClipboard,
-});
+): PersistedChatData => {
+  const snapshot = finalizeStreamingSnapshotState(state.chats, state.contentStore);
+  return {
+    chats: buildPersistedChats({
+      ...state,
+      chats: snapshot.chats,
+    } as StoreState),
+    contentStore: snapshot.contentStore,
+    branchClipboard: sanitizeClipboard(state.branchClipboard, snapshot.contentStore),
+  };
+};
 
 export const applyPersistedChatDataState = (
   state: StoreState,
