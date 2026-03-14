@@ -311,9 +311,13 @@
 .overtype-wrapper .overtype-input,
 .overtype-wrapper .overtype-preview,
 .overtype-container[data-mode="preview"] .overtype-wrapper .overtype-preview,
-.overtype-container[data-mode="normal"] .overtype-wrapper .overtype-preview,
-.overtype-container[data-mode="normal"] .overtype-wrapper .overtype-input {
+.overtype-container[data-mode="normal"] .overtype-wrapper .overtype-preview {
   font-family: inherit !important;
+}
+
+.overtype-wrapper .overtype-preview,
+.overtype-container[data-mode="preview"] .overtype-wrapper .overtype-preview,
+.overtype-container[data-mode="normal"] .overtype-wrapper .overtype-preview {
   color: inherit !important;
 }
 

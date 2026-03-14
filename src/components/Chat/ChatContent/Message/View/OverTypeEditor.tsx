@@ -205,6 +205,17 @@ const OverTypeEditor: React.FC<OverTypeEditorProps> = ({
     }
   }, [mode, autoFocus]);
 
+  useEffect(() => {
+    const textarea = instanceRef.current?.textarea;
+    if (!textarea) return;
+
+    if (mode === 'edit') {
+      textarea.dataset.messageEditing = 'true';
+    } else {
+      delete textarea.dataset.messageEditing;
+    }
+  }, [mode]);
+
   // Sync external value changes (avoid cursor jump during typing)
   useEffect(() => {
     const instance = instanceRef.current;
