@@ -27,7 +27,7 @@ const CollapseToggle = ({
         ? 'before:absolute before:left-2.5 before:top-0 before:bottom-0 before:w-1.5 before:rounded-full before:bg-gray-300/50 dark:before:bg-gray-500/40 hover:before:bg-gray-400/60 dark:hover:before:bg-gray-400/50 md:before:left-1.5'
         : canHover
           ? 'before:absolute before:left-2.5 before:top-0 before:bottom-0 before:w-1.5 before:rounded-full before:bg-gray-300/0 before:opacity-0 hover:before:bg-gray-300/70 hover:before:opacity-100 focus-visible:before:bg-gray-300/70 focus-visible:before:opacity-100 dark:before:bg-gray-500/0 dark:hover:before:bg-gray-500/60 dark:focus-visible:before:bg-gray-500/60 md:before:left-1.5'
-          : 'before:absolute before:left-2.5 before:top-0 before:bottom-0 before:w-1.5 before:rounded-full before:bg-gray-300/35 active:before:bg-gray-400/60 dark:before:bg-gray-500/30 dark:active:before:bg-gray-400/50 md:before:left-1.5'
+          : 'before:absolute before:left-2.5 before:top-0 before:bottom-0 before:w-1.5 before:rounded-full before:bg-transparent active:before:bg-gray-400/60 dark:active:before:bg-gray-400/50 md:before:left-1.5'
     }`}
     onClick={onClick}
     aria-label={isCollapsed ? 'Expand message' : 'Collapse message'}
