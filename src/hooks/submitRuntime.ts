@@ -10,7 +10,6 @@ import { cloneChatAt } from '@store/branch-domain';
 import { upsertActivePathMessage } from '@utils/branchUtils';
 import { materializeActivePath } from '@utils/branchUtils';
 import { addContent, releaseContent, resolveContent } from '@utils/contentStore';
-import { getStreamingMarkdownEnvironment } from '@utils/markdownStreamingPolicy';
 import { deleteRequest as deleteStreamRecord } from '@utils/streamDb';
 import {
   appendToStreamingBuffer,
@@ -19,6 +18,7 @@ import {
   initializeStreamingBuffer,
   isBufferingNode,
   isStreamingContentHash,
+  notifyStreamingUpdate,
 } from '@utils/streamingBuffer';
 import { getEffectiveStreamEnabled } from '@utils/streamSupport';
 import * as swBridge from '@utils/swBridge';
@@ -33,10 +33,18 @@ const abortControllers = new Map<string, AbortController>();
 const swCancellers = new Map<string, () => void>();
 const sessionChunkTargets = new Map<string, { chatId: string; targetNodeId: string }>();
 const pendingChunkBuffers = new Map<string, string>();
-const pendingChunkTimers = new Map<string, ReturnType<typeof setTimeout>>();
-const STREAM_FLUSH_INTERVAL_MS = getStreamingMarkdownEnvironment().isDesktopLike
-  ? 32
-  : 80;
+const pendingChunkTimers = new Map<string, number>();
+
+// Align chunk flushes with the display refresh rate (VSync).
+// Falls back to ~16ms setTimeout for environments without rAF (tests / SSR).
+const scheduleFlush: (cb: () => void) => number =
+  typeof requestAnimationFrame === 'function'
+    ? requestAnimationFrame
+    : (cb) => setTimeout(cb, 16) as unknown as number;
+const cancelFlush: (id: number) => void =
+  typeof cancelAnimationFrame === 'function'
+    ? cancelAnimationFrame
+    : (id) => clearTimeout(id);
 const SYSTEM_MESSAGE_UNSUPPORTED_PATTERNS = [
   /does not support.*system/i,
   /system.*not supported/i,
@@ -69,9 +77,9 @@ export const createSubmitAbortController = (sessionId: string) => {
 
 const discardQueuedChunks = (chatId: string, targetNodeId: string) => {
   const key = getChunkBufferKey(chatId, targetNodeId);
-  const timer = pendingChunkTimers.get(key);
-  if (timer) {
-    clearTimeout(timer);
+  const handle = pendingChunkTimers.get(key);
+  if (handle != null) {
+    cancelFlush(handle);
     pendingChunkTimers.delete(key);
   }
   pendingChunkBuffers.delete(key);
@@ -117,6 +125,15 @@ export const writeChunkToStore = (
   targetNodeId: string,
   text: string
 ) => {
+  // Fast path: buffer already exists — update buffer only, skip Zustand.
+  // Only the component subscribing via useStreamingText will re-render.
+  if (isBufferingNode(targetNodeId)) {
+    appendToStreamingBuffer(targetNodeId, text);
+    notifyStreamingUpdate(targetNodeId);
+    return;
+  }
+
+  // Slow path: first chunk — need to set streaming hash in the store.
   useStore.setState((state) => {
     const chats = state.chats;
     if (!chats) return state;
@@ -235,10 +252,10 @@ export const finalizeStreamingNode = (chatId: string, targetNodeId: string) => {
 export const flushQueuedChunks = (chatId: string, targetNodeId: string) => {
   const key = getChunkBufferKey(chatId, targetNodeId);
   const buffered = pendingChunkBuffers.get(key);
-  const timer = pendingChunkTimers.get(key);
+  const handle = pendingChunkTimers.get(key);
 
-  if (timer) {
-    clearTimeout(timer);
+  if (handle != null) {
+    cancelFlush(handle);
     pendingChunkTimers.delete(key);
   }
 
@@ -261,9 +278,10 @@ export const queueChunkToStore = (
 
   pendingChunkTimers.set(
     key,
-    setTimeout(() => {
+    scheduleFlush(() => {
+      pendingChunkTimers.delete(key);
       flushQueuedChunks(chatId, targetNodeId);
-    }, STREAM_FLUSH_INTERVAL_MS)
+    })
   );
 };
 

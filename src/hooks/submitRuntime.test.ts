@@ -231,7 +231,10 @@ describe('writeChunkToStore', () => {
     };
 
     writeChunkToStore('chat-a', 'node-1', 'one');
+    // Second chunk uses the fast path (buffer only, no store update).
     writeChunkToStore('chat-a', 'node-1', ' two');
+    // Finalize writes accumulated buffer back to the store.
+    finalizeStreamingNode('chat-a', 'node-1');
 
     const msg = (mockState as any).chats[0].messages[1];
     expect(msg.content[0].text).toBe('one two');

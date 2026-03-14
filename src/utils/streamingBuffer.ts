@@ -77,6 +77,7 @@ export const peekBufferedContent = (nodeId: string): ContentInterface[] | undefi
 export const finalizeStreamingBuffer = (nodeId: string): ContentInterface[] => {
   const content = getBufferedContent(nodeId) ?? [];
   streamingBuffers.delete(nodeId);
+  streamingListeners.delete(nodeId);
   return content;
 };
 
@@ -86,6 +87,33 @@ export const isBufferingNode = (nodeId: string): boolean => streamingBuffers.has
 
 export const clearStreamingBuffersForTest = (): void => {
   streamingBuffers.clear();
+  streamingListeners.clear();
+};
+
+// ---------------------------------------------------------------------------
+// Streaming subscription (useSyncExternalStore support)
+// ---------------------------------------------------------------------------
+
+const streamingListeners = new Map<string, Set<() => void>>();
+
+export const notifyStreamingUpdate = (nodeId: string): void => {
+  streamingListeners.get(nodeId)?.forEach((cb) => cb());
+};
+
+export const subscribeToStreaming = (
+  nodeId: string,
+  callback: () => void
+): (() => void) => {
+  let listeners = streamingListeners.get(nodeId);
+  if (!listeners) {
+    listeners = new Set();
+    streamingListeners.set(nodeId, listeners);
+  }
+  listeners.add(callback);
+  return () => {
+    listeners!.delete(callback);
+    if (listeners!.size === 0) streamingListeners.delete(nodeId);
+  };
 };
 
 export const finalizeStreamingSnapshotState = (
