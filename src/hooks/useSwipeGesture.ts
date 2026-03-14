@@ -3,6 +3,7 @@ import useStore from '@store/store';
 
 const SWIPE_THRESHOLD = 0.3;
 const DIRECTION_LOCK_THRESHOLD = 10;
+const SCROLL_TOP_SUPPRESSION_MS = 400;
 
 export default function useSwipeGesture(
   menuRef: React.RefObject<HTMLDivElement | null>,
@@ -19,6 +20,9 @@ export default function useSwipeGesture(
   const horizontalRef = useRef(false);
   const modeRef = useRef<'open' | 'close'>('open');
   const preventScrollListenerRef = useRef<((event: Event) => void) | null>(
+    null
+  );
+  const scrollTopSuppressionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
 
@@ -52,6 +56,13 @@ export default function useSwipeGesture(
     html.classList.toggle('sidebar-swiping', active);
 
     if (active) {
+      html.dataset.sidebarSwipeIgnoreScrollTopUntil = String(
+        Date.now() + SCROLL_TOP_SUPPRESSION_MS
+      );
+      if (scrollTopSuppressionTimerRef.current) {
+        clearTimeout(scrollTopSuppressionTimerRef.current);
+        scrollTopSuppressionTimerRef.current = null;
+      }
       if (!preventScrollListenerRef.current) {
         preventScrollListenerRef.current = (event: Event) => {
           if (event.cancelable) {
@@ -69,6 +80,17 @@ export default function useSwipeGesture(
       }
       return;
     }
+
+    html.dataset.sidebarSwipeIgnoreScrollTopUntil = String(
+      Date.now() + SCROLL_TOP_SUPPRESSION_MS
+    );
+    if (scrollTopSuppressionTimerRef.current) {
+      clearTimeout(scrollTopSuppressionTimerRef.current);
+    }
+    scrollTopSuppressionTimerRef.current = setTimeout(() => {
+      delete html.dataset.sidebarSwipeIgnoreScrollTopUntil;
+      scrollTopSuppressionTimerRef.current = null;
+    }, SCROLL_TOP_SUPPRESSION_MS);
 
     if (preventScrollListenerRef.current) {
       document.removeEventListener(
@@ -225,6 +247,10 @@ export default function useSwipeGesture(
     return () => {
       document.body.classList.remove('sidebar-swiping');
       document.documentElement.classList.remove('sidebar-swiping');
+      if (scrollTopSuppressionTimerRef.current) {
+        clearTimeout(scrollTopSuppressionTimerRef.current);
+      }
+      delete document.documentElement.dataset.sidebarSwipeIgnoreScrollTopUntil;
       if (preventScrollListenerRef.current) {
         document.removeEventListener(
           'touchmove',

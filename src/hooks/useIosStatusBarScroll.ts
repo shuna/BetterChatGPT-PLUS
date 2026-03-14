@@ -47,9 +47,14 @@ export default function useIosStatusBarScroll() {
     const onScroll = () => {
       if (window.scrollY !== 0) return;
 
+      const ignoreScrollTopUntil = Number(
+        document.documentElement.dataset.sidebarSwipeIgnoreScrollTopUntil ?? '0'
+      );
+
       if (
         document.body.classList.contains('sidebar-swiping') ||
-        document.documentElement.classList.contains('sidebar-swiping')
+        document.documentElement.classList.contains('sidebar-swiping') ||
+        ignoreScrollTopUntil > Date.now()
       ) {
         requestAnimationFrame(() => {
           window.scrollTo(0, 1);
