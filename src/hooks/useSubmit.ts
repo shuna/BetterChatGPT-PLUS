@@ -1,6 +1,7 @@
 import useStore from '@store/store';
 import { useTranslation } from 'react-i18next';
 import { countTokens, limitMessageTokens, loadEncoder } from '@utils/messageUtils';
+import { hasMeaningfulMessageContent } from '@utils/contentValidation';
 import { getModelContextInfo } from '@utils/modelLookup';
 import { fitsContextWindow, getPromptBudgetForContext } from '@utils/tokenBudget';
 import {
@@ -92,6 +93,8 @@ const useSubmit = () => {
       );
 
       if (contextMessages.length === 0)
+        throw new Error(t('errors.noMessagesSubmitted') as string);
+      if (!hasMeaningfulMessageContent(contextMessages))
         throw new Error(t('errors.noMessagesSubmitted') as string);
 
       await loadEncoder();

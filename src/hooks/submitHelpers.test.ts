@@ -9,6 +9,7 @@ import {
   getSubmitContextMessages,
   resolveProviderForModel,
 } from './submitHelpers';
+import { hasMeaningfulContent, hasMeaningfulMessageContent } from '@utils/contentValidation';
 
 const textMessage = (role: MessageInterface['role'], text: string): MessageInterface => ({
   role,
@@ -102,5 +103,24 @@ describe('submitHelpers', () => {
 
     const withGpt4 = getSubmitContextMessages(messages, 'append', 2, 'gpt-4o');
     expect(withGpt4).toEqual([systemMsg, userMsg]);
+  });
+
+  it('treats whitespace-only text as empty while preserving images', () => {
+    expect(hasMeaningfulContent([{ type: 'text', text: '   \n\t' }])).toBe(false);
+    expect(
+      hasMeaningfulContent([
+        { type: 'text', text: '   ' },
+        { type: 'image_url', image_url: { url: 'data:image/png;base64,abc', detail: 'auto' } },
+      ])
+    ).toBe(true);
+    expect(hasMeaningfulMessageContent([textMessage('user', '   ')])).toBe(false);
+    expect(
+      hasMeaningfulMessageContent([
+        {
+          role: 'user',
+          content: [{ type: 'image_url', image_url: { url: 'https://example.com/x.png', detail: 'low' } }],
+        },
+      ])
+    ).toBe(true);
   });
 });

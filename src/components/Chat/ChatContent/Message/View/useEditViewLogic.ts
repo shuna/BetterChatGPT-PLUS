@@ -9,6 +9,7 @@ import {
 } from '@type/chat';
 import { defaultModel } from '@constants/chat';
 import { isKnownModel } from '@utils/modelLookup';
+import { hasMeaningfulContent } from '@utils/contentValidation';
 
 function isChatBusy(): boolean {
   const state = useStore.getState();
@@ -208,11 +209,8 @@ export function useEditViewLogic({
   };
 
   const handleSave = () => {
-    const hasTextContent = (_content[0] as TextContentInterface).text !== '';
-    const hasImageContent = Array.isArray(_content) && _content.some(
-      (c) => c.type === 'image_url'
-    );
-    if (sticky && !hasTextContent && !hasImageContent) return;
+    const hasSubmittableContent = hasMeaningfulContent(_content);
+    if (sticky && !hasSubmittableContent) return;
     if (!sticky && isNodeBusy(nodeId)) return;
 
     const resolvedMessageIndex = resolveMessageIndex(nodeId, messageIndex);
@@ -284,14 +282,12 @@ export function useEditViewLogic({
   };
 
   const handleGenerate = () => {
-    const hasTextContent = (_content[0] as TextContentInterface).text !== '';
-    const hasImageContent = Array.isArray(_content) && _content.some(
-      (c) => c.type === 'image_url'
-    );
+    const hasSubmittableContent = hasMeaningfulContent(_content);
     if (isChatBusy() || !modelValid) return;
+    if (sticky && !hasSubmittableContent) return;
 
     if (sticky) {
-      if (hasTextContent || hasImageContent) {
+      if (hasSubmittableContent) {
         appendNodeToActivePath(currentChatIndex, inputRole, _content);
       }
       _setContent([{ type: 'text', text: '' } as TextContentInterface]);

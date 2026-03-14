@@ -5,6 +5,7 @@ import { ContentInterface, isImageContent } from '@type/chat';
 import { ModelOptions } from '@type/chat';
 import type { ProviderId } from '@type/provider';
 import { useModelType } from '@utils/modelLookup';
+import { hasMeaningfulContent } from '@utils/contentValidation';
 import TokenCount from '@components/TokenCount';
 import CommandPrompt from '../CommandPrompt';
 
@@ -68,6 +69,7 @@ const EditViewButtons = memo(
     const isAssistant = role === 'assistant';
     const isUser = role === 'user';
     const isNotLast = !sticky && messageIndex < lastMessageIndex;
+    const canSubmitDraft = hasMeaningfulContent(_content);
 
     return (
       <div>
@@ -142,10 +144,12 @@ const EditViewButtons = memo(
             {sticky && (
               <button
                 className={`btn relative mr-2 btn-primary ${
-                  isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
+                  isCurrentChatGenerating || noModel || !canSubmitDraft
+                    ? 'cursor-not-allowed opacity-40'
+                    : ''
                 }`}
                 onClick={handleGenerate}
-                disabled={isCurrentChatGenerating || noModel}
+                disabled={isCurrentChatGenerating || noModel || !canSubmitDraft}
                 aria-label={t('generate') as string}
               >
                 <div className='flex items-center justify-center gap-2'>
