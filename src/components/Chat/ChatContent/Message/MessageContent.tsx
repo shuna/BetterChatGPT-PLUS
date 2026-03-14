@@ -7,7 +7,7 @@ import { ContentInterface } from '@type/chat';
 
 const editStateCache = new Map<string, boolean>();
 
-const getEditSessionKey = (
+export const getEditSessionKey = (
   currentChatIndex: number,
   messageIndex: number,
   nodeId?: string,
@@ -16,6 +16,18 @@ const getEditSessionKey = (
   sticky
     ? `sticky:${currentChatIndex}:${messageIndex}`
     : `message:${currentChatIndex}:${nodeId ?? messageIndex}`;
+
+export const primeEditSession = (
+  currentChatIndex: number,
+  messageIndex: number,
+  nodeId?: string,
+  sticky?: boolean
+) => {
+  editStateCache.set(
+    getEditSessionKey(currentChatIndex, messageIndex, nodeId, sticky),
+    true
+  );
+};
 
 const MessageContent = ({
   role,

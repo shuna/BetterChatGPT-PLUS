@@ -83,12 +83,9 @@ const EditView = ({
         handleRemoveImage={logic.handleRemoveImage}
         handleGenerate={logic.handleGenerate}
         handleGenerateNextOnly={logic.handleGenerateNextOnly}
-        handleBranchOnly={logic.handleBranchOnly}
-        handleBranchGenerate={logic.handleBranchGenerate}
         handleSave={logic.handleSave}
         handleCancel={logic.handleCancel}
         setIsModalOpen={logic.setIsModalOpen}
-        setIsEdit={setIsEdit}
         _setContent={logic._setContent}
         _content={logic._content}
         imageUrl={logic.imageUrl}
@@ -99,7 +96,6 @@ const EditView = ({
         providerId={logic.providerId}
         modelValid={logic.modelValid}
         messageIndex={messageIndex}
-        isGeneratingMessage={logic.isGeneratingMessage}
         role={role}
       />
       {logic.isModalOpen && (
