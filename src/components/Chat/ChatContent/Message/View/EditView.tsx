@@ -15,6 +15,7 @@ const EditView = ({
   nodeId,
   sticky,
   editSessionKey,
+  autoFocus = true,
 }: {
   role?: string;
   content: ContentInterface[];
@@ -23,6 +24,7 @@ const EditView = ({
   nodeId?: string;
   sticky?: boolean;
   editSessionKey: string;
+  autoFocus?: boolean;
 }) => {
   const { t } = useTranslation();
   const logic = useEditViewLogic({
@@ -60,7 +62,7 @@ const EditView = ({
             logic.handlePaste(e as unknown as React.ClipboardEvent<HTMLTextAreaElement>);
           }}
           placeholder={t('submitPlaceholder') as string}
-          autoFocus
+          autoFocus={autoFocus}
           autoResize
           minHeight='3.5rem'
         />

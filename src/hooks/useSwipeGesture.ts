@@ -1,4 +1,4 @@
-import { useRef, useCallback } from 'react';
+import { useRef, useCallback, useEffect } from 'react';
 import useStore from '@store/store';
 
 const SWIPE_THRESHOLD = 0.3;
@@ -110,6 +110,24 @@ export default function useSwipeGesture(
     [getEffectiveWidth, applyTransform, setBodySwiping]
   );
 
+  const cancelSwipe = useCallback(() => {
+    if (!trackingRef.current) return;
+    trackingRef.current = false;
+    setBodySwiping(false);
+    // Restore menu/backdrop to current state without animation
+    const menu = menuRef.current;
+    const backdrop = backdropRef.current;
+    if (menu) {
+      menu.style.transition = '';
+      menu.style.transform = '';
+    }
+    if (backdrop) {
+      backdrop.style.transition = '';
+      backdrop.style.display = '';
+      backdrop.style.opacity = '';
+    }
+  }, [menuRef, backdropRef, setBodySwiping]);
+
   const onTouchEnd = useCallback(
     (e: React.TouchEvent) => {
       if (!trackingRef.current) return;
@@ -131,6 +149,10 @@ export default function useSwipeGesture(
     },
     [getEffectiveWidth, finishSwipe, setBodySwiping]
   );
+
+  const onTouchCancel = useCallback(() => {
+    cancelSwipe();
+  }, [cancelSwipe]);
 
   const onEdgeTouchStart = useCallback(
     (e: React.TouchEvent) => {
@@ -160,16 +182,25 @@ export default function useSwipeGesture(
     [hideSideMenu]
   );
 
+  // Cleanup: ensure sidebar-swiping class is removed on unmount
+  useEffect(() => {
+    return () => {
+      document.body.classList.remove('sidebar-swiping');
+    };
+  }, []);
+
   return {
     edgeHandlers: {
       onTouchStart: onEdgeTouchStart,
       onTouchMove,
       onTouchEnd,
+      onTouchCancel,
     },
     menuHandlers: {
       onTouchStart: onMenuTouchStart,
       onTouchMove,
       onTouchEnd,
+      onTouchCancel,
     },
   };
 }

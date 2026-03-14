@@ -96,8 +96,8 @@
 
   /* Lock chat scroll while sidebar swipe is in progress */
   .sidebar-swiping [data-virtuoso-scroller='true'] {
-    overflow-y: hidden !important;
     touch-action: none !important;
+    pointer-events: none !important;
   }
 
   ::-webkit-scrollbar-thumb {

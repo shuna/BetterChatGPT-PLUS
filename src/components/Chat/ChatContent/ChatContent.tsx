@@ -505,7 +505,7 @@ const ChatContent = () => {
 
     // Bottom lock forces follow regardless of current position
     if (bottomLockRef.current) return 'smooth' as const;
-    return isAtBottom ? 'smooth' as const : false;
+    return false;
   }, [autoScroll, isCurrentChatGenerating]);
 
   const handleAtBottomStateChange = useCallback((bottom: boolean) => {
@@ -690,6 +690,7 @@ const ChatContent = () => {
     if (!viewport) return;
 
     let prevHeight = viewport.height;
+    let didShrinkWhileEditingMessage = false;
 
     const onResize = () => {
       const delta = viewport.height - prevHeight;
@@ -703,6 +704,7 @@ const ChatContent = () => {
         activeElement.matches(MESSAGE_EDIT_TEXTAREA_SELECTOR);
 
       if (delta < 0 && isEditingMessage) {
+        didShrinkWhileEditingMessage = true;
         requestAnimationFrame(() => {
           activeElement.scrollIntoView({
             block: 'center',
@@ -712,13 +714,8 @@ const ChatContent = () => {
         return;
       }
 
-      if (delta > 0) {
-        const savedScrollTop = scrollerElement.scrollTop;
-        requestAnimationFrame(() => {
-          if (scrollerElement.scrollTop !== savedScrollTop) {
-            scrollerElement.scrollTop = savedScrollTop;
-          }
-        });
+      if (delta > 0 && didShrinkWhileEditingMessage) {
+        didShrinkWhileEditingMessage = false;
       }
     };
 
@@ -864,7 +861,7 @@ const ChatContent = () => {
           className='h-full'
           totalCount={items.length}
           computeItemKey={(index) => activePath[items[index].originalIndex] ?? `${currentChatId}:${items[index].originalIndex}`}
-          overscan={600}
+          increaseViewportBy={{ top: 1200, bottom: 600 }}
           followOutput={handleFollowOutput}
           atBottomStateChange={handleAtBottomStateChange}
           atBottomThreshold={150}
