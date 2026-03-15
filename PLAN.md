@@ -159,6 +159,60 @@ yarn remove react-virtuoso
 | `ChatContent.test.ts` | 定数名変更に追従（軽微） |
 | `package.json` | `react-virtuoso` を削除 |
 
+## Virtuoso 起因のワークアラウンド処遇
+
+Virtuoso 導入に伴い追加されたワークアラウンドを、廃止後にどう扱うか整理する。
+
+### 1. Sticky input フォーカス喪失の回避 → **削除**
+- **経緯**: Virtuoso の Footer コンポーネントが再マウントされる際に textarea のフォーカスが失われる問題。Footer textarea が `MESSAGE_EDIT_TEXTAREA_SELECTOR` にマッチしてしまうため、`closest(VIRTUOSO_ITEM_SELECTOR)` で区別するワークアラウンドを追加。
+- **場所**: `ChatContent.tsx` L49-67 (`isEditingMessageElement`)、L621-626 (`onFocusIn`)
+- **廃止後**: Footer は通常の子要素として描画されるため再マウントが発生しない。ただし `isEditingMessageElement` 自体はメッセージ編集中のビューポートロック判定で引き続き使うため、関数は維持。`closest(VIRTUOSO_ITEM_SELECTOR)` のチェックも `data-item-index` を維持するなら残しておいて問題ない。**ワークアラウンドの動機は消滅するが、防御的チェックとして残存しても害はない。**
+
+### 2. スクロールリバウンド防止 → **削除**
+- **経緯**: Virtuoso が内部でスクロール位置を調整する際にリバウンド（意図しない跳ね返り）が発生。アンカー追跡の精緻化で対処。
+- **場所**: `ChatContent.tsx` L326-338 (`refreshAnchorOffsetWithinItem`)、L386-390 (`handleRangeChanged`)
+- **廃止後**: ネイティブスクロールではリバウンドが発生しない。`handleRangeChanged` は Virtuoso の `rangeChanged` prop 用なので丸ごと削除。アンカー追跡は scroll イベントから `scrollTop` ベースで再実装し、大幅に簡素化。
+
+### 3. サイドバースワイプ時の touch-action ロック → **簡素化**
+- **経緯**: Virtuoso がスクロールコンテナを制御するため、サイドバースワイプ中に競合が発生。`[data-virtuoso-scroller='true']` に `touch-action: none` を適用。
+- **場所**: `main.css` L104-107
+- **廃止後**: セレクタを `[data-chat-scroller]` に変更するのみ。スワイプ中のスクロール抑制自体はネイティブスクロールでも必要なので、ワークアラウンドではなく正当な処理として維持。
+
+### 4. iOS ステータスバータップ対応 → **簡素化**
+- **経緯**: iOS Safari のステータスバータップで `window.scrollY` が 0 になるが、Virtuoso が独自のスクロールコンテナを持つためネイティブの scroll-to-top が効かない。カスタムフック `useIosStatusBarScroll` で Virtuoso のスクロールコンテナを手動で操作。
+- **場所**: `useIosStatusBarScroll.ts` L98-103
+- **廃止後**: セレクタを `[data-chat-scroller]` に変更。フック自体は `overflow: hidden` のレイアウト構造上引き続き必要（window ではなくコンテナをスクロールする必要があるため）。**Virtuoso 固有の問題ではなく、アプリのレイアウト構造の問題。**
+
+### 5. メッセージ編集時のビューポートジャンプ防止 → **簡素化**
+- **経緯**: メッセージ編集で要素の高さが変わると、Virtuoso が内部でスクロール位置を再計算して意図しないジャンプが発生。`ResizeObserver` + `lockTargetRef` でスクロール補正。
+- **場所**: `ChatContent.tsx` L663-720 (`ResizeObserver` + ロックロジック)
+- **廃止後**: ネイティブスクロールでもコンテンツ高さ変化によるビューポートずれは発生しうるため、ロックロジック自体は維持。ただし `getVirtuosoListContainer()` (L143-151) は削除し、直接スクロールコンテナの子要素を参照するよう簡素化。
+
+### 6. `handleScrollerRef` の二重 ref パターン → **削除**
+- **経緯**: Virtuoso は `scrollerRef` コールバックで HTMLElement を渡すが、ref と state の両方で保持する必要があった（同期読み取り用 ref + リアクティブな effect 用 state）。
+- **場所**: `ChatContent.tsx` L289-294, L566-599
+- **廃止後**: 通常の `useRef<HTMLDivElement>` で直接参照。`scrollerElement` state は不要になり、`handleScrollerRef` コールバック全体を削除。scroll イベントリスナーの登録は `useEffect` で `scrollerRef.current` に対して行う。
+
+### 7. `followOutput` / `bottomLockRef` のストリーミング追従制御 → **再実装**
+- **経緯**: Virtuoso の `followOutput` API は「コンテンツが追加されたときに自動スクロールするか」を制御するコールバック。ストリーミング中の追従、手動スクロールアップでの解除、編集中の抑制など複雑なロジックが必要。
+- **場所**: `ChatContent.tsx` L530-561 (`handleFollowOutput`, `handleAtBottomStateChange`, `bottomLockRef`)
+- **廃止後**: `followOutput` API 自体が消えるため、代替として:
+  - ストリーミング中かつ `atBottom` なら、`MutationObserver` or `useEffect` で `scrollTop = scrollHeight` を適用
+  - `bottomLockRef` / `bottomLockTimerRef` は不要になる可能性が高い（ネイティブスクロールでは `scrollTop = scrollHeight` が即座に反映される）
+  - **最もリスクの高い再実装部分**
+
+### まとめ
+
+| ワークアラウンド | 処遇 | 理由 |
+|----------------|------|------|
+| Sticky input フォーカス喪失回避 | **そのまま維持** | 防御的チェックとして害なし |
+| スクロールリバウンド防止 | **削除** | Virtuoso固有の問題 |
+| サイドバースワイプ touch-action | **セレクタ変更のみ** | レイアウト構造上の正当な処理 |
+| iOS ステータスバータップ | **セレクタ変更のみ** | レイアウト構造上の正当な処理 |
+| 編集時ビューポートジャンプ防止 | **簡素化** | ロック自体は必要、Virtuosoセレクタのみ削除 |
+| 二重 ref パターン | **削除** | Virtuoso API 固有 |
+| followOutput / bottomLock | **再実装** | ストリーミング追従はネイティブ scroll で再実装 |
+
 ## リスク
 
 1. **大規模会話 (200件超) でのパフォーマンス** — 初期は `content-visibility: auto` で対処。問題が出れば `@tanstack/react-virtual` を導入
