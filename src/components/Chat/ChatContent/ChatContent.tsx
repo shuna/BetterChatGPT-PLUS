@@ -61,7 +61,8 @@ export function isEditingMessageElement(
 
   return !!(
     activeElement.matches(MESSAGE_EDIT_TEXTAREA_SELECTOR) &&
-    scroller.contains(activeElement)
+    scroller.contains(activeElement) &&
+    (activeElement as HTMLElement).closest?.(VIRTUOSO_ITEM_SELECTOR)
   );
 }
 
@@ -620,7 +621,8 @@ const ChatContent = () => {
       if (
         target instanceof HTMLTextAreaElement &&
         target.matches(MESSAGE_EDIT_TEXTAREA_SELECTOR) &&
-        scrollerElement.contains(target)
+        scrollerElement.contains(target) &&
+        target.closest(VIRTUOSO_ITEM_SELECTOR)
       ) {
         setIsEditingInScroller(true);
       }
@@ -631,7 +633,8 @@ const ChatContent = () => {
       if (
         next instanceof HTMLTextAreaElement &&
         next.matches(MESSAGE_EDIT_TEXTAREA_SELECTOR) &&
-        scrollerElement.contains(next)
+        scrollerElement.contains(next) &&
+        next.closest(VIRTUOSO_ITEM_SELECTOR)
       ) {
         return;
       }

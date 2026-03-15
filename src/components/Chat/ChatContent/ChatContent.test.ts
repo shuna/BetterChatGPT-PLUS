@@ -4,15 +4,30 @@ import { isEditingMessageElement, shouldShowHiddenMessagesWarning } from './Chat
 
 describe('isEditingMessageElement', () => {
   it('returns true when a message edit textarea inside the scroller is focused', () => {
+    const itemWrapper = {};
     const activeElement = {
       tagName: 'TEXTAREA',
       matches: (selector: string) => selector === 'textarea[data-message-editing="true"]',
+      closest: (selector: string) => selector === '[data-item-index]' ? itemWrapper : null,
     };
     const scroller = {
       contains: (element: unknown) => element === activeElement,
     };
 
     expect(isEditingMessageElement(scroller, activeElement)).toBe(true);
+  });
+
+  it('returns false for sticky footer textarea even with the edit marker', () => {
+    const activeElement = {
+      tagName: 'TEXTAREA',
+      matches: (selector: string) => selector === 'textarea[data-message-editing="true"]',
+      closest: () => null, // not inside a [data-item-index] wrapper
+    };
+    const scroller = {
+      contains: (element: unknown) => element === activeElement,
+    };
+
+    expect(isEditingMessageElement(scroller, activeElement)).toBe(false);
   });
 
   it('returns false for sticky input textareas without the edit marker', () => {
