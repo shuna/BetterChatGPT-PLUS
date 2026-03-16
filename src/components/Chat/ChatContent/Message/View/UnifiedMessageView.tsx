@@ -111,7 +111,7 @@ const UnifiedMessageView = memo(
     };
 
     const streamingText = useStreamingText(isGeneratingMessage ? nodeId : undefined);
-    const currentTextContent = streamingText ?? (isTextContent(content[0]) ? content[0].text : '');
+    const currentTextContent = streamingText ?? (content?.[0] && isTextContent(content[0]) ? content[0].text : '');
     const handleCopy = () => {
       navigator.clipboard.writeText(currentTextContent);
     };
@@ -121,7 +121,7 @@ const UnifiedMessageView = memo(
 
     // Determine displayed value: draft when editing, saved content when viewing
     const displayValue = isEditState
-      ? (editLogic._content[0] as TextContentInterface).text
+      ? (editLogic._content[0] as TextContentInterface)?.text ?? ''
       : currentTextContent;
 
     return (

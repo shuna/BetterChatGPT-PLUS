@@ -337,7 +337,7 @@ export function useEditViewLogic({
       textareaRef.current.style.height = 'auto';
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
-  }, [(_content[0] as TextContentInterface).text]);
+  }, [(_content[0] as TextContentInterface)?.text]);
 
   useEffect(() => {
     if (textareaRef.current) {

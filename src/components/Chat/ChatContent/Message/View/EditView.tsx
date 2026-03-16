@@ -47,7 +47,7 @@ const EditView = ({
         }`}
       >
         <OverTypeEditor
-          value={(logic._content[0] as TextContentInterface).text}
+          value={(logic._content[0] as TextContentInterface)?.text ?? ''}
           mode='edit'
           onChange={(val) => {
             logic._setContent((prev) => [

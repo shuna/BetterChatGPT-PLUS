@@ -105,7 +105,7 @@ const ContentView = memo(
       }
     };
 
-    const currentTextContent = isTextContent(content[0]) ? content[0].text : '';
+    const currentTextContent = content?.[0] && isTextContent(content[0]) ? content[0].text : '';
     const handleCopy = () => {
       navigator.clipboard.writeText(currentTextContent);
     };
