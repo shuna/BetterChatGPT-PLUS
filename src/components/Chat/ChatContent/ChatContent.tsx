@@ -1,5 +1,4 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ListRange, Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import useStore from '@store/store';
 import { useTranslation } from 'react-i18next';
 
@@ -19,13 +18,12 @@ import { defaultModel, reduceMessagesToTotalToken } from '@constants/chat';
 import { toast } from 'react-toastify';
 
 const EMPTY_MESSAGES: never[] = [];
-const SCROLL_TO_BOTTOM_TOP = Number.MAX_SAFE_INTEGER;
 const SCROLL_ALIGN_TOLERANCE = 0.5;
+const BOTTOM_THRESHOLD = 150;
 const KEYBOARD_VIEWPORT_DELTA_THRESHOLD = 50;
 type ScrollBehaviorMode = 'auto' | 'smooth';
 const MESSAGE_EDIT_TEXTAREA_SELECTOR = 'textarea[data-message-editing="true"]';
-const VIRTUOSO_ITEM_SELECTOR = '[data-item-index]';
-const VIRTUOSO_LIST_SELECTOR = '[data-test-id="virtuoso-item-list"]';
+const MESSAGE_ITEM_SELECTOR = '[data-item-index]';
 
 type ActiveElementLike = {
   tagName?: string;
@@ -35,11 +33,6 @@ type ActiveElementLike = {
 type ScrollerLike = {
   contains: (element: any) => boolean;
 } | null;
-
-type LockTarget = {
-  element: HTMLElement;
-  topOffset: number;
-};
 
 export function isEditingMessageInScroller(scroller: HTMLElement | null): boolean {
   if (!scroller || typeof document === 'undefined') return false;
@@ -62,7 +55,7 @@ export function isEditingMessageElement(
   return !!(
     activeElement.matches(MESSAGE_EDIT_TEXTAREA_SELECTOR) &&
     scroller.contains(activeElement) &&
-    (activeElement as HTMLElement).closest?.(VIRTUOSO_ITEM_SELECTOR)
+    (activeElement as HTMLElement).closest?.(MESSAGE_ITEM_SELECTOR)
   );
 }
 
@@ -95,59 +88,6 @@ function isEditableTarget(target: EventTarget | null): boolean {
     target instanceof HTMLInputElement ||
     target.isContentEditable
   );
-}
-
-function getViewportLockTarget(scroller: HTMLElement): LockTarget | null {
-  const scrollerRect = scroller.getBoundingClientRect();
-  const items = scroller.querySelectorAll<HTMLElement>(VIRTUOSO_ITEM_SELECTOR);
-
-  for (const item of items) {
-    const rect = item.getBoundingClientRect();
-    if (rect.top <= scrollerRect.top && rect.bottom > scrollerRect.top) {
-      return {
-        element: item,
-        topOffset: rect.top - scrollerRect.top,
-      };
-    }
-    if (rect.top > scrollerRect.top) {
-      return {
-        element: item,
-        topOffset: rect.top - scrollerRect.top,
-      };
-    }
-  }
-
-  return null;
-}
-
-function getEditingLockTarget(scroller: HTMLElement): LockTarget | null {
-  const activeTextarea = scroller.querySelector<HTMLElement>(
-    `${MESSAGE_EDIT_TEXTAREA_SELECTOR}:focus`
-  );
-  if (!activeTextarea) return null;
-
-  const bubble = activeTextarea.closest<HTMLElement>(VIRTUOSO_ITEM_SELECTOR);
-  if (!bubble) return null;
-
-  const scrollerRect = scroller.getBoundingClientRect();
-  return {
-    element: bubble,
-    topOffset: bubble.getBoundingClientRect().top - scrollerRect.top,
-  };
-}
-
-function getLockTarget(scroller: HTMLElement, isEditing: boolean): LockTarget | null {
-  return isEditing ? getEditingLockTarget(scroller) : getViewportLockTarget(scroller);
-}
-
-function getVirtuosoListContainer(scroller: HTMLElement): HTMLElement | null {
-  const listContainer = scroller.querySelector<HTMLElement>(VIRTUOSO_LIST_SELECTOR);
-  if (listContainer) return listContainer;
-
-  const firstItem = scroller.querySelector<HTMLElement>(VIRTUOSO_ITEM_SELECTOR);
-  if (firstItem?.parentElement instanceof HTMLElement) return firstItem.parentElement;
-
-  return scroller.firstElementChild instanceof HTMLElement ? scroller.firstElementChild : null;
 }
 
 const ChatContent = () => {
@@ -285,13 +225,9 @@ const ChatContent = () => {
   const lastSubmitMode = useStore((state) => state.lastSubmitMode);
   const setLastSubmitContext = useStore((state) => state.setLastSubmitContext);
 
-  // Virtuoso state
-  const virtuosoRef = useRef<VirtuosoHandle>(null);
-  // Keep both a ref and state copy of the scroller:
-  // - scrollerRef is for synchronous reads inside callbacks like followOutput.
-  // - scrollerElement drives effects that need to react to the mounted element changing.
-  const scrollerRef = useRef<HTMLElement | null>(null);
-  const [scrollerElement, setScrollerElement] = useState<HTMLElement | null>(null);
+  // Scroller refs — simplified from Virtuoso's dual-ref pattern
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [scrollerElement, setScrollerElement] = useState<HTMLDivElement | null>(null);
   const [atBottom, setAtBottom] = useState(true);
   const [isEditingInScroller, setIsEditingInScroller] = useState(false);
   const [bubbleNavigationState, setBubbleNavigationState] = useState({
@@ -299,17 +235,16 @@ const ChatContent = () => {
     canMoveDown: false,
   });
 
+  const scrollerCallbackRef = useCallback((el: HTMLDivElement | null) => {
+    (scrollerRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+    setScrollerElement(el);
+  }, []);
+
   // Scroll anchor tracking (local refs, saved to store on departure)
   const saveChatScrollAnchor = useStore((state) => state.saveChatScrollAnchor);
   const getChatScrollAnchor = useStore((state) => state.getChatScrollAnchor);
   const anchorRef = useRef({ firstVisibleItemIndex: 0, offsetWithinItem: 0, wasAtBottom: true });
   const atBottomRef = useRef(true);
-
-  // Bottom lock mode
-  const bottomLockRef = useRef(false);
-  const bottomLockTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastScrollTopRef = useRef(0);
-  const lockTargetRef = useRef<LockTarget | null>(null);
   const pendingEditStateSyncRef = useRef<number | null>(null);
 
   // Build visible items list, filtering hidden system messages
@@ -321,21 +256,6 @@ const ChatContent = () => {
     });
     return result;
   }, [messagesLimited, advancedMode]);
-
-  // Track visible range for anchor
-  const refreshAnchorOffsetWithinItem = useCallback(() => {
-    if (!scrollerRef.current || items.length === 0) return;
-    const anchorIndex = Math.min(
-      Math.max(anchorRef.current.firstVisibleItemIndex, 0),
-      items.length - 1
-    );
-    const firstItem = scrollerRef.current.querySelector(`[data-item-index="${anchorIndex}"]`);
-    if (!firstItem) return;
-
-    const scrollerRect = scrollerRef.current.getBoundingClientRect();
-    const itemRect = firstItem.getBoundingClientRect();
-    anchorRef.current.offsetWithinItem = scrollerRect.top - itemRect.top;
-  }, [items.length]);
 
   const getViewportBubbleState = useCallback(() => {
     if (!scrollerRef.current || items.length === 0) {
@@ -383,12 +303,6 @@ const ChatContent = () => {
     });
   }, [getViewportBubbleState, items.length]);
 
-  const handleRangeChanged = useCallback((range: ListRange) => {
-    anchorRef.current.firstVisibleItemIndex = range.startIndex;
-    refreshAnchorOffsetWithinItem();
-    updateBubbleNavigationState();
-  }, [refreshAnchorOffsetWithinItem, updateBubbleNavigationState]);
-
   // Save scroll anchor to store (called on chat departure / unmount)
   const saveCurrentAnchor = useCallback(() => {
     if (!currentChatId) return;
@@ -402,17 +316,10 @@ const ChatContent = () => {
   const prevChatIdRef = useRef(currentChatId);
   useEffect(() => {
     if (prevChatIdRef.current && prevChatIdRef.current !== currentChatId) {
-      // Chat changed — save anchor for the previous chat
       saveChatScrollAnchor(prevChatIdRef.current, {
         ...anchorRef.current,
         wasAtBottom: atBottomRef.current,
       });
-      // Reset bottom lock so it doesn't bleed into the new chat
-      bottomLockRef.current = false;
-      if (bottomLockTimerRef.current) {
-        clearTimeout(bottomLockTimerRef.current);
-        bottomLockTimerRef.current = null;
-      }
     }
     prevChatIdRef.current = currentChatId;
   }, [currentChatId, saveChatScrollAnchor]);
@@ -423,7 +330,65 @@ const ChatContent = () => {
     };
   }, [saveCurrentAnchor]);
 
-  // Restore scroll anchor on mount (after Virtuoso renders)
+  // --- Scroll event: atBottom + anchor tracking ---
+  useEffect(() => {
+    const scroller = scrollerElement;
+    if (!scroller) return;
+
+    const onScroll = () => {
+      const isBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < BOTTOM_THRESHOLD;
+      setAtBottom(isBottom);
+      atBottomRef.current = isBottom;
+
+      // Anchor update
+      if (!isBottom) {
+        const scrollerRect = scroller.getBoundingClientRect();
+        const nodeItems = scroller.querySelectorAll<HTMLElement>(MESSAGE_ITEM_SELECTOR);
+        for (const item of nodeItems) {
+          const rect = item.getBoundingClientRect();
+          if (rect.bottom > scrollerRect.top) {
+            anchorRef.current.firstVisibleItemIndex = Number(item.dataset.itemIndex);
+            anchorRef.current.offsetWithinItem = scrollerRect.top - rect.top;
+            break;
+          }
+        }
+      }
+      anchorRef.current.wasAtBottom = isBottom;
+
+      updateBubbleNavigationState();
+    };
+
+    // Sync initial state before any scroll event fires
+    onScroll();
+
+    scroller.addEventListener('scroll', onScroll, { passive: true });
+    return () => scroller.removeEventListener('scroll', onScroll);
+  }, [scrollerElement, updateBubbleNavigationState]);
+
+  // --- Streaming auto-follow via ResizeObserver ---
+  useEffect(() => {
+    if (!isCurrentChatGenerating || !atBottom || !autoScroll) return;
+    if (isEditingInScroller) return;
+
+    const scroller = scrollerRef.current;
+    const messageList = scroller?.querySelector('[data-message-list]');
+    if (!scroller || !messageList) return;
+
+    const scrollToEnd = () => {
+      scroller.scrollTop = scroller.scrollHeight;
+    };
+
+    // Scroll to end immediately
+    scrollToEnd();
+
+    // ResizeObserver to follow content height changes
+    const observer = new ResizeObserver(scrollToEnd);
+    observer.observe(messageList);
+
+    return () => observer.disconnect();
+  }, [isCurrentChatGenerating, atBottom, autoScroll, isEditingInScroller]);
+
+  // Restore scroll anchor on mount
   const pendingChatFocus = useStore((state) => state.pendingChatFocus);
   const clearPendingChatFocus = useStore((state) => state.clearPendingChatFocus);
 
@@ -438,25 +403,27 @@ const ChatContent = () => {
 
     clearPendingChatFocus();
     requestAnimationFrame(() => {
-      virtuosoRef.current?.scrollToIndex({ index: itemIndex, behavior: 'smooth', align: 'center' });
+      const scroller = scrollerRef.current;
+      const item = scroller?.querySelector<HTMLElement>(`[data-item-index="${itemIndex}"]`);
+      if (!item || !scroller) return;
+      item.scrollIntoView({ block: 'center', behavior: 'smooth' });
     });
   }, [pendingChatFocus, currentChatIndex, activePath, items, clearPendingChatFocus]);
 
   // Restore saved scroll anchor on chat switch (when no pendingChatFocus)
   useEffect(() => {
-    // Skip if pendingChatFocus will handle scrolling
     if (pendingChatFocus && pendingChatFocus.chatIndex === currentChatIndex) return;
 
     const anchor = getChatScrollAnchor(currentChatId);
-    if (!anchor) return; // first visit — Virtuoso defaults to bottom
-    if (anchor.wasAtBottom) return; // was at bottom — Virtuoso defaults correctly
+    if (!anchor) return;
+    if (anchor.wasAtBottom) return;
 
     requestAnimationFrame(() => {
-      virtuosoRef.current?.scrollToIndex({
-        index: anchor.firstVisibleItemIndex,
-        align: 'start',
-        offset: -anchor.offsetWithinItem,
-      });
+      const scroller = scrollerRef.current;
+      const item = scroller?.querySelector<HTMLElement>(`[data-item-index="${anchor.firstVisibleItemIndex}"]`);
+      if (!item || !scroller) return;
+      item.scrollIntoView({ block: 'start' });
+      scroller.scrollTop += anchor.offsetWithinItem;
     });
   }, [currentChatIndex]); // intentionally only on chat switch (mount)
 
@@ -472,39 +439,24 @@ const ChatContent = () => {
   }, [currentChatIndex, items.length, updateBubbleNavigationState]);
 
   const handleScrollToBottom = useCallback(() => {
-    bottomLockRef.current = true;
-    const scrollBehavior: ScrollBehaviorMode = animateBubbleNavigation ? 'smooth' : 'auto';
-    // Clear any pending unlock timer
-    if (bottomLockTimerRef.current) clearTimeout(bottomLockTimerRef.current);
-    virtuosoRef.current?.scrollTo({ top: SCROLL_TO_BOTTOM_TOP, behavior: scrollBehavior });
-    // Retry scroll for a few frames to handle pending height changes
-    let retries = 3;
-    const retryScroll = () => {
-      if (retries-- > 0 && bottomLockRef.current) {
-        virtuosoRef.current?.scrollTo({ top: SCROLL_TO_BOTTOM_TOP });
-        requestAnimationFrame(retryScroll);
-      }
-    };
-    requestAnimationFrame(retryScroll);
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    scroller.scrollTo({
+      top: scroller.scrollHeight,
+      behavior: animateBubbleNavigation ? 'smooth' : 'auto',
+    });
   }, [animateBubbleNavigation]);
 
   const scrollToBubbleAtIndex = useCallback((index: number) => {
     if (index < 0 || index >= items.length) return;
-    virtuosoRef.current?.scrollToIndex({
-      index,
-      align: 'start',
+    const scroller = scrollerRef.current;
+    const item = scroller?.querySelector<HTMLElement>(`[data-item-index="${index}"]`);
+    if (!item) return;
+    item.scrollIntoView({
+      block: 'start',
       behavior: animateBubbleNavigation ? 'smooth' : 'auto',
     });
   }, [animateBubbleNavigation, items.length]);
-
-  const getAnchorBubbleIndex = useCallback(() => {
-    if (items.length === 0) return -1;
-    const anchorIndex = Math.min(
-      Math.max(anchorRef.current.firstVisibleItemIndex, 0),
-      items.length - 1
-    );
-    return anchorIndex;
-  }, [items.length]);
 
   const getTopAlignedBubbleIndex = useCallback(() => {
     const { currentIndex, insideBubble } = getViewportBubbleState();
@@ -525,89 +477,8 @@ const ChatContent = () => {
   }, [getTopAlignedBubbleIndex, items.length, scrollToBubbleAtIndex]);
 
   const { canMoveUp, canMoveDown } = bubbleNavigationState;
-  const shouldLockViewport = isEditingInScroller || (isCurrentChatGenerating && !atBottom);
 
-  const handleFollowOutput = useCallback((isAtBottom: boolean) => {
-    if (!autoScroll) return false;
-    if (isEditingMessageInScroller(scrollerRef.current)) return false;
-
-    // Avoid restarting smooth follow animations while streaming content is still changing height.
-    if (isCurrentChatGenerating) {
-      if (bottomLockRef.current) return true;
-      return isAtBottom ? true : false;
-    }
-
-    // Bottom lock forces follow regardless of current position
-    if (bottomLockRef.current) return 'smooth' as const;
-    return false;
-  }, [autoScroll, isCurrentChatGenerating]);
-
-  const handleAtBottomStateChange = useCallback((bottom: boolean) => {
-    setAtBottom(bottom);
-    atBottomRef.current = bottom;
-
-    // Bottom lock release: require stable atBottom for 500ms
-    if (bottom && bottomLockRef.current) {
-      if (bottomLockTimerRef.current) clearTimeout(bottomLockTimerRef.current);
-      bottomLockTimerRef.current = setTimeout(() => {
-        bottomLockRef.current = false;
-        bottomLockTimerRef.current = null;
-      }, 500);
-    } else if (!bottom && bottomLockTimerRef.current) {
-      // Not at bottom — cancel pending unlock
-      clearTimeout(bottomLockTimerRef.current);
-      bottomLockTimerRef.current = null;
-    }
-  }, []);
-
-  // Detect manual upward scroll to release bottom lock
-  const scrollListenerCleanupRef = useRef<(() => void) | null>(null);
-
-  const handleScrollerRef = useCallback((ref: HTMLElement | Window | null) => {
-    // Clean up previous listener
-    if (scrollListenerCleanupRef.current) {
-      scrollListenerCleanupRef.current();
-      scrollListenerCleanupRef.current = null;
-    }
-
-    if (ref && ref instanceof HTMLElement) {
-      scrollerRef.current = ref;
-      setScrollerElement(ref);
-      setIsEditingInScroller(isEditingMessageInScroller(ref));
-      const onScroll = () => {
-        const currentTop = ref.scrollTop;
-        // User scrolled up manually — release bottom lock
-        if (bottomLockRef.current && currentTop < lastScrollTopRef.current - 10) {
-          bottomLockRef.current = false;
-          if (bottomLockTimerRef.current) {
-            clearTimeout(bottomLockTimerRef.current);
-            bottomLockTimerRef.current = null;
-          }
-        }
-        lastScrollTopRef.current = currentTop;
-        updateBubbleNavigationState();
-      };
-      ref.addEventListener('scroll', onScroll, { passive: true });
-      scrollListenerCleanupRef.current = () => ref.removeEventListener('scroll', onScroll);
-      updateBubbleNavigationState();
-    } else {
-      scrollerRef.current = null;
-      setScrollerElement(null);
-      setIsEditingInScroller(false);
-      updateBubbleNavigationState();
-    }
-  }, [updateBubbleNavigationState]);
-
-  // Cleanup scroll listener on unmount
-  useEffect(() => {
-    return () => {
-      if (scrollListenerCleanupRef.current) {
-        scrollListenerCleanupRef.current();
-        scrollListenerCleanupRef.current = null;
-      }
-    };
-  }, []);
-
+  // --- Focus tracking for isEditingInScroller ---
   useEffect(() => {
     if (!scrollerElement) return;
 
@@ -622,7 +493,7 @@ const ChatContent = () => {
         target instanceof HTMLTextAreaElement &&
         target.matches(MESSAGE_EDIT_TEXTAREA_SELECTOR) &&
         scrollerElement.contains(target) &&
-        target.closest(VIRTUOSO_ITEM_SELECTOR)
+        target.closest(MESSAGE_ITEM_SELECTOR)
       ) {
         setIsEditingInScroller(true);
       }
@@ -634,13 +505,11 @@ const ChatContent = () => {
         next instanceof HTMLTextAreaElement &&
         next.matches(MESSAGE_EDIT_TEXTAREA_SELECTOR) &&
         scrollerElement.contains(next) &&
-        next.closest(VIRTUOSO_ITEM_SELECTOR)
+        next.closest(MESSAGE_ITEM_SELECTOR)
       ) {
         return;
       }
 
-      // Re-check after the browser settles focus. This avoids unlocking during
-      // transitions where focus briefly leaves the textarea and then returns.
       pendingEditStateSyncRef.current = requestAnimationFrame(() => {
         pendingEditStateSyncRef.current = null;
         setIsEditingInScroller(isEditingMessageInScroller(scrollerElement));
@@ -660,65 +529,7 @@ const ChatContent = () => {
     };
   }, [scrollerElement]);
 
-  useEffect(() => {
-    if (!scrollerElement) return;
-
-    if (shouldLockViewport) {
-      lockTargetRef.current = getLockTarget(scrollerElement, isEditingInScroller);
-      return;
-    }
-
-    lockTargetRef.current = null;
-  }, [scrollerElement, shouldLockViewport, isEditingInScroller]);
-
-  useEffect(() => {
-    if (!scrollerElement || !shouldLockViewport) return;
-
-    const observeTarget = getVirtuosoListContainer(scrollerElement);
-    if (!observeTarget) return;
-
-    const observer = new ResizeObserver(() => {
-      const lockTarget = lockTargetRef.current;
-      if (!lockTarget) return;
-
-      if (!lockTarget.element.isConnected) {
-        lockTargetRef.current = getLockTarget(scrollerElement, isEditingInScroller);
-        return;
-      }
-
-      const scrollerRect = scrollerElement.getBoundingClientRect();
-      const currentTop = lockTarget.element.getBoundingClientRect().top - scrollerRect.top;
-      const drift = currentTop - lockTarget.topOffset;
-
-      if (Math.abs(drift) > 1) {
-        scrollerElement.scrollTop += drift;
-      }
-    });
-
-    observer.observe(observeTarget);
-    return () => observer.disconnect();
-  }, [scrollerElement, shouldLockViewport, isEditingInScroller]);
-
-  useEffect(() => {
-    if (!scrollerElement || !shouldLockViewport || isEditingInScroller) return;
-
-    let rafId: number | null = null;
-    const onScroll = () => {
-      if (rafId != null) return;
-
-      rafId = requestAnimationFrame(() => {
-        lockTargetRef.current = getLockTarget(scrollerElement, false);
-        rafId = null;
-      });
-    };
-
-    scrollerElement.addEventListener('scroll', onScroll, { passive: true });
-    return () => {
-      scrollerElement.removeEventListener('scroll', onScroll);
-      if (rafId != null) cancelAnimationFrame(rafId);
-    };
-  }, [scrollerElement, shouldLockViewport, isEditingInScroller]);
-
+  // --- Keyboard viewport resize handling ---
   useEffect(() => {
     if (!scrollerElement || typeof window === 'undefined') return;
 
@@ -759,6 +570,7 @@ const ChatContent = () => {
     return () => viewport.removeEventListener('resize', onResize);
   }, [scrollerElement]);
 
+  // --- Keyboard bubble navigation ---
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!event.altKey || event.metaKey || event.ctrlKey || event.shiftKey) return;
@@ -777,106 +589,9 @@ const ChatContent = () => {
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [handleScrollToNextBubble, handleScrollToPreviousBubble, isEditingInScroller]);
 
-  const itemContent = useCallback((index: number) => {
-    const { message, originalIndex } = items[index];
-    return (
-      <>
-        <Message
-          role={message.role}
-          content={message.content}
-          messageIndex={originalIndex}
-          nodeId={activePath[originalIndex]}
-        />
-        {!isCurrentChatGenerating && advancedMode && (
-          <NewMessageButton
-            messageIndex={originalIndex}
-            nodeId={activePath[originalIndex]}
-            role={message.role}
-          />
-        )}
-      </>
-    );
-  }, [items, activePath, isCurrentChatGenerating, advancedMode]);
-
-  const Footer = useCallback(() => (
-    <div className='flex flex-col items-center text-sm dark:bg-gray-800'>
-      <Message
-        role={inputRole}
-        content={[{ type: 'text', text: '' } as TextContentInterface]}
-        messageIndex={stickyIndex}
-        sticky
-      />
-
-      <div className='flex justify-center mt-1'>
-        <TokenCount />
-      </div>
-
-      <div
-        className={`flex justify-center my-2 min-h-[40px] ${
-          isCurrentChatGenerating ? '' : 'invisible pointer-events-none'
-        }`}
-        aria-hidden={!isCurrentChatGenerating}
-      >
-        {isCurrentChatGenerating && (
-          <button
-            className='btn relative btn-neutral border-0 md:border'
-            onClick={() => {
-              if (currentChatId) stopSessionsForChat(currentChatId);
-            }}
-            aria-label={t('stopGenerating') as string}
-          >
-            <div className='flex w-full items-center justify-center gap-2'>
-              <svg
-                stroke='currentColor'
-                fill='none'
-                strokeWidth='1.5'
-                viewBox='0 0 24 24'
-                strokeLinecap='round'
-                strokeLinejoin='round'
-                className='h-3 w-3 animate-pulse'
-                height='1em'
-                width='1em'
-                xmlns='http://www.w3.org/2000/svg'
-              >
-                <rect x='3' y='3' width='18' height='18' rx='2' ry='2'></rect>
-              </svg>
-              {t('stopGenerating')}
-            </div>
-          </button>
-        )}
-      </div>
-
-      {error !== '' && (
-        <div className='relative py-2 px-3 w-3/5 mt-3 max-md:w-11/12 border rounded-md border-red-500 bg-red-500/10'>
-          <div className='text-gray-600 dark:text-gray-100 text-sm whitespace-pre-wrap'>
-            {error}
-          </div>
-          {lastSubmitMode && (
-            <div className='flex items-center gap-2 mt-2'>
-              <button
-                className='px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600 transition-colors'
-                onClick={handleRetry}
-              >
-                {t('retry')}
-              </button>
-            </div>
-          )}
-          <div
-            className='text-white absolute top-1 right-1 cursor-pointer'
-            onClick={() => {
-              setError('');
-              setLastSubmitContext(null, null, null, null);
-            }}
-          >
-            <CrossIcon />
-          </div>
-        </div>
-      )}
-      <div className='w-full h-36'></div>
-    </div>
-  ), [inputRole, stickyIndex, isCurrentChatGenerating, currentChatId, error, lastSubmitMode, handleRetry, t, setError, setLastSubmitContext]);
-
-  const components = useMemo(() => ({ Footer }), [Footer]);
+  const computeItemKey = useCallback((index: number) => {
+    return activePath[items[index].originalIndex] ?? `${currentChatId}:${items[index].originalIndex}`;
+  }, [activePath, items, currentChatId]);
 
   return (
     <div className='flex-1 overflow-hidden'>
@@ -891,21 +606,108 @@ const ChatContent = () => {
         />
         <CollapseAllButtons />
 
-        <Virtuoso
-          ref={virtuosoRef}
+        <div
+          ref={scrollerCallbackRef}
           key={currentChatIndex}
-          className='h-full'
-          totalCount={items.length}
-          computeItemKey={(index) => activePath[items[index].originalIndex] ?? `${currentChatId}:${items[index].originalIndex}`}
-          increaseViewportBy={{ top: 1200, bottom: 600 }}
-          followOutput={handleFollowOutput}
-          atBottomStateChange={handleAtBottomStateChange}
-          atBottomThreshold={150}
-          itemContent={itemContent}
-          components={components}
-          rangeChanged={handleRangeChanged}
-          scrollerRef={handleScrollerRef}
-        />
+          className='h-full overflow-y-auto'
+          data-chat-scroller
+        >
+          <div data-message-list>
+            {items.map((item, index) => (
+              <div key={computeItemKey(index)} data-item-index={index}>
+                <Message
+                  role={item.message.role}
+                  content={item.message.content}
+                  messageIndex={item.originalIndex}
+                  nodeId={activePath[item.originalIndex]}
+                />
+                {!isCurrentChatGenerating && advancedMode && (
+                  <NewMessageButton
+                    messageIndex={item.originalIndex}
+                    nodeId={activePath[item.originalIndex]}
+                    role={item.message.role}
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className='flex flex-col items-center text-sm dark:bg-gray-800'>
+            <Message
+              role={inputRole}
+              content={[{ type: 'text', text: '' } as TextContentInterface]}
+              messageIndex={stickyIndex}
+              sticky
+            />
+
+            <div className='flex justify-center mt-1'>
+              <TokenCount />
+            </div>
+
+            <div
+              className={`flex justify-center my-2 min-h-[40px] ${
+                isCurrentChatGenerating ? '' : 'invisible pointer-events-none'
+              }`}
+              aria-hidden={!isCurrentChatGenerating}
+            >
+              {isCurrentChatGenerating && (
+                <button
+                  className='btn relative btn-neutral border-0 md:border'
+                  onClick={() => {
+                    if (currentChatId) stopSessionsForChat(currentChatId);
+                  }}
+                  aria-label={t('stopGenerating') as string}
+                >
+                  <div className='flex w-full items-center justify-center gap-2'>
+                    <svg
+                      stroke='currentColor'
+                      fill='none'
+                      strokeWidth='1.5'
+                      viewBox='0 0 24 24'
+                      strokeLinecap='round'
+                      strokeLinejoin='round'
+                      className='h-3 w-3 animate-pulse'
+                      height='1em'
+                      width='1em'
+                      xmlns='http://www.w3.org/2000/svg'
+                    >
+                      <rect x='3' y='3' width='18' height='18' rx='2' ry='2'></rect>
+                    </svg>
+                    {t('stopGenerating')}
+                  </div>
+                </button>
+              )}
+            </div>
+
+            {error !== '' && (
+              <div className='relative py-2 px-3 w-3/5 mt-3 max-md:w-11/12 border rounded-md border-red-500 bg-red-500/10'>
+                <div className='text-gray-600 dark:text-gray-100 text-sm whitespace-pre-wrap'>
+                  {error}
+                </div>
+                {lastSubmitMode && (
+                  <div className='flex items-center gap-2 mt-2'>
+                    <button
+                      className='px-3 py-1 text-sm bg-red-500 text-white rounded hover:bg-red-600 transition-colors'
+                      onClick={handleRetry}
+                    >
+                      {t('retry')}
+                    </button>
+                  </div>
+                )}
+                <div
+                  className='text-white absolute top-1 right-1 cursor-pointer'
+                  onClick={() => {
+                    setError('');
+                    setLastSubmitContext(null, null, null, null);
+                  }}
+                >
+                  <CrossIcon />
+                </div>
+              </div>
+            )}
+            <div className='w-full h-36'></div>
+          </div>
+        </div>
       </div>
     </div>
   );

@@ -80,3 +80,128 @@ describe('shouldShowHiddenMessagesWarning', () => {
     ).toBe(true);
   });
 });
+
+// --- Scroll state / auto-follow logic tests (pure computation, no DOM) ---
+
+const BOTTOM_THRESHOLD = 150;
+
+function computeAtBottom(scrollHeight: number, scrollTop: number, clientHeight: number): boolean {
+  return scrollHeight - scrollTop - clientHeight < BOTTOM_THRESHOLD;
+}
+
+describe('atBottom calculation', () => {
+  it('detects bottom when gap is less than threshold', () => {
+    // gap = 2000 - 1900 - 800 = -700 < 150
+    expect(computeAtBottom(2000, 1900, 800)).toBe(true);
+  });
+
+  it('detects not-at-bottom when gap exceeds threshold', () => {
+    // gap = 5000 - 100 - 800 = 4100 > 150
+    expect(computeAtBottom(5000, 100, 800)).toBe(false);
+  });
+
+  it('short chat that fits in viewport is at bottom', () => {
+    // scrollHeight == clientHeight, scrollTop == 0 → gap = 0
+    expect(computeAtBottom(600, 0, 600)).toBe(true);
+  });
+
+  it('long chat scrolled to top is NOT at bottom', () => {
+    // gap = 5000 - 0 - 800 = 4200 > 150
+    expect(computeAtBottom(5000, 0, 800)).toBe(false);
+  });
+
+  it('gap exactly at threshold boundary is not at bottom', () => {
+    // gap = 150, NOT strictly less than 150
+    expect(computeAtBottom(1150, 0, 1000)).toBe(false);
+  });
+
+  it('gap just below threshold is at bottom', () => {
+    // gap = 149 < 150
+    expect(computeAtBottom(1149, 0, 1000)).toBe(true);
+  });
+});
+
+describe('anchor tracking logic', () => {
+  // Simulate the anchor computation from onScroll
+  function computeAnchor(
+    scrollerTop: number,
+    items: Array<{ index: number; top: number; bottom: number }>
+  ): { index: number; offset: number } | null {
+    for (const item of items) {
+      if (item.bottom > scrollerTop) {
+        return {
+          index: item.index,
+          offset: scrollerTop - item.top,
+        };
+      }
+    }
+    return null;
+  }
+
+  it('captures the first visible item index and offset', () => {
+    const anchor = computeAnchor(0, [
+      { index: 0, top: -500, bottom: -100 },   // fully above viewport
+      { index: 1, top: -100, bottom: 300 },     // straddles top — first visible
+      { index: 2, top: 300, bottom: 700 },
+    ]);
+
+    expect(anchor).not.toBeNull();
+    expect(anchor!.index).toBe(1);
+    expect(anchor!.offset).toBe(100); // 0 - (-100) = 100
+  });
+
+  it('returns first item when all are visible', () => {
+    const anchor = computeAnchor(0, [
+      { index: 0, top: 0, bottom: 200 },
+      { index: 1, top: 200, bottom: 400 },
+    ]);
+
+    expect(anchor!.index).toBe(0);
+    expect(anchor!.offset).toBe(0);
+  });
+
+  it('returns null for empty item list', () => {
+    expect(computeAnchor(0, [])).toBeNull();
+  });
+});
+
+describe('auto-follow guard conditions', () => {
+  function shouldAutoFollow(opts: {
+    isGenerating: boolean;
+    atBottom: boolean;
+    autoScroll: boolean;
+    isEditing: boolean;
+  }): boolean {
+    return opts.isGenerating && opts.atBottom && opts.autoScroll && !opts.isEditing;
+  }
+
+  it('follows when generating, at bottom, auto-scroll on, not editing', () => {
+    expect(shouldAutoFollow({
+      isGenerating: true, atBottom: true, autoScroll: true, isEditing: false,
+    })).toBe(true);
+  });
+
+  it('does not follow when not at bottom', () => {
+    expect(shouldAutoFollow({
+      isGenerating: true, atBottom: false, autoScroll: true, isEditing: false,
+    })).toBe(false);
+  });
+
+  it('does not follow when editing in scroller', () => {
+    expect(shouldAutoFollow({
+      isGenerating: true, atBottom: true, autoScroll: true, isEditing: true,
+    })).toBe(false);
+  });
+
+  it('does not follow when not generating', () => {
+    expect(shouldAutoFollow({
+      isGenerating: false, atBottom: true, autoScroll: true, isEditing: false,
+    })).toBe(false);
+  });
+
+  it('does not follow when autoScroll is off', () => {
+    expect(shouldAutoFollow({
+      isGenerating: true, atBottom: true, autoScroll: false, isEditing: false,
+    })).toBe(false);
+  });
+});

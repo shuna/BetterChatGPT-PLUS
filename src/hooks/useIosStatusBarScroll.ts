@@ -95,8 +95,8 @@ export default function useIosStatusBarScroll() {
         }
       }
 
-      // Find the Virtuoso scroller element (it is the scrollable container)
-      const scroller = document.querySelector('[data-virtuoso-scroller="true"]');
+      // Find the chat scroller element (it is the scrollable container)
+      const scroller = document.querySelector('[data-chat-scroller]');
 
       if (scroller) {
         scroller.scrollTo({ top: 0, behavior: 'smooth' });

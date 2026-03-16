@@ -101,7 +101,7 @@
     overscroll-behavior: none;
   }
 
-  .sidebar-swiping [data-virtuoso-scroller='true'] {
+  .sidebar-swiping [data-chat-scroller] {
     touch-action: none !important;
     pointer-events: none !important;
   }
