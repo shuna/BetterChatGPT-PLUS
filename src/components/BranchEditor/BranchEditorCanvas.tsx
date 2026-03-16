@@ -7,6 +7,7 @@ import ReactFlow, {
   ReactFlowInstance,
   useNodesState,
   useEdgesState,
+  PanOnScrollMode,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -432,7 +433,7 @@ const BranchEditorCanvas = ({
         minZoom={0.1}
         maxZoom={2}
         panOnScroll
-        panOnScrollMode="free"
+        panOnScrollMode={PanOnScrollMode.Free}
         zoomActivationKeyCode="Shift"
         proOptions={{ hideAttribution: true }}
       >
