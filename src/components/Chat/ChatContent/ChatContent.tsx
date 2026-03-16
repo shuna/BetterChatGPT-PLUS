@@ -229,6 +229,7 @@ const ChatContent = () => {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [scrollerElement, setScrollerElement] = useState<HTMLDivElement | null>(null);
   const [atBottom, setAtBottom] = useState(true);
+  const [atTop, setAtTop] = useState(true);
   const [isEditingInScroller, setIsEditingInScroller] = useState(false);
   const [bubbleNavigationState, setBubbleNavigationState] = useState({
     canMoveUp: false,
@@ -337,7 +338,9 @@ const ChatContent = () => {
 
     const onScroll = () => {
       const isBottom = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < BOTTOM_THRESHOLD;
+      const isTop = scroller.scrollTop < BOTTOM_THRESHOLD;
       setAtBottom(isBottom);
+      setAtTop(isTop);
       atBottomRef.current = isBottom;
 
       // Anchor update
@@ -437,6 +440,15 @@ const ChatContent = () => {
   useEffect(() => {
     updateBubbleNavigationState();
   }, [currentChatIndex, items.length, updateBubbleNavigationState]);
+
+  const handleScrollToTop = useCallback(() => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    scroller.scrollTo({
+      top: 0,
+      behavior: animateBubbleNavigation ? 'smooth' : 'auto',
+    });
+  }, [animateBubbleNavigation]);
 
   const handleScrollToBottom = useCallback(() => {
     const scroller = scrollerRef.current;
@@ -598,8 +610,10 @@ const ChatContent = () => {
       <div className='h-full dark:bg-gray-800 relative'>
         <ScrollToBottomButton
           atBottom={atBottom}
+          atTop={atTop}
           canMoveUp={canMoveUp}
           canMoveDown={canMoveDown}
+          scrollToTop={handleScrollToTop}
           scrollToPreviousBubble={handleScrollToPreviousBubble}
           scrollToNextBubble={handleScrollToNextBubble}
           scrollToBottom={handleScrollToBottom}
