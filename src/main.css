@@ -77,21 +77,62 @@
     background: rgba(16, 163, 127);
   }
 
+  /* Auto-hide scrollbar: visible on hover/scroll, hidden when idle */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  *:hover,
+  *:active {
+    scrollbar-color: rgba(217, 217, 227, 0.8) transparent;
+  }
+  .dark *:hover,
+  .dark *:active {
+    scrollbar-color: rgba(86, 88, 105, 1) transparent;
+  }
+
   ::-webkit-scrollbar {
-    height: 1rem;
+    height: 0.5rem;
     width: 0.5rem;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: transparent;
+    border-radius: 9999px;
+    transition: background-color 0.3s;
+  }
+
+  *:hover::-webkit-scrollbar-thumb {
+    background-color: rgba(217, 217, 227, 0.8);
+  }
+
+  *:hover::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(217, 217, 227, 0.6);
+  }
+
+  .dark *:hover::-webkit-scrollbar-thumb {
+    background-color: rgba(86, 88, 105, 1);
+  }
+
+  .dark *:hover::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(217, 217, 227, 0.8);
+  }
+
+  ::-webkit-scrollbar-track {
+    background-color: transparent;
+    border-radius: 9999px;
   }
 
   @media screen and (max-width: 768px) {
     ::-webkit-scrollbar {
       display: none;
-      scrollbar-width: none; /* Firefox */
+      scrollbar-width: none;
     }
   }
 
   .hide-scroll-bar::-webkit-scrollbar {
     display: none;
-    scrollbar-width: none; /* Firefox */
+    scrollbar-width: none;
   }
 
   /* Lock chat scroll while sidebar swipe is in progress */
@@ -104,32 +145,6 @@
   .sidebar-swiping [data-chat-scroller] {
     touch-action: none !important;
     pointer-events: none !important;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    --tw-border-opacity: 1;
-    background-color: rgba(217, 217, 227, 0.8);
-    border-color: rgba(255, 255, 255, var(--tw-border-opacity));
-    border-radius: 9999px;
-    border-width: 1px;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(217, 217, 227, 0.6);
-  }
-
-  .dark ::-webkit-scrollbar-thumb {
-    --tw-bg-opacity: 1;
-    background-color: rgba(86, 88, 105, var(--tw-bg-opacity));
-  }
-
-  .dark ::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(217, 217, 227, 0.8);
-  }
-
-  ::-webkit-scrollbar-track {
-    background-color: transparent;
-    border-radius: 9999px;
   }
 
   pre ::-webkit-scrollbar-thumb {
