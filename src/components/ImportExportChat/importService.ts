@@ -15,7 +15,7 @@ import {
   validateExportV2,
 } from '@utils/import';
 import { flatMessagesToBranchTree } from '@utils/branchUtils';
-import { ensureUniqueChatIds } from '@utils/chatIdentity';
+import { assignFreshChatIds } from '@utils/chatIdentity';
 import { ContentStoreData, addContent } from '@utils/contentStore';
 import { isKnownModel } from '@utils/modelLookup';
 import { BranchNodeLegacy, ChatInterface, Folder, FolderCollection } from '@type/chat';
@@ -87,6 +87,7 @@ const resetPersistedStateForReplace = () => {
 };
 
 const mergeChats = (chatsToImport: ChatInterface[]) => {
+  assignFreshChatIds(chatsToImport);
   const existingChats = useStore.getState().chats;
   if (existingChats) {
     useStore.getState().setChats(chatsToImport.concat(cloneState(existingChats)));
@@ -250,7 +251,6 @@ const importExportV3 = (parsedData: ExportV3, t: Translator): ImportResult => {
     );
   }
 
-  ensureUniqueChatIds(parsedData.chats);
   clearMissingFolderReferences(parsedData.chats, parsedData.folders);
 
   shiftAndMergeFolders(parsedData.folders);

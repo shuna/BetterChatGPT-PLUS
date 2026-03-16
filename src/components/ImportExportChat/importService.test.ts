@@ -203,7 +203,8 @@ describe('importService', () => {
       message: 'notifications.successfulImport',
     });
     expect(testContext.importOpenAIChatExportMock).toHaveBeenCalledTimes(2);
-    expect(testContext.storeState.chats[0].id).toBe('imported-chat');
+    expect(testContext.storeState.chats[0].id).not.toBe('imported-chat');
+    expect(testContext.storeState.chats[0].title).toBe('Imported');
     expect(testContext.storeState.chats[1].id).toBe('existing-chat');
   });
 
@@ -264,8 +265,9 @@ describe('importService', () => {
       success: true,
       message: 'notifications.successfulImport',
     });
-    expect(testContext.storeState.chats[0].id).toBe('dup-chat');
+    expect(testContext.storeState.chats[0].id).not.toBe('dup-chat');
     expect(testContext.storeState.chats[1].id).not.toBe('dup-chat');
+    expect(testContext.storeState.chats[0].id).not.toBe(testContext.storeState.chats[1].id);
   });
 
   it('clears orphaned folder references when importing a single-chat export v3 file', async () => {
@@ -311,7 +313,9 @@ describe('importService', () => {
       success: true,
       message: 'notifications.successfulImport',
     });
-    expect(testContext.storeState.chats).toEqual([createChat('imported-chat', 'Imported')]);
+    expect(testContext.storeState.chats).toHaveLength(1);
+    expect(testContext.storeState.chats[0].title).toBe('Imported');
+    expect(testContext.storeState.chats[0].id).not.toBe('imported-chat');
     expect(testContext.storeState.apiKey).toBeUndefined();
     expect(testContext.storeState.theme).toBe('dark');
     expect(testContext.storeState.currentChatIndex).toBe(0);
@@ -396,7 +400,7 @@ describe('importService', () => {
       success: true,
       message: 'notifications.successfulImport',
     });
-    expect(testContext.storeState.chats[0].id).toBe('single-chat');
+    expect(testContext.storeState.chats[0].id).not.toBe('single-chat');
     expect(testContext.storeState.chats[0].title).toBe('My Single Chat');
     expect(testContext.storeState.chats[1].id).toBe('existing-chat');
   });
