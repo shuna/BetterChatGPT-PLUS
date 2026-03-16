@@ -431,6 +431,9 @@ const BranchEditorCanvas = ({
         fitViewOptions={{ padding: 0.2 }}
         minZoom={0.1}
         maxZoom={2}
+        panOnScroll
+        panOnScrollMode="free"
+        zoomActivationKeyCode="Shift"
         proOptions={{ hideAttribution: true }}
       >
         <Background />
