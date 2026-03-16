@@ -369,16 +369,30 @@ const ChatContent = () => {
   }, [scrollerElement, updateBubbleNavigationState]);
 
   // --- Streaming auto-follow via ResizeObserver ---
+  // Track atBottom via ref so the observer can read it without being a dependency.
+  // This prevents the observer from tearing down when content growth momentarily
+  // sets atBottom=false before the scroll-to-end callback fires.
+  const atBottomForAutoScrollRef = useRef(atBottom);
+  atBottomForAutoScrollRef.current = atBottom;
+
   useEffect(() => {
-    if (!isCurrentChatGenerating || !atBottom || !autoScroll) return;
+    if (!isCurrentChatGenerating || !autoScroll) return;
     if (isEditingInScroller) return;
 
     const scroller = scrollerRef.current;
     const messageList = scroller?.querySelector('[data-message-list]');
     if (!scroller || !messageList) return;
 
+    // Only start auto-follow if already at the bottom when generation begins
+    if (!atBottomForAutoScrollRef.current) return;
+
     const scrollToEnd = () => {
+      // Stop following if user scrolled away manually
+      if (!atBottomForAutoScrollRef.current) return;
       scroller.scrollTop = scroller.scrollHeight;
+      // Eagerly mark as at-bottom so the next resize callback doesn't bail out
+      // before the async scroll event has a chance to update the ref.
+      atBottomForAutoScrollRef.current = true;
     };
 
     // Scroll to end immediately
@@ -388,8 +402,25 @@ const ChatContent = () => {
     const observer = new ResizeObserver(scrollToEnd);
     observer.observe(messageList);
 
-    return () => observer.disconnect();
-  }, [isCurrentChatGenerating, atBottom, autoScroll, isEditingInScroller]);
+    // Also observe individual message elements for streaming text growth
+    const observeMessages = () => {
+      const msgs = messageList.querySelectorAll('[data-item-index]');
+      msgs.forEach((msg) => observer.observe(msg));
+    };
+    observeMessages();
+
+    // Re-observe when new message elements are added
+    const mutationObserver = new MutationObserver(() => {
+      observeMessages();
+      scrollToEnd();
+    });
+    mutationObserver.observe(messageList, { childList: true });
+
+    return () => {
+      observer.disconnect();
+      mutationObserver.disconnect();
+    };
+  }, [isCurrentChatGenerating, autoScroll, isEditingInScroller]);
 
   // Restore scroll anchor on mount
   const pendingChatFocus = useStore((state) => state.pendingChatFocus);
