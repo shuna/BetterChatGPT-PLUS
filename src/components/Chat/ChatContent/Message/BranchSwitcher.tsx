@@ -1,6 +1,7 @@
 import React from 'react';
 import useStore from '@store/store';
 import { getSiblingsOf } from '@utils/branchUtils';
+import { isSplitView } from '@type/chat';
 
 const BranchSwitcher = ({
   chatIndex,
@@ -10,6 +11,9 @@ const BranchSwitcher = ({
   nodeId: string;
 }) => {
   const switchBranchAtNode = useStore((state) => state.switchBranchAtNode);
+  const setBranchEditorFocusNodeId = useStore((state) => state.setBranchEditorFocusNodeId);
+  const chatActiveView = useStore((state) => state.chatActiveView);
+  const navigateToBranchEditor = useStore((state) => state.navigateToBranchEditor);
   const branchTree = useStore(
     (state) => state.chats?.[chatIndex]?.branchTree
   );
@@ -55,9 +59,18 @@ const BranchSwitcher = ({
           />
         </svg>
       </button>
-      <span className='tabular-nums'>
+      <button
+        className='tabular-nums hover:text-blue-500 dark:hover:text-blue-400 cursor-pointer'
+        onClick={() => {
+          setBranchEditorFocusNodeId(nodeId);
+          if (!isSplitView(chatActiveView)) {
+            navigateToBranchEditor();
+          }
+        }}
+        title='ブランチエディタで表示'
+      >
         {currentIdx + 1}/{total}
-      </span>
+      </button>
       <button
         className='p-0.5 hover:text-gray-700 dark:hover:text-gray-200 disabled:opacity-30'
         onClick={handleNext}

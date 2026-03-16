@@ -11,51 +11,6 @@ import EditButton from './Button/EditButton';
 import DeleteButton from './Button/DeleteButton';
 import MarkdownModeButton from './Button/MarkdownModeButton';
 import BranchSwitcher from '../BranchSwitcher';
-import useStore from '@store/store';
-import { isSplitView } from '@type/chat';
-
-function ShowInBranchEditorButton({ nodeId }: { nodeId: string }) {
-  const setBranchEditorFocusNodeId = useStore((state) => state.setBranchEditorFocusNodeId);
-  const setChatActiveView = useStore((state) => state.setChatActiveView);
-  const chatActiveView = useStore((state) => state.chatActiveView);
-  const navigateToBranchEditor = useStore((state) => state.navigateToBranchEditor);
-
-  const handleClick = () => {
-    setBranchEditorFocusNodeId(nodeId);
-    if (isSplitView(chatActiveView)) {
-      // Already visible, just focus
-    } else {
-      navigateToBranchEditor();
-    }
-  };
-
-  return (
-    <button
-      className='p-1 hover:text-white'
-      aria-label='Show in branch editor'
-      title='ブランチエディタで表示'
-      onClick={handleClick}
-    >
-      <svg
-        stroke='currentColor'
-        fill='none'
-        strokeWidth='2'
-        viewBox='0 0 24 24'
-        strokeLinecap='round'
-        strokeLinejoin='round'
-        className='h-4 w-4'
-        xmlns='http://www.w3.org/2000/svg'
-      >
-        <circle cx='12' cy='5' r='2' />
-        <circle cx='6' cy='19' r='2' />
-        <circle cx='18' cy='19' r='2' />
-        <line x1='12' y1='7' x2='12' y2='13' />
-        <line x1='12' y1='13' x2='6' y2='17' />
-        <line x1='12' y1='13' x2='18' y2='17' />
-      </svg>
-    </button>
-  );
-}
 
 type ContentActionsProps = {
   nodeId?: string;
@@ -116,7 +71,6 @@ export default function ContentActions({
               <DownButton onClick={onMoveDown} />
             )}
 
-            {nodeId && <ShowInBranchEditorButton nodeId={nodeId} />}
             <MarkdownModeButton />
             <CopyButton onClick={onCopy} />
             {!isGeneratingMessage && <EditButton setIsEdit={setIsEdit} />}

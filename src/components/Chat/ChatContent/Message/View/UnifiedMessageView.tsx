@@ -155,9 +155,8 @@ const UnifiedMessageView = memo(
           />
         )}
         <ContentAttachments images={isEditState ? [] : validImageContents} />
-        <div className='min-h-[68px] mt-3 flex items-end'>
         {isEditState ? (
-          <>
+          <div className='min-h-[68px] mt-3 flex items-end'>
             <EditViewButtons
               sticky={false}
               handleFileChange={editLogic.handleFileChange}
@@ -189,7 +188,7 @@ const UnifiedMessageView = memo(
                 handleConfirm={editLogic.handleGenerate}
               />
             )}
-          </>
+          </div>
         ) : (
           <ContentActions
             nodeId={nodeId}
@@ -209,7 +208,6 @@ const UnifiedMessageView = memo(
             onDelete={handleDelete}
           />
         )}
-        </div>
       </>
     );
   }

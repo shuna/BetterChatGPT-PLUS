@@ -26,6 +26,46 @@ import MessageDetailModal from './MessageDetailModal';
 import { buildPathToLeaf } from '@utils/branchUtils';
 import { perfStart, perfEnd } from '@utils/perfTrace';
 
+const UndoRedoControls = () => {
+  const canUndo = useStore((state) => state.branchHistoryPast.length > 0);
+  const canRedo = useStore((state) => state.branchHistoryFuture.length > 0);
+  const undoBranch = useStore((state) => state.undoBranch);
+  const redoBranch = useStore((state) => state.redoBranch);
+
+  const btnBase = 'w-[26px] h-[26px] flex items-center justify-center border-gray-300 dark:border-gray-600';
+
+  return (
+    <div className='react-flow__panel !bg-gray-200 dark:!bg-gray-700 !rounded !shadow-md' style={{ position: 'absolute', left: 0, bottom: 116 }}>
+      <button
+        className={`${btnBase} ${
+          canUndo ? 'text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600' : 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
+        }`}
+        onClick={undoBranch}
+        disabled={!canUndo}
+        title='Undo'
+      >
+        <svg className='w-3 h-3' fill='none' stroke='currentColor' viewBox='0 0 24 24' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'>
+          <path d='M3 10h13a4 4 0 0 1 0 8H7' />
+          <path d='M3 10l4-4M3 10l4 4' />
+        </svg>
+      </button>
+      <button
+        className={`${btnBase} border-t ${
+          canRedo ? 'text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600' : 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
+        }`}
+        onClick={redoBranch}
+        disabled={!canRedo}
+        title='Redo'
+      >
+        <svg className='w-3 h-3' fill='none' stroke='currentColor' viewBox='0 0 24 24' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'>
+          <path d='M21 10H8a4 4 0 0 0 0 8h10' />
+          <path d='M21 10l-4-4M21 10l-4 4' />
+        </svg>
+      </button>
+    </div>
+  );
+};
+
 const nodeTypes = {
   messageNode: MessageNode,
   conversationHeader: ConversationHeaderNode,
@@ -196,6 +236,16 @@ const BranchEditorCanvas = ({
     }
   }, [focusNodeId, rfNodes, setBranchEditorFocusNodeId, branchEditorSyncEnabled]);
 
+  // Listen for menu button clicks from MessageNode
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { nodeId, chatIndex, x, y } = (e as CustomEvent).detail;
+      setContextMenu({ nodeId, chatIndex, x, y });
+    };
+    document.addEventListener('node-menu-click', handler);
+    return () => document.removeEventListener('node-menu-click', handler);
+  }, []);
+
   const navigateToChat = useCallback(
     (chatIndex: number, nodeId: string) => {
       ensureBranchTree(chatIndex);
@@ -215,15 +265,22 @@ const BranchEditorCanvas = ({
   );
 
   const onNodeClick = useCallback(
-    (_: React.MouseEvent, node: Node<MessageNodeData>) => {
+    (event: React.MouseEvent, node: Node<MessageNodeData>) => {
       const nodeChatIndex = node.data.chatIndex >= 0 ? node.data.chatIndex : primaryChatIndex;
       const chat = chats?.[nodeChatIndex];
       if (!chat?.branchTree) return;
       const newPath = buildPathToLeaf(chat.branchTree, node.id);
       switchActivePath(nodeChatIndex, newPath);
-      setSelectedNodeForModal({ nodeId: node.id, chatIndex: nodeChatIndex });
+
+      // Header click → navigate to chat, content click → open modal
+      const target = event.target as HTMLElement;
+      if (target.closest('[data-node-header]')) {
+        navigateToChat(nodeChatIndex, node.id);
+      } else {
+        setSelectedNodeForModal({ nodeId: node.id, chatIndex: nodeChatIndex });
+      }
     },
-    [chats, primaryChatIndex, switchActivePath]
+    [chats, primaryChatIndex, switchActivePath, navigateToChat]
   );
 
   const onNodeDoubleClick = useCallback(
@@ -379,6 +436,7 @@ const BranchEditorCanvas = ({
         proOptions={{ hideAttribution: true }}
       >
         <Background />
+        <UndoRedoControls />
         <Controls className='!bg-gray-200 dark:!bg-gray-700 !rounded !shadow-md [&>button]:!bg-transparent [&>button]:!fill-gray-700 [&>button]:dark:!fill-gray-200 [&>button]:!border-gray-300 [&>button]:dark:!border-gray-600' />
         <MiniMap
           nodeColor={(node) => {

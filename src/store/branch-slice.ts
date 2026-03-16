@@ -73,10 +73,23 @@ export interface ScrollAnchor {
   wasAtBottom: boolean;
 }
 
+interface BranchSnapshot {
+  chats: ChatInterface[];
+  contentStore: ContentStoreData;
+}
+
+const HISTORY_LIMIT = 50;
+
 export interface BranchSlice {
   contentStore: ContentStoreData;
   setContentStore: (contentStore: ContentStoreData) => void;
   applyBranchState: (chats: ChatInterface[], contentStore: ContentStoreData) => void;
+  branchHistoryPast: BranchSnapshot[];
+  branchHistoryFuture: BranchSnapshot[];
+  undoBranch: () => void;
+  redoBranch: () => void;
+  canUndoBranch: () => boolean;
+  canRedoBranch: () => boolean;
   branchClipboard: BranchClipboard | null;
   branchEditorFocusNodeId: string | null;
   setBranchEditorFocusNodeId: (nodeId: string | null) => void;
@@ -183,9 +196,51 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     set({ contentStore });
   },
   applyBranchState: (chats, contentStore) => {
+    // Save snapshot for undo before applying
+    const prevChats = get().chats;
+    const prevContentStore = get().contentStore;
+    if (prevChats) {
+      const past = [...get().branchHistoryPast, { chats: prevChats, contentStore: prevContentStore }];
+      if (past.length > HISTORY_LIMIT) past.shift();
+      set({ branchHistoryPast: past, branchHistoryFuture: [] });
+    }
     get().setChats(chats);
     set({ contentStore });
   },
+  branchHistoryPast: [],
+  branchHistoryFuture: [],
+  undoBranch: () => {
+    const past = get().branchHistoryPast;
+    if (past.length === 0) return;
+    const snapshot = past[past.length - 1];
+    const currentChats = get().chats;
+    const currentContentStore = get().contentStore;
+    set({
+      branchHistoryPast: past.slice(0, -1),
+      branchHistoryFuture: currentChats
+        ? [...get().branchHistoryFuture, { chats: currentChats, contentStore: currentContentStore }]
+        : get().branchHistoryFuture,
+    });
+    get().setChats(snapshot.chats);
+    set({ contentStore: snapshot.contentStore });
+  },
+  redoBranch: () => {
+    const future = get().branchHistoryFuture;
+    if (future.length === 0) return;
+    const snapshot = future[future.length - 1];
+    const currentChats = get().chats;
+    const currentContentStore = get().contentStore;
+    set({
+      branchHistoryFuture: future.slice(0, -1),
+      branchHistoryPast: currentChats
+        ? [...get().branchHistoryPast, { chats: currentChats, contentStore: currentContentStore }]
+        : get().branchHistoryPast,
+    });
+    get().setChats(snapshot.chats);
+    set({ contentStore: snapshot.contentStore });
+  },
+  canUndoBranch: () => get().branchHistoryPast.length > 0,
+  canRedoBranch: () => get().branchHistoryFuture.length > 0,
   branchClipboard: null,
   branchEditorFocusNodeId: null,
   setBranchEditorFocusNodeId: (nodeId) => {

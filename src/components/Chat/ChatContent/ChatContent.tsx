@@ -449,7 +449,12 @@ const ChatContent = () => {
       const scroller = scrollerRef.current;
       const item = scroller?.querySelector<HTMLElement>(`[data-item-index="${itemIndex}"]`);
       if (!item || !scroller) return;
-      item.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      const scrollerHeight = scroller.clientHeight;
+      const itemHeight = item.offsetHeight;
+      item.scrollIntoView({
+        block: itemHeight > scrollerHeight ? 'start' : 'center',
+        behavior: 'smooth',
+      });
     });
   }, [pendingChatFocus, currentChatIndex, activePath, items, clearPendingChatFocus]);
 
