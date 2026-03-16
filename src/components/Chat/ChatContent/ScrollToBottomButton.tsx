@@ -5,8 +5,10 @@ import DownArrow from '@icon/DownArrow';
 
 interface ScrollToBottomButtonProps {
   atBottom: boolean;
+  atTop: boolean;
   canMoveUp: boolean;
   canMoveDown: boolean;
+  scrollToTop: () => void;
   scrollToPreviousBubble: () => void;
   scrollToNextBubble: () => void;
   scrollToBottom: () => void;
@@ -17,14 +19,25 @@ const baseButtonClass =
 
 const ScrollToBottomButton = React.memo(({
   atBottom,
+  atTop,
   canMoveUp,
   canMoveDown,
+  scrollToTop,
   scrollToPreviousBubble,
   scrollToNextBubble,
   scrollToBottom,
 }: ScrollToBottomButtonProps) => {
   return (
     <div className='absolute right-6 bottom-[84px] z-10 flex flex-col gap-1.5'>
+      <button
+        className={baseButtonClass}
+        aria-label='scroll to top'
+        title='最上部へ移動'
+        disabled={atTop}
+        onClick={scrollToTop}
+      >
+        <ArrowBottom className='rotate-180' />
+      </button>
       <button
         className={baseButtonClass}
         aria-label='scroll to previous bubble'
