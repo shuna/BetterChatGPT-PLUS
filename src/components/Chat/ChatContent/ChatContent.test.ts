@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { isEditingMessageElement, shouldShowHiddenMessagesWarning } from './ChatContent';
+import {
+  isEditingMessageElement,
+  scrollViewportToBottom,
+  shouldShowHiddenMessagesWarning,
+} from './ChatContent';
 
 describe('isEditingMessageElement', () => {
   it('returns true when a message edit textarea inside the scroller is focused', () => {
@@ -203,5 +207,19 @@ describe('auto-follow guard conditions', () => {
     expect(shouldAutoFollow({
       isGenerating: true, atBottom: true, autoScroll: false, isEditing: false,
     })).toBe(false);
+  });
+});
+
+describe('scrollViewportToBottom', () => {
+  it('moves the viewport to the end and eagerly syncs bottom state', () => {
+    const scroller = { scrollTop: 120, scrollHeight: 960 };
+    const updates: boolean[] = [];
+
+    scrollViewportToBottom(scroller, (isAtBottom) => {
+      updates.push(isAtBottom);
+    });
+
+    expect(scroller.scrollTop).toBe(960);
+    expect(updates).toEqual([true]);
   });
 });

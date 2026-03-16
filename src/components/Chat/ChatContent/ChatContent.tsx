@@ -81,6 +81,14 @@ export function shouldShowHiddenMessagesWarning({
   );
 }
 
+export function scrollViewportToBottom(
+  scroller: { scrollHeight: number; scrollTop: number },
+  onBottomStateChange: (isAtBottom: boolean) => void
+): void {
+  scroller.scrollTop = scroller.scrollHeight;
+  onBottomStateChange(true);
+}
+
 function isEditableTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   return (
@@ -373,6 +381,11 @@ const ChatContent = () => {
   // sets atBottom=false before the scroll-to-end callback fires.
   const atBottomForAutoScrollRef = useRef(atBottom);
   atBottomForAutoScrollRef.current = atBottom;
+  const syncAtBottomState = useCallback((isBottom: boolean) => {
+    atBottomRef.current = isBottom;
+    atBottomForAutoScrollRef.current = isBottom;
+    setAtBottom(isBottom);
+  }, []);
 
   useEffect(() => {
     if (!isCurrentChatGenerating || !autoScroll) return;
@@ -388,10 +401,9 @@ const ChatContent = () => {
     const scrollToEnd = () => {
       // Stop following if user scrolled away manually
       if (!atBottomForAutoScrollRef.current) return;
-      scroller.scrollTop = scroller.scrollHeight;
-      // Eagerly mark as at-bottom so the next resize callback doesn't bail out
-      // before the async scroll event has a chance to update the ref.
-      atBottomForAutoScrollRef.current = true;
+      // Eagerly keep both state and refs pinned to "at bottom" so content growth
+      // during streaming cannot temporarily break the auto-follow loop.
+      scrollViewportToBottom(scroller, syncAtBottomState);
     };
 
     // Scroll to end immediately
@@ -419,7 +431,7 @@ const ChatContent = () => {
       observer.disconnect();
       mutationObserver.disconnect();
     };
-  }, [isCurrentChatGenerating, autoScroll, isEditingInScroller]);
+  }, [isCurrentChatGenerating, autoScroll, isEditingInScroller, syncAtBottomState]);
 
   // Restore scroll anchor on mount
   const pendingChatFocus = useStore((state) => state.pendingChatFocus);
