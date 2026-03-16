@@ -17,3 +17,10 @@ export const ensureUniqueChatIds = (chats: ChatInterface[]) => {
 
   return changed;
 };
+
+/** Assign a fresh UUID to every chat so imported chats never collide with existing ones. */
+export const assignFreshChatIds = (chats: ChatInterface[]) => {
+  chats.forEach((chat) => {
+    chat.id = uuidv4();
+  });
+};
