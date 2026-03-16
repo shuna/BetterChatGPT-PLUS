@@ -217,24 +217,22 @@ const BranchEditorCanvas = ({
     setEdges(rfEdges);
   }, [rfNodes, rfEdges, setNodes, setEdges]);
 
-  const branchEditorSyncEnabled = useStore((state) => state.branchEditorSyncEnabled);
-
-  // Focus on a specific node when navigated from chat view
+  // Focus on a specific node (always honors explicit requests;
+  // branchEditorSyncEnabled only gates automatic chat-hover navigation,
+  // which is already guarded in Message.tsx click handler)
   useEffect(() => {
     if (focusNodeId && reactFlowInstance.current) {
-      if (branchEditorSyncEnabled) {
-        const targetNode = rfNodes.find((n) => n.id === focusNodeId);
-        if (targetNode) {
-          reactFlowInstance.current.setCenter(
-            targetNode.position.x + 140,
-            targetNode.position.y + 40,
-            { zoom: 1.2, duration: 400 }
-          );
-        }
+      const targetNode = rfNodes.find((n) => n.id === focusNodeId);
+      if (targetNode) {
+        reactFlowInstance.current.setCenter(
+          targetNode.position.x + 140,
+          targetNode.position.y + 40,
+          { zoom: 1.2, duration: 400 }
+        );
       }
       setBranchEditorFocusNodeId(null);
     }
-  }, [focusNodeId, rfNodes, setBranchEditorFocusNodeId, branchEditorSyncEnabled]);
+  }, [focusNodeId, rfNodes, setBranchEditorFocusNodeId]);
 
   // Listen for menu button clicks from MessageNode
   useEffect(() => {
