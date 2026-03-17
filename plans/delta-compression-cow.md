@@ -213,18 +213,27 @@ persisted-state/
 
 #### 世代番号によるchat↔content-store整合性保証
 
-chatとcontent-storeを別レコードにすると、「chatは新、content-storeは旧」でクラッシュ復旧する窓ができる。BranchNode.contentHashがcontent-store側に存在しないと復元不能になる。
+chatとcontent-storeを別レコードにすると、クラッシュ復旧時に片方だけが更新された状態が残り得る。BranchNode.contentHashがcontent-store側に存在しないと復元不能になる。
 
-**コミット手順**:
+##### コミット中のcontent-storeはsuperset（旧hash保持）
+
+**問題**: 新しいcontent-storeが旧hashをGC済みの状態で先に保存され、chat更新前に中断すると、旧chatが参照するhashがcontent-storeに存在しない状態になる。
+
+**対策**: コミット中に保存するcontent-storeは、**新旧両方のhashを含むsuperset**とする。GC（refCount=0のエントリ削除）はコミット完了後に遅延実行する。
 
 ```ts
 async function commitState(db, chats, contentStore, changedChatIds) {
   const nextGen = currentGeneration + 1;
 
-  // ステップ1: content-storeを先に書く（新しいcontentHashを含む）
+  // GCを遅延: refCount=0のエントリにpendingDeleteマークを付けるが、
+  // この時点ではまだ削除しない
+  const supersetStore = buildSupersetForCommit(contentStore, pendingDeletes);
+
+  // ステップ1: content-store(superset)を先に書く
+  // 旧chatが参照するhashも新chatが参照するhashも両方含む
   const tx1 = db.transaction('persisted-state', 'readwrite');
   tx1.objectStore('persisted-state').put(
-    { data: contentStore, generation: nextGen },
+    { data: supersetStore, generation: nextGen },
     'content-store'
   );
   await tx1.done;
@@ -246,26 +255,65 @@ async function commitState(db, chats, contentStore, changedChatIds) {
   await tx3.done;
 
   currentGeneration = nextGen;
+
+  // ステップ4: GC実行（コミット完了後に安全に削除）
+  // 全chatがnextGenに到達しているため、旧hashへの参照は残っていない
+  if (pendingDeletes.length > 0) {
+    const txGc = db.transaction('persisted-state', 'readwrite');
+    txGc.objectStore('persisted-state').put(
+      { data: contentStore, generation: nextGen },  // GC済みの本来のstore
+      'content-store'
+    );
+    await txGc.done;
+  }
 }
 ```
 
-**復旧ルール（起動時）**:
+```ts
+function buildSupersetForCommit(
+  currentStore: ContentStoreData,
+  pendingDeletes: string[]
+): ContentStoreData {
+  // currentStoreはメモリ上ではすでにrefCount=0のエントリが削除されている。
+  // pendingDeletesに記録された「今回のコミットで消えるhash」を
+  // 旧content-storeから復元して一時的にsupersetに含める。
+  const superset = { ...currentStore };
+  for (const hash of pendingDeletes) {
+    if (!(hash in superset) && hash in previousContentStoreSnapshot) {
+      superset[hash] = { ...previousContentStoreSnapshot[hash], refCount: 0 };
+    }
+  }
+  return superset;
+}
+```
+
+##### 中断シナリオの安全性
+
+| 中断タイミング | ディスク状態 | 安全性 |
+|---------------|-------------|--------|
+| ステップ1後（content-store書き込み後） | content-store=superset(nextGen), chat=旧, meta=旧 | **安全**: supersetは旧hashも含むため、旧chatの参照は解決可能 |
+| ステップ2途中（一部chatのみ更新） | content-store=superset(nextGen), 一部chat=nextGen/一部chat=旧, meta=旧 | **安全**: supersetは新旧両方のhashを含む |
+| ステップ3後、ステップ4前（GC未実行） | content-store=superset(nextGen), 全chat=nextGen, meta=nextGen | **安全**: supersetに不要エントリが残るだけ（メモリリークだが復元は正常） |
+| ステップ4途中（GC中断） | content-storeが中途半端 | **安全**: 次回起動時にchatが参照するhashを走査し、参照されていないエントリを再GCすればよい |
+
+##### 復旧ルール（起動時）
 
 ```
 1. meta.generation を読む → G とする
-2. 各 chat:{id} の generation を確認:
-   - generation === G → 正常（最新コミットに含まれる）
-   - generation < G → このchatはコミット途中で中断された可能性
-     → content-store は G なので新しいhashを含む。chatは旧いのでhashは存在する。安全。
-   - generation > G → ありえない（metaが最後に書かれるため）
-3. content-store.generation を確認:
+2. content-store.generation を確認:
    - generation === G → 正常
    - generation > G → content-storeは書けたがmeta更新前に中断
-     → chatは G-1 以下。chatが参照するhashは content-store(G) にも content-store(G-1) にも存在する。安全。
+     → supersetなので旧chatの参照も解決可能。安全。
      → meta.generation を content-store.generation に合わせて修正
+3. 各 chat:{id} の generation を確認:
+   - generation === G → 正常
+   - generation < G → chatはコミット途中で中断。content-storeはsupersetなので参照は解決可能
+4. GC残留チェック:
+   - 全chatが参照するcontentHashを収集
+   - content-store内でどのchatからも参照されていないエントリを削除（遅延GCの再実行）
 ```
 
-**書き込み順序の鍵**: content-storeを**先に**書くことで、chatが参照するcontentHashが必ずcontent-storeに存在することを保証。逆順だとchatが新しいhashを指しているのにcontent-storeに未到着という状態が生まれる。
+**設計の鍵**: content-storeを書く時点では**何も消さない（superset）**。消すのはコミット完了後。これにより、どの時点で中断しても旧chatが参照するhashがcontent-storeに存在することが保証される。
 
 #### コピーオンライト状態遷移
 
@@ -309,7 +357,7 @@ async function commitState(db, chats, contentStore, changedChatIds) {
 
 | 懸念 | リスク | 対策 |
 |------|--------|------|
-| **chat↔content-store整合性（最重大）** | chatが新しいcontentHashを参照するがcontent-storeにまだない → 復元不能 | 世代番号管理。content-storeを先に書き、metaを最後に書く。起動時にgeneration照合で不整合を検出・修復 |
+| **chat↔content-store整合性（最重大）** | chatが参照するcontentHashがcontent-storeにない → 復元不能 | content-storeはコミット中superset（旧hash保持）で書き込み。GCはコミット完了後に遅延実行。起動時にgeneration照合+参照走査で不整合を検出・修復 |
 | **タブ強制終了** | 圧縮中にrawが消え、packedも不完全 → データ消失 | raw削除はpacked書き込み完了後の別トランザクション。packed未完了ならrawが残存 |
 | **`beforeunload`での保存失敗** | 非同期gzip圧縮が完了しない | `beforeunload`では非圧縮rawを同期的に保存。圧縮は次回アイドル時 |
 | **バックグラウンドタブのスロットリング** | `setTimeout`が大幅に遅延 | `requestIdleCallback`を使用。圧縮はベストエフォート、未圧縮でも機能に影響なし |
@@ -322,8 +370,9 @@ async function commitState(db, chats, contentStore, changedChatIds) {
 ### 2.3 実装ステップ
 
 1. `IndexedDbStorage.ts`をチャット単位のキー構造 + 世代番号管理にリファクタリング
-2. `commitState`関数を実装（content-store先行、meta最後の書き込み順序）
-3. 起動時のgeneration照合・修復ロジックを実装
+2. `commitState`関数を実装（content-store superset先行書き込み、meta最後、GCはコミット後）
+3. `buildSupersetForCommit`を実装（pendingDeletesの旧hashをsupersetに含める）
+4. 起動時のgeneration照合・修復・残留GCロジックを実装
 4. `saveChatData`を差分書き込み対応に変更（変更されたチャットのみ書き込み）
 5. `CompressionService`クラスを新規作成:
    - `compressChat(id)` — gzip圧縮 + packedキーに書き込み + raw削除
@@ -379,14 +428,18 @@ async function commitState(db, chats, contentStore, changedChatIds) {
 
 - チャット単位のキー分離が正しく動作すること
 - 差分書き込み（変更チャットのみ）が正しいこと
-- 世代番号: content-store(G), chat(G-1), meta(G-1) → 起動時に正常扱いされること
+- 世代番号: content-store(G), chat(G-1), meta(G-1) → 起動時に正常扱い、旧chatの参照がsuperset内に存在すること
 - 世代番号: content-store(G+1), meta(G) → meta.generationが修正されること
+- superset: コミット中のcontent-storeが旧hashを含んでいること
+- 遅延GC: コミット完了後にrefCount=0のエントリが削除されること
+- GC中断リカバリ: 起動時に参照走査で不要エントリが再GCされること
 - マイグレーション: 旧単一キーから分割キーへの移行と中断リカバリ
 
 ### 3.2 統合テスト — 中断耐性
 
-- commitState: ステップ1(content-store書き込み)後に中断 → chatは旧generation、復旧可能
-- commitState: ステップ2(chat書き込み)後に中断 → meta未更新、復旧可能
+- commitState: ステップ1(superset書き込み)後に中断 → 旧chatが参照するhashがsuperset内に存在し復旧可能
+- commitState: ステップ2(chat書き込み)後に中断 → meta未更新、supersetが新旧両方含むため復旧可能
+- commitState: ステップ3後ステップ4(GC)前に中断 → supersetに不要エントリが残るが復元は正常。起動時再GCで解消
 - 圧縮: packed書き込み途中でabort → rawが残存すること
 - 圧縮: raw削除途中でabort → 両方存在しraw優先で復元されること
 - マイグレーション途中で中断 → 再起動時にマイグレーションが再実行されること
@@ -421,8 +474,8 @@ async function commitState(db, chats, contentStore, changedChatIds) {
 
 ### Phase 2: IndexedDBキー分離 + 世代番号管理
 - チャット単位のキー分離
-- 世代番号によるchat↔content-store整合性保証（content-store先行書き込み、meta最後）
-- 起動時のgeneration照合・修復ロジック
+- 世代番号によるchat↔content-store整合性保証（superset先行書き込み、meta最後、GC遅延実行）
+- 起動時のgeneration照合・修復・残留GCロジック
 - 差分書き込み（変更チャットのみ）
 - マイグレーション
 - テスト
