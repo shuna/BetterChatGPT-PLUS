@@ -55,51 +55,49 @@ const ExportChat = () => {
   };
 
   return (
-    <div className='mt-6'>
+    <div>
       <div className='block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300'>
         {t('export')} (JSON)
       </div>
-      <div className='flex flex-col gap-2'>
-        <div className='flex items-center gap-3'>
-          <button
-            className='btn btn-small btn-primary'
-            onClick={handleExport}
-            aria-label={t('export') as string}
-          >
-            {t('export')}
-          </button>
-        </div>
-        <div className='flex items-center gap-4 text-xs text-gray-500 dark:text-gray-400'>
-          <label className='flex items-center gap-1.5 cursor-pointer'>
-            <input
-              type='radio'
-              name='exportFormat'
-              checked={format === 'v3'}
-              onChange={() => setFormat('v3')}
-              className='rounded'
-            />
-            Compact (v3)
-          </label>
-          <label className='flex items-center gap-1.5 cursor-pointer'>
-            <input
-              type='radio'
-              name='exportFormat'
-              checked={format === 'v1'}
-              onChange={() => setFormat('v1')}
-              className='rounded'
-            />
-            Legacy {t('compatible', 'compatible')} (v1)
-          </label>
-          <label className='flex items-center gap-1.5 cursor-pointer'>
-            <input
-              type='checkbox'
-              checked={useGzip}
-              onChange={(e) => setUseGzip(e.target.checked)}
-              className='rounded'
-            />
-            .gz {t('compression', 'compression')}
-          </label>
-        </div>
+      <div className='flex flex-col gap-2 text-xs text-gray-500 dark:text-gray-400'>
+        <label className='flex items-center gap-1.5 cursor-pointer'>
+          <input
+            type='radio'
+            name='exportFormat'
+            checked={format === 'v3'}
+            onChange={() => setFormat('v3')}
+            className='rounded'
+          />
+          {t('exportFormatCompact')}
+        </label>
+        <label className='flex items-center gap-1.5 cursor-pointer'>
+          <input
+            type='radio'
+            name='exportFormat'
+            checked={format === 'v1'}
+            onChange={() => setFormat('v1')}
+            className='rounded'
+          />
+          {t('exportFormatLegacy')}
+        </label>
+      </div>
+      <div className='flex items-center justify-between mt-3'>
+        <label className='flex items-center gap-1.5 cursor-pointer text-xs text-gray-500 dark:text-gray-400'>
+          <input
+            type='checkbox'
+            checked={useGzip}
+            onChange={(e) => setUseGzip(e.target.checked)}
+            className='rounded'
+          />
+          {t('gzCompression')}
+        </label>
+        <button
+          className='btn btn-small btn-primary w-32 justify-center'
+          onClick={handleExport}
+          aria-label={t('export') as string}
+        >
+          {t('export')}
+        </button>
       </div>
     </div>
   );
