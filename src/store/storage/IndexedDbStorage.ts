@@ -840,6 +840,16 @@ async function loadSplitData(
       chats.push(record.chat);
     }
 
+    // Reorder chats to match the authoritative order stored in meta.chatIds
+    if (meta.chatIds) {
+      const orderMap = new Map(meta.chatIds.map((id, i) => [id, i]));
+      chats.sort((a, b) => {
+        const ai = orderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+        const bi = orderMap.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+        return ai - bi;
+      });
+    }
+
     // Clipboard: accept if generation <= committedGen, otherwise discard
     // (clipboard is written alongside chats in step 2)
     let clipboard: BranchClipboard | null = null;
