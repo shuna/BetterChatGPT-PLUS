@@ -401,6 +401,13 @@ function buildSupersetForCommit(
 - `resolveContent`（delta chain depth 5）: 最大深度でも正しく復元されること
 - `promoteToFull`: デルタエントリが全文に正しく昇格すること
 
+**デルタ破損への防御**:
+- `resolveContent`: baseHashが存在しない → エラーを局所化し空コンテンツ or 例外（呼び出し元で処理）
+- `resolveContent`: 循環参照（A→B→A） → 深度カウンタで検出、全文フォールバック不可のためエラー
+- `resolveContent`: `patch_fromText`/`patch_apply`が失敗 → エラーを局所化、該当エントリを破損マークし呼び出し元に通知
+- `resolveContent`: デルタベースがtext-onlyでない（実装バグ） → 全文フォールバック不可のためエラー
+- 起動時バリデーション: 全デルタエントリのbaseHash存在チェック。不在の場合はエントリを破損扱いとしログ出力
+
 **依存解決（releaseContent中心）**:
 - `releaseContent`: refCount→0時に依存エントリが全文昇格されること
 - `releaseContent`: refCount→0のエントリがdeltaBaseでない場合は単純削除されること
@@ -435,13 +442,21 @@ function buildSupersetForCommit(
 - superset: コミット中のcontent-storeが旧hashを含んでいること
 - 遅延GC: コミット完了後にrefCount=0のエントリが削除されること
 - GC中断リカバリ: 起動時に参照走査で不要エントリが再GCされること
+
+**clipboard世代ずれ**:
+- branch-clipboard(nextGen) + content-store(oldGen) → clipboard参照のhashが解決可能であること（supersetによる保護、またはcontent-store先行書き込みにより到達不可能な状態であること）
+- content-store(nextGen) + branch-clipboard(oldGen) → 旧clipboardの参照がsuperset内に存在すること
+- 起動時GC: clipboardが参照するhashがGC対象から除外されること
+
 - マイグレーション: 旧単一キーから分割キーへの移行と中断リカバリ
 
 ### 3.2 統合テスト — 中断耐性
 
-- commitState: ステップ1(superset書き込み)後に中断 → 旧chatが参照するhashがsuperset内に存在し復旧可能
-- commitState: ステップ2(chat書き込み)後に中断 → meta未更新、supersetが新旧両方含むため復旧可能
+- commitState: ステップ1(superset書き込み)後に中断 → 旧chat・旧clipboardが参照するhashがsuperset内に存在し復旧可能
+- commitState: ステップ2途中(一部chat書き込み、clipboard未書き込み)で中断 → 旧clipboardの参照がsupersetで保護されること
+- commitState: ステップ2(chat+clipboard書き込み)後に中断 → meta未更新、supersetが新旧両方含むため復旧可能
 - commitState: ステップ3後ステップ4(GC)前に中断 → supersetに不要エントリが残るが復元は正常。起動時再GCで解消
+- commitState: ステップ4(GC)後にclipboard/chatの参照が残っているケース → GC対象から除外されていること
 - 圧縮: packed書き込み途中でabort → rawが残存すること
 - 圧縮: raw削除途中でabort → 両方存在しraw優先で復元されること
 - マイグレーション途中で中断 → 再起動時にマイグレーションが再実行されること
@@ -455,9 +470,9 @@ function buildSupersetForCommit(
 
 ### 3.4 パフォーマンステスト
 
-- デルタチェーン深度1〜5でのresolveContent所要時間（< 1ms目標）
-- `promoteDependents`のContentStore全体スキャン: 1000エントリで < 1ms目標
-- 100チャット × 各10ブランチでの圧縮/展開サイクル時間
+- デルタチェーン深度: 深度1→5で所要時間が概ね線形増加であること（指数的悪化がないことを確認）
+- `promoteDependents`: 1000エントリでのスキャンがUIブロッキング級（16ms超）に悪化しないこと
+- 100チャット × 各10ブランチでの圧縮/展開サイクル: 全体で数秒以内に完了すること
 - gzip圧縮率の実測（実際のチャットデータで50-70%削減を確認）
 
 ---
