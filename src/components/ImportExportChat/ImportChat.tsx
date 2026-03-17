@@ -7,6 +7,7 @@ const ImportChat = () => {
   const { t } = useTranslation(['main', 'import']);
   const inputRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<ImportMode>('append');
+  const [fileSelected, setFileSelected] = useState(false);
   const [alert, setAlert] = useState<{
     message: string;
     success: boolean;
@@ -42,14 +43,20 @@ const ImportChat = () => {
 
   return (
     <>
-      <label className='block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300'>
+      <div className='block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300'>
         {t('import')} (JSON)
-      </label>
+      </div>
+      <p className='text-xs text-gray-500 dark:text-gray-400 mb-2 truncate'>
+        {fileSelected && inputRef.current?.files?.[0]
+          ? inputRef.current.files[0].name
+          : t('selectFileDescription', { ns: 'import', defaultValue: 'インポートするファイルを選択してください' })}
+      </p>
       <input
-        className='w-full text-sm file:p-2 text-gray-800 file:text-gray-700 dark:text-gray-300 dark:file:text-gray-200 rounded-md cursor-pointer focus:outline-none bg-gray-50 file:bg-gray-100 dark:bg-gray-800 dark:file:bg-gray-700 file:border-0 border border-gray-300 dark:border-gray-600 placeholder-gray-900 dark:placeholder-gray-300 file:cursor-pointer'
+        className='hidden'
         type='file'
         accept='.json,.json.gz,.gz'
         ref={inputRef}
+        onChange={() => setFileSelected(!!inputRef.current?.files?.length)}
       />
       <div className='mt-3 flex flex-col gap-2 text-xs text-gray-500 dark:text-gray-400'>
         <label className='flex items-center gap-1.5 cursor-pointer'>
@@ -78,13 +85,23 @@ const ImportChat = () => {
           </div>
         )}
       </div>
-      <button
-        className='btn btn-small btn-primary mt-3'
-        onClick={handleFileUpload}
-        aria-label={translate('import')}
-      >
-        {t('import')}
-      </button>
+      <div className='flex items-center justify-between mt-3'>
+        <button
+          className='btn btn-small btn-neutral flex items-center gap-2 whitespace-nowrap'
+          onClick={() => inputRef.current?.click()}
+          type='button'
+        >
+          {t('selectFile')}
+        </button>
+        <button
+          className={`btn btn-small w-32 justify-center ${fileSelected ? 'btn-primary' : 'btn-neutral cursor-not-allowed opacity-50'}`}
+          onClick={handleFileUpload}
+          disabled={!fileSelected}
+          aria-label={translate('import')}
+        >
+          {t('import')}
+        </button>
+      </div>
       {alert && (
         <div
           className={`relative py-2 px-3 w-full mt-3 border rounded-md text-gray-600 dark:text-gray-100 text-sm whitespace-pre-wrap ${

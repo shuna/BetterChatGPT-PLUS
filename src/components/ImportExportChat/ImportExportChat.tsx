@@ -28,11 +28,13 @@ const ImportExportChat = () => {
           setIsModalOpen={setIsModalOpen}
           cancelButton={false}
         >
-          <div className='p-6 border-b border-gray-200 dark:border-gray-600'>
-            <ImportChat />
-            <ExportChat />
-            <div className='border-t my-3 border-gray-200 dark:border-gray-600' />
-            {/* <ImportChatOpenAI setIsModalOpen={setIsModalOpen} /> */}
+          <div className='p-6 border-b border-gray-200 dark:border-gray-600 w-[85vw] max-w-xl'>
+            <div className='rounded-lg border border-gray-200 dark:border-gray-600 p-4'>
+              <ImportChat />
+            </div>
+            <div className='rounded-lg border border-gray-200 dark:border-gray-600 p-4 mt-4'>
+              <ExportChat />
+            </div>
           </div>
         </PopupModal>
       )}
