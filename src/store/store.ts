@@ -10,6 +10,7 @@ import { ToastSlice, createToastSlice } from './toast-slice';
 import { ProviderSlice, createProviderSlice } from './provider-slice';
 import { BranchSlice, createBranchSlice } from './branch-slice';
 import { MigrationSlice, createMigrationSlice } from './migration-slice';
+import { SearchSlice, createSearchSlice } from './search-slice';
 import { STORE_VERSION } from './version';
 import {
   createLocalStoragePartializedState,
@@ -27,7 +28,8 @@ export type StoreState = ChatSlice &
   ToastSlice &
   ProviderSlice &
   BranchSlice &
-  MigrationSlice;
+  MigrationSlice &
+  SearchSlice;
 
 export type StoreSlice<T> = (
   set: StoreApi<StoreState>['setState'],
@@ -46,6 +48,7 @@ const useStore = create<StoreState>()(
       ...createProviderSlice(set, get),
       ...createBranchSlice(set, get),
       ...createMigrationSlice(set, get),
+      ...createSearchSlice(set, get),
     }),
     {
       name: 'free-chat-gpt',

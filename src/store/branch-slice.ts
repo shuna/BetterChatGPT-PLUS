@@ -135,6 +135,7 @@ export interface BranchSlice {
   ) => string;
   switchBranchAtNode: (chatIndex: number, nodeId: string) => void;
   switchActivePath: (chatIndex: number, newPath: string[]) => void;
+  switchActivePathSilent: (chatIndex: number, newPath: string[]) => void;
   deleteBranch: (chatIndex: number, nodeId: string) => void;
   renameBranchNode: (
     chatIndex: number,
@@ -385,6 +386,14 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
       switchActivePathState(chats, chatIndex, newPath, contentStore),
       contentStore
     );
+  },
+
+  switchActivePathSilent: (chatIndex, newPath) => {
+    const contentStore = { ...get().contentStore };
+    const chats = finalizeStreamingNodesInChat(get().chats!, chatIndex, contentStore);
+    const updated = switchActivePathState(chats, chatIndex, newPath, contentStore);
+    get().setChats(updated);
+    set({ contentStore });
   },
 
   deleteBranch: (chatIndex, nodeId) => {

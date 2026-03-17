@@ -336,6 +336,21 @@ export function resolveContent(
 }
 
 /**
+ * Resolve a contentHash to plain text (all text content joined).
+ * Useful for search and preview — follows delta chains via resolveContent.
+ */
+export function resolveContentText(
+  store: ContentStoreData,
+  hash: string
+): string {
+  const content = resolveContent(store, hash);
+  return content
+    .filter((c): c is Extract<ContentInterface, { type: 'text' }> => c.type === 'text')
+    .map((c) => c.text)
+    .join(' ');
+}
+
+/**
  * Build an export-safe content store with all deltas resolved to full content.
  * Ensures V3 format compatibility.
  */

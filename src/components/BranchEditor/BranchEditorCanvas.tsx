@@ -26,6 +26,7 @@ import BranchDiffModal from './BranchDiffModal';
 import MessageDetailModal from './MessageDetailModal';
 import { buildPathToLeaf } from '@utils/branchUtils';
 import { perfStart, perfEnd } from '@utils/perfTrace';
+import BranchSearchBar from './BranchSearchBar';
 
 const UndoRedoControls = () => {
   const canUndo = useStore((state) => state.branchHistoryPast.length > 0);
@@ -80,6 +81,9 @@ const BranchEditorCanvas = ({
   primaryChatIndex: number;
 }) => {
   const chats = useStore((state) => state.chats);
+  const isSearchOpen = useStore((state) => state.isSearchOpen);
+  const openSearch = useStore((state) => state.openSearch);
+  const closeSearch = useStore((state) => state.closeSearch);
   const switchActivePath = useStore((state) => state.switchActivePath);
   const focusNodeId = useStore((state) => state.branchEditorFocusNodeId);
   const setBranchEditorFocusNodeId = useStore((state) => state.setBranchEditorFocusNodeId);
@@ -192,6 +196,22 @@ const BranchEditorCanvas = ({
     chatIndex: number;
   } | null>(null);
   const [showDiff, setShowDiff] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // Ctrl+F / Cmd+F handler — only when branch editor container has focus
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        if (!containerRef.current?.contains(document.activeElement) &&
+            document.activeElement !== containerRef.current) return;
+        e.preventDefault();
+        if (isSearchOpen) closeSearch();
+        else openSearch();
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [isSearchOpen, openSearch, closeSearch]);
 
   // Cross-conversation drag state
   const copyBranchSequence = useStore((state) => state.copyBranchSequence);
@@ -415,7 +435,8 @@ const BranchEditorCanvas = ({
   }, [dropPopover, chats, moveBranchSequence]);
 
   return (
-    <>
+    <div ref={containerRef} className='relative w-full h-full' tabIndex={-1}>
+      {isSearchOpen && <BranchSearchBar entries={entries} />}
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -519,7 +540,7 @@ const BranchEditorCanvas = ({
           </div>
         </>
       )}
-    </>
+    </div>
   );
 };
 

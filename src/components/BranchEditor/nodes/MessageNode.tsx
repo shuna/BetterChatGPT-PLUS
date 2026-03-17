@@ -12,6 +12,8 @@ const roleBadgeColors: Record<string, string> = {
 const MessageNode = memo(({ data, id }: NodeProps<MessageNodeData>) => {
   const hoveredNodeId = useStore((state) => state.hoveredNodeId);
   const setHoveredNodeId = useStore((state) => state.setHoveredNodeId);
+  const isSearchMatch = useStore((state) => state.matchedNodeIds.has(id));
+  const isCurrentSearchResult = useStore((state) => state.currentResultNodeId === id);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
 
   const isHovered = hoveredNodeId === id;
@@ -36,9 +38,19 @@ const MessageNode = memo(({ data, id }: NodeProps<MessageNodeData>) => {
     menuBtnRef.current?.dispatchEvent(event);
   }, [id, data.chatIndex]);
 
-  const borderColor = data.isActive
-    ? data.conversationColor || '#3b82f6'
-    : undefined;
+  const borderColor = isCurrentSearchResult
+    ? '#f97316'
+    : isSearchMatch
+      ? '#eab308'
+      : data.isActive
+        ? data.conversationColor || '#3b82f6'
+        : undefined;
+
+  const searchHighlightClass = isCurrentSearchResult
+    ? 'ring-2 ring-orange-400 ring-offset-1'
+    : isSearchMatch
+      ? 'ring-1 ring-yellow-400'
+      : '';
 
   return (
     <div
@@ -46,8 +58,8 @@ const MessageNode = memo(({ data, id }: NodeProps<MessageNodeData>) => {
         data.isActive
           ? 'bg-white dark:bg-gray-700'
           : 'border-gray-400 dark:border-gray-500 bg-gray-100 dark:bg-gray-800 opacity-50'
-      } ${isHovered ? 'outline outline-[3px] outline-blue-400 outline-offset-0' : ''}`}
-      style={data.isActive ? { borderColor } : undefined}
+      } ${isHovered ? 'outline outline-[3px] outline-blue-400 outline-offset-0' : ''} ${searchHighlightClass}`}
+      style={(data.isActive || isSearchMatch || isCurrentSearchResult) ? { borderColor } : undefined}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >

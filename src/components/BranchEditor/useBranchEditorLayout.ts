@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { BranchTree, isTextContent } from '@type/chat';
+import { BranchTree } from '@type/chat';
 import { Node, Edge } from 'reactflow';
 import useStore from '@store/store';
 import type { ContentStoreData } from '@utils/contentStore';
+import { resolveContentText } from '@utils/contentStore';
 import type { WorkerInput, WorkerOutput } from './branchLayout.worker';
 import { perfStart, perfEnd } from '@utils/perfTrace';
 
@@ -41,14 +42,8 @@ function resolveContentPreview(
   contentStore: ContentStoreData,
   hash: string
 ): string {
-  const entry = contentStore[hash];
-  if (!entry) return '';
-  const texts: string[] = [];
-  for (const content of entry.content) {
-    if (isTextContent(content)) texts.push(content.text);
-  }
-  const joined = texts.join(' ');
-  return joined.length > 80 ? `${joined.slice(0, 80)}...` : joined;
+  const text = resolveContentText(contentStore, hash);
+  return text.length > 80 ? `${text.slice(0, 80)}...` : text;
 }
 
 export function useBranchEditorLayout(tree: BranchTree | undefined) {
