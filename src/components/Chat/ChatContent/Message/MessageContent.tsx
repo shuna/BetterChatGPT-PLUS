@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import useStore from '@store/store';
 
 import EditView from './View/EditView';
@@ -6,7 +6,6 @@ import UnifiedMessageView from './View/UnifiedMessageView';
 import { ContentInterface } from '@type/chat';
 
 const editStateCache = new Map<string, boolean>();
-const stickyAutoFocusCache = new Set<string>();
 
 export const getEditSessionKey = (
   currentChatIndex: number,
@@ -52,14 +51,8 @@ const MessageContent = ({
   const [isEditState, setIsEditState] = useState<boolean>(
     () => editStateCache.get(editSessionKey) ?? sticky
   );
-  const shouldAutoFocusStickyEditor = useMemo(
-    () => sticky && !stickyAutoFocusCache.has(editSessionKey),
-    [editSessionKey, sticky]
-  );
-  useEffect(() => {
-    if (!shouldAutoFocusStickyEditor) return;
-    stickyAutoFocusCache.add(editSessionKey);
-  }, [editSessionKey, shouldAutoFocusStickyEditor]);
+  // Never auto-focus the sticky editor — only focus when the user explicitly clicks it
+  const shouldAutoFocusStickyEditor = false;
   const setIsEdit = useCallback<React.Dispatch<React.SetStateAction<boolean>>>(
     (value) => {
       setIsEditState((previous) => {
