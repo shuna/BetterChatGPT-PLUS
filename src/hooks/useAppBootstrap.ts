@@ -7,6 +7,7 @@ import useInitialiseNewChat from './useInitialiseNewChat';
 import {
   applyPersistedChatDataState,
   createPersistedChatDataState,
+  setIndexedDbMigrationComplete,
   type PersistedChatData,
 } from '@store/persistence';
 import { STORE_VERSION } from '@store/version';
@@ -45,6 +46,7 @@ export function resumeLargeMigrationInBackground(baseState: StoreState) {
     useStore.getState().setMigrationUiState(migMetaToUiState(meta));
   }).then((result) => {
     setMigrationInProgress(false);
+    setIndexedDbMigrationComplete(true);
     if (result) {
       // Apply migrated data to store
       const nextState = { ...useStore.getState() };
@@ -196,6 +198,8 @@ const useAppBootstrap = () => {
           contentStore: nextState.contentStore,
           currentChatIndex: nextState.currentChatIndex,
         });
+        // IndexedDB already has authoritative data — safe to strip chats from localStorage
+        setIndexedDbMigrationComplete(true);
       } else if (
         useStore.getState().chats ||
         Object.keys(useStore.getState().contentStore ?? {}).length > 0 ||
@@ -203,10 +207,20 @@ const useAppBootstrap = () => {
       ) {
         // First launch after introducing IndexedDB: migrate any existing chat payloads
         // from localStorage-backed zustand state into IndexedDB and keep localStorage slim.
+        const chatDataState = createPersistedChatDataState(useStore.getState());
+        const payloadSize = estimatePersistedPayloadSize(chatDataState);
         try {
-          await saveChatData(createPersistedChatDataState(useStore.getState()));
+          if (payloadSize >= LARGE_MIGRATION_THRESHOLD) {
+            await beginLargeMigration(chatDataState, STORE_VERSION, 'localStorage');
+            setMigrationInProgress(true);
+          } else {
+            await saveChatData(chatDataState);
+          }
+          // IndexedDB write succeeded — safe to strip chats from localStorage
+          setIndexedDbMigrationComplete(true);
         } catch (error) {
           notifyStorageError(error);
+          // Do NOT set migrationComplete — keep chats in localStorage as safety net
         }
       } else if (legacyChats && legacyChats.length > 0) {
         // Check if localStorage chats are large enough for background migration
@@ -217,7 +231,7 @@ const useAppBootstrap = () => {
           try {
             await beginLargeMigration(lsPayload, STORE_VERSION, 'localStorage');
             setMigrationInProgress(true);
-            // Don't set chats into store yet — migration will apply them on completion
+            setIndexedDbMigrationComplete(true);
           } catch (error) {
             notifyStorageError(error);
             // Fallback: immediate save
@@ -226,6 +240,7 @@ const useAppBootstrap = () => {
             useStore.setState({ contentStore: {} });
             try {
               await saveChatData(createPersistedChatDataState(useStore.getState()));
+              setIndexedDbMigrationComplete(true);
             } catch (err) {
               notifyStorageError(err);
             }
@@ -236,10 +251,14 @@ const useAppBootstrap = () => {
           useStore.setState({ contentStore: {} });
           try {
             await saveChatData(createPersistedChatDataState(useStore.getState()));
+            setIndexedDbMigrationComplete(true);
           } catch (error) {
             notifyStorageError(error);
           }
         }
+      } else {
+        // No chat data anywhere — safe to strip (nothing to lose)
+        setIndexedDbMigrationComplete(true);
       }
 
       localStorage.removeItem('chats');

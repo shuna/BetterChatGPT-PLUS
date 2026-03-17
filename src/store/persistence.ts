@@ -146,6 +146,20 @@ let previousFullResult: PersistedStoreState | null = null;
 let previousLocalInputRefs: Partial<Record<keyof LocalStoragePersistedState, unknown>> = {};
 let previousLocalResult: LocalStoragePersistedState | null = null;
 
+/**
+ * When true, localStorage persist will strip chats/contentStore/branchClipboard
+ * (normal operation — data lives in IndexedDB).
+ * When false (during bootstrap), localStorage retains these fields as a safety net
+ * so that data is not lost if IndexedDB write fails or the page crashes mid-migration.
+ */
+let indexedDbMigrationComplete = false;
+
+export function setIndexedDbMigrationComplete(v: boolean): void {
+  indexedDbMigrationComplete = v;
+  // Invalidate cache so next persist picks up the change
+  previousLocalResult = null;
+}
+
 const buildPersistedChats = (state: StoreState): PersistedChat[] | undefined =>
   state.chats?.map(({ messages, ...rest }) =>
     rest.branchTree ? rest : { ...rest, messages }
@@ -287,7 +301,17 @@ export const createPartializedState = (state: StoreState): PersistedStoreState =
 
 export const createLocalStoragePartializedState = (
   state: StoreState
-): LocalStoragePersistedState => {
+): LocalStoragePersistedState | PersistedStoreState => {
+  // Before IndexedDB migration is confirmed, keep chats/contentStore in localStorage
+  // as a safety net against data loss from crashes or storage eviction.
+  if (!indexedDbMigrationComplete) {
+    const hasChats = state.chats && state.chats.length > 0;
+    const hasContentStore = Object.keys(state.contentStore ?? {}).length > 0;
+    if (hasChats || hasContentStore || state.branchClipboard) {
+      return createPartializedState(state);
+    }
+  }
+
   let changed = !previousLocalResult;
 
   if (!changed) {

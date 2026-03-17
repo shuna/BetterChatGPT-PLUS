@@ -17,6 +17,7 @@ import {
   migratePersistedState,
   migratePersistedChatDataState,
   rehydrateStoreState,
+  setIndexedDbMigrationComplete,
 } from './persistence';
 import { DEFAULT_PROVIDERS } from './provider-config';
 import { STORE_VERSION } from './version';
@@ -113,6 +114,7 @@ const buildStoreState = () => {
 describe('persistence', () => {
   beforeEach(() => {
     clearStreamingBuffersForTest();
+    setIndexedDbMigrationComplete(false);
   });
 
   it('finalizes streaming marker nodes when building a full snapshot', () => {
@@ -147,8 +149,9 @@ describe('persistence', () => {
     expect(second).toBe(first);
   });
 
-  it('omits chat payloads from localStorage partialized state', () => {
+  it('omits chat payloads from localStorage partialized state after migration complete', () => {
     const state = buildStoreState();
+    setIndexedDbMigrationComplete(true);
 
     const partialized = createLocalStoragePartializedState(state as never);
 
@@ -156,6 +159,16 @@ describe('persistence', () => {
     expect('contentStore' in partialized).toBe(false);
     expect('branchClipboard' in partialized).toBe(false);
     expect(partialized.prompts).toEqual(state.prompts);
+  });
+
+  it('retains chat payloads in localStorage before migration complete', () => {
+    const state = buildStoreState();
+    setIndexedDbMigrationComplete(false);
+
+    const partialized = createLocalStoragePartializedState(state as never);
+
+    expect('chats' in partialized).toBe(true);
+    expect('contentStore' in partialized).toBe(true);
   });
 
   it('rehydrates current chat index and materializes branch-tree messages', () => {
