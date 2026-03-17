@@ -12,10 +12,14 @@ import {
   pasteBranchSequenceState,
   removeMessageAtIndexState,
   replaceMessageAndPruneFollowingState,
+  updateLastNodeContentState,
   upsertMessageAtIndexState,
 } from './branch-domain';
+import { resolveContent } from '@utils/contentStore';
 
 const textContent = (text: string): ContentInterface[] => [{ type: 'text', text }];
+const L = 'This is a fairly long text that simulates a real chat message with enough content to make delta compression worthwhile. It contains multiple sentences.';
+const longContent = (suffix: string) => textContent(L + suffix);
 
 const createChat = (): ChatInterface => ({
   id: 'chat-1',
@@ -63,7 +67,8 @@ describe('branch-domain', () => {
     );
 
     expect(deleted.chats[0].branchTree?.nodes[newNodeId]).toBeUndefined();
-    expect(deleted.contentStore[newHash]).toBeUndefined();
+    // With deferred GC, entry stays with refCount<=0 until flushPendingGC
+    expect(deleted.contentStore[newHash]?.refCount).toBeLessThanOrEqual(0);
   });
 
   it('pastes copied nodes and retains referenced content', () => {
@@ -238,5 +243,135 @@ describe('branch-domain', () => {
       content: textContent('follow-up'),
     });
     expect(updated.chats[0].branchTree?.activePath).toHaveLength(3);
+  });
+});
+
+describe('branch-domain delta compression', () => {
+  const createLongChat = (): ChatInterface => ({
+    id: 'chat-1',
+    title: 'Chat',
+    titleSet: true,
+    config: { ..._defaultChatConfig },
+    imageDetail: _defaultImageDetail,
+    messages: [
+      { role: 'user', content: longContent(' user msg') },
+      { role: 'assistant', content: longContent(' assistant msg') },
+    ],
+  });
+
+  it('createBranchState: stores delta for text-only branch', () => {
+    const ensured = ensureBranchTreeState([createLongChat()], 0, {});
+    const sourceNodeId = ensured.chats[0].branchTree!.activePath[1];
+
+    const branched = createBranchState(
+      ensured.chats,
+      0,
+      sourceNodeId,
+      longContent(' assistant msg edited'),
+      ensured.contentStore
+    );
+
+    const newHash = branched.chats[0].branchTree!.nodes[branched.newId].contentHash;
+    expect(branched.contentStore[newHash].delta).toBeDefined();
+    expect(resolveContent(branched.contentStore, newHash)).toEqual(longContent(' assistant msg edited'));
+  });
+
+  it('createBranchState: stores full for image content', () => {
+    const ensured = ensureBranchTreeState([createLongChat()], 0, {});
+    const sourceNodeId = ensured.chats[0].branchTree!.activePath[1];
+    const imgContent: ContentInterface[] = [
+      { type: 'image_url', image_url: { url: 'data:image/png;base64,abc', detail: 'auto' } },
+    ];
+
+    const branched = createBranchState(
+      ensured.chats,
+      0,
+      sourceNodeId,
+      imgContent,
+      ensured.contentStore
+    );
+
+    const newHash = branched.chats[0].branchTree!.nodes[branched.newId].contentHash;
+    expect(branched.contentStore[newHash].delta).toBeUndefined();
+  });
+
+  it('upsertMessageAtIndexState: resolves content correctly after edit', () => {
+    const ensured = ensureBranchTreeState([createLongChat()], 0, {});
+
+    const updated = upsertMessageAtIndexState(
+      ensured.chats,
+      0,
+      1,
+      { role: 'assistant', content: longContent(' assistant msg updated') },
+      ensured.contentStore
+    );
+
+    const nodeId = updated.chats[0].branchTree!.activePath[1];
+    const hash = updated.chats[0].branchTree!.nodes[nodeId].contentHash;
+    // When base refCount drops to 0, delta gets promoted to full — this is correct
+    expect(resolveContent(updated.contentStore, hash)).toEqual(longContent(' assistant msg updated'));
+  });
+
+  it('upsertMessageAtIndexState: keeps delta when base has other refs', () => {
+    const ensured = ensureBranchTreeState([createLongChat()], 0, {});
+    const sourceNodeId = ensured.chats[0].branchTree!.activePath[1];
+
+    // Create a branch first so the base has refCount > 1
+    const branched = createBranchState(
+      ensured.chats, 0, sourceNodeId, undefined, ensured.contentStore
+    );
+
+    // Now edit the original node — base still has refs from the branch
+    const updated = upsertMessageAtIndexState(
+      branched.chats,
+      0,
+      1,
+      { role: 'assistant', content: longContent(' assistant msg updated') },
+      branched.contentStore
+    );
+
+    const nodeId = updated.chats[0].branchTree!.activePath[1];
+    const hash = updated.chats[0].branchTree!.nodes[nodeId].contentHash;
+    expect(updated.contentStore[hash].delta).toBeDefined();
+    expect(resolveContent(updated.contentStore, hash)).toEqual(longContent(' assistant msg updated'));
+  });
+
+  it('updateLastNodeContentState: resolves content correctly', () => {
+    const ensured = ensureBranchTreeState([createLongChat()], 0, {});
+
+    const updated = updateLastNodeContentState(
+      ensured.chats,
+      0,
+      longContent(' assistant msg edited'),
+      ensured.contentStore
+    );
+
+    const tree = updated.chats[0].branchTree!;
+    const lastId = tree.activePath[tree.activePath.length - 1];
+    const hash = tree.nodes[lastId].contentHash;
+    expect(resolveContent(updated.contentStore, hash)).toEqual(longContent(' assistant msg edited'));
+  });
+
+  it('branch create → delete all branches → contentStore integrity', () => {
+    const ensured = ensureBranchTreeState([createLongChat()], 0, {});
+    const sourceNodeId = ensured.chats[0].branchTree!.activePath[1];
+
+    const branched = createBranchState(
+      ensured.chats,
+      0,
+      sourceNodeId,
+      longContent(' assistant variant'),
+      ensured.contentStore
+    );
+
+    const deleted = deleteBranchState(
+      branched.chats,
+      0,
+      branched.newId,
+      branched.contentStore
+    );
+
+    const origHash = deleted.chats[0].branchTree!.nodes[sourceNodeId].contentHash;
+    expect(resolveContent(deleted.contentStore, origHash)).toEqual(longContent(' assistant msg'));
   });
 });
