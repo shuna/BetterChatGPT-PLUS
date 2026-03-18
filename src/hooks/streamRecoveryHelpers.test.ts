@@ -149,7 +149,7 @@ describe('findRecoverableChat', () => {
   const chats = [
     { id: 'c0', messages: [] },
     { id: 'c1', messages: [{ role: 'user', content: [] }] },
-  ] as ChatInterface[];
+  ] as unknown as ChatInterface[];
 
   it('returns chat at valid index', () => {
     expect(findRecoverableChat(chats, 0)?.id).toBe('c0');
@@ -176,7 +176,7 @@ describe('hasRecoverableMessage', () => {
       { role: 'user', content: [] },
       { role: 'assistant', content: [] },
     ],
-  } as ChatInterface;
+  } as unknown as ChatInterface;
 
   it('returns true for valid message index', () => {
     expect(hasRecoverableMessage(chat, 0)).toBe(true);
