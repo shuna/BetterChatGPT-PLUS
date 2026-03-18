@@ -6,6 +6,93 @@ const MARKDOWN_SYNTAX_PATTERN = /(^|\n)\s{0,3}(#{1,6}\s|[-*+]\s|\d+\.\s|>\s)|(\*
 
 const hasMarkdownSyntax = (value: string) => MARKDOWN_SYNTAX_PATTERN.test(value);
 
+/**
+ * Detect consecutive table-row divs in OverType preview output and replace them
+ * with a proper <table> element.  Each row is a <div> whose text matches the
+ * pipe-delimited GFM table syntax (`| cell | cell |`).  Separator rows
+ * (`|---|---|`) are consumed but not rendered.
+ */
+const TABLE_ROW_RE = /^\s*\|(.+)\|\s*$/;
+const SEPARATOR_RE = /^\s*\|[\s:]*-{2,}[\s:]*(\|[\s:]*-{2,}[\s:]*)*\|\s*$/;
+
+function convertTablesToHtml(previewEl: HTMLElement) {
+  const children = Array.from(previewEl.children) as HTMLElement[];
+  let i = 0;
+  while (i < children.length) {
+    const child = children[i];
+    const text = child.textContent ?? '';
+    if (child.tagName === 'DIV' && TABLE_ROW_RE.test(text)) {
+      // Collect consecutive table-row divs
+      const rowDivs: HTMLElement[] = [];
+      let j = i;
+      while (j < children.length) {
+        const t = children[j].textContent ?? '';
+        if (children[j].tagName === 'DIV' && TABLE_ROW_RE.test(t)) {
+          rowDivs.push(children[j]);
+          j++;
+        } else {
+          break;
+        }
+      }
+      // Need at least header + separator + 1 data row (or header + separator)
+      if (rowDivs.length >= 2) {
+        const table = document.createElement('table');
+        const parseCells = (div: HTMLElement) => {
+          const raw = div.textContent ?? '';
+          const m = TABLE_ROW_RE.exec(raw);
+          if (!m) return [];
+          return m[1].split('|').map((c) => c.trim());
+        };
+
+        // First row = header
+        const headerCells = parseCells(rowDivs[0]);
+        const thead = document.createElement('thead');
+        const headerRow = document.createElement('tr');
+        headerCells.forEach((c) => {
+          const th = document.createElement('th');
+          th.textContent = c;
+          headerRow.appendChild(th);
+        });
+        thead.appendChild(headerRow);
+        table.appendChild(thead);
+
+        // Find separator row and skip it
+        let dataStart = 1;
+        if (rowDivs.length > 1 && SEPARATOR_RE.test(rowDivs[1].textContent ?? '')) {
+          dataStart = 2;
+        }
+
+        // Remaining rows = body
+        if (dataStart < rowDivs.length) {
+          const tbody = document.createElement('tbody');
+          for (let k = dataStart; k < rowDivs.length; k++) {
+            const cells = parseCells(rowDivs[k]);
+            const tr = document.createElement('tr');
+            cells.forEach((c) => {
+              const td = document.createElement('td');
+              td.textContent = c;
+              tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+          }
+          table.appendChild(tbody);
+        }
+
+        // Replace divs with table
+        previewEl.insertBefore(table, rowDivs[0]);
+        rowDivs.forEach((d) => d.remove());
+        // Re-scan from same position since we modified DOM
+        children.splice(i, rowDivs.length, table as unknown as HTMLElement);
+        i++;
+      } else {
+        i = j;
+      }
+    } else {
+      i++;
+    }
+  }
+}
+
 const applyEditorMode = (
   instance: OverTypeInstance,
   mode: 'preview' | 'edit',
@@ -184,6 +271,12 @@ const OverTypeEditor: React.FC<OverTypeEditorProps> = ({
       },
       onKeydown: (e) => {
         onKeyDownRef.current?.(e);
+      },
+      // @ts-expect-error onRender is supported at runtime but missing from type definitions
+      onRender: (previewEl: HTMLElement, renderMode: string) => {
+        if (renderMode === 'preview') {
+          convertTablesToHtml(previewEl);
+        }
       },
     });
 
