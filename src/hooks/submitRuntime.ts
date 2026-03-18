@@ -10,7 +10,8 @@ import { cloneChatAt } from '@store/branch-domain';
 import { upsertActivePathMessage } from '@utils/branchUtils';
 import { materializeActivePath } from '@utils/branchUtils';
 import { addContent, releaseContent, resolveContent } from '@utils/contentStore';
-import { deleteRequest as deleteStreamRecord } from '@utils/streamDb';
+import { appendText as appendStreamText, deleteRequest as deleteStreamRecord, saveRequest as saveStreamRecord } from '@utils/streamDb';
+import { sendAck, parseProxySse, type ProxyConfig } from '@utils/proxyClient';
 import {
   appendToStreamingBuffer,
   createStreamingContentHash,
@@ -299,6 +300,16 @@ type ExecuteSubmitStreamParams = {
   t: (key: string) => string;
 };
 
+/** Resolve proxy config from store, returns undefined if not configured */
+function getProxyConfig(): ProxyConfig | undefined {
+  const { proxyEndpoint, proxyAuthToken } = useStore.getState();
+  if (!proxyEndpoint) return undefined;
+  return {
+    endpoint: proxyEndpoint.replace(/\/+$/, ''),
+    authToken: proxyAuthToken || undefined,
+  };
+}
+
 export const executeSubmitStream = async ({
   sessionId,
   chatId,
@@ -314,6 +325,7 @@ export const executeSubmitStream = async ({
 }: ExecuteSubmitStreamParams) => {
   sessionChunkTargets.set(sessionId, { chatId, targetNodeId });
   const isStreamSupported = getEffectiveStreamEnabled(config);
+  const proxyConfig = getProxyConfig();
   const runRequest = async (requestMessages: MessageInterface[]) => {
     if (!isStreamSupported) {
       let data;
@@ -364,6 +376,7 @@ export const executeSubmitStream = async ({
       queueChunkToStore(chatId, targetNodeId, text);
     };
 
+    // --- Path 1: SW available (with optional proxy) ---
     if (await swBridge.waitForController()) {
       const requestId = crypto.randomUUID();
       const prepared = prepareStreamRequest(
@@ -374,6 +387,15 @@ export const executeSubmitStream = async ({
         undefined,
         apiVersion
       );
+
+      // Build proxy bridge config for SW if proxy is configured
+      const swProxyConfig = proxyConfig
+        ? {
+            endpoint: proxyConfig.endpoint,
+            authToken: proxyConfig.authToken,
+            sessionId: `${chatId}:${requestId}`,
+          }
+        : undefined;
 
       await new Promise<void>((resolve, reject) => {
         let swHandle: swBridge.SwStreamHandle | undefined;
@@ -399,14 +421,19 @@ export const executeSubmitStream = async ({
           chatIndex,
           messageIndex,
           onChunk,
-          onDone: () => {
+          onDone: (meta) => {
             cleanup();
+            // ACK proxy to free KV cache
+            if (meta?.proxySessionId && proxyConfig) {
+              sendAck(proxyConfig, meta.proxySessionId);
+            }
             resolve();
           },
           onError: (error) => {
             cleanup();
             reject(new Error(error));
           },
+          proxyConfig: swProxyConfig,
         }).then((handle) => {
           swHandle = handle;
           swCancellers.set(sessionId, () => handle.cancel());
@@ -418,6 +445,174 @@ export const executeSubmitStream = async ({
       return;
     }
 
+    // --- Path 2: Proxy without SW (fetch proxy SSE directly) ---
+    if (proxyConfig) {
+      const requestId = crypto.randomUUID();
+      const proxySessionId = `${chatId}:${requestId}`;
+      const prepared = prepareStreamRequest(
+        resolvedProvider.endpoint,
+        requestMessages,
+        config,
+        resolvedProvider.key,
+        undefined,
+        apiVersion
+      );
+
+      // Write initial streamDb record so useStreamRecovery can find this session
+      await saveStreamRecord({
+        requestId,
+        chatIndex,
+        messageIndex,
+        bufferedText: '',
+        status: 'streaming',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        acknowledged: false,
+        proxySessionId,
+        lastProxyEventId: 0,
+      });
+
+      const res = await fetch(`${proxyConfig.endpoint}/api/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(proxyConfig.authToken
+            ? { Authorization: `Bearer ${proxyConfig.authToken}` }
+            : {}),
+        },
+        body: JSON.stringify({
+          endpoint: prepared.endpoint,
+          headers: prepared.headers,
+          body: prepared.body,
+          sessionId: proxySessionId,
+          intermediateCache: true,
+        }),
+        signal: abortController.signal,
+      });
+
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+
+      if (!res.body) throw new Error('Proxy returned no body');
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let partial = '';
+      let llmPartial = '';
+      let reading = true;
+      const CHUNK_TIMEOUT_MS = 45_000;
+
+      // Periodic streamDb flush (mirrors SW's FLUSH_INTERVAL_MS = 800)
+      const DB_FLUSH_INTERVAL_MS = 800;
+      let dbBuffered = '';
+      let dbFlushTimer: ReturnType<typeof setTimeout> | null = null;
+      let dbFlushChain = Promise.resolve();
+
+      function flushDbBuffer() {
+        if (dbFlushTimer) { clearTimeout(dbFlushTimer); dbFlushTimer = null; }
+        const snapshot = dbBuffered;
+        if (!snapshot) return;
+        dbBuffered = '';
+        dbFlushChain = dbFlushChain
+          .then(() => appendStreamText(requestId, snapshot))
+          .catch(() => {});
+      }
+
+      function scheduleDbFlush() {
+        if (dbFlushTimer) return;
+        dbFlushTimer = setTimeout(flushDbBuffer, DB_FLUSH_INTERVAL_MS);
+      }
+
+      function readWithTimeout() {
+        let timer: ReturnType<typeof setTimeout>;
+        return Promise.race([
+          reader.read().finally(() => clearTimeout(timer)),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error('Chunk timeout: no data received for 45s')),
+              CHUNK_TIMEOUT_MS
+            );
+          }),
+        ]);
+      }
+
+      try {
+        while (reading && !abortController.signal.aborted) {
+          const { done, value } = await readWithTimeout();
+          const chunk = partial + decoder.decode(done ? undefined : value, { stream: !done });
+          const proxySse = parseProxySse(chunk, done);
+          partial = proxySse.partial;
+
+          for (const evt of proxySse.events) {
+            if (evt.eventType === 'done') {
+              reading = false;
+              break;
+            }
+            if (evt.eventType === 'error' || evt.eventType === 'interrupted') {
+              throw new Error(evt.meta?.error || 'Proxy stream error');
+            }
+            if (evt.rawText) {
+              const llmChunk = llmPartial + evt.rawText;
+              const llmParsed = parseEventSource(llmChunk, false);
+              llmPartial = llmParsed.partial;
+
+              const resultString = llmParsed.events.reduce(
+                (output: string, current) => {
+                  if (!current.choices?.[0]?.delta) return output;
+                  const content = current.choices[0]?.delta?.content ?? null;
+                  if (content) output += content;
+                  return output;
+                },
+                ''
+              );
+              if (resultString) {
+                onChunk(resultString);
+                dbBuffered += resultString;
+                scheduleDbFlush();
+              }
+              if (llmParsed.done) {
+                reading = false;
+                break;
+              }
+            }
+          }
+
+          if (done) reading = false;
+        }
+
+        // Flush remaining LLM partial
+        if (llmPartial) {
+          const llmFlushed = parseEventSource(llmPartial, true);
+          const resultString = llmFlushed.events.reduce(
+            (output: string, current) => {
+              if (!current.choices?.[0]?.delta) return output;
+              const content = current.choices[0]?.delta?.content ?? null;
+              if (content) output += content;
+              return output;
+            },
+            ''
+          );
+          if (resultString) {
+            onChunk(resultString);
+            dbBuffered += resultString;
+          }
+        }
+      } finally {
+        reader.cancel();
+        reader.releaseLock();
+        // Final streamDb flush
+        flushDbBuffer();
+        await dbFlushChain;
+        // ACK proxy to free KV cache (best-effort, even on error/abort)
+        sendAck(proxyConfig, proxySessionId);
+        deleteStreamRecord(requestId).catch(() => {});
+      }
+
+      return;
+    }
+
+    // --- Path 3: Direct fetch (no SW, no proxy) ---
     const stream = await getChatCompletionStream(
       resolvedProvider.endpoint,
       requestMessages,
@@ -450,7 +645,7 @@ export const executeSubmitStream = async ({
     try {
       while (reading && !abortController.signal.aborted) {
         const { done, value } = await readWithTimeout();
-        const chunk = partial + decoder.decode(value, { stream: !done });
+        const chunk = partial + decoder.decode(done ? undefined : value, { stream: !done });
         const parsed = parseEventSource(chunk, done);
         partial = parsed.partial;
 

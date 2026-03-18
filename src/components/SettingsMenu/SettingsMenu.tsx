@@ -20,6 +20,7 @@ import ClearConversation from '@components/Menu/MenuOptions/ClearConversation';
 import DisplayChatSizeToggle from './DisplayChatSizeToggle';
 import ProviderMenuButton from './ProviderMenuButton';
 import StreamingMarkdownPolicySelect from './StreamingMarkdownPolicySelect';
+import ProxySettings from './ProxySettings';
 
 const SettingsMenu = () => {
   const { t } = useTranslation();
@@ -67,6 +68,7 @@ const SettingsMenu = () => {
             <ChatConfigMenu />
             <TotalTokenCost />
             <ProviderMenuButton />
+            <ProxySettings />
           </div>
         </PopupModal>
       )}
