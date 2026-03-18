@@ -10,7 +10,7 @@ import { cloneChatAt } from '@store/branch-domain';
 import { upsertActivePathMessage } from '@utils/branchUtils';
 import { materializeActivePath } from '@utils/branchUtils';
 import { addContent, releaseContent, resolveContent } from '@utils/contentStore';
-import { deleteRequest as deleteStreamRecord } from '@utils/streamDb';
+import { appendText as appendStreamText, deleteRequest as deleteStreamRecord, saveRequest as saveStreamRecord } from '@utils/streamDb';
 import { sendAck, parseProxySse, type ProxyConfig } from '@utils/proxyClient';
 import {
   appendToStreamingBuffer,
@@ -447,7 +447,8 @@ export const executeSubmitStream = async ({
 
     // --- Path 2: Proxy without SW (fetch proxy SSE directly) ---
     if (proxyConfig) {
-      const proxySessionId = `${chatId}:${crypto.randomUUID()}`;
+      const requestId = crypto.randomUUID();
+      const proxySessionId = `${chatId}:${requestId}`;
       const prepared = prepareStreamRequest(
         resolvedProvider.endpoint,
         requestMessages,
@@ -456,6 +457,20 @@ export const executeSubmitStream = async ({
         undefined,
         apiVersion
       );
+
+      // Write initial streamDb record so useStreamRecovery can find this session
+      await saveStreamRecord({
+        requestId,
+        chatIndex,
+        messageIndex,
+        bufferedText: '',
+        status: 'streaming',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        acknowledged: false,
+        proxySessionId,
+        lastProxyEventId: 0,
+      });
 
       const res = await fetch(`${proxyConfig.endpoint}/api/stream`, {
         method: 'POST',
@@ -470,6 +485,7 @@ export const executeSubmitStream = async ({
           headers: prepared.headers,
           body: prepared.body,
           sessionId: proxySessionId,
+          intermediateCache: true,
         }),
         signal: abortController.signal,
       });
@@ -487,6 +503,27 @@ export const executeSubmitStream = async ({
       let reading = true;
       const CHUNK_TIMEOUT_MS = 45_000;
 
+      // Periodic streamDb flush (mirrors SW's FLUSH_INTERVAL_MS = 800)
+      const DB_FLUSH_INTERVAL_MS = 800;
+      let dbBuffered = '';
+      let dbFlushTimer: ReturnType<typeof setTimeout> | null = null;
+      let dbFlushChain = Promise.resolve();
+
+      function flushDbBuffer() {
+        if (dbFlushTimer) { clearTimeout(dbFlushTimer); dbFlushTimer = null; }
+        const snapshot = dbBuffered;
+        if (!snapshot) return;
+        dbBuffered = '';
+        dbFlushChain = dbFlushChain
+          .then(() => appendStreamText(requestId, snapshot))
+          .catch(() => {});
+      }
+
+      function scheduleDbFlush() {
+        if (dbFlushTimer) return;
+        dbFlushTimer = setTimeout(flushDbBuffer, DB_FLUSH_INTERVAL_MS);
+      }
+
       function readWithTimeout() {
         let timer: ReturnType<typeof setTimeout>;
         return Promise.race([
@@ -503,7 +540,7 @@ export const executeSubmitStream = async ({
       try {
         while (reading && !abortController.signal.aborted) {
           const { done, value } = await readWithTimeout();
-          const chunk = partial + decoder.decode(value, { stream: !done });
+          const chunk = partial + decoder.decode(done ? undefined : value, { stream: !done });
           const proxySse = parseProxySse(chunk, done);
           partial = proxySse.partial;
 
@@ -529,7 +566,11 @@ export const executeSubmitStream = async ({
                 },
                 ''
               );
-              if (resultString) onChunk(resultString);
+              if (resultString) {
+                onChunk(resultString);
+                dbBuffered += resultString;
+                scheduleDbFlush();
+              }
               if (llmParsed.done) {
                 reading = false;
                 break;
@@ -552,15 +593,22 @@ export const executeSubmitStream = async ({
             },
             ''
           );
-          if (resultString) onChunk(resultString);
+          if (resultString) {
+            onChunk(resultString);
+            dbBuffered += resultString;
+          }
         }
       } finally {
         reader.cancel();
         reader.releaseLock();
+        // Final streamDb flush
+        flushDbBuffer();
+        await dbFlushChain;
+        // ACK proxy to free KV cache (best-effort, even on error/abort)
+        sendAck(proxyConfig, proxySessionId);
+        deleteStreamRecord(requestId).catch(() => {});
       }
 
-      // ACK proxy
-      sendAck(proxyConfig, proxySessionId);
       return;
     }
 
@@ -597,7 +645,7 @@ export const executeSubmitStream = async ({
     try {
       while (reading && !abortController.signal.aborted) {
         const { done, value } = await readWithTimeout();
-        const chunk = partial + decoder.decode(value, { stream: !done });
+        const chunk = partial + decoder.decode(done ? undefined : value, { stream: !done });
         const parsed = parseEventSource(chunk, done);
         partial = parsed.partial;
 

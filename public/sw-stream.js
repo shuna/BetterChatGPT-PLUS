@@ -100,6 +100,10 @@ function extractText(events) {
 // --- Proxy SSE Parser ---
 // Proxy format: id: N\ndata: "JSON-stringified raw text"\n\n
 // Control events: event: done\ndata: {"totalChunks":N,"complete":true}\n\n
+//
+// IMPORTANT: This is a plain-JS copy of parseProxySse in src/utils/proxyClient.ts.
+// SW scope cannot import ES modules, so the logic is duplicated here.
+// Keep both implementations in sync when making changes.
 
 function parseProxySse(text, flush) {
   const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -219,6 +223,7 @@ async function handleStartStream(msg, port) {
       headers,
       body,
       sessionId: proxyConfig.sessionId,
+      intermediateCache: true,
     });
   } else {
     fetchEndpoint = endpoint;
@@ -265,7 +270,7 @@ async function handleStartStream(msg, port) {
 
       while (reading) {
         const { done, value } = await readWithTimeout();
-        const chunk = partial + decoder.decode(value, { stream: !done });
+        const chunk = partial + decoder.decode(done ? undefined : value, { stream: !done });
         const proxySse = parseProxySse(chunk, done);
         partial = proxySse.partial;
 
@@ -317,7 +322,7 @@ async function handleStartStream(msg, port) {
       // --- Direct mode: existing LLM SSE parsing ---
       while (reading) {
         const { done, value } = await readWithTimeout();
-        const chunk = partial + decoder.decode(value, { stream: !done });
+        const chunk = partial + decoder.decode(done ? undefined : value, { stream: !done });
         const parsed = parseEventSource(chunk, done);
         partial = parsed.partial;
 

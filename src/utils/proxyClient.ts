@@ -83,6 +83,10 @@ export interface ProxySseEvent {
 /**
  * Parse proxy SSE text into structured events.
  *
+ * IMPORTANT: A plain-JS copy of this function exists in public/sw-stream.js
+ * (parseProxySse) for Service Worker scope which cannot import ES modules.
+ * Keep both implementations in sync when making changes.
+ *
  * Proxy SSE format:
  *   id: 1
  *   data: "JSON-stringified raw text"

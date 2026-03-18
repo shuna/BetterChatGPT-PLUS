@@ -125,7 +125,11 @@ async function handleStream(
     return jsonResponse({ error: 'endpoint and sessionId are required' }, 400);
   }
 
-  // Forward request to LLM API
+  // SECURITY NOTE: The client sends LLM API keys inside `headers`.
+  // This Worker forwards them verbatim to the LLM endpoint.  The keys
+  // transit through Cloudflare's network but are NOT logged or stored
+  // by this Worker.  Operators should be aware that deploying this proxy
+  // means LLM API keys pass through the Worker.  See README for details.
   let llmRes: Response;
   try {
     llmRes = await fetch(endpoint, {
@@ -170,7 +174,9 @@ async function handleStream(
         error,
       } satisfies CachedSession),
       { expirationTtl: KV_EXPIRATION_TTL }
-    ).catch(() => {/* KV write failed - quota exceeded or other error */});
+    ).catch((e) => {
+      console.error(`KV write failed for session:${sessionId}:`, (e as Error).message ?? e);
+    });
 
   const processStream = async () => {
     const writer = writable.getWriter();

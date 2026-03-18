@@ -22,6 +22,13 @@ jobs:
       - name: Install dependencies
         run: cd worker && npm install
 
+      - name: Validate wrangler.toml KV namespace ID
+        run: |
+          if grep -q 'REPLACE_WITH_KV_NAMESPACE_ID' worker/wrangler.toml; then
+            echo "::error::wrangler.toml still contains placeholder KV namespace ID. Replace it before deploying."
+            exit 1
+          fi
+
       - name: Deploy to CloudFlare Workers
         run: cd worker && npx wrangler deploy
         env:

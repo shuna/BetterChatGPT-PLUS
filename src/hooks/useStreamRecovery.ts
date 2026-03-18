@@ -67,6 +67,10 @@ export default function useStreamRecovery() {
   }, []);
 }
 
+/** Max retry attempts when proxy returns an 'interrupted' event (Worker may still be writing) */
+const PROXY_RECOVERY_MAX_RETRIES = 3;
+const PROXY_RECOVERY_RETRY_DELAY_MS = 2000;
+
 /** Try to recover additional text from the proxy's KV cache */
 async function tryProxyRecovery(
   record: StreamRecord,
@@ -80,29 +84,61 @@ async function tryProxyRecovery(
     authToken: proxyAuthToken || undefined,
   };
 
+  let bestText: string | null = null;
+
+  for (let attempt = 0; attempt <= PROXY_RECOVERY_MAX_RETRIES; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, PROXY_RECOVERY_RETRY_DELAY_MS));
+    }
+
+    const result = await readProxyRecoveryStream(config, record);
+    if (!result) break;
+
+    if (result.text.length > (bestText?.length ?? 0)) {
+      bestText = result.text;
+    }
+
+    // If the stream completed or errored, no point retrying
+    if (!result.interrupted) break;
+  }
+
+  // ACK the proxy to free KV
+  sendAck(config, record.proxySessionId);
+
+  return bestText && bestText.length > currentText.length ? bestText : null;
+}
+
+async function readProxyRecoveryStream(
+  config: ProxyConfig,
+  record: StreamRecord
+): Promise<{ text: string; interrupted: boolean } | null> {
   const stream = await recoverFromProxy(
     config,
-    record.proxySessionId,
+    record.proxySessionId!,
     record.lastProxyEventId ?? 0
   );
   if (!stream) return null;
 
-  // Read the recovery SSE stream and extract text
   const reader = stream.getReader();
   const decoder = new TextDecoder();
   let partial = '';
   let llmPartial = '';
   let recoveredText = record.bufferedText;
+  let interrupted = false;
 
   try {
     while (true) {
       const { done, value } = await reader.read();
-      const chunk = partial + decoder.decode(value, { stream: !done });
+      const chunk = partial + decoder.decode(done ? undefined : value, { stream: !done });
       const proxySse = parseProxySse(chunk, done);
       partial = proxySse.partial;
 
       for (const evt of proxySse.events) {
-        if (evt.eventType === 'done' || evt.eventType === 'error' || evt.eventType === 'interrupted') {
+        if (evt.eventType === 'interrupted') {
+          interrupted = true;
+          break;
+        }
+        if (evt.eventType === 'done' || evt.eventType === 'error') {
           break;
         }
         if (evt.rawText) {
@@ -134,10 +170,7 @@ async function tryProxyRecovery(
     reader.cancel().catch(() => {});
   }
 
-  // ACK the proxy to free KV
-  sendAck(config, record.proxySessionId);
-
-  return recoveredText.length > currentText.length ? recoveredText : null;
+  return { text: recoveredText, interrupted };
 }
 
 async function recoverPending() {

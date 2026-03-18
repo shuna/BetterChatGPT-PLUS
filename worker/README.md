@@ -4,6 +4,10 @@ CloudFlare Worker that proxies SSE streams from LLM APIs with disconnect recover
 
 **This is an optional component.** The main application works without it. Deploy this if you want server-side stream buffering to recover from client disconnections.
 
+## Security considerations
+
+**API key passthrough:** The client sends LLM API keys (e.g. `Authorization: Bearer sk-...`) inside the request body. The Worker forwards them verbatim to the LLM endpoint. Keys are **not** logged or stored, but they do transit through the Cloudflare Worker. If you are deploying this proxy for other users, make sure they understand this trust model. For production deployments, consider having the Worker inject API keys from Cloudflare secrets instead.
+
 ## How it works
 
 1. Client sends LLM request to the Worker instead of directly to the LLM API
@@ -118,6 +122,12 @@ data: "data: {\"choices\":[...]}\n\n"
 event: done
 data: {}
 ```
+
+### `POST /api/ack/:sessionId`
+
+Client confirms full receipt of the stream. Deletes the KV cache entry immediately.
+
+**Response:** `{ "deleted": true }`
 
 ### `GET /api/recover/:sessionId?lastEventId=N`
 
