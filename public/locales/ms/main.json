@@ -36,16 +36,11 @@
   "countTotalTokens": "Kira jumlah token keseluruhan",
   "morePrompts": "Anda boleh mencari lebih banyak arahan di sini: ",
   "clearPrompts": "Kosongkan arahan",
-  "postOnShareGPT": {
-    "title": "Siarkan di ShareGPT",
-    "warning": "Sila ambil perhatian bahawa dengan menyiarkan perbualan anda di ShareGPT, ia akan menjadi boleh diakses dan dilihat oleh sesiapa sahaja. Setelah disiarkan, perbualan tidak boleh disembunyikan atau dipadam, dan mungkin diarkibkan atau dikongsi oleh orang lain. Kami menasihatkan anda untuk mempertimbangkan dengan teliti dan mengelakkan berkongsi maklumat sensitif atau peribadi di platform ini."
-  },
   "newFolder": "Folder Baru",
   "cloneChat": "Buat salinan perbualan ini",
   "cloned": "Dicipta",
   "enterToSubmit": "Tekan Enter untuk hantar",
   "submitPlaceholder": "Taip mesej atau klik [/] untuk arahan...",
-  "showShareGPT": "Tunjukkan butang ShareGPT",
   "tokenCostModelNotRegistered": "kos tidak diketahui: model tidak didaftarkan",
   "tokenCostNoPricingData": "kos tidak diketahui: tiada data harga"
 }

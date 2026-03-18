@@ -38,16 +38,11 @@
   "liveTokenCountWithImages": "Input: {{prompt}} / Output: {{completion}} / Images: {{images}} ({{cost}})",
   "morePrompts": "You can find more prompts here: ",
   "clearPrompts": "Clear prompts",
-  "postOnShareGPT": {
-    "title": "Post on ShareGPT",
-    "warning": "Please be aware that by posting your conversation on ShareGPT, it will become publicly accessible and viewable to anyone. Once posted, the conversation cannot be hidden or deleted, and may be archived or shared by others. We advise you to consider carefully and avoid sharing sensitive or private information on this platform."
-  },
   "newFolder": "New Folder",
   "cloneChat": "Clone Chat",
   "cloned": "Cloned",
   "enterToSubmit": "Enter to submit",
   "submitPlaceholder": "Type a message or click [/] for prompts...",
-  "showShareGPT": "Show ShareGPT button",
   "tokenCostModelNotRegistered": "cost unknown: model not registered",
   "tokenCostNoPricingData": "cost unknown: no pricing data"
 }

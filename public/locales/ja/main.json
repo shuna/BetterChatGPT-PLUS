@@ -45,10 +45,6 @@
   "liveTokenCountWithImages": "入力: {{prompt}} / 出力: {{completion}} / 画像: {{images}} ({{cost}})",
   "morePrompts": "ここでさらにプロンプトを見つけることができます：",
   "clearPrompts": "プロンプトをクリア",
-  "postOnShareGPT": {
-    "title": "ShareGPTに投稿",
-    "warning": "ShareGPTに会話を投稿すると、誰でもアクセスして閲覧できるようになることに注意してください。一度投稿すると、会話は非表示にできず、削除もできません。また、他の人がアーカイブや共有する可能性があります。このプラットフォームで機密性のある情報や個人情報を共有しないように注意してください。"
-  },
   "newFolder": "新しいフォルダー",
   "cloneChat": "チャットのコピーを作成",
   "cloned": "完了しました",
@@ -56,7 +52,6 @@
   "enterToSubmit": "Enterキーを押して送信",
   "animateBubbleNavigation": "会話バブル移動をアニメーション表示",
   "submitPlaceholder": "メッセージを入力するか、[/] をクリックしてプロンプトを表示します...",
-  "showShareGPT": "ShareGPTボタンを表示",
   "proxySettings": "ストリームプロキシ",
   "proxyEndpoint": "プロキシURL",
   "proxyEndpointPlaceholder": "https://stream-proxy.example.com",

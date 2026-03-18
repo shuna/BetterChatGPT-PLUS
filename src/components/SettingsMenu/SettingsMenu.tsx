@@ -14,7 +14,7 @@ import ChatConfigMenu from '@components/ChatConfigMenu';
 import EnterToSubmitToggle from './EnterToSubmitToggle';
 import AutoScrollToggle from './AutoScrollToggle';
 import AnimateBubbleNavigationToggle from './AnimateBubbleNavigationToggle';
-import HideShareGPTToggle from './HideShareGPTToggle';
+
 import TotalTokenCost, { TotalTokenCostToggle } from './TotalTokenCost';
 import ClearConversation from '@components/Menu/MenuOptions/ClearConversation';
 import DisplayChatSizeToggle from './DisplayChatSizeToggle';
@@ -61,7 +61,7 @@ const SettingsMenu = () => {
               <AdvancedModeToggle />
               <TotalTokenCostToggle />
               <DisplayChatSizeToggle />
-              <HideShareGPTToggle />
+
             </div>
             <ClearConversation />
             <PromptLibraryMenu />

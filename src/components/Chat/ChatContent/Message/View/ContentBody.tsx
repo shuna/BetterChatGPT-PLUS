@@ -101,7 +101,7 @@ const ContentBody = memo(function ContentBody({
   }, [isGeneratingMessage]);
 
   return (
-    <div className='markdown prose w-full md:max-w-full break-words dark:prose-invert dark share-gpt-message'>
+    <div className='markdown prose w-full md:max-w-full break-words dark:prose-invert dark'>
       {markdownMode ? (
         <>
           {isGeneratingMessage && streamingMode === 'plain' ? (

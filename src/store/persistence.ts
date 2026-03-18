@@ -86,7 +86,6 @@ export type PersistedStoreState = Omit<
   | 'defaultImageDetail'
   | 'autoScroll'
   | 'animateBubbleNavigation'
-  | 'hideShareGPT'
   | 'providers'
   | 'favoriteModels'
   | 'branchClipboard'
@@ -122,7 +121,7 @@ const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'hideMenuOptions', 'hideSideMenu', 'folders', 'enterToSubmit',
   'inlineLatex', 'markdownMode', 'streamingMarkdownPolicy', 'totalTokenUsed', 'countTotalTokens',
   'displayChatSize', 'menuWidth', 'defaultImageDetail', 'autoScroll', 'animateBubbleNavigation',
-  'hideShareGPT', 'providers', 'favoriteModels',
+  'providers', 'favoriteModels',
   'branchClipboard', 'contentStore', 'providerModelCache',
   'providerCustomModels', '_legacyCustomModels',
   'onboardingCompleted',
@@ -136,7 +135,7 @@ const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
   'hideMenuOptions', 'hideSideMenu', 'folders', 'enterToSubmit',
   'inlineLatex', 'markdownMode', 'streamingMarkdownPolicy', 'totalTokenUsed', 'countTotalTokens',
   'displayChatSize', 'menuWidth', 'defaultImageDetail', 'autoScroll', 'animateBubbleNavigation',
-  'hideShareGPT', 'providers', 'favoriteModels',
+  'providers', 'favoriteModels',
   'providerModelCache',
   'providerCustomModels', '_legacyCustomModels',
   'onboardingCompleted',
@@ -222,7 +221,7 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     defaultImageDetail: state.defaultImageDetail,
     autoScroll: state.autoScroll,
     animateBubbleNavigation: state.animateBubbleNavigation,
-    hideShareGPT: state.hideShareGPT,
+
     providers: state.providers,
     favoriteModels: state.favoriteModels,
     branchClipboard: sanitizeClipboard(state.branchClipboard, snapshot.contentStore),
@@ -268,7 +267,7 @@ function buildLocalStoragePartializedState(
     defaultImageDetail: state.defaultImageDetail,
     autoScroll: state.autoScroll,
     animateBubbleNavigation: state.animateBubbleNavigation,
-    hideShareGPT: state.hideShareGPT,
+
     providers: state.providers,
     favoriteModels: state.favoriteModels,
     providerModelCache: state.providerModelCache,

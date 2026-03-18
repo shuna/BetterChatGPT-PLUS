@@ -89,7 +89,6 @@ const buildStoreState = () => {
     menuWidth: 320,
     defaultImageDetail: _defaultImageDetail,
     autoScroll: true,
-    hideShareGPT: false,
     providers: { ...DEFAULT_PROVIDERS },
     providerCustomModels: {},
     favoriteModels: [],
