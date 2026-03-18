@@ -8,7 +8,7 @@ compatibility_flags = ["nodejs_compat"]
 # Then replace the id below with the output
 [[kv_namespaces]]
 binding = "STREAM_CACHE"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "9351a4f5bea84b8495cbebdbada260e4"
 
 # For local development:
 # [[kv_namespaces]]
