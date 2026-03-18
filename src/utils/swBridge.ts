@@ -46,6 +46,12 @@ export interface SwStreamHandle {
   cancel: () => void;
 }
 
+export interface ProxyStreamConfig {
+  endpoint: string;
+  authToken?: string;
+  sessionId: string;
+}
+
 export interface StartStreamParams {
   requestId: string;
   endpoint: string;
@@ -54,8 +60,10 @@ export interface StartStreamParams {
   chatIndex: number;
   messageIndex: number;
   onChunk: (text: string) => void;
-  onDone: () => void;
-  onError: (error: string) => void;
+  onDone: (meta?: { proxySessionId?: string; lastProxyEventId?: number }) => void;
+  onError: (error: string, meta?: { proxySessionId?: string; lastProxyEventId?: number }) => void;
+  /** When set, SW routes the request through the proxy worker */
+  proxyConfig?: ProxyStreamConfig;
 }
 
 export async function startStream(params: StartStreamParams): Promise<SwStreamHandle> {
@@ -69,6 +77,7 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
     onChunk,
     onDone,
     onError,
+    proxyConfig,
   } = params;
 
   // Save initial record to IndexedDB (client side too, in case SW dies before writing)
@@ -100,11 +109,17 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
         break;
       case 'sw-done':
         cleanup();
-        onDone();
+        onDone({
+          proxySessionId: data.proxySessionId,
+          lastProxyEventId: data.lastProxyEventId,
+        });
         break;
       case 'sw-error':
         cleanup();
-        onError(data.error || 'Unknown error');
+        onError(data.error || 'Unknown error', {
+          proxySessionId: data.proxySessionId,
+          lastProxyEventId: data.lastProxyEventId,
+        });
         break;
       case 'sw-cancelled':
         cleanup();
@@ -132,6 +147,8 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
       body,
       chatIndex,
       messageIndex,
+      proxyMode: !!proxyConfig,
+      proxyConfig: proxyConfig || undefined,
     },
     [channel.port2],
   );

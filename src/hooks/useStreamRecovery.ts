@@ -5,6 +5,13 @@ import { upsertActivePathMessage } from '@utils/branchUtils';
 import { cloneChatAtIndex } from '@utils/chatShallowClone';
 import { register } from '@utils/swBridge';
 import {
+  recoverFromProxy,
+  sendAck,
+  parseProxySse,
+  type ProxyConfig,
+} from '@utils/proxyClient';
+import { parseEventSource } from '@api/helper';
+import {
   buildRecoveredMessage,
   findRecoverableChat,
   getCurrentMessageText,
@@ -60,6 +67,79 @@ export default function useStreamRecovery() {
   }, []);
 }
 
+/** Try to recover additional text from the proxy's KV cache */
+async function tryProxyRecovery(
+  record: StreamRecord,
+  currentText: string
+): Promise<string | null> {
+  const { proxyEndpoint, proxyAuthToken } = useStore.getState();
+  if (!proxyEndpoint || !record.proxySessionId) return null;
+
+  const config: ProxyConfig = {
+    endpoint: proxyEndpoint.replace(/\/+$/, ''),
+    authToken: proxyAuthToken || undefined,
+  };
+
+  const stream = await recoverFromProxy(
+    config,
+    record.proxySessionId,
+    record.lastProxyEventId ?? 0
+  );
+  if (!stream) return null;
+
+  // Read the recovery SSE stream and extract text
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let partial = '';
+  let llmPartial = '';
+  let recoveredText = record.bufferedText;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      const chunk = partial + decoder.decode(value, { stream: !done });
+      const proxySse = parseProxySse(chunk, done);
+      partial = proxySse.partial;
+
+      for (const evt of proxySse.events) {
+        if (evt.eventType === 'done' || evt.eventType === 'error' || evt.eventType === 'interrupted') {
+          break;
+        }
+        if (evt.rawText) {
+          const llmChunk = llmPartial + evt.rawText;
+          const llmParsed = parseEventSource(llmChunk, false);
+          llmPartial = llmParsed.partial;
+
+          for (const llmEvt of llmParsed.events) {
+            const content = llmEvt.choices?.[0]?.delta?.content;
+            if (content) recoveredText += content;
+          }
+        }
+      }
+
+      if (done) break;
+    }
+
+    // Flush remaining LLM partial
+    if (llmPartial) {
+      const flushed = parseEventSource(llmPartial, true);
+      for (const llmEvt of flushed.events) {
+        const content = llmEvt.choices?.[0]?.delta?.content;
+        if (content) recoveredText += content;
+      }
+    }
+  } catch {
+    // Network error during recovery — use what we have
+  } finally {
+    reader.cancel().catch(() => {});
+  }
+
+  // ACK the proxy to free KV
+  sendAck(config, record.proxySessionId);
+
+  return recoveredText.length > currentText.length ? recoveredText : null;
+}
+
 async function recoverPending() {
   let records: StreamRecord[];
   try {
@@ -73,7 +153,7 @@ async function recoverPending() {
   const { setChats } = useStore.getState();
 
   for (const record of records) {
-    const { requestId, chatIndex, messageIndex, bufferedText, status } = record;
+    const { requestId, chatIndex, messageIndex, bufferedText } = record;
 
     // Re-read latest state each iteration to avoid overwriting prior recoveries
     const chats = useStore.getState().chats;
@@ -91,12 +171,13 @@ async function recoverPending() {
 
     const currentText = getCurrentMessageText(chat.messages[messageIndex]);
 
-    // Only apply if SW captured more text than what's currently displayed
-    if (shouldApplyRecoveredText(currentText, bufferedText)) {
+    // First: apply IndexedDB buffered text (fast, local)
+    let bestText = bufferedText;
+    if (shouldApplyRecoveredText(currentText, bestText)) {
       const updatedChats = cloneChatAtIndex(chats, chatIndex);
       const updatedMessages = updatedChats[chatIndex].messages;
       const oldMsg = updatedMessages[messageIndex];
-      const newMsg = buildRecoveredMessage(oldMsg, bufferedText);
+      const newMsg = buildRecoveredMessage(oldMsg, bestText);
       updatedMessages[messageIndex] = newMsg;
       upsertActivePathMessage(
         updatedChats[chatIndex],
@@ -112,6 +193,40 @@ async function recoverPending() {
     if (effectiveStatus === 'streaming') {
       // Still actively streaming, don't notify yet
       continue;
+    }
+
+    // Second: try proxy recovery for interrupted/failed streams
+    if (
+      (effectiveStatus === 'interrupted' || effectiveStatus === 'failed') &&
+      record.proxySessionId
+    ) {
+      try {
+        const proxyText = await tryProxyRecovery(
+          record,
+          getCurrentMessageText(
+            useStore.getState().chats?.[chatIndex]?.messages[messageIndex]
+          )
+        );
+        if (proxyText) {
+          const latestChats = useStore.getState().chats;
+          if (latestChats) {
+            const updatedChats = cloneChatAtIndex(latestChats, chatIndex);
+            const updatedMessages = updatedChats[chatIndex].messages;
+            const oldMsg = updatedMessages[messageIndex];
+            const newMsg = buildRecoveredMessage(oldMsg, proxyText);
+            updatedMessages[messageIndex] = newMsg;
+            upsertActivePathMessage(
+              updatedChats[chatIndex],
+              messageIndex,
+              newMsg,
+              useStore.getState().contentStore
+            );
+            setChats(updatedChats);
+          }
+        }
+      } catch {
+        // Proxy recovery failed — use IndexedDB data
+      }
     }
 
     // Clear any generating sessions for this chat

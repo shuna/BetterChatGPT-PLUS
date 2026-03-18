@@ -8,6 +8,10 @@ export interface StreamRecord {
   createdAt: number;
   updatedAt: number;
   acknowledged: boolean;
+  /** Proxy session ID for server-side recovery (set when proxy mode is active) */
+  proxySessionId?: string;
+  /** Last received proxy event ID for recovery offset */
+  lastProxyEventId?: number;
 }
 
 const DB_NAME = 'sw-stream-db';

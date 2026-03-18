@@ -97,18 +97,68 @@ function extractText(events) {
   return text;
 }
 
+// --- Proxy SSE Parser ---
+// Proxy format: id: N\ndata: "JSON-stringified raw text"\n\n
+// Control events: event: done\ndata: {"totalChunks":N,"complete":true}\n\n
+
+function parseProxySse(text, flush) {
+  const normalized = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const rawBlocks = normalized.split('\n\n');
+  const partial = flush ? '' : (rawBlocks.pop() ?? '');
+  const events = [];
+
+  for (const block of rawBlocks) {
+    if (!block.trim()) continue;
+    let id = 0;
+    let eventType = undefined;
+    let dataLine = '';
+
+    for (const line of block.split('\n')) {
+      if (line.startsWith('id: ')) {
+        id = parseInt(line.slice(4), 10);
+      } else if (line.startsWith('event: ')) {
+        eventType = line.slice(7);
+      } else if (line.startsWith('data: ')) {
+        dataLine = line.slice(6);
+      } else if (line === 'data') {
+        dataLine = '';
+      }
+    }
+
+    if (eventType === 'done' || eventType === 'error' || eventType === 'interrupted') {
+      try {
+        events.push({ id, eventType, meta: JSON.parse(dataLine) });
+      } catch {
+        events.push({ id, eventType });
+      }
+    } else if (dataLine) {
+      try {
+        const rawText = JSON.parse(dataLine);
+        events.push({ id, rawText });
+      } catch {
+        // skip malformed
+      }
+    }
+  }
+
+  return { events, partial };
+}
+
 // --- Stream handler ---
 
 async function handleStartStream(msg, port) {
   const { requestId, endpoint, headers, body } = msg;
+  const proxyMode = !!msg.proxyMode;
+  const proxyConfig = msg.proxyConfig; // { endpoint, authToken, sessionId }
   const controller = new AbortController();
   activeStreams.set(requestId, controller);
   let bufferedText = '';
   let flushTimer = null;
   let flushChain = Promise.resolve();
+  let lastProxyEventId = 0;
 
   // Save initial record
-  await dbPut({
+  const initialRecord = {
     requestId,
     chatIndex: msg.chatIndex,
     messageIndex: msg.messageIndex,
@@ -117,7 +167,12 @@ async function handleStartStream(msg, port) {
     createdAt: Date.now(),
     updatedAt: Date.now(),
     acknowledged: false,
-  });
+  };
+  if (proxyMode && proxyConfig) {
+    initialRecord.proxySessionId = proxyConfig.sessionId;
+    initialRecord.lastProxyEventId = 0;
+  }
+  await dbPut(initialRecord);
 
   function postToClient(data) {
     if (port) {
@@ -132,9 +187,12 @@ async function handleStartStream(msg, port) {
     }
 
     const snapshot = bufferedText;
+    const eventIdSnapshot = lastProxyEventId;
     flushChain = flushChain
       .then(async () => {
-        await dbUpdate(requestId, { bufferedText: snapshot });
+        const updates = { bufferedText: snapshot };
+        if (proxyMode) updates.lastProxyEventId = eventIdSnapshot;
+        await dbUpdate(requestId, updates);
       })
       .catch(() => {});
 
@@ -148,11 +206,31 @@ async function handleStartStream(msg, port) {
     }, FLUSH_INTERVAL_MS);
   }
 
-  try {
-    const response = await fetch(endpoint, {
-      method: 'POST',
+  // Build the actual fetch target
+  let fetchEndpoint, fetchHeaders, fetchBody;
+  if (proxyMode && proxyConfig) {
+    fetchEndpoint = proxyConfig.endpoint + '/api/stream';
+    fetchHeaders = { 'Content-Type': 'application/json' };
+    if (proxyConfig.authToken) {
+      fetchHeaders['Authorization'] = 'Bearer ' + proxyConfig.authToken;
+    }
+    fetchBody = JSON.stringify({
+      endpoint,
       headers,
-      body: JSON.stringify(body),
+      body,
+      sessionId: proxyConfig.sessionId,
+    });
+  } else {
+    fetchEndpoint = endpoint;
+    fetchHeaders = headers;
+    fetchBody = JSON.stringify(body);
+  }
+
+  try {
+    const response = await fetch(fetchEndpoint, {
+      method: 'POST',
+      headers: fetchHeaders,
+      body: fetchBody,
       signal: controller.signal,
     });
 
@@ -181,28 +259,88 @@ async function handleStartStream(msg, port) {
       ]);
     }
 
-    while (reading) {
-      const { done, value } = await readWithTimeout();
-      const chunk = partial + decoder.decode(value, { stream: !done });
-      const parsed = parseEventSource(chunk, done);
-      partial = parsed.partial;
+    if (proxyMode) {
+      // --- Proxy mode: parse proxy SSE, unwrap, then parse LLM SSE ---
+      let llmPartial = '';
 
-      const text = extractText(parsed.events);
-      if (text) {
-        // Forward to client
-        postToClient({ type: 'sw-chunk', requestId, text });
-        bufferedText += text;
-        scheduleFlush();
+      while (reading) {
+        const { done, value } = await readWithTimeout();
+        const chunk = partial + decoder.decode(value, { stream: !done });
+        const proxySse = parseProxySse(chunk, done);
+        partial = proxySse.partial;
+
+        for (const evt of proxySse.events) {
+          if (evt.id > lastProxyEventId) lastProxyEventId = evt.id;
+
+          if (evt.eventType === 'done') {
+            reading = false;
+            break;
+          }
+          if (evt.eventType === 'error' || evt.eventType === 'interrupted') {
+            const errorMsg = evt.meta && evt.meta.error ? evt.meta.error : 'Proxy stream error';
+            throw new Error(errorMsg);
+          }
+
+          if (evt.rawText) {
+            // Unwrap: parse the raw LLM SSE text
+            const llmChunk = llmPartial + evt.rawText;
+            const llmParsed = parseEventSource(llmChunk, false);
+            llmPartial = llmParsed.partial;
+
+            const text = extractText(llmParsed.events);
+            if (text) {
+              postToClient({ type: 'sw-chunk', requestId, text });
+              bufferedText += text;
+              scheduleFlush();
+            }
+
+            if (llmParsed.done) {
+              reading = false;
+              break;
+            }
+          }
+        }
+
+        if (done) reading = false;
       }
 
-      if (parsed.done || done) {
-        reading = false;
+      // Flush any remaining partial LLM SSE
+      if (llmPartial) {
+        const llmFlushed = parseEventSource(llmPartial, true);
+        const text = extractText(llmFlushed.events);
+        if (text) {
+          postToClient({ type: 'sw-chunk', requestId, text });
+          bufferedText += text;
+        }
+      }
+    } else {
+      // --- Direct mode: existing LLM SSE parsing ---
+      while (reading) {
+        const { done, value } = await readWithTimeout();
+        const chunk = partial + decoder.decode(value, { stream: !done });
+        const parsed = parseEventSource(chunk, done);
+        partial = parsed.partial;
+
+        const text = extractText(parsed.events);
+        if (text) {
+          postToClient({ type: 'sw-chunk', requestId, text });
+          bufferedText += text;
+          scheduleFlush();
+        }
+
+        if (parsed.done || done) {
+          reading = false;
+        }
       }
     }
 
     await flushBufferedText();
     await dbUpdate(requestId, { status: 'completed' });
-    postToClient({ type: 'sw-done', requestId });
+    postToClient({
+      type: 'sw-done',
+      requestId,
+      ...(proxyMode ? { proxySessionId: proxyConfig.sessionId, lastProxyEventId } : {}),
+    });
   } catch (err) {
     // On timeout, abort the fetch so the connection is released
     if (!controller.signal.aborted) {
@@ -219,6 +357,7 @@ async function handleStartStream(msg, port) {
       requestId,
       error,
       isTimeout: isTimeout || false,
+      ...(proxyMode ? { proxySessionId: proxyConfig.sessionId, lastProxyEventId } : {}),
     });
   } finally {
     if (flushTimer) {
