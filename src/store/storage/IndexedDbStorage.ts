@@ -984,20 +984,35 @@ export const saveChatData = async (data: PersistedChatData): Promise<void> => {
 
   currentGeneration = nextGen;
 
-  // Step 4: Deferred GC
-  const pendingGC = getPendingGCHashes();
-  if (pendingGC.size > 0) {
-    // Flush from in-memory store
-    const flushed = flushPendingGC(contentStore);
-    if (flushed.length > 0) {
-      // Write GC'd content store (now without the flushed entries)
-      await withTransaction('readwrite', async (store) => {
+  // Step 4: Deferred GC — read-modify-write from IDB to avoid
+  // overwriting content-store entries added by concurrent saves.
+  const pendingGCSet = getPendingGCHashes();
+  if (pendingGCSet.size > 0) {
+    const hashesToGC = [...pendingGCSet];
+    // Flush from in-memory snapshot (keeps Zustand contentStore clean for
+    // future snapshots) and clear the global pending set.
+    flushPendingGC(contentStore);
+
+    await withTransaction('readwrite', async (store) => {
+      const record = await idbGet<ContentStoreRecord>(store, CONTENT_STORE_KEY);
+      if (!record?.data) return;
+
+      const liveStore = record.data;
+      let changed = false;
+      for (const hash of hashesToGC) {
+        if (liveStore[hash] && liveStore[hash].refCount <= 0) {
+          delete liveStore[hash];
+          changed = true;
+        }
+      }
+
+      if (changed) {
         await idbPut(store, CONTENT_STORE_KEY, {
-          data: contentStore,
+          data: liveStore,
           generation: nextGen,
         } satisfies ContentStoreRecord);
-      });
-    }
+      }
+    });
   }
 
   // Remove chat keys (both raw and packed) that no longer exist

@@ -119,6 +119,8 @@ const useAppBootstrap = () => {
     let unsubscribe: (() => void) | undefined;
     let cleanupCompression: (() => void) | undefined;
     let migrationStarted = false;
+    let saving = false;
+    let pendingSave = false;
 
     const flushChatDataSave = async () => {
       if (saveTimer) {
@@ -126,10 +128,24 @@ const useAppBootstrap = () => {
         saveTimer = undefined;
       }
 
+      if (saving) {
+        pendingSave = true;
+        return;
+      }
+
+      saving = true;
       try {
-        await saveChatData(createPersistedChatDataState(useStore.getState()));
-      } catch (error) {
-        notifyStorageError(error);
+        while (true) {
+          pendingSave = false;
+          try {
+            await saveChatData(createPersistedChatDataState(useStore.getState()));
+          } catch (error) {
+            notifyStorageError(error);
+          }
+          if (!pendingSave) break;
+        }
+      } finally {
+        saving = false;
       }
     };
 
