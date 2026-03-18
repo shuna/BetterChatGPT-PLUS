@@ -27,11 +27,18 @@ interface StreamRequest {
   headers: Record<string, string>;
   body: unknown;
   sessionId: string;
+  /** Enable periodic KV writes during streaming (for long responses) */
+  intermediateCache?: boolean;
 }
+
+/** Number of chunks between intermediate KV writes */
+const INTERMEDIATE_CACHE_INTERVAL = 50;
 
 interface CachedSession {
   /** Raw text chunks as received from LLM API */
   chunks: string[];
+  /** Total number of chunks received so far */
+  totalChunks: number;
   /** Whether the LLM stream completed successfully */
   done: boolean;
   /** Error message if stream failed */
@@ -109,7 +116,7 @@ async function handleStream(
     return jsonResponse({ error: 'Invalid JSON body' }, 400);
   }
 
-  const { endpoint, headers: reqHeaders, body, sessionId } = parsed;
+  const { endpoint, headers: reqHeaders, body, sessionId, intermediateCache } = parsed;
 
   if (!endpoint || !sessionId) {
     return jsonResponse({ error: 'endpoint and sessionId are required' }, 400);
@@ -149,6 +156,19 @@ async function handleStream(
   let eventId = 0;
   const { readable, writable } = new TransformStream();
 
+  /** Write current state to KV (fire-and-forget via waitUntil) */
+  const writeToKV = (done: boolean, error?: string) =>
+    env.STREAM_CACHE.put(
+      `session:${sessionId}`,
+      JSON.stringify({
+        chunks: allChunks,
+        totalChunks: allChunks.length,
+        done,
+        error,
+      } satisfies CachedSession),
+      { expirationTtl: 300 }
+    ).catch(() => {/* KV write failed - quota exceeded or other error */});
+
   const processStream = async () => {
     const writer = writable.getWriter();
     const reader = llmRes.body!.getReader();
@@ -176,52 +196,54 @@ async function handleStream(
             clientGone = true;
           }
         }
+
+        // Intermediate cache: periodically persist to KV so that
+        // even if the Worker is killed, partial data is recoverable.
+        if (intermediateCache && eventId % INTERMEDIATE_CACHE_INTERVAL === 0) {
+          ctx.waitUntil(writeToKV(false));
+        }
       }
 
-      // Send completion event
+      // Send completion event with metadata
+      const donePayload = JSON.stringify({
+        totalChunks: eventId,
+        complete: true,
+      });
       if (!clientGone) {
         try {
-          await writer.write(enc.encode('event: done\ndata: {}\n\n'));
+          await writer.write(
+            enc.encode(`event: done\ndata: ${donePayload}\n\n`)
+          );
         } catch {
           clientGone = true;
         }
       }
     } catch (e) {
       streamError = (e as Error).message;
+      const errPayload = JSON.stringify({
+        totalChunks: eventId,
+        complete: false,
+        error: streamError,
+      });
       if (!clientGone) {
         try {
           await writer.write(
-            enc.encode(
-              `event: error\ndata: ${JSON.stringify({ error: streamError })}\n\n`
-            )
+            enc.encode(`event: error\ndata: ${errPayload}\n\n`)
           );
         } catch {
           clientGone = true;
         }
       }
     } finally {
-      // Close the writer (no-op if client already disconnected)
       try {
         writer.close();
       } catch {
         // Already closed or errored
       }
 
-      // Persist completed stream to KV for recovery (1 write per session)
+      // Final KV write with completion status
       if (allChunks.length > 0) {
-        try {
-          await env.STREAM_CACHE.put(
-            `session:${sessionId}`,
-            JSON.stringify({
-              chunks: allChunks,
-              done: !streamError,
-              error: streamError,
-            } satisfies CachedSession),
-            { expirationTtl: 300 } // 5 minutes TTL
-          );
-        } catch {
-          // KV write failed (e.g., quota exceeded) - nothing we can do
-        }
+        await writeToKV(!streamError, streamError);
       }
     }
   };
@@ -270,12 +292,32 @@ async function handleRecover(
         );
       }
       if (session.done) {
-        controller.enqueue(enc.encode('event: done\ndata: {}\n\n'));
-      }
-      if (session.error) {
         controller.enqueue(
           enc.encode(
-            `event: error\ndata: ${JSON.stringify({ error: session.error })}\n\n`
+            `event: done\ndata: ${JSON.stringify({
+              totalChunks: session.totalChunks,
+              complete: true,
+            })}\n\n`
+          )
+        );
+      } else if (session.error) {
+        controller.enqueue(
+          enc.encode(
+            `event: error\ndata: ${JSON.stringify({
+              totalChunks: session.totalChunks,
+              complete: false,
+              error: session.error,
+            })}\n\n`
+          )
+        );
+      } else {
+        // Stream was interrupted (intermediate cache, Worker killed)
+        controller.enqueue(
+          enc.encode(
+            `event: interrupted\ndata: ${JSON.stringify({
+              totalChunks: session.totalChunks,
+              complete: false,
+            })}\n\n`
           )
         );
       }
