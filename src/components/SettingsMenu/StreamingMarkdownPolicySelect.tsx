@@ -9,22 +9,22 @@ const StreamingMarkdownPolicySelect = () => {
   const setStreamingMarkdownPolicy = useStore((state) => state.setStreamingMarkdownPolicy);
 
   return (
-    <label className='flex flex-col gap-1 text-sm text-gray-900 dark:text-gray-300'>
-      <span className='font-medium'>
-        {t('streamingMarkdownPolicy', 'Streaming markdown rendering')}
+    <div className='flex items-center justify-between gap-4 px-4 py-3'>
+      <span className='text-sm font-medium text-gray-900 dark:text-gray-300'>
+        {t('streamingMarkdownPolicy')}
       </span>
       <select
-        className='min-w-[14rem] rounded-md border border-gray-300 bg-white px-3 py-2 text-sm dark:border-gray-600 dark:bg-gray-800'
+        className='flex-shrink-0 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300'
         value={value}
         onChange={(e) => {
           setStreamingMarkdownPolicy(e.target.value as StreamingMarkdownPolicy);
         }}
       >
-        <option value='auto'>{t('streamingMarkdownPolicy.auto', 'Auto')}</option>
-        <option value='always'>{t('streamingMarkdownPolicy.always', 'Always on')}</option>
-        <option value='never'>{t('streamingMarkdownPolicy.never', 'Power saver')}</option>
+        <option value='auto'>{t('streamingMarkdownPolicy.auto')}</option>
+        <option value='always'>{t('streamingMarkdownPolicy.always')}</option>
+        <option value='never'>{t('streamingMarkdownPolicy.never')}</option>
       </select>
-    </label>
+    </div>
   );
 };
 

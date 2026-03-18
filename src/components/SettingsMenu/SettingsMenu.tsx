@@ -4,23 +4,40 @@ import useStore from '@store/store';
 
 import PopupModal from '@components/PopupModal';
 import SettingIcon from '@icon/SettingIcon';
-import ThemeSwitcher from '@components/Menu/MenuOptions/ThemeSwitcher';
-import LanguageSelector from '@components/LanguageSelector';
+import { languageCodeToName, selectableLanguages } from '@constants/language';
+import { Theme } from '@type/theme';
 import AutoTitleToggle from './AutoTitleToggle';
 import AdvancedModeToggle from './AdvencedModeToggle';
 import InlineLatexToggle from './InlineLatexToggle';
-import PromptLibraryMenu from '@components/PromptLibraryMenu';
-import ChatConfigMenu from '@components/ChatConfigMenu';
 import EnterToSubmitToggle from './EnterToSubmitToggle';
-import AutoScrollToggle from './AutoScrollToggle';
 import AnimateBubbleNavigationToggle from './AnimateBubbleNavigationToggle';
+import StreamingMarkdownPolicySelect from './StreamingMarkdownPolicySelect';
 
 import TotalTokenCost, { TotalTokenCostToggle } from './TotalTokenCost';
 import ClearConversation from '@components/Menu/MenuOptions/ClearConversation';
 import DisplayChatSizeToggle from './DisplayChatSizeToggle';
 import ProviderMenuButton from './ProviderMenuButton';
-import StreamingMarkdownPolicySelect from './StreamingMarkdownPolicySelect';
-import ProxySettings from './ProxySettings';
+import { ProxySettingsInline } from './ProxySettings';
+import { ChatConfigInline } from '@components/ChatConfigMenu/ChatConfigMenu';
+import { PromptLibraryInline } from '@components/PromptLibraryMenu/PromptLibraryMenu';
+import ImportChat from '@components/ImportExportChat/ImportChat';
+import ExportChat from '@components/ImportExportChat/ExportChat';
+
+type TabId = 'general' | 'chatConfig' | 'providers' | 'proxy' | 'prompts' | 'data';
+
+interface TabDef {
+  id: TabId;
+  labelKey: string;
+}
+
+const tabs: TabDef[] = [
+  { id: 'general', labelKey: 'settingsTab.general' },
+  { id: 'providers', labelKey: 'settingsTab.providers' },
+  { id: 'chatConfig', labelKey: 'settingsTab.chatConfig' },
+  { id: 'data', labelKey: 'settingsTab.data' },
+  { id: 'prompts', labelKey: 'settingsTab.prompts' },
+  { id: 'proxy', labelKey: 'settingsTab.proxy' },
+];
 
 const SettingsMenu = () => {
   const { t } = useTranslation();
@@ -43,36 +60,218 @@ const SettingsMenu = () => {
         <SettingIcon className='w-4 h-4' /> {t('setting') as string}
       </a>
       {isModalOpen && (
-        <PopupModal
-          setIsModalOpen={setIsModalOpen}
-          title={t('setting') as string}
-          cancelButton={false}
-        >
-          <div className='p-6 border-b border-gray-200 dark:border-gray-600 flex flex-col items-center gap-4'>
-            <LanguageSelector />
-            <ThemeSwitcher />
-            <div className='flex flex-col gap-3'>
-              <AutoTitleToggle />
-              <EnterToSubmitToggle />
-              <AutoScrollToggle />
-              <AnimateBubbleNavigationToggle />
-              <InlineLatexToggle />
-              <StreamingMarkdownPolicySelect />
-              <AdvancedModeToggle />
-              <TotalTokenCostToggle />
-              <DisplayChatSizeToggle />
-
-            </div>
-            <ClearConversation />
-            <PromptLibraryMenu />
-            <ChatConfigMenu />
-            <TotalTokenCost />
-            <ProviderMenuButton />
-            <ProxySettings />
-          </div>
-        </PopupModal>
+        <SettingsDialog setIsModalOpen={setIsModalOpen} />
       )}
     </>
+  );
+};
+
+const SettingsDialog = ({
+  setIsModalOpen,
+}: {
+  setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
+}) => {
+  const { t } = useTranslation();
+  const [activeTab, setActiveTab] = useState<TabId>('general');
+
+  return (
+    <PopupModal
+      setIsModalOpen={setIsModalOpen}
+      title={t('setting') as string}
+      cancelButton={false}
+      maxWidth='max-w-4xl'
+    >
+      <div className='flex flex-col md:flex-row h-[70vh] w-[90vw] max-w-4xl'>
+        {/* Sidebar - desktop: vertical, mobile: horizontal scroll */}
+        <nav className='md:w-48 flex-shrink-0 border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-600'>
+          {/* Mobile: horizontal scroll tab bar */}
+          <div className='md:hidden flex overflow-x-auto hide-scroll-bar'>
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                className={`flex-shrink-0 px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors ${
+                  activeTab === tab.id
+                    ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400'
+                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                }`}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                {t(tab.labelKey)}
+              </button>
+            ))}
+          </div>
+          {/* Desktop: vertical tab list */}
+          <div className='hidden md:flex flex-col py-2'>
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                className={`text-left px-4 py-2 text-sm font-medium transition-colors ${
+                  activeTab === tab.id
+                    ? 'bg-gray-200 dark:bg-gray-600 text-gray-900 dark:text-white'
+                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-200'
+                }`}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                {t(tab.labelKey)}
+              </button>
+            ))}
+          </div>
+        </nav>
+
+        {/* Content area */}
+        <div className='flex-1 overflow-y-auto p-6'>
+          {activeTab === 'general' && <GeneralTab />}
+          {activeTab === 'chatConfig' && <ChatConfigInline />}
+          {activeTab === 'providers' && <ProvidersTab />}
+          {activeTab === 'proxy' && <ProxySettingsInline />}
+          {activeTab === 'prompts' && <PromptLibraryInline />}
+          {activeTab === 'data' && <DataTab />}
+        </div>
+      </div>
+    </PopupModal>
+  );
+};
+
+const SectionLabel = ({ children }: { children: React.ReactNode }) => (
+  <div className='text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1'>
+    {children}
+  </div>
+);
+
+const SettingsGroup = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <div>
+    <SectionLabel>{label}</SectionLabel>
+    <div className='rounded-lg border border-gray-200 dark:border-gray-600 divide-y divide-gray-200 dark:divide-gray-600'>
+      {children}
+    </div>
+  </div>
+);
+
+const SettingsRow = ({ label, children }: { label: string; children: React.ReactNode }) => (
+  <div className='flex items-center justify-between gap-4 px-4 py-3'>
+    <span className='text-sm font-medium text-gray-900 dark:text-gray-300'>{label}</span>
+    <div className='flex-shrink-0'>{children}</div>
+  </div>
+);
+
+const LanguageSelect = () => {
+  const { i18n } = useTranslation();
+  return (
+    <select
+      className='rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300'
+      value={i18n.language}
+      onChange={(e) => i18n.changeLanguage(e.target.value)}
+      aria-label='language selector'
+    >
+      {selectableLanguages.map((lang) => (
+        <option key={lang} value={lang}>
+          {languageCodeToName[lang]}
+        </option>
+      ))}
+    </select>
+  );
+};
+
+const ThemeRadioGroup = () => {
+  const { t } = useTranslation();
+  const theme = useStore((state) => state.theme);
+  const setTheme = useStore((state) => state.setTheme);
+
+  useEffect(() => {
+    document.documentElement.className = theme;
+  }, [theme]);
+
+  const options: { value: Theme; label: string }[] = [
+    { value: 'light', label: t('lightMode') },
+    { value: 'dark', label: t('darkMode') },
+  ];
+
+  return (
+    <div className='flex items-center gap-4'>
+      {options.map((opt) => (
+        <label key={opt.value} className='flex items-center gap-1.5 cursor-pointer text-sm text-gray-900 dark:text-gray-300'>
+          <input
+            type='radio'
+            name='theme'
+            value={opt.value}
+            checked={theme === opt.value}
+            onChange={() => setTheme(opt.value)}
+            className='accent-blue-500'
+          />
+          {opt.label}
+        </label>
+      ))}
+    </div>
+  );
+};
+
+const GeneralTab = () => {
+  const { t } = useTranslation();
+  return (
+    <div className='flex flex-col gap-5'>
+      <SettingsGroup label={t('settingsSection.appearance')}>
+        <SettingsRow label={t('settingsLabel.language')}>
+          <LanguageSelect />
+        </SettingsRow>
+        <SettingsRow label={t('settingsLabel.theme')}>
+          <ThemeRadioGroup />
+        </SettingsRow>
+      </SettingsGroup>
+
+      <SettingsGroup label={t('settingsSection.input')}>
+        <EnterToSubmitToggle />
+      </SettingsGroup>
+
+      <SettingsGroup label={t('settingsSection.display')}>
+        <AnimateBubbleNavigationToggle />
+        <DisplayChatSizeToggle />
+        <TotalTokenCostToggle />
+      </SettingsGroup>
+      <TotalTokenCost />
+
+      <SettingsGroup label={t('settingsSection.rendering')}>
+        <InlineLatexToggle />
+        <StreamingMarkdownPolicySelect />
+      </SettingsGroup>
+
+      <SettingsGroup label={t('settingsSection.features')}>
+        <AutoTitleToggle />
+        <AdvancedModeToggle />
+      </SettingsGroup>
+    </div>
+  );
+};
+
+const ProvidersTab = () => {
+  return (
+    <div className='flex flex-col items-start gap-4'>
+      <ProviderMenuButton />
+    </div>
+  );
+};
+
+const DataTab = () => {
+  const { t } = useTranslation();
+  return (
+    <div className='flex flex-col gap-6'>
+      {/* Import */}
+      <div className='rounded-lg border border-gray-200 dark:border-gray-600 p-4'>
+        <ImportChat />
+      </div>
+
+      {/* Export */}
+      <div className='rounded-lg border border-gray-200 dark:border-gray-600 p-4'>
+        <ExportChat />
+      </div>
+
+      {/* Danger zone */}
+      <div className='border-t border-gray-200 dark:border-gray-600 pt-4'>
+        <SectionLabel>{t('settingsSection.dangerZone')}</SectionLabel>
+        <div className='mt-3'>
+          <ClearConversation />
+        </div>
+      </div>
+    </div>
   );
 };
 

@@ -50,7 +50,7 @@
   "cloned": "完了しました",
   "exportVisibleBranchOnly": "現在表示中の分岐のみを含める",
   "enterToSubmit": "Enterキーを押して送信",
-  "animateBubbleNavigation": "会話バブル移動をアニメーション表示",
+  "animateBubbleNavigation": "アニメーション効果",
   "submitPlaceholder": "メッセージを入力するか、[/] をクリックしてプロンプトを表示します...",
   "proxySettings": "ストリームプロキシ",
   "proxyEndpoint": "プロキシURL",
@@ -91,6 +91,31 @@
   "added": "追加",
   "removed": "削除",
   "changed": "変更",
+  "displayChatSize": "会話リストに各チャットサイズを表示",
+  "settingsTab": {
+    "general": "全般",
+    "chatConfig": "チャット設定",
+    "providers": "AIプロバイダー",
+    "proxy": "プロキシ",
+    "prompts": "プロンプト",
+    "data": "データ"
+  },
+  "settingsSection": {
+    "appearance": "外観",
+    "input": "入力",
+    "display": "表示",
+    "rendering": "レンダリング",
+    "features": "機能",
+    "dangerZone": "危険な操作"
+  },
+  "settingsLabel": {
+    "language": "言語",
+    "theme": "テーマ"
+  },
+  "streamingMarkdownPolicy": "Markdownの表示",
+  "streamingMarkdownPolicy.auto": "自動",
+  "streamingMarkdownPolicy.always": "常に表示",
+  "streamingMarkdownPolicy.never": "受信中OFF（省電力）",
   "stopGenerating": "生成を停止",
   "retry": "再試行",
   "storageQuotaExceeded": "保存容量の上限に達したため、保存できませんでした",

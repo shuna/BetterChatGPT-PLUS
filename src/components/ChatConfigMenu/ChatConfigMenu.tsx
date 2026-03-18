@@ -242,4 +242,143 @@ const DefaultSystemChat = ({
   );
 };
 
+export { ChatConfigInline };
+
+const ChatConfigInline = () => {
+  const config = useStore.getState().defaultChatConfig;
+  const setDefaultChatConfig = useStore((state) => state.setDefaultChatConfig);
+  const setDefaultSystemMessage = useStore(
+    (state) => state.setDefaultSystemMessage
+  );
+  const setDefaultImageDetail = useStore(
+    (state) => state.setDefaultImageDetail
+  );
+
+  const [_systemMessage, _setSystemMessage] = useState<string>(
+    useStore.getState().defaultSystemMessage
+  );
+  const [_model, _setModel] = useState<ModelOptions>(config.model);
+  const [_providerId, _setProviderId] = useState<ProviderId | undefined>(config.providerId);
+  const [_maxToken, _setMaxToken] = useState<number>(config.max_tokens);
+  const [_temperature, _setTemperature] = useState<number>(config.temperature);
+  const [_topP, _setTopP] = useState<number>(config.top_p);
+  const [_presencePenalty, _setPresencePenalty] = useState<number>(
+    config.presence_penalty
+  );
+  const [_frequencyPenalty, _setFrequencyPenalty] = useState<number>(
+    config.frequency_penalty
+  );
+  const [_stream, _setStream] = useState<boolean>(config.stream !== false);
+  const [_imageDetail, _setImageDetail] = useState<ImageDetail>(
+    useStore.getState().defaultImageDetail
+  );
+
+  const { t } = useTranslation('model');
+  const isStreamSupported = isModelStreamSupported(_model, _providerId);
+
+  React.useEffect(() => {
+    if (!isStreamSupported && _stream) {
+      _setStream(false);
+    }
+  }, [isStreamSupported, _stream]);
+
+  const handleSave = () => {
+    const modelContextLength = getModelContextInfo(_model, _providerId).contextLength;
+    const nextConfig = normalizeConfigStream({
+      model: _model,
+      max_tokens: clampCompletionTokens(_maxToken, modelContextLength),
+      temperature: _temperature,
+      top_p: _topP,
+      presence_penalty: _presencePenalty,
+      frequency_penalty: _frequencyPenalty,
+      stream: _stream,
+      providerId: _providerId,
+    });
+
+    if (!isSameConfig(config, nextConfig)) {
+      setDefaultChatConfig(nextConfig);
+    }
+    if (useStore.getState().defaultSystemMessage !== _systemMessage) {
+      setDefaultSystemMessage(_systemMessage);
+    }
+    if (useStore.getState().defaultImageDetail !== _imageDetail) {
+      setDefaultImageDetail(_imageDetail);
+    }
+  };
+
+  const handleReset = () => {
+    _setModel(_defaultChatConfig.model);
+    _setProviderId(_defaultChatConfig.providerId);
+    _setMaxToken(_defaultChatConfig.max_tokens);
+    _setTemperature(_defaultChatConfig.temperature);
+    _setTopP(_defaultChatConfig.top_p);
+    _setPresencePenalty(_defaultChatConfig.presence_penalty);
+    _setFrequencyPenalty(_defaultChatConfig.frequency_penalty);
+    _setStream(_defaultChatConfig.stream !== false);
+    _setImageDetail(_defaultImageDetail);
+    _setSystemMessage(_defaultSystemMessage);
+  };
+
+  return (
+    <div className='text-sm text-gray-900 dark:text-gray-300'>
+      <DefaultSystemChat
+        _systemMessage={_systemMessage}
+        _setSystemMessage={_setSystemMessage}
+      />
+      <ModelSelector
+        _model={_model}
+        _setModel={_setModel}
+        _providerId={_providerId}
+        _onModelChange={(modelId, providerId) => {
+          _setModel(modelId);
+          _setProviderId(providerId);
+        }}
+        _label={t('model')}
+      />
+      <StreamToggle
+        _stream={_stream}
+        _setStream={_setStream}
+        disabled={!isStreamSupported}
+      />
+      <MaxTokenSlider
+        _maxToken={_maxToken}
+        _setMaxToken={_setMaxToken}
+        _model={_model}
+        _providerId={_providerId}
+      />
+      <TemperatureSlider
+        _temperature={_temperature}
+        _setTemperature={_setTemperature}
+      />
+      <TopPSlider _topP={_topP} _setTopP={_setTopP} />
+      <PresencePenaltySlider
+        _presencePenalty={_presencePenalty}
+        _setPresencePenalty={_setPresencePenalty}
+      />
+      <FrequencyPenaltySlider
+        _frequencyPenalty={_frequencyPenalty}
+        _setFrequencyPenalty={_setFrequencyPenalty}
+      />
+      <ImageDetailSelector
+        _imageDetail={_imageDetail}
+        _setImageDetail={_setImageDetail}
+      />
+      <div className='flex gap-3 mt-5'>
+        <button
+          className='btn btn-primary cursor-pointer'
+          onClick={handleSave}
+        >
+          {t('save', { ns: 'main', defaultValue: 'Save' })}
+        </button>
+        <button
+          className='btn btn-neutral cursor-pointer'
+          onClick={handleReset}
+        >
+          {t('resetToDefault')}
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export default ChatConfigMenu;

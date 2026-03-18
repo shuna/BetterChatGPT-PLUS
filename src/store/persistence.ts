@@ -84,7 +84,6 @@ export type PersistedStoreState = Omit<
   | 'displayChatSize'
   | 'menuWidth'
   | 'defaultImageDetail'
-  | 'autoScroll'
   | 'animateBubbleNavigation'
   | 'providers'
   | 'favoriteModels'
@@ -120,7 +119,7 @@ const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'titleModel', 'titleProviderId', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
   'hideMenuOptions', 'hideSideMenu', 'folders', 'enterToSubmit',
   'inlineLatex', 'markdownMode', 'streamingMarkdownPolicy', 'totalTokenUsed', 'countTotalTokens',
-  'displayChatSize', 'menuWidth', 'defaultImageDetail', 'autoScroll', 'animateBubbleNavigation',
+  'displayChatSize', 'menuWidth', 'defaultImageDetail', 'animateBubbleNavigation',
   'providers', 'favoriteModels',
   'branchClipboard', 'contentStore', 'providerModelCache',
   'providerCustomModels', '_legacyCustomModels',
@@ -134,7 +133,7 @@ const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
   'titleModel', 'titleProviderId', 'advancedMode', 'prompts', 'defaultChatConfig', 'defaultSystemMessage',
   'hideMenuOptions', 'hideSideMenu', 'folders', 'enterToSubmit',
   'inlineLatex', 'markdownMode', 'streamingMarkdownPolicy', 'totalTokenUsed', 'countTotalTokens',
-  'displayChatSize', 'menuWidth', 'defaultImageDetail', 'autoScroll', 'animateBubbleNavigation',
+  'displayChatSize', 'menuWidth', 'defaultImageDetail', 'animateBubbleNavigation',
   'providers', 'favoriteModels',
   'providerModelCache',
   'providerCustomModels', '_legacyCustomModels',
@@ -219,7 +218,6 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     displayChatSize: state.displayChatSize,
     menuWidth: state.menuWidth,
     defaultImageDetail: state.defaultImageDetail,
-    autoScroll: state.autoScroll,
     animateBubbleNavigation: state.animateBubbleNavigation,
 
     providers: state.providers,
@@ -265,7 +263,6 @@ function buildLocalStoragePartializedState(
     displayChatSize: state.displayChatSize,
     menuWidth: state.menuWidth,
     defaultImageDetail: state.defaultImageDetail,
-    autoScroll: state.autoScroll,
     animateBubbleNavigation: state.animateBubbleNavigation,
 
     providers: state.providers,

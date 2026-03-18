@@ -39,7 +39,6 @@ export interface ConfigSlice {
   menuWidth: number;
   displayChatSize: boolean;
   defaultImageDetail: ImageDetail;
-  autoScroll: boolean;
   animateBubbleNavigation: boolean;
   onboardingCompleted: number | false; // false = not completed, number = store version when completed
   setOnboardingCompleted: (completed: boolean) => void;
@@ -61,7 +60,6 @@ export interface ConfigSlice {
   setMenuWidth: (menuWidth: number) => void;
   setDisplayChatSize: (displayChatSize: boolean) => void;
   setDefaultImageDetail: (imageDetail: ImageDetail) => void;
-  setAutoScroll: (autoScroll: boolean) => void;
   setAnimateBubbleNavigation: (animateBubbleNavigation: boolean) => void;
   splitPanelRatio: number;
   splitPanelSwapped: boolean;
@@ -95,7 +93,6 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
   menuWidth: _defaultMenuWidth,
   displayChatSize: _defaultDisplayChatSize,
   defaultImageDetail: _defaultImageDetail,
-  autoScroll: true,
   animateBubbleNavigation: true,
   onboardingCompleted: false,
   setOnboardingCompleted: (completed: boolean) => {
@@ -229,13 +226,6 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
     set((prev: ConfigSlice) => ({
       ...prev,
       defaultImageDetail: imageDetail,
-    }));
-  },
-  setAutoScroll: (autoScroll: boolean) => {
-    if (get().autoScroll === autoScroll) return;
-    set((prev: ConfigSlice) => ({
-      ...prev,
-      autoScroll: autoScroll,
     }));
   },
   setAnimateBubbleNavigation: (animateBubbleNavigation: boolean) => {

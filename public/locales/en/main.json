@@ -52,8 +52,7 @@
   "cloned": "Cloned",
   "exportVisibleBranchOnly": "Include only the currently visible branch",
   "enterToSubmit": "Enter to submit",
-  "autoScroll": "Auto scroll to bottom",
-  "animateBubbleNavigation": "Animate bubble navigation",
+  "animateBubbleNavigation": "Animation effects",
   "proxySettings": "Stream Proxy",
   "proxyEndpoint": "Proxy Endpoint URL",
   "proxyEndpointPlaceholder": "https://stream-proxy.example.com",
@@ -101,6 +100,30 @@
   "added": "Added",
   "removed": "Removed",
   "changed": "Changed",
+  "settingsTab": {
+    "general": "General",
+    "chatConfig": "Chat Config",
+    "providers": "AI Providers",
+    "proxy": "Proxy",
+    "prompts": "Prompts",
+    "data": "Data"
+  },
+  "settingsSection": {
+    "appearance": "Appearance",
+    "input": "Input",
+    "display": "Display",
+    "rendering": "Rendering",
+    "features": "Features",
+    "dangerZone": "Danger Zone"
+  },
+  "settingsLabel": {
+    "language": "Language",
+    "theme": "Theme"
+  },
+  "streamingMarkdownPolicy": "Streaming markdown rendering",
+  "streamingMarkdownPolicy.auto": "Auto",
+  "streamingMarkdownPolicy.always": "Always on",
+  "streamingMarkdownPolicy.never": "Power saver",
   "stopGenerating": "Stop generating",
   "retry": "Retry",
   "storageQuotaExceeded": "Storage quota exceeded. Your changes could not be saved",

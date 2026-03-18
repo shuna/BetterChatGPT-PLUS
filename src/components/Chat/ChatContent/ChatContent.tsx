@@ -121,7 +121,6 @@ const ChatContent = () => {
       : 0
   );
   const advancedMode = useStore((state) => state.advancedMode);
-  const autoScroll = useStore((state) => state.autoScroll);
   const animateBubbleNavigation = useStore((state) => state.animateBubbleNavigation);
   const currentChatId = useStore((state) =>
     state.chats?.[state.currentChatIndex]?.id ?? ''
@@ -388,7 +387,7 @@ const ChatContent = () => {
   }, []);
 
   useEffect(() => {
-    if (!isCurrentChatGenerating || !autoScroll) return;
+    if (!isCurrentChatGenerating) return;
     if (isEditingInScroller) return;
 
     const scroller = scrollerRef.current;
@@ -431,7 +430,7 @@ const ChatContent = () => {
       observer.disconnect();
       mutationObserver.disconnect();
     };
-  }, [isCurrentChatGenerating, autoScroll, isEditingInScroller, syncAtBottomState]);
+  }, [isCurrentChatGenerating, isEditingInScroller, syncAtBottomState]);
 
   // Restore scroll anchor on mount
   const pendingChatFocus = useStore((state) => state.pendingChatFocus);

@@ -173,39 +173,32 @@ describe('auto-follow guard conditions', () => {
   function shouldAutoFollow(opts: {
     isGenerating: boolean;
     atBottom: boolean;
-    autoScroll: boolean;
     isEditing: boolean;
   }): boolean {
-    return opts.isGenerating && opts.atBottom && opts.autoScroll && !opts.isEditing;
+    return opts.isGenerating && opts.atBottom && !opts.isEditing;
   }
 
-  it('follows when generating, at bottom, auto-scroll on, not editing', () => {
+  it('follows when generating, at bottom, not editing', () => {
     expect(shouldAutoFollow({
-      isGenerating: true, atBottom: true, autoScroll: true, isEditing: false,
+      isGenerating: true, atBottom: true, isEditing: false,
     })).toBe(true);
   });
 
   it('does not follow when not at bottom', () => {
     expect(shouldAutoFollow({
-      isGenerating: true, atBottom: false, autoScroll: true, isEditing: false,
+      isGenerating: true, atBottom: false, isEditing: false,
     })).toBe(false);
   });
 
   it('does not follow when editing in scroller', () => {
     expect(shouldAutoFollow({
-      isGenerating: true, atBottom: true, autoScroll: true, isEditing: true,
+      isGenerating: true, atBottom: true, isEditing: true,
     })).toBe(false);
   });
 
   it('does not follow when not generating', () => {
     expect(shouldAutoFollow({
-      isGenerating: false, atBottom: true, autoScroll: true, isEditing: false,
-    })).toBe(false);
-  });
-
-  it('does not follow when autoScroll is off', () => {
-    expect(shouldAutoFollow({
-      isGenerating: true, atBottom: true, autoScroll: false, isEditing: false,
+      isGenerating: false, atBottom: true, isEditing: false,
     })).toBe(false);
   });
 });

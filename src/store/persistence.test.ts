@@ -88,7 +88,6 @@ const buildStoreState = () => {
     displayChatSize: false,
     menuWidth: 320,
     defaultImageDetail: _defaultImageDetail,
-    autoScroll: true,
     providers: { ...DEFAULT_PROVIDERS },
     providerCustomModels: {},
     favoriteModels: [],
