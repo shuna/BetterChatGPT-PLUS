@@ -1,0 +1,20 @@
+name = "weavelet-stream-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+# KV namespace for stream recovery
+# To create: wrangler kv namespace create STREAM_CACHE
+# Then replace the id below with the output
+[[kv_namespaces]]
+binding = "STREAM_CACHE"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# For local development:
+# [[kv_namespaces]]
+# binding = "STREAM_CACHE"
+# id = "REPLACE_WITH_KV_NAMESPACE_ID"
+# preview_id = "REPLACE_WITH_PREVIEW_KV_NAMESPACE_ID"
+
+# Secrets (set via `wrangler secret put <NAME>`):
+# - PROXY_AUTH_TOKEN: Token to authenticate clients to this proxy
