@@ -72,6 +72,8 @@ const ConversationEditMenu = ({ entries }: { entries: MultiLayoutEntry[] }) => {
   const [open, setOpen] = React.useState(false);
   const [confirming, setConfirming] = React.useState(false);
   const pruneHiddenNodes = useStore((state) => state.pruneHiddenNodes);
+  const btnRef = React.useRef<HTMLButtonElement>(null);
+  const [menuPos, setMenuPos] = React.useState({ left: 0, top: 0 });
 
   const hasHiddenNodes = React.useMemo(() => {
     return entries.some((entry) => {
@@ -99,7 +101,14 @@ const ConversationEditMenu = ({ entries }: { entries: MultiLayoutEntry[] }) => {
       <div className='react-flow__panel !bg-gray-200 dark:!bg-gray-700 !rounded !shadow-md' style={{ position: 'absolute', left: 0, top: 10 }}>
         <button
           className={`${btnBase} text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600`}
-          onClick={() => setOpen((v) => !v)}
+          ref={btnRef}
+          onClick={() => {
+            if (!open && btnRef.current) {
+              const rect = btnRef.current.getBoundingClientRect();
+              setMenuPos({ left: rect.left, top: rect.bottom + 4 });
+            }
+            setOpen((v) => !v);
+          }}
           title='会話編集メニュー'
         >
           <svg className='w-3.5 h-3.5' fill='none' stroke='currentColor' viewBox='0 0 24 24' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
@@ -114,8 +123,8 @@ const ConversationEditMenu = ({ entries }: { entries: MultiLayoutEntry[] }) => {
         <>
           <div className='fixed inset-0 z-40' onClick={() => { setOpen(false); setConfirming(false); }} />
           <div
-            className='absolute z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[200px]'
-            style={{ left: 32, top: 10 }}
+            className='fixed z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[200px]'
+            style={{ left: menuPos.left, top: menuPos.top }}
           >
             {!confirming ? (
               <button
