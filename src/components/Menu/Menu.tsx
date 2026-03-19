@@ -74,7 +74,7 @@ const Menu = () => {
       >
         <div className='flex h-full min-h-0 flex-col'>
           <div className='flex h-full w-full flex-1 items-start border-white/20'>
-            <nav className='flex h-full flex-1 flex-col space-y-1 px-2 pt-2'>
+            <nav className='flex h-full flex-1 flex-col space-y-1 overflow-hidden px-2 pt-2'>
               <div className='flex gap-2'>
                 <button
                   className='mb-2 inline-flex shrink-0 items-center justify-center rounded-md border border-gray-300 bg-gray-200 px-2 py-2 text-gray-900 shadow-sm transition-colors duration-200 hover:bg-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600'
