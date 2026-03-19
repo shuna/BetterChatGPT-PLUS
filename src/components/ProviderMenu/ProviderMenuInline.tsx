@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import { ProviderId } from '@type/provider';
@@ -14,6 +14,53 @@ import ProviderCustomModelList from './ProviderCustomModelList';
 import ProviderSettingsForm from './ProviderSettingsForm';
 
 type ViewMode = 'browse' | 'custom';
+
+const ResizableSidebar = ({
+  children,
+  minWidth,
+  maxWidth,
+  defaultWidth,
+}: {
+  children: React.ReactNode;
+  minWidth: number;
+  maxWidth: number;
+  defaultWidth: number;
+}) => {
+  const [width, setWidth] = useState(defaultWidth);
+  const dragging = useRef(false);
+  const startX = useRef(0);
+  const startW = useRef(0);
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    dragging.current = true;
+    startX.current = e.clientX;
+    startW.current = width;
+    e.preventDefault();
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!dragging.current) return;
+      const delta = ev.clientX - startX.current;
+      setWidth(Math.min(maxWidth, Math.max(minWidth, startW.current + delta)));
+    };
+    const onMouseUp = () => {
+      dragging.current = false;
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, [width, minWidth, maxWidth]);
+
+  return (
+    <div className='hidden md:block relative border-r dark:border-gray-600 overflow-y-auto flex-shrink-0' style={{ width }}>
+      {children}
+      <div
+        className='absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-blue-400/40 active:bg-blue-400/60 z-10'
+        onMouseDown={onMouseDown}
+      />
+    </div>
+  );
+};
 
 const ProviderMenuInline = () => {
   const { t } = useTranslation('model');
@@ -109,8 +156,8 @@ const ProviderMenuInline = () => {
 
       {/* Body */}
       <div className='flex flex-1 overflow-hidden'>
-        {/* Provider sidebar */}
-        <div className='hidden md:block w-48 border-r dark:border-gray-600 overflow-y-auto flex-shrink-0'>
+        {/* Provider sidebar - resizable */}
+        <ResizableSidebar minWidth={80} maxWidth={200} defaultWidth={130}>
           {PROVIDER_ORDER.map((providerId) => {
             const provider = providers[providerId];
             const favoriteCount = favoriteModels.filter(
@@ -121,22 +168,22 @@ const ProviderMenuInline = () => {
               <button
                 key={providerId}
                 onClick={() => setSelectedProvider(providerId)}
-                className={`w-full text-left px-4 py-3 text-sm flex items-center justify-between transition-colors ${
+                className={`w-full text-left px-3 py-2.5 text-sm flex items-center justify-between transition-colors truncate ${
                   selectedProvider === providerId
                     ? 'bg-gray-200 dark:bg-gray-600 text-gray-900 dark:text-white font-medium'
                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600/50'
                 }`}
               >
-                <span>{provider.name}</span>
+                <span className='truncate'>{provider.name}</span>
                 {favoriteCount > 0 && (
-                  <span className='text-xs bg-green-600 text-white rounded-full px-1.5 py-0.5 ml-1'>
+                  <span className='text-xs bg-green-600 text-white rounded-full px-1.5 py-0.5 ml-1 flex-shrink-0'>
                     {favoriteCount}
                   </span>
                 )}
               </button>
             );
           })}
-        </div>
+        </ResizableSidebar>
 
         <div className='flex-1 flex flex-col overflow-hidden'>
           {/* Browse / Custom tabs */}

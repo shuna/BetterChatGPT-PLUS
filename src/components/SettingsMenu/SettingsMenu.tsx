@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 
@@ -39,6 +39,57 @@ const tabs: TabDef[] = [
   { id: 'prompts', labelKey: 'settingsTab.prompts' },
   { id: 'proxy', labelKey: 'settingsTab.proxy' },
 ];
+
+const ResizableNav = ({
+  children,
+  minWidth,
+  maxWidth,
+  defaultWidth,
+}: {
+  children: React.ReactNode;
+  minWidth: number;
+  maxWidth: number;
+  defaultWidth: number;
+}) => {
+  const [width, setWidth] = useState(defaultWidth);
+  const dragging = useRef(false);
+  const startX = useRef(0);
+  const startW = useRef(0);
+
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    dragging.current = true;
+    startX.current = e.clientX;
+    startW.current = width;
+    e.preventDefault();
+
+    const onMouseMove = (ev: MouseEvent) => {
+      if (!dragging.current) return;
+      const delta = ev.clientX - startX.current;
+      setWidth(Math.min(maxWidth, Math.max(minWidth, startW.current + delta)));
+    };
+    const onMouseUp = () => {
+      dragging.current = false;
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+  }, [width, minWidth, maxWidth]);
+
+  return (
+    <nav className='relative flex-shrink-0 border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-600' style={{ width: undefined }}>
+      <div className='hidden md:block' style={{ width }}>
+        {children}
+      </div>
+      <div className='md:hidden'>{children}</div>
+      {/* Drag handle */}
+      <div
+        className='hidden md:block absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-blue-400/40 active:bg-blue-400/60 z-10'
+        onMouseDown={onMouseDown}
+      />
+    </nav>
+  );
+};
 
 const SettingsMenu = () => {
   const { t } = useTranslation();
@@ -98,7 +149,7 @@ const SettingsDialog = ({
     >
       <div className='flex flex-col md:flex-row h-[70vh] w-[90vw] max-w-4xl'>
         {/* Sidebar - desktop: vertical, mobile: horizontal scroll */}
-        <nav className='md:w-48 flex-shrink-0 border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-600'>
+        <ResizableNav minWidth={80} maxWidth={200} defaultWidth={120}>
           {/* Mobile: horizontal scroll tab bar */}
           <div className='md:hidden flex overflow-x-auto hide-scroll-bar'>
             {tabs.map((tab) => (
@@ -120,7 +171,7 @@ const SettingsDialog = ({
             {tabs.map((tab) => (
               <button
                 key={tab.id}
-                className={`text-left px-4 py-2 text-sm font-medium transition-colors ${
+                className={`text-left px-3 py-2 text-sm font-medium transition-colors truncate ${
                   activeTab === tab.id
                     ? 'bg-gray-200 dark:bg-gray-600 text-gray-900 dark:text-white'
                     : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-gray-200'
@@ -131,7 +182,7 @@ const SettingsDialog = ({
               </button>
             ))}
           </div>
-        </nav>
+        </ResizableNav>
 
         {/* Content area */}
         <div className='flex-1 overflow-y-auto p-6'>
