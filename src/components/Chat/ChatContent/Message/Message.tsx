@@ -130,9 +130,7 @@ const Message = React.memo(
           />
         )}
         <div
-          className={`text-base gap-2.5 md:gap-4 m-auto px-3 py-6 md:py-8 md:pl-7 md:pr-4 flex transition-all ease-in-out ${
-            sticky ? 'flex-col' : ''
-          } ${maxWidthClass}`}
+          className={`text-base gap-2.5 md:gap-4 m-auto px-3 py-6 md:py-8 md:px-7 flex flex-col transition-all ease-in-out ${maxWidthClass}`}
         >
           {sticky ? (
             <>
@@ -158,29 +156,29 @@ const Message = React.memo(
             </>
           ) : (
             <>
-              <Avatar role={role} />
-              <div className='flex-1 min-w-0'>
+              <div className='flex items-center gap-2.5'>
+                <Avatar role={role} />
+                {advancedMode && (
+                  <RoleSelector
+                    role={role}
+                    messageIndex={messageIndex}
+                    sticky={sticky}
+                  />
+                )}
+              </div>
+              <div className='min-w-0'>
                 {isCollapsed ? (
                   <div className='h-[4.5rem] overflow-hidden py-0 text-sm leading-6 text-gray-700 dark:text-gray-200 whitespace-pre-wrap break-words line-clamp-3'>
                     {collapsedPreview}
                   </div>
                 ) : (
-                  <>
-                    {advancedMode && (
-                      <RoleSelector
-                        role={role}
-                        messageIndex={messageIndex}
-                        sticky={sticky}
-                      />
-                    )}
-                    <MessageContent
-                      role={role}
-                      content={content}
-                      messageIndex={messageIndex}
-                      nodeId={resolvedNodeId}
-                      sticky={sticky}
-                    />
-                  </>
+                  <MessageContent
+                    role={role}
+                    content={content}
+                    messageIndex={messageIndex}
+                    nodeId={resolvedNodeId}
+                    sticky={sticky}
+                  />
                 )}
               </div>
             </>
