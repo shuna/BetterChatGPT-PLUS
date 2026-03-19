@@ -130,7 +130,7 @@ const Message = React.memo(
           />
         )}
         <div
-          className={`text-base gap-2.5 md:gap-4 m-auto px-3 py-6 md:py-8 md:px-7 flex flex-col transition-all ease-in-out ${maxWidthClass}`}
+          className={`text-base gap-1.5 md:gap-2 m-auto px-3 py-6 md:py-8 md:px-7 flex flex-col transition-all ease-in-out ${maxWidthClass}`}
         >
           {sticky ? (
             <>
