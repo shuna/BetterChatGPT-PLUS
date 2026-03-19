@@ -61,6 +61,8 @@ export interface ConfigSlice {
   setDisplayChatSize: (displayChatSize: boolean) => void;
   setDefaultImageDetail: (imageDetail: ImageDetail) => void;
   setAnimateBubbleNavigation: (animateBubbleNavigation: boolean) => void;
+  showDebugPanel: boolean;
+  setShowDebugPanel: (showDebugPanel: boolean) => void;
   splitPanelRatio: number;
   splitPanelSwapped: boolean;
   setSplitPanelRatio: (ratio: number) => void;
@@ -234,6 +236,11 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
       ...prev,
       animateBubbleNavigation,
     }));
+  },
+  showDebugPanel: false,
+  setShowDebugPanel: (showDebugPanel: boolean) => {
+    if (get().showDebugPanel === showDebugPanel) return;
+    set((prev: ConfigSlice) => ({ ...prev, showDebugPanel }));
   },
   splitPanelRatio: 0.5,
   splitPanelSwapped: false,

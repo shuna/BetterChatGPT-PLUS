@@ -1,3 +1,4 @@
+import { debugReport } from '@store/debug-store';
 import { saveRequest, cleanupStale } from './streamDb';
 
 let registration: ServiceWorkerRegistration | null = null;
@@ -5,6 +6,7 @@ let controllerReady: Promise<void> | null = null;
 
 export async function register(): Promise<boolean> {
   if (!('serviceWorker' in navigator)) return false;
+  debugReport('sw', { label: 'Service Worker', status: 'active', detail: 'registering' });
   try {
     registration = await navigator.serviceWorker.register('./sw-stream.js', {
       scope: './',
@@ -21,8 +23,10 @@ export async function register(): Promise<boolean> {
 
     // Cleanup stale IndexedDB records on startup
     cleanupStale().catch(() => {});
+    debugReport('sw', { status: 'done', detail: 'registered' });
     return true;
   } catch {
+    debugReport('sw', { status: 'error', detail: 'registration failed' });
     return false;
   }
 }
@@ -80,6 +84,7 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
     proxyConfig,
   } = params;
 
+  debugReport('streaming', { label: 'Streaming', status: 'active', detail: requestId });
   // Save initial record to IndexedDB (client side too, in case SW dies before writing)
   await saveRequest({
     requestId,
@@ -109,6 +114,7 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
         break;
       case 'sw-done':
         cleanup();
+        debugReport('streaming', { status: 'done' });
         onDone({
           proxySessionId: data.proxySessionId,
           lastProxyEventId: data.lastProxyEventId,
@@ -116,6 +122,7 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
         break;
       case 'sw-error':
         cleanup();
+        debugReport('streaming', { status: 'error', detail: data.error });
         onError(data.error || 'Unknown error', {
           proxySessionId: data.proxySessionId,
           lastProxyEventId: data.lastProxyEventId,

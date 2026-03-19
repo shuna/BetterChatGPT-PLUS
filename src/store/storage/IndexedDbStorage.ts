@@ -1,3 +1,4 @@
+import { debugReport } from '@store/debug-store';
 import { STORE_VERSION } from '@store/version';
 import {
   migratePersistedChatDataState,
@@ -307,6 +308,7 @@ export async function beginLargeMigration(
   }
 
   migrationInProgress = true;
+  debugReport('migration', { label: 'Migration', status: 'active', detail: `${chats.length} chats` });
   return meta;
 }
 
@@ -463,6 +465,7 @@ async function resumeLargeMigrationInner(
       lastChatIndex: i + 1,
       updatedAt: Date.now(),
     };
+    debugReport('migration', { status: 'active', detail: `${i + 1}/${chats.length} chats` });
     await updateMigrationMeta({
       migratedChats: currentMeta.migratedChats,
       lastChatIndex: currentMeta.lastChatIndex,
@@ -570,6 +573,7 @@ async function finalizeLargeMigration(
   });
 
   await updateMigrationMeta({ status: 'done', updatedAt: Date.now() });
+  debugReport('migration', { status: 'done' });
 
   if (migMeta) {
     onProgress?.({ ...migMeta, status: 'done' });
@@ -923,6 +927,7 @@ function computeChatFingerprint(chat: PersistedChat): string {
  */
 export const saveChatData = async (data: PersistedChatData): Promise<void> => {
   if (!hasIndexedDb()) return;
+  debugReport('idb-save', { label: 'IndexedDB Save', status: 'active' });
   if (migrationInProgress) {
     console.warn('[saveChatData] Skipped — migration in progress');
     return;
@@ -1031,6 +1036,7 @@ export const saveChatData = async (data: PersistedChatData): Promise<void> => {
 
   previousChatSnapshot = newSnapshot;
   previousContentStoreSnapshot = { ...contentStore };
+  debugReport('idb-save', { status: 'done', detail: `${changedChatIds.length} chats` });
 };
 
 // ─── Copy-on-Write Compression ───
@@ -1133,6 +1139,7 @@ export async function compressInactiveChats(
     );
   });
 
+  debugReport('compression', { label: 'Compression', status: 'active', detail: `${rawKeys.length} candidates` });
   let compressed = 0;
   for (const key of rawKeys) {
     if (signal?.aborted) break;
@@ -1147,6 +1154,7 @@ export async function compressInactiveChats(
       console.warn(`[IndexedDb] Failed to compress chat ${id}`, e);
     }
   }
+  debugReport('compression', { status: 'done', detail: `${compressed} compressed` });
   return compressed;
 }
 

@@ -16,6 +16,7 @@ import StreamingMarkdownPolicySelect from './StreamingMarkdownPolicySelect';
 import TotalTokenCost, { TotalTokenCostToggle } from './TotalTokenCost';
 import ClearConversation from '@components/Menu/MenuOptions/ClearConversation';
 import DisplayChatSizeToggle from './DisplayChatSizeToggle';
+import ShowDebugPanelToggle from './ShowDebugPanelToggle';
 import ProviderMenuButton from './ProviderMenuButton';
 import { ProxySettingsInline } from './ProxySettings';
 import { ChatConfigInline } from '@components/ChatConfigMenu/ChatConfigMenu';
@@ -226,6 +227,7 @@ const GeneralTab = () => {
         <AnimateBubbleNavigationToggle />
         <DisplayChatSizeToggle />
         <TotalTokenCostToggle />
+        <ShowDebugPanelToggle />
       </SettingsGroup>
       <TotalTokenCost />
 

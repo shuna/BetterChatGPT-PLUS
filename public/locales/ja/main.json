@@ -92,6 +92,9 @@
   "removed": "削除",
   "changed": "変更",
   "displayChatSize": "会話リストに各チャットサイズを表示",
+  "showDebugPanel": "デバッグパネルを表示",
+  "debugPanel": "デバッグ",
+  "debugPanel.noActivity": "アクティビティなし",
   "settingsTab": {
     "general": "全般",
     "chatConfig": "チャット設定",

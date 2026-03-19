@@ -5,6 +5,7 @@ import NewChat from './NewChat';
 import NewFolder from './NewFolder';
 import ChatHistoryList from './ChatHistoryList';
 import MenuOptions from './MenuOptions';
+import DebugPanel from './DebugPanel';
 
 import MenuIcon from '@icon/MenuIcon';
 import useSwipeGesture from '@hooks/useSwipeGesture';
@@ -89,6 +90,7 @@ const Menu = () => {
                 <NewFolder />
               </div>
               <ChatHistoryList />
+              <DebugPanel />
               <MenuOptions />
             </nav>
           </div>
