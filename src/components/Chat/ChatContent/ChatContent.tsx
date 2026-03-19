@@ -761,10 +761,7 @@ const ChatContent = () => {
                     {proxyEndpoint && (
                       <button
                         className='px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors'
-                        onClick={() => {
-                          recoverPending();
-                          toast.info(t('recoverFromProxy'));
-                        }}
+                        onClick={() => recoverPending({ manual: true })}
                       >
                         {t('recoverFromProxy')}
                       </button>

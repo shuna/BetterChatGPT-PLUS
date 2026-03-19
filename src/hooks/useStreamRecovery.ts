@@ -11,6 +11,8 @@ import {
   type ProxyConfig,
 } from '@utils/proxyClient';
 import { parseEventSource } from '@api/helper';
+import { debugReport } from '@store/debug-store';
+import { toast } from 'react-toastify';
 import {
   buildRecoveredMessage,
   findRecoverableChat,
@@ -173,17 +175,31 @@ async function readProxyRecoveryStream(
   return { text: recoveredText, interrupted };
 }
 
-async function recoverPending() {
+export async function recoverPending(opts?: { manual?: boolean }) {
+  const manual = opts?.manual ?? false;
+  const debugId = `recovery-${Date.now()}`;
+  debugReport(debugId, { label: 'Stream Recovery', status: 'active', detail: 'Checking pending records…' });
+
   let records: StreamRecord[];
   try {
     records = await getAllPending();
   } catch {
+    debugReport(debugId, { status: 'error', detail: 'Failed to read pending records' });
+    if (manual) toast.error('リカバリに失敗しました', { autoClose: false });
     return;
   }
 
-  if (records.length === 0) return;
+  if (records.length === 0) {
+    debugReport(debugId, { status: 'done', detail: 'No pending records' });
+    if (manual) toast.info('リカバリ対象のレコードがありません');
+    return;
+  }
+
+  debugReport(debugId, { detail: `Found ${records.length} pending record(s)` });
 
   const { setChats } = useStore.getState();
+  let recoveredCount = 0;
+  let failedCount = 0;
 
   for (const record of records) {
     const { requestId, chatIndex, messageIndex, bufferedText } = record;
@@ -233,6 +249,7 @@ async function recoverPending() {
       (effectiveStatus === 'interrupted' || effectiveStatus === 'failed') &&
       record.proxySessionId
     ) {
+      debugReport(debugId, { detail: `Proxy recovery for session ${record.proxySessionId.slice(0, 8)}…` });
       try {
         const proxyText = await tryProxyRecovery(
           record,
@@ -241,6 +258,8 @@ async function recoverPending() {
           )
         );
         if (proxyText) {
+          debugReport(debugId, { detail: `Proxy recovered ${proxyText.length} chars` });
+          recoveredCount++;
           const latestChats = useStore.getState().chats;
           if (latestChats) {
             const updatedChats = cloneChatAtIndex(latestChats, chatIndex);
@@ -258,7 +277,8 @@ async function recoverPending() {
           }
         }
       } catch {
-        // Proxy recovery failed — use IndexedDB data
+        debugReport(debugId, { detail: 'Proxy recovery failed, using IndexedDB data' });
+        failedCount++;
       }
     }
 
@@ -271,5 +291,15 @@ async function recoverPending() {
     showRecoveryToast(effectiveStatus);
 
     await deleteRequest(requestId);
+  }
+
+  debugReport(debugId, { status: 'done', detail: `Processed ${records.length} record(s)` });
+
+  if (manual) {
+    if (recoveredCount > 0) {
+      toast.success(`リカバリ成功: ${recoveredCount}件のメッセージを復元しました`);
+    } else if (failedCount > 0) {
+      toast.error('プロキシからのリカバリに失敗しました', { autoClose: false });
+    }
   }
 }

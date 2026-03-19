@@ -129,6 +129,7 @@
   "streamingMarkdownPolicy.never": "Power saver",
   "stopGenerating": "Stop generating",
   "retry": "Retry",
+  "recoverFromProxy": "Recover from proxy",
   "storageQuotaExceeded": "Storage quota exceeded. Your changes could not be saved",
   "searchDisabledDuringGeneration": "Generating...",
   "onboarding": {

@@ -121,6 +121,7 @@
   "streamingMarkdownPolicy.never": "受信中OFF（省電力）",
   "stopGenerating": "生成を停止",
   "retry": "再試行",
+  "recoverFromProxy": "プロキシからリカバリ",
   "storageQuotaExceeded": "保存容量の上限に達したため、保存できませんでした",
   "searchDisabledDuringGeneration": "生成中...",
   "onboarding": {
