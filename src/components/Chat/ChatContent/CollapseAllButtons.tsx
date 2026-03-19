@@ -31,7 +31,7 @@ const CollapseAllButtons = React.memo(() => {
   const orphanLabel = orphanCount > 9 ? '9+' : String(orphanCount);
 
   return (
-    <div className='absolute left-6 bottom-[84px] z-10 flex flex-col gap-1.5'>
+    <div className='absolute left-6 bottom-[22px] z-10 flex flex-col gap-1.5'>
       {orphanCount > 0 && (
         <button
           className={`${btnClass} relative overflow-hidden`}

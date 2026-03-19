@@ -48,7 +48,7 @@ export default function ContentActions({
   onDelete,
 }: ContentActionsProps) {
   return (
-    <div className='sticky bottom-3 z-20 mt-3 -mx-2 flex w-[calc(100%+1rem)] flex-nowrap items-center justify-between gap-x-3 gap-y-2 px-2 py-2 transition duration-150 md:pointer-events-none md:translate-y-2 md:opacity-0 md:group-hover:pointer-events-auto md:group-hover:translate-y-0 md:group-hover:opacity-100'>
+    <div className='sticky bottom-3 z-20 mt-3 -mx-2 flex w-[calc(100%+1rem)] flex-nowrap items-end justify-end gap-x-3 gap-y-2 px-2 py-2 pr-14 pointer-events-none translate-y-2 opacity-0 transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100'>
       <div className='min-w-0'>
         {nodeId && (
           <BranchSwitcher
@@ -57,7 +57,7 @@ export default function ContentActions({
           />
         )}
       </div>
-      <div className='ml-auto flex flex-wrap items-center justify-end gap-2 rounded-xl bg-white/75 px-2 py-2 shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/60 dark:bg-gray-800/75 dark:supports-[backdrop-filter]:bg-gray-800/60'>
+      <div className='ml-auto flex flex-wrap items-center justify-end gap-2 rounded-xl bg-transparent px-2 py-2 transition-all duration-150 group-hover:bg-white/75 group-hover:shadow-sm group-hover:backdrop-blur supports-[backdrop-filter]:group-hover:bg-white/60 dark:group-hover:bg-gray-800/75 dark:supports-[backdrop-filter]:group-hover:bg-gray-800/60'>
         {isDelete || (
           <>
             {!isCurrentChatGenerating && role === 'assistant' && (
