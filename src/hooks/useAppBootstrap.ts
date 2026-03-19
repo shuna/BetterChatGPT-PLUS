@@ -26,6 +26,7 @@ import {
 } from '@store/storage/IndexedDbStorage';
 import type { MigrationMetaRecord } from '@store/storage/IndexedDbStorage';
 import { notifyStorageError } from '@store/storage/storageErrors';
+import { registerSnapshotFlushCallback } from '@utils/streamingBuffer';
 
 function migMetaToUiState(meta: MigrationMetaRecord) {
   const status = meta.status === 'idle' || meta.status === 'done' ? 'done' : meta.status;
@@ -340,6 +341,10 @@ const useAppBootstrap = () => {
           resumeLargeMigrationInBackground(useStore.getState());
         }
       }
+
+      // Register streaming snapshot flush callback so that in-flight
+      // streaming buffers are periodically persisted to IndexedDB (every 5s).
+      registerSnapshotFlushCallback(() => void flushChatDataSave());
 
       // Initialize compression scheduler (skips if migration in progress)
       const activeChatId = useStore.getState().chats?.[useStore.getState().currentChatIndex]?.id;

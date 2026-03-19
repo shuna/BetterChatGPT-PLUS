@@ -55,6 +55,7 @@ export const initializeStreamingBuffer = (
   content: ContentInterface[]
 ): void => {
   streamingBuffers.set(nodeId, { content: cloneContent(content) });
+  ensureSnapshotFlushRunning();
 };
 
 export const appendToStreamingBuffer = (nodeId: string, text: string): void => {
@@ -88,6 +89,44 @@ export const isBufferingNode = (nodeId: string): boolean => streamingBuffers.has
 export const clearStreamingBuffersForTest = (): void => {
   streamingBuffers.clear();
   streamingListeners.clear();
+  stopSnapshotFlush();
+};
+
+// ---------------------------------------------------------------------------
+// Periodic snapshot flush — persists streaming buffer to IndexedDB every N seconds
+// ---------------------------------------------------------------------------
+
+const SNAPSHOT_FLUSH_INTERVAL_MS = 5_000;
+
+let snapshotFlushTimer: ReturnType<typeof setInterval> | null = null;
+let snapshotFlushCallback: (() => void) | null = null;
+
+/**
+ * Register a callback to be invoked on each snapshot flush tick.
+ * Call once at app bootstrap.  The timer auto-starts/stops based on
+ * whether there are active streaming buffers.
+ */
+export const registerSnapshotFlushCallback = (onFlush: () => void): void => {
+  snapshotFlushCallback = onFlush;
+};
+
+/** Called internally when a streaming buffer is first created. */
+export const ensureSnapshotFlushRunning = (): void => {
+  if (snapshotFlushTimer != null || !snapshotFlushCallback) return;
+  snapshotFlushTimer = setInterval(() => {
+    if (streamingBuffers.size === 0) {
+      stopSnapshotFlush();
+      return;
+    }
+    snapshotFlushCallback?.();
+  }, SNAPSHOT_FLUSH_INTERVAL_MS);
+};
+
+export const stopSnapshotFlush = (): void => {
+  if (snapshotFlushTimer != null) {
+    clearInterval(snapshotFlushTimer);
+    snapshotFlushTimer = null;
+  }
 };
 
 // ---------------------------------------------------------------------------
