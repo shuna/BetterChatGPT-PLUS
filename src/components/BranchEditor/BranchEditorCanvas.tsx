@@ -68,6 +68,95 @@ const UndoRedoControls = () => {
   );
 };
 
+const ConversationEditMenu = ({ entries }: { entries: MultiLayoutEntry[] }) => {
+  const [open, setOpen] = React.useState(false);
+  const [confirming, setConfirming] = React.useState(false);
+  const pruneHiddenNodes = useStore((state) => state.pruneHiddenNodes);
+
+  const hasHiddenNodes = React.useMemo(() => {
+    return entries.some((entry) => {
+      const activeSet = new Set(entry.tree.activePath);
+      return Object.keys(entry.tree.nodes).some((id) => !activeSet.has(id));
+    });
+  }, [entries]);
+
+  const handlePrune = React.useCallback(() => {
+    entries.forEach((entry) => {
+      const activeSet = new Set(entry.tree.activePath);
+      const hasHidden = Object.keys(entry.tree.nodes).some((id) => !activeSet.has(id));
+      if (hasHidden) {
+        pruneHiddenNodes(entry.chatIndex);
+      }
+    });
+    setConfirming(false);
+    setOpen(false);
+  }, [entries, pruneHiddenNodes]);
+
+  const btnBase = 'w-[26px] h-[26px] flex items-center justify-center border-gray-300 dark:border-gray-600';
+
+  return (
+    <>
+      <div className='react-flow__panel !bg-gray-200 dark:!bg-gray-700 !rounded !shadow-md' style={{ position: 'absolute', left: 0, top: 10 }}>
+        <button
+          className={`${btnBase} text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600`}
+          onClick={() => setOpen((v) => !v)}
+          title='会話編集メニュー'
+        >
+          <svg className='w-3.5 h-3.5' fill='none' stroke='currentColor' viewBox='0 0 24 24' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+            <circle cx='12' cy='5' r='1' fill='currentColor' />
+            <circle cx='12' cy='12' r='1' fill='currentColor' />
+            <circle cx='12' cy='19' r='1' fill='currentColor' />
+          </svg>
+        </button>
+      </div>
+
+      {open && (
+        <>
+          <div className='fixed inset-0 z-40' onClick={() => { setOpen(false); setConfirming(false); }} />
+          <div
+            className='absolute z-50 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg py-1 min-w-[200px]'
+            style={{ left: 32, top: 10 }}
+          >
+            {!confirming ? (
+              <button
+                className={`w-full text-left px-4 py-2 text-sm ${
+                  hasHiddenNodes
+                    ? 'text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                    : 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                }`}
+                onClick={() => hasHiddenNodes && setConfirming(true)}
+                disabled={!hasHiddenNodes}
+              >
+                非表示ノードを削除
+              </button>
+            ) : (
+              <div className='px-4 py-2'>
+                <p className='text-sm text-gray-700 dark:text-gray-300 mb-2'>
+                  非表示ノードを全て削除しますか？<br />この操作はUndoで取り消せます。
+                </p>
+                <div className='flex gap-2'>
+                  <button
+                    className='px-3 py-1 text-sm bg-red-600 text-white rounded hover:bg-red-700'
+                    onClick={handlePrune}
+                  >
+                    削除
+                  </button>
+                  <button
+                    className='px-3 py-1 text-sm bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded hover:bg-gray-300 dark:hover:bg-gray-500'
+                    onClick={() => setConfirming(false)}
+                  >
+                    キャンセル
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </>
+  );
+};
+
 const nodeTypes = {
   messageNode: MessageNode,
   conversationHeader: ConversationHeaderNode,
@@ -460,6 +549,7 @@ const BranchEditorCanvas = ({
       >
         <Background />
         <UndoRedoControls />
+        <ConversationEditMenu entries={entries} />
         <Controls className='!bg-gray-200 dark:!bg-gray-700 !rounded !shadow-md [&>button]:!bg-transparent [&>button]:!fill-gray-700 [&>button]:dark:!fill-gray-200 [&>button]:!border-gray-300 [&>button]:dark:!border-gray-600' />
         <MiniMap
           nodeColor={(node) => {

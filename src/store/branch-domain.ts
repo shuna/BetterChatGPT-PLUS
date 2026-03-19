@@ -256,6 +256,37 @@ export const deleteBranchState = (
   return { chats: updatedChats, contentStore };
 };
 
+export const pruneHiddenNodesState = (
+  chats: ChatInterface[],
+  chatIndex: number,
+  currentContentStore: ContentStoreData
+) => {
+  const contentStore = { ...currentContentStore };
+  const updatedChats = cloneChatAt(chats, chatIndex);
+  const tree = updatedChats[chatIndex].branchTree!;
+  const activeSet = new Set(tree.activePath);
+
+  const toDelete = Object.keys(tree.nodes).filter((id) => !activeSet.has(id));
+  toDelete.forEach((id) => {
+    releaseContent(contentStore, tree.nodes[id].contentHash);
+    delete tree.nodes[id];
+  });
+
+  // Fix parent pointers: first node in activePath has no parent outside the path
+  for (const id of tree.activePath) {
+    const node = tree.nodes[id];
+    if (node.parentId && !activeSet.has(node.parentId)) {
+      node.parentId = null;
+    }
+  }
+
+  if (tree.activePath.length > 0) {
+    tree.rootId = tree.activePath[0];
+  }
+
+  return { chats: updatedChats, contentStore };
+};
+
 export const renameBranchNodeState = (
   chats: ChatInterface[],
   chatIndex: number,

@@ -17,6 +17,7 @@ import {
   copyBranchSequenceState,
   createBranchState,
   deleteBranchState,
+  pruneHiddenNodesState,
   ensureBranchTreeState,
   insertMessageAtIndexState,
   moveMessageState,
@@ -137,6 +138,7 @@ export interface BranchSlice {
   switchActivePath: (chatIndex: number, newPath: string[]) => void;
   switchActivePathSilent: (chatIndex: number, newPath: string[]) => void;
   deleteBranch: (chatIndex: number, nodeId: string) => void;
+  pruneHiddenNodes: (chatIndex: number) => void;
   renameBranchNode: (
     chatIndex: number,
     nodeId: string,
@@ -404,6 +406,17 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
       get().contentStore
     );
     get().applyBranchState(chats, contentStore);
+  },
+
+  pruneHiddenNodes: (chatIndex) => {
+    const contentStore = { ...get().contentStore };
+    const chats = finalizeStreamingNodesInChat(get().chats!, chatIndex, contentStore);
+    const result = pruneHiddenNodesState(
+      chats,
+      chatIndex,
+      contentStore
+    );
+    get().applyBranchState(result.chats, result.contentStore);
   },
 
   renameBranchNode: (chatIndex, nodeId, label) => {
