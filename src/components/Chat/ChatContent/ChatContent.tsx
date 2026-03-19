@@ -11,6 +11,7 @@ import CrossIcon from '@icon/CrossIcon';
 import useSubmit from '@hooks/useSubmit';
 import { stopSessionsForChat } from '@hooks/useSubmit';
 import { recoverPending } from '@hooks/useStreamRecovery';
+import { getAllPending } from '@utils/streamDb';
 import TokenCount from '@components/TokenCount/TokenCount';
 import { MessageInterface, TextContentInterface } from '@type/chat';
 import countTokens, { limitMessageTokens } from '@utils/messageUtils';
@@ -235,6 +236,15 @@ const ChatContent = () => {
   const lastSubmitMode = useStore((state) => state.lastSubmitMode);
   const proxyEndpoint = useStore((state) => state.proxyEndpoint);
   const setLastSubmitContext = useStore((state) => state.setLastSubmitContext);
+  const [hasPendingRecords, setHasPendingRecords] = useState(false);
+
+  useEffect(() => {
+    if (error && proxyEndpoint) {
+      getAllPending().then((records) => setHasPendingRecords(records.length > 0)).catch(() => setHasPendingRecords(false));
+    } else {
+      setHasPendingRecords(false);
+    }
+  }, [error, proxyEndpoint]);
 
   // Scroller refs — simplified from Virtuoso's dual-ref pattern
   const scrollerRef = useRef<HTMLDivElement>(null);
@@ -758,7 +768,7 @@ const ChatContent = () => {
                     >
                       {t('retry')}
                     </button>
-                    {proxyEndpoint && (
+                    {hasPendingRecords && (
                       <button
                         className='px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors'
                         onClick={() => recoverPending({ manual: true })}
