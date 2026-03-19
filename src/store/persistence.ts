@@ -98,6 +98,7 @@ export type PersistedStoreState = Omit<
   | 'chatActiveView'
   | 'proxyEndpoint'
   | 'proxyAuthToken'
+  | 'showDebugPanel'
   >,
   'chats'
 > & {
@@ -126,6 +127,7 @@ const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'onboardingCompleted',
   'splitPanelRatio', 'splitPanelSwapped', 'chatActiveView',
   'proxyEndpoint', 'proxyAuthToken',
+  'showDebugPanel',
 ];
 
 const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
@@ -140,6 +142,7 @@ const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
   'onboardingCompleted',
   'splitPanelRatio', 'splitPanelSwapped', 'chatActiveView',
   'proxyEndpoint', 'proxyAuthToken',
+  'showDebugPanel',
 ];
 
 let previousFullInputRefs: Partial<Record<keyof PersistedStoreState, unknown>> = {};
@@ -233,6 +236,7 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     chatActiveView: state.chatActiveView,
     proxyEndpoint: state.proxyEndpoint,
     proxyAuthToken: state.proxyAuthToken,
+    showDebugPanel: state.showDebugPanel,
   };
 }
 
@@ -276,6 +280,7 @@ function buildLocalStoragePartializedState(
     chatActiveView: state.chatActiveView,
     proxyEndpoint: state.proxyEndpoint,
     proxyAuthToken: state.proxyAuthToken,
+    showDebugPanel: state.showDebugPanel,
   };
 }
 
