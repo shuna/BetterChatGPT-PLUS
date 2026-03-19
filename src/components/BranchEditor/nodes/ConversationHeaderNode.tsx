@@ -13,7 +13,7 @@ const ConversationHeaderNode = memo(({ data }: NodeProps<ConversationHeaderData>
     <div
       className='px-3 py-1.5 rounded-md flex items-center gap-2 text-xs font-medium shadow-sm min-w-[280px]'
       style={{
-        backgroundColor: data.conversationColor + '20',
+        backgroundColor: data.conversationColor + '35',
         borderLeft: `3px solid ${data.conversationColor}`,
       }}
     >

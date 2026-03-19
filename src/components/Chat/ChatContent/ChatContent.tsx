@@ -669,7 +669,7 @@ const ChatContent = () => {
 
   return (
     <div className='flex-1 overflow-hidden'>
-      <div className='h-full dark:bg-gray-800 relative'>
+      <div className='h-full bg-white dark:bg-gray-800 relative'>
         <ScrollToBottomButton
           atBottom={atBottom}
           atTop={atTop}
@@ -708,7 +708,7 @@ const ChatContent = () => {
             ))}
           </div>
 
-          <div className='flex flex-col items-center text-sm dark:bg-gray-800'>
+          <div className='flex flex-col items-center text-sm bg-white dark:bg-gray-800'>
             <Message
               role={inputRole}
               content={[{ type: 'text', text: '' } as TextContentInterface]}

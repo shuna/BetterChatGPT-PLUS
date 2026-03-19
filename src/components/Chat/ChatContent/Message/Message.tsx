@@ -22,12 +22,12 @@ const CollapseToggle = ({
 }) => (
   <button
     type='button'
-    className={`collapse-toggle absolute left-2 top-[4.2rem] bottom-2 z-10 w-7 rounded-full touch-manipulation transition-all duration-200 md:left-0 md:top-2 md:w-5 ${
+    className={`collapse-toggle absolute left-px top-[4.2rem] bottom-2 z-[999] w-6 rounded-full touch-manipulation transition-all duration-200 md:left-0 md:top-2 md:w-5 ${
       isCollapsed
-        ? 'before:absolute before:left-2.5 before:top-0 before:bottom-0 before:w-1.5 before:rounded-full before:bg-gray-300/50 dark:before:bg-gray-500/40 hover:before:bg-gray-400/60 dark:hover:before:bg-gray-400/50 md:before:left-1.5'
+        ? 'before:absolute before:left-[9px] before:top-0 before:bottom-0 before:w-1.5 before:rounded-full before:bg-gray-300/50 dark:before:bg-gray-500/40 hover:before:bg-gray-400/60 dark:hover:before:bg-gray-400/50 md:before:left-1.5'
         : canHover
-          ? 'before:absolute before:left-2.5 before:top-0 before:bottom-0 before:w-1.5 before:rounded-full before:bg-gray-300/0 before:opacity-0 hover:before:bg-gray-300/70 hover:before:opacity-100 focus-visible:before:bg-gray-300/70 focus-visible:before:opacity-100 dark:before:bg-gray-500/0 dark:hover:before:bg-gray-500/60 dark:focus-visible:before:bg-gray-500/60 md:before:left-1.5'
-          : 'before:absolute before:left-2.5 before:top-0 before:bottom-0 before:w-1.5 before:rounded-full before:bg-transparent active:before:bg-gray-400/60 dark:active:before:bg-gray-400/50 md:before:left-1.5'
+          ? 'before:absolute before:left-[9px] before:top-0 before:bottom-0 before:w-1.5 before:rounded-full before:bg-gray-300/0 before:opacity-0 hover:before:bg-gray-300/70 hover:before:opacity-100 focus-visible:before:bg-gray-300/70 focus-visible:before:opacity-100 dark:before:bg-gray-500/0 dark:hover:before:bg-gray-500/60 dark:focus-visible:before:bg-gray-500/60 md:before:left-1.5'
+          : 'before:absolute before:left-[9px] before:top-0 before:bottom-0 before:w-1.5 before:rounded-full before:bg-transparent active:before:bg-gray-400/60 dark:active:before:bg-gray-400/50 md:before:left-1.5'
     }`}
     onClick={onClick}
     aria-label={isCollapsed ? 'Expand message' : 'Collapse message'}
@@ -130,7 +130,7 @@ const Message = React.memo(
           />
         )}
         <div
-          className={`text-base gap-1.5 md:gap-2 m-auto px-3 py-6 md:py-8 md:px-7 flex flex-col transition-all ease-in-out ${maxWidthClass}`}
+          className={`text-base gap-1.5 md:gap-2 m-auto px-7 py-6 md:py-8 flex flex-col transition-all ease-in-out ${maxWidthClass}`}
         >
           {sticky ? (
             <>

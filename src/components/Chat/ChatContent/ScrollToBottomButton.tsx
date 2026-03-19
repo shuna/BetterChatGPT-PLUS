@@ -15,7 +15,7 @@ interface ScrollToBottomButtonProps {
 }
 
 const baseButtonClass =
-  'cursor-pointer rounded-full border border-gray-200 bg-gray-50 p-1.5 text-gray-600 transition-colors hover:bg-gray-200 disabled:cursor-default disabled:opacity-40 dark:border-white/10 dark:bg-white/10 dark:text-gray-200 dark:hover:bg-white/20';
+  'cursor-pointer rounded-full border border-gray-300 bg-gray-200 p-1.5 text-gray-600 shadow-sm transition-colors hover:bg-gray-300 disabled:cursor-default disabled:opacity-40 dark:border-white/10 dark:bg-white/10 dark:text-gray-200 dark:hover:bg-white/20';
 
 const ScrollToBottomButton = React.memo(({
   atBottom,

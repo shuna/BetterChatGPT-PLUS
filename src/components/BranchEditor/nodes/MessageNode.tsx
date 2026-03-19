@@ -56,8 +56,8 @@ const MessageNode = memo(({ data, id }: NodeProps<MessageNodeData>) => {
     <div
       className={`relative px-3 py-2 rounded-lg border-2 shadow-md w-[280px] cursor-pointer transition-shadow duration-150 ${
         data.isActive
-          ? 'bg-white dark:bg-gray-700'
-          : 'border-gray-400 dark:border-gray-500 bg-gray-100 dark:bg-gray-800 opacity-50'
+          ? 'bg-gray-100 dark:bg-gray-600'
+          : 'border-gray-400 dark:border-gray-500 bg-gray-200 dark:bg-gray-700 opacity-50'
       } ${isHovered ? 'outline outline-[3px] outline-blue-400 outline-offset-0' : ''} ${searchHighlightClass}`}
       style={(data.isActive || isSearchMatch || isCurrentSearchResult) ? { borderColor } : undefined}
       onMouseEnter={handleMouseEnter}

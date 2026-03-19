@@ -105,7 +105,7 @@ const ConversationEditMenu = ({ entries }: { entries: MultiLayoutEntry[] }) => {
           onClick={() => {
             if (!open && btnRef.current) {
               const rect = btnRef.current.getBoundingClientRect();
-              setMenuPos({ left: rect.left, top: rect.bottom + 4 });
+              setMenuPos({ left: rect.right + 4, top: rect.top });
             }
             setOpen((v) => !v);
           }}
@@ -556,17 +556,17 @@ const BranchEditorCanvas = ({
         zoomActivationKeyCode="Shift"
         proOptions={{ hideAttribution: true }}
       >
-        <Background />
+        <Background className='!bg-white dark:!bg-gray-800' />
         <UndoRedoControls />
         <ConversationEditMenu entries={entries} />
         <Controls className='!bg-gray-200 dark:!bg-gray-700 !rounded !shadow-md [&>button]:!bg-transparent [&>button]:!fill-gray-700 [&>button]:dark:!fill-gray-200 [&>button]:!border-gray-300 [&>button]:dark:!border-gray-600' />
         <MiniMap
           nodeColor={(node) => {
             const data = node.data as MessageNodeData;
-            if (!data.isActive) return '#9ca3af';
+            if (!data.isActive) return '#6b7280';
             return data.conversationColor || '#3b82f6';
           }}
-          className='!bg-gray-100 dark:!bg-gray-900'
+          className='!bg-gray-400 dark:!bg-gray-900'
         />
       </ReactFlow>
 

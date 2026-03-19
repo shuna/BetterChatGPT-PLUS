@@ -27,7 +27,7 @@ const CollapseAllButtons = React.memo(() => {
   if (!hasMessages) return null;
 
   const btnClass =
-    'cursor-pointer rounded-full border border-gray-200 bg-gray-50 text-gray-600 dark:border-white/10 dark:bg-white/10 dark:text-gray-200 p-1.5 hover:bg-gray-200 dark:hover:bg-white/20 transition-colors';
+    'cursor-pointer rounded-full border border-gray-300 bg-gray-200 text-gray-600 shadow-sm dark:border-white/10 dark:bg-white/10 dark:text-gray-200 p-1.5 hover:bg-gray-300 dark:hover:bg-white/20 transition-colors';
   const orphanLabel = orphanCount > 9 ? '9+' : String(orphanCount);
 
   return (
