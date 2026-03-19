@@ -51,7 +51,7 @@ const DebugPanel = () => {
   });
 
   return (
-    <div className='flex-shrink-0 border-t border-gray-300 dark:border-gray-600 px-2 py-1.5'>
+    <div className='flex-shrink-0 min-w-0 overflow-hidden border-t border-gray-300 dark:border-gray-600 px-2 py-1.5'>
       <div className='text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1'>
         {t('debugPanel')}
       </div>
@@ -64,10 +64,10 @@ const DebugPanel = () => {
           sorted.map((entry) => (
             <div
               key={entry.id}
-              className='flex items-center gap-1.5 text-[11px] text-gray-700 dark:text-gray-300 leading-tight'
+              className='flex items-center gap-1.5 min-w-0 text-[11px] text-gray-700 dark:text-gray-300 leading-tight'
             >
               <StatusIndicator status={entry.status} />
-              <span className='truncate'>
+              <span className='truncate min-w-0'>
                 <span className='font-medium'>{entry.label}</span>
                 {entry.detail && (
                   <span className='text-gray-500 dark:text-gray-400'>
