@@ -1,3 +1,4 @@
+import { getStreamingChatIds } from '@utils/streamingBuffer';
 import { debugReport } from '@store/debug-store';
 import { STORE_VERSION } from '@store/version';
 import {
@@ -1140,11 +1141,13 @@ export async function compressInactiveChats(
   });
 
   debugReport('compression', { label: 'Compression', status: 'active', detail: `${rawKeys.length} candidates` });
+  const streamingChatIds = getStreamingChatIds();
   let compressed = 0;
   for (const key of rawKeys) {
     if (signal?.aborted) break;
     const id = key.slice('chat:'.length);
     if (id === activeChatId) continue;
+    if (streamingChatIds.has(id)) continue;
 
     try {
       if (await compressSingleChat(id, signal)) {

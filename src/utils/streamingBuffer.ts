@@ -13,6 +13,9 @@ interface StreamingBufferEntry {
 
 const streamingBuffers = new Map<string, StreamingBufferEntry>();
 
+/** Tracks which chatId each streaming nodeId belongs to. */
+const nodeToChatId = new Map<string, string>();
+
 const cloneContentItem = (content: ContentInterface): ContentInterface =>
   content.type === 'text'
     ? { ...content }
@@ -52,9 +55,11 @@ export const getStreamingNodeIdFromHash = (hash: string): string | null =>
 
 export const initializeStreamingBuffer = (
   nodeId: string,
-  content: ContentInterface[]
+  content: ContentInterface[],
+  chatId?: string,
 ): void => {
   streamingBuffers.set(nodeId, { content: cloneContent(content) });
+  if (chatId) nodeToChatId.set(nodeId, chatId);
   ensureSnapshotFlushRunning();
 };
 
@@ -79,16 +84,21 @@ export const finalizeStreamingBuffer = (nodeId: string): ContentInterface[] => {
   const content = getBufferedContent(nodeId) ?? [];
   streamingBuffers.delete(nodeId);
   streamingListeners.delete(nodeId);
+  nodeToChatId.delete(nodeId);
   return content;
 };
 
 export const hasActiveStreamingBuffers = (): boolean => streamingBuffers.size > 0;
+
+/** Returns the set of chatIds that currently have active streaming buffers. */
+export const getStreamingChatIds = (): Set<string> => new Set(nodeToChatId.values());
 
 export const isBufferingNode = (nodeId: string): boolean => streamingBuffers.has(nodeId);
 
 export const clearStreamingBuffersForTest = (): void => {
   streamingBuffers.clear();
   streamingListeners.clear();
+  nodeToChatId.clear();
   stopSnapshotFlush();
 };
 

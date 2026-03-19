@@ -154,7 +154,8 @@ export const writeChunkToStore = (
         updatedContentStore = { ...state.contentStore };
         initializeStreamingBuffer(
           targetNodeId,
-          resolveContent(updatedContentStore, node.contentHash)
+          resolveContent(updatedContentStore, node.contentHash),
+          chatId,
         );
         releaseContent(updatedContentStore, node.contentHash);
         tree.nodes[targetNodeId] = {
@@ -162,7 +163,7 @@ export const writeChunkToStore = (
           contentHash: createStreamingContentHash(targetNodeId),
         };
       } else if (!isBufferingNode(targetNodeId)) {
-        initializeStreamingBuffer(targetNodeId, []);
+        initializeStreamingBuffer(targetNodeId, [], chatId);
       }
 
       appendToStreamingBuffer(targetNodeId, text);

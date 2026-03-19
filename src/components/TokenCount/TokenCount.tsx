@@ -11,7 +11,8 @@ import {
   LIVE_TOKEN_RECOUNT_THROTTLE_MS,
   buildPromptCountCacheKey,
 } from '@utils/liveTokenUsage';
-import { isTextContent } from '@type/chat';
+import { isTextContent, type MessageInterface } from '@type/chat';
+import { peekBufferedContent } from '@utils/streamingBuffer';
 
 type TokenCounts = {
   promptTokenCount: number;
@@ -128,9 +129,16 @@ const TokenCount = React.memo(() => {
         promptCacheRef.current = cachedPrompt;
       }
 
+      // Read live streaming buffer content if available, since
+      // chat.messages is only updated on the first chunk and becomes stale.
+      const liveContent = peekBufferedContent(snapshot.generatingSession.targetNodeId);
+      const liveCompletionMessage: MessageInterface | undefined = liveContent
+        ? { role: 'assistant', content: liveContent }
+        : completionMessage;
+
       const nextCompletionTokenCount =
-        completionMessage && isTextContent(completionMessage.content[0])
-          ? await countTokens([completionMessage], snapshot.model)
+        liveCompletionMessage && isTextContent(liveCompletionMessage.content[0])
+          ? await countTokens([liveCompletionMessage], snapshot.model)
           : 0;
 
       nextCounts = {
@@ -225,9 +233,11 @@ const TokenCount = React.memo(() => {
       () => {
         const version = requestVersionRef.current;
         void countCurrentSnapshot(version).finally(() => {
+          // Always re-chain while generating — streaming buffer content
+          // changes without triggering a store/messages update, so we
+          // must poll.  The throttle wrapper limits the rate.
           if (
             mountedRef.current &&
-            version !== requestVersionRef.current &&
             latestInputRef.current.generatingSession
           ) {
             throttledCountRef.current?.();

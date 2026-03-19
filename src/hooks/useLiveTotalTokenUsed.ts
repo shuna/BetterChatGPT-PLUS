@@ -12,8 +12,9 @@ import {
   LIVE_TOKEN_RECOUNT_THROTTLE_MS,
   buildPromptCountCacheKey,
 } from '@utils/liveTokenUsage';
-import type { TotalTokenUsed } from '@type/chat';
+import type { MessageInterface, TotalTokenUsed } from '@type/chat';
 import { isTextContent } from '@type/chat';
+import { peekBufferedContent } from '@utils/streamingBuffer';
 
 const useLiveTotalTokenUsed = (): TotalTokenUsed => {
   const encoderReady = useTokenEncoder();
@@ -68,9 +69,17 @@ const useLiveTotalTokenUsed = (): TotalTokenUsed => {
           promptCacheRef.current.set(promptCacheKey, cachedPrompt);
         }
 
-        const completionTokens = isTextContent(completionMessage.content[0])
-          ? await countTokens([completionMessage], chat.config.model)
-          : 0;
+        // Read live streaming buffer content if available, since
+        // chat.messages is only updated on the first chunk and becomes stale.
+        const liveContent = peekBufferedContent(session.targetNodeId);
+        const liveCompletionMessage: MessageInterface | undefined = liveContent
+          ? { role: 'assistant', content: liveContent }
+          : completionMessage;
+
+        const completionTokens =
+          liveCompletionMessage && isTextContent(liveCompletionMessage.content[0])
+            ? await countTokens([liveCompletionMessage], chat.config.model)
+            : 0;
 
         return {
           key: buildTokenUsageKey(chat.config.model, chat.config.providerId),
@@ -117,9 +126,10 @@ const useLiveTotalTokenUsed = (): TotalTokenUsed => {
       () => {
         const version = requestVersionRef.current;
         void calculateCurrentLiveUsage(version).finally(() => {
+          // Always re-chain while generating — streaming buffer content
+          // changes without triggering a store update, so we must poll.
           if (
             mountedRef.current &&
-            version !== requestVersionRef.current &&
             Object.keys(latestInputRef.current.generatingSessions).length > 0
           ) {
             throttledCalculationRef.current?.();
