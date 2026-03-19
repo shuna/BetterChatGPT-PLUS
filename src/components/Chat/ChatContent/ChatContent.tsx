@@ -10,6 +10,7 @@ import CrossIcon from '@icon/CrossIcon';
 
 import useSubmit from '@hooks/useSubmit';
 import { stopSessionsForChat } from '@hooks/useSubmit';
+import { recoverPending } from '@hooks/useStreamRecovery';
 import TokenCount from '@components/TokenCount/TokenCount';
 import { MessageInterface, TextContentInterface } from '@type/chat';
 import countTokens, { limitMessageTokens } from '@utils/messageUtils';
@@ -142,11 +143,14 @@ const ChatContent = () => {
   );
   const [messagesLimited, setMessagesLimited] = React.useState(messages);
 
-  // Synchronously reset messagesLimited when conversation changes so that
-  // the new messages are displayed immediately (before async token limiting).
+  // Synchronously reset messagesLimited when conversation changes or when
+  // messages are inserted/removed so that activePath and messagesLimited
+  // stay in sync (avoids stale content in edit state after mid-chat insert).
   const prevChatIndexRef = useRef(currentChatIndex);
-  if (prevChatIndexRef.current !== currentChatIndex) {
+  const prevMessagesRef = useRef(messages);
+  if (prevChatIndexRef.current !== currentChatIndex || prevMessagesRef.current !== messages) {
     prevChatIndexRef.current = currentChatIndex;
+    prevMessagesRef.current = messages;
     setMessagesLimited(messages);
   }
 
@@ -229,6 +233,7 @@ const ChatContent = () => {
 
   const { error, handleRetry } = useSubmit();
   const lastSubmitMode = useStore((state) => state.lastSubmitMode);
+  const proxyEndpoint = useStore((state) => state.proxyEndpoint);
   const setLastSubmitContext = useStore((state) => state.setLastSubmitContext);
 
   // Scroller refs — simplified from Virtuoso's dual-ref pattern
@@ -254,15 +259,16 @@ const ChatContent = () => {
   const atBottomRef = useRef(true);
   const pendingEditStateSyncRef = useRef<number | null>(null);
 
-  // Build visible items list, filtering hidden system messages
+  // Build visible items list from messages (not messagesLimited) to stay
+  // in sync with activePath. messagesLimited is only used for token warnings.
   const items = useMemo(() => {
     const result: Array<{ message: MessageInterface; originalIndex: number }> = [];
-    messagesLimited?.forEach((message, index) => {
+    messages?.forEach((message, index) => {
       if (!advancedMode && index === 0 && message.role === 'system') return;
       result.push({ message, originalIndex: index });
     });
     return result;
-  }, [messagesLimited, advancedMode]);
+  }, [messages, advancedMode]);
 
   const getViewportBubbleState = useCallback(() => {
     if (!scrollerRef.current || items.length === 0) {
@@ -752,6 +758,17 @@ const ChatContent = () => {
                     >
                       {t('retry')}
                     </button>
+                    {proxyEndpoint && (
+                      <button
+                        className='px-3 py-1 text-sm bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors'
+                        onClick={() => {
+                          recoverPending();
+                          toast.info(t('recoverFromProxy'));
+                        }}
+                      >
+                        {t('recoverFromProxy')}
+                      </button>
+                    )}
                   </div>
                 )}
                 <div

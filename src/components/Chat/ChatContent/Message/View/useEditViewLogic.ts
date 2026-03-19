@@ -115,6 +115,17 @@ export function useEditViewLogic({
   const [imageUrl, setImageUrl] = useState<string>('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync _content with content prop when it changes and no draft exists.
+  // This handles desync when a mid-chat insert causes activePath and
+  // messagesLimited to temporarily diverge during async token limiting.
+  const prevContentRef = useRef(content);
+  if (prevContentRef.current !== content) {
+    prevContentRef.current = content;
+    if (!editDraftCache.has(editSessionKey)) {
+      setContentState(cloneContent(content));
+    }
+  }
   const _setContent = React.useCallback<React.Dispatch<React.SetStateAction<ContentInterface[]>>>(
     (value) => {
       setContentState((previous) => {
