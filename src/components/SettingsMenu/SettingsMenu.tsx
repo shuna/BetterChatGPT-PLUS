@@ -17,7 +17,7 @@ import TotalTokenCost, { TotalTokenCostToggle } from './TotalTokenCost';
 import ClearConversation from '@components/Menu/MenuOptions/ClearConversation';
 import DisplayChatSizeToggle from './DisplayChatSizeToggle';
 import ShowDebugPanelToggle from './ShowDebugPanelToggle';
-import ProviderMenuButton from './ProviderMenuButton';
+import ProviderMenuInline from '@components/ProviderMenu/ProviderMenuInline';
 import { ProxySettingsInline } from './ProxySettings';
 import { ChatConfigInline } from '@components/ChatConfigMenu/ChatConfigMenu';
 import { PromptLibraryInline } from '@components/PromptLibraryMenu/PromptLibraryMenu';
@@ -45,23 +45,35 @@ const SettingsMenu = () => {
 
   const theme = useStore.getState().theme;
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [initialTab, setInitialTab] = useState<TabId>('general');
+  const showProviderMenu = useStore((state) => state.showProviderMenu);
+  const setShowProviderMenu = useStore((state) => state.setShowProviderMenu);
 
   useEffect(() => {
     document.documentElement.className = theme;
   }, [theme]);
+
+  useEffect(() => {
+    if (showProviderMenu) {
+      setInitialTab('providers');
+      setIsModalOpen(true);
+      setShowProviderMenu(false);
+    }
+  }, [showProviderMenu, setShowProviderMenu]);
 
   return (
     <>
       <a
         className='flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-gray-700 transition-colors duration-200 hover:bg-gray-100 dark:text-white dark:hover:bg-gray-500/10'
         onClick={() => {
+          setInitialTab('general');
           setIsModalOpen(true);
         }}
       >
         <SettingIcon className='w-4 h-4' /> {t('setting') as string}
       </a>
       {isModalOpen && (
-        <SettingsDialog setIsModalOpen={setIsModalOpen} />
+        <SettingsDialog setIsModalOpen={setIsModalOpen} initialTab={initialTab} />
       )}
     </>
   );
@@ -69,11 +81,13 @@ const SettingsMenu = () => {
 
 const SettingsDialog = ({
   setIsModalOpen,
+  initialTab = 'general',
 }: {
   setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  initialTab?: TabId;
 }) => {
   const { t } = useTranslation();
-  const [activeTab, setActiveTab] = useState<TabId>('general');
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab);
 
   return (
     <PopupModal
@@ -245,11 +259,7 @@ const GeneralTab = () => {
 };
 
 const ProvidersTab = () => {
-  return (
-    <div className='flex flex-col items-start gap-4'>
-      <ProviderMenuButton />
-    </div>
-  );
+  return <ProviderMenuInline />;
 };
 
 const DataTab = () => {
