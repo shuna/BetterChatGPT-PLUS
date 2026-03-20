@@ -63,9 +63,9 @@ export interface StartStreamParams {
   body: object;
   chatIndex: number;
   messageIndex: number;
-  onChunk: (text: string) => void;
+  onChunk: (text: string, meta?: { generationId?: string }) => void;
   onDone: (meta?: { proxySessionId?: string; lastProxyEventId?: number; generationId?: string }) => void;
-  onError: (error: string, meta?: { proxySessionId?: string; lastProxyEventId?: number }) => void;
+  onError: (error: string, meta?: { proxySessionId?: string; lastProxyEventId?: number; generationId?: string }) => void;
   /** When set, SW routes the request through the proxy worker */
   proxyConfig?: ProxyStreamConfig;
 }
@@ -110,7 +110,7 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
 
     switch (data.type) {
       case 'sw-chunk':
-        onChunk(data.text);
+        onChunk(data.text, { generationId: data.generationId });
         break;
       case 'sw-done':
         cleanup();
@@ -127,6 +127,7 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
         onError(data.error || 'Unknown error', {
           proxySessionId: data.proxySessionId,
           lastProxyEventId: data.lastProxyEventId,
+          generationId: data.generationId,
         });
         break;
       case 'sw-cancelled':

@@ -100,6 +100,7 @@ export type PersistedStoreState = Omit<
   | 'proxyAuthToken'
   | 'showDebugPanel'
   | 'verifiedStats'
+  | 'pendingVerifications'
   >,
   'chats'
 > & {
@@ -130,6 +131,7 @@ const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'proxyEndpoint', 'proxyAuthToken',
   'showDebugPanel',
   'verifiedStats',
+  'pendingVerifications',
 ];
 
 const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
@@ -146,6 +148,7 @@ const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
   'proxyEndpoint', 'proxyAuthToken',
   'showDebugPanel',
   'verifiedStats',
+  'pendingVerifications',
 ];
 
 let previousFullInputRefs: Partial<Record<keyof PersistedStoreState, unknown>> = {};
@@ -241,6 +244,7 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     proxyAuthToken: state.proxyAuthToken,
     showDebugPanel: state.showDebugPanel,
     verifiedStats: state.verifiedStats,
+    pendingVerifications: state.pendingVerifications,
   };
 }
 
@@ -286,6 +290,7 @@ function buildLocalStoragePartializedState(
     proxyAuthToken: state.proxyAuthToken,
     showDebugPanel: state.showDebugPanel,
     verifiedStats: state.verifiedStats,
+    pendingVerifications: state.pendingVerifications,
   };
 }
 
@@ -377,6 +382,22 @@ export const rehydrateStoreState = (state: StoreState) => {
       }
     }
   });
+
+  if (state.pendingVerifications) {
+    const now = Date.now();
+    state.pendingVerifications = Object.fromEntries(
+      Object.entries(state.pendingVerifications).map(([key, verification]) => [
+        key,
+        verification.status === 'fetching'
+          ? {
+              ...verification,
+              status: 'pending',
+              nextAttemptAt: Math.min(verification.nextAttemptAt, now),
+            }
+          : verification,
+      ])
+    );
+  }
 
   createPartializedState(state);
   return repaired;

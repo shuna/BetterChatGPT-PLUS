@@ -14,6 +14,10 @@ import { parseEventSource } from '@api/helper';
 import { debugReport } from '@store/debug-store';
 import { toast } from 'react-toastify';
 import {
+  buildVerifiedStatsKey,
+  OPENROUTER_VERIFICATION_INITIAL_DELAY_MS,
+} from '@utils/openrouterVerification';
+import {
   buildRecoveredMessage,
   findRecoverableChat,
   getCurrentMessageText,
@@ -380,6 +384,24 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
           debugReport(debugId, { detail: 'Proxy recovery failed, using IndexedDB data' });
           failedCount++;
         }
+      }
+
+      const latestChat = useStore.getState().chats?.[chatIndex];
+      const targetNodeId = latestChat?.branchTree?.activePath?.[messageIndex];
+      if (
+        record.generationId &&
+        latestChat?.config.providerId === 'openrouter' &&
+        targetNodeId
+      ) {
+        useStore.getState().queueVerification(
+          buildVerifiedStatsKey(latestChat.id, targetNodeId),
+          {
+            generationId: record.generationId,
+            chatId: latestChat.id,
+            targetNodeId,
+            nextAttemptAt: Date.now() + OPENROUTER_VERIFICATION_INITIAL_DELAY_MS,
+          }
+        );
       }
 
       if (restoredThisRecord) {
