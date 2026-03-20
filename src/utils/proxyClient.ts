@@ -51,12 +51,13 @@ export async function sendAck(
 export async function recoverFromProxy(
   config: ProxyConfig,
   sessionId: string,
-  lastEventId: number
+  lastEventId: number,
+  signal?: AbortSignal
 ): Promise<ReadableStream<Uint8Array> | null> {
   try {
     const res = await fetch(
       `${config.endpoint}/api/recover/${encodeURIComponent(sessionId)}?lastEventId=${lastEventId}`,
-      { headers: authHeaders(config) }
+      { headers: authHeaders(config), signal }
     );
     if (!res.ok || !res.body) return null;
     return res.body;
