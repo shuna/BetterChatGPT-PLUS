@@ -143,6 +143,10 @@ async function readProxyRecoveryStream(
         if (evt.eventType === 'done' || evt.eventType === 'error') {
           break;
         }
+        if (evt.eventType === 'waiting') {
+          // Server is still streaming — continue reading
+          continue;
+        }
         if (evt.rawText) {
           const llmChunk = llmPartial + evt.rawText;
           const llmParsed = parseEventSource(llmChunk, false);
@@ -240,13 +244,13 @@ export async function recoverPending(opts?: { manual?: boolean }) {
     // Determine if stream is stale (SW probably died)
     const effectiveStatus = resolveRecoveryStatus(record);
     if (effectiveStatus === 'streaming') {
-      // Still actively streaming, don't notify yet
+      // Still actively streaming without proxy, don't notify yet
       continue;
     }
 
-    // Second: try proxy recovery for interrupted/failed streams
+    // Second: try proxy recovery for interrupted/failed/streaming-with-proxy streams
     if (
-      (effectiveStatus === 'interrupted' || effectiveStatus === 'failed') &&
+      (effectiveStatus === 'interrupted' || effectiveStatus === 'failed' || effectiveStatus === 'streaming-with-proxy') &&
       record.proxySessionId
     ) {
       debugReport(debugId, { detail: `Proxy recovery for session ${record.proxySessionId.slice(0, 8)}…` });

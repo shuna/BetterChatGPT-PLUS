@@ -4,7 +4,7 @@ import type { ChatInterface, MessageInterface, TextContentInterface } from '@typ
 import { isTextContent } from '@type/chat';
 import type { StreamRecord } from '@utils/streamDb';
 
-export type RecoveryStatus = Exclude<StreamRecord['status'], 'streaming'>;
+export type RecoveryStatus = Exclude<StreamRecord['status'], 'streaming'> | 'streaming-with-proxy';
 
 const STREAM_STALE_THRESHOLD_MS = 30_000;
 
@@ -36,8 +36,10 @@ export const buildRecoveredMessage = (
 export const resolveRecoveryStatus = (
   record: StreamRecord,
   now: number = Date.now()
-): StreamRecord['status'] => {
+): StreamRecord['status'] | 'streaming-with-proxy' => {
   if (record.status !== 'streaming') return record.status;
+  // If proxy is configured, allow recovery even during active streaming
+  if (record.proxySessionId) return 'streaming-with-proxy';
   return now - record.updatedAt > STREAM_STALE_THRESHOLD_MS
     ? 'interrupted'
     : 'streaming';
@@ -79,6 +81,13 @@ const RECOVERY_TOASTS: Record<
     options: { autoClose: 6000 },
     show: () => {
       toast.warning('バックグラウンド中に応答が途切れました', { autoClose: 6000 });
+    },
+  },
+  'streaming-with-proxy': {
+    message: 'プロキシ経由でストリームを復元中…',
+    options: { autoClose: 4000 },
+    show: () => {
+      toast.info('プロキシ経由でストリームを復元中…', { autoClose: 4000 });
     },
   },
 };

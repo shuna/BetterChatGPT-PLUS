@@ -122,7 +122,7 @@ export function parseProxySse(
       }
     }
 
-    if (eventType === 'done' || eventType === 'error' || eventType === 'interrupted') {
+    if (eventType === 'done' || eventType === 'error' || eventType === 'interrupted' || eventType === 'waiting') {
       try {
         events.push({ id, eventType, meta: JSON.parse(dataLine) });
       } catch {
