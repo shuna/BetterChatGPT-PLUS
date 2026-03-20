@@ -20,7 +20,6 @@ import {
   hasRecoverableMessage,
   resolveRecoveryStatus,
   shouldApplyRecoveredText,
-  showRecoveryToast,
 } from './streamRecoveryHelpers';
 
 const VISIBILITY_THRESHOLD_MS = 3000;
@@ -258,7 +257,7 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
   const hydrated = await waitForStoreHydration();
   if (!hydrated) {
     debugReport(debugId, { status: 'error', detail: 'Store hydration timeout' });
-    if (manual) toast.error('ストアの初期化がタイムアウトしました');
+    toast.error('リカバリ前のストア初期化がタイムアウトしました', { autoClose: false });
     return;
   }
 
@@ -267,7 +266,7 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
     records = await getAllPending();
   } catch {
     debugReport(debugId, { status: 'error', detail: 'Failed to read pending records' });
-    if (manual) toast.error('リカバリに失敗しました', { autoClose: false });
+    toast.error('リカバリの準備に失敗しました', { autoClose: false });
     return;
   }
 
@@ -289,12 +288,18 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
   const { setChats } = useStore.getState();
   let recoveredCount = 0;
   let failedCount = 0;
+  let restoredMessageCount = 0;
+  let timedOut = false;
 
   try {
     for (const record of records) {
-      if (abort.signal.aborted) break;
+      if (abort.signal.aborted) {
+        timedOut = true;
+        break;
+      }
 
       const { requestId, chatIndex, messageIndex, bufferedText } = record;
+      let restoredThisRecord = false;
 
       // Re-read latest state each iteration to avoid overwriting prior recoveries
       const chats = useStore.getState().chats;
@@ -327,6 +332,7 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
           useStore.getState().contentStore
         );
         setChats(updatedChats);
+        restoredThisRecord = true;
       }
 
       // Determine if stream is stale (SW probably died)
@@ -352,7 +358,6 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
           );
           if (proxyText) {
             debugReport(debugId, { detail: `Proxy recovered ${proxyText.length} chars` });
-            recoveredCount++;
             const latestChats = useStore.getState().chats;
             if (latestChats) {
               const updatedChats = cloneChatAtIndex(latestChats, chatIndex);
@@ -367,6 +372,8 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
                 useStore.getState().contentStore
               );
               setChats(updatedChats);
+              recoveredCount++;
+              restoredThisRecord = true;
             }
           }
         } catch {
@@ -375,13 +382,14 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
         }
       }
 
+      if (restoredThisRecord) {
+        restoredMessageCount++;
+      }
+
       // Clear any generating sessions for this chat
       useStore.getState().removeSessionsForChat(
         useStore.getState().chats?.[chatIndex]?.id ?? ''
       );
-
-      // Show toast
-      showRecoveryToast(effectiveStatus);
 
       await deleteRequest(requestId);
     }
@@ -394,11 +402,20 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
 
   debugReport(debugId, { status: 'done', detail: `Processed ${records.length} record(s)` });
 
-  if (manual) {
-    if (recoveredCount > 0) {
-      toast.success(`リカバリ成功: ${recoveredCount}件のメッセージを復元しました`);
-    } else if (failedCount > 0) {
-      toast.error('プロキシからのリカバリに失敗しました', { autoClose: false });
-    }
+  if (restoredMessageCount > 0) {
+    const sourceLabel = recoveredCount > 0
+      ? ` ${recoveredCount}件はプロキシから追加復元しました。`
+      : '';
+    toast.success(`リカバリ成功: ${restoredMessageCount}件のメッセージを復元しました。${sourceLabel}`.trim());
+  } else if (manual && !failedCount && !timedOut) {
+    toast.info('復元できる新しい内容はありませんでした');
+  }
+
+  if (failedCount > 0) {
+    toast.error(`リカバリ失敗: ${failedCount}件はプロキシから復元できませんでした`, { autoClose: false });
+  }
+
+  if (timedOut) {
+    toast.error('リカバリがタイムアウトしました。しばらくしてから再試行してください', { autoClose: false });
   }
 }
