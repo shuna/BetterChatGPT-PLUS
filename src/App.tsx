@@ -17,18 +17,17 @@ import MigrationProgressBanner from '@components/MigrationProgressBanner';
 import OnboardingModal from '@components/Onboarding/OnboardingModal';
 
 function App() {
-  const { isBootstrapped, bootPhase } = useAppBootstrap();
+  const isBootstrapped = useAppBootstrap();
   useStreamRecovery();
   useOpenRouterVerification();
   useIosStatusBarScroll();
 
   if (!isBootstrapped) {
-    return (
-      <div className='h-full w-full bg-white dark:bg-gray-900 flex items-end justify-center'>
-        <span className='text-xs text-gray-400 dark:text-gray-600 pb-4'>{bootPhase}</span>
-      </div>
-    );
+    return <div className='h-full w-full bg-white dark:bg-gray-900' />;
   }
+
+  // Remove boot status indicator once app is ready
+  document.getElementById('boot-status')?.remove();
 
   return (
     <div className='overflow-hidden w-full h-full relative'>

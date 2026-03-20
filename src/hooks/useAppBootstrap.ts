@@ -78,9 +78,13 @@ export function resumeLargeMigrationInBackground(baseState: StoreState) {
   });
 }
 
+function setBootPhase(phase: string) {
+  const el = document.getElementById('boot-status');
+  if (el) el.textContent = phase;
+}
+
 const useAppBootstrap = () => {
   const [isBootstrapped, setIsBootstrapped] = useState(false);
-  const [bootPhase, setBootPhase] = useState('initializing');
   const initialiseNewChat = useInitialiseNewChat();
   const setChats = useStore((state) => state.setChats);
   const setTheme = useStore((state) => state.setTheme);
@@ -396,7 +400,7 @@ const useAppBootstrap = () => {
     };
   }, [initialiseNewChat, setApiKey, setChats, setCurrentChatIndex, setTheme]);
 
-  return { isBootstrapped, bootPhase };
+  return isBootstrapped;
 };
 
 export default useAppBootstrap;

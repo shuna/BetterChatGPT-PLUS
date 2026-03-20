@@ -91,6 +91,9 @@ let nextRequestId = 1;
 
 const compressedStorage: StateStorage = {
   getItem: (name: string): string | null => {
+    const el = document.getElementById('boot-status');
+    if (el) el.textContent = 'decompressing store';
+
     const raw = localStorage.getItem(name);
     if (raw === null) return null;
 
