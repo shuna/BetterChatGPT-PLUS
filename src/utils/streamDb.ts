@@ -12,6 +12,8 @@ export interface StreamRecord {
   proxySessionId?: string;
   /** Last received proxy event ID for recovery offset */
   lastProxyEventId?: number;
+  /** OpenRouter generation ID when present in the upstream stream */
+  generationId?: string;
 }
 
 const DB_NAME = 'sw-stream-db';
@@ -62,7 +64,8 @@ export async function getRequest(requestId: string): Promise<StreamRecord | unde
 export async function appendText(
   requestId: string,
   text: string,
-  lastProxyEventId?: number
+  lastProxyEventId?: number,
+  generationId?: string
 ): Promise<void> {
   const db = await openDb();
   const store = tx(db, 'readwrite');
@@ -73,6 +76,24 @@ export async function appendText(
     if (lastProxyEventId !== undefined) {
       record.lastProxyEventId = lastProxyEventId;
     }
+    if (generationId !== undefined) {
+      record.generationId = generationId;
+    }
+    await reqToPromise(store.put(record));
+  }
+  db.close();
+}
+
+export async function setGenerationId(
+  requestId: string,
+  generationId: string
+): Promise<void> {
+  const db = await openDb();
+  const store = tx(db, 'readwrite');
+  const record: StreamRecord | undefined = await reqToPromise(store.get(requestId));
+  if (record) {
+    record.generationId = generationId;
+    record.updatedAt = Date.now();
     await reqToPromise(store.put(record));
   }
   db.close();

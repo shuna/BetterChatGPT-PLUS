@@ -312,10 +312,15 @@ async function handleStartStream(msg, port) {
             const llmParsed = parseEventSource(llmChunk, false);
             llmPartial = llmParsed.partial;
 
-            if (!generationId) generationId = extractGenerationId(llmParsed.events);
+            if (!generationId) {
+              generationId = extractGenerationId(llmParsed.events);
+              if (generationId) {
+                void dbUpdate(requestId, { generationId });
+              }
+            }
             const text = extractText(llmParsed.events);
             if (text) {
-              postToClient({ type: 'sw-chunk', requestId, text });
+              postToClient({ type: 'sw-chunk', requestId, text, generationId });
               bufferedText += text;
               scheduleFlush();
             }
@@ -347,10 +352,15 @@ async function handleStartStream(msg, port) {
         const parsed = parseEventSource(chunk, done);
         partial = parsed.partial;
 
-        if (!generationId) generationId = extractGenerationId(parsed.events);
+        if (!generationId) {
+          generationId = extractGenerationId(parsed.events);
+          if (generationId) {
+            void dbUpdate(requestId, { generationId });
+          }
+        }
         const text = extractText(parsed.events);
         if (text) {
-          postToClient({ type: 'sw-chunk', requestId, text });
+          postToClient({ type: 'sw-chunk', requestId, text, generationId });
           bufferedText += text;
           scheduleFlush();
         }
@@ -385,6 +395,7 @@ async function handleStartStream(msg, port) {
       requestId,
       error,
       isTimeout: isTimeout || false,
+      generationId,
       ...(proxyMode ? { proxySessionId: proxyConfig.sessionId, lastProxyEventId } : {}),
     });
   } finally {

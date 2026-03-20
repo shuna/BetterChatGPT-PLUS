@@ -13,7 +13,11 @@ import {
 } from '@utils/liveTokenUsage';
 import { isTextContent, type MessageInterface } from '@type/chat';
 import { peekBufferedContent } from '@utils/streamingBuffer';
-import type { VerifiedStats } from '@store/openrouter-stats-slice';
+import type {
+  PendingOpenRouterVerification,
+  VerifiedStats,
+} from '@store/openrouter-stats-slice';
+import { buildVerifiedStatsKey } from '@utils/openrouterVerification';
 
 type TokenCounts = {
   promptTokenCount: number;
@@ -63,19 +67,41 @@ const TokenCount = React.memo(() => {
   const providerModelCache = useStore((state) => state.providerModelCache);
 
   // Look up verified stats for the last assistant message's node
-  const verifiedStats: VerifiedStats | undefined = useStore((state) => {
+  const {
+    verifiedStats,
+    pendingVerification,
+    lastAssistantStatsKey,
+  }: {
+    verifiedStats?: VerifiedStats;
+    pendingVerification?: PendingOpenRouterVerification;
+    lastAssistantStatsKey: string | null;
+  } = useStore((state) => {
     const chat = state.chats?.[state.currentChatIndex];
-    if (!chat?.branchTree) return undefined;
+    if (!chat?.branchTree) {
+      return {
+        verifiedStats: undefined,
+        pendingVerification: undefined,
+        lastAssistantStatsKey: null,
+      };
+    }
     const path = chat.branchTree.activePath;
     // Walk backwards to find the last assistant node
     for (let i = path.length - 1; i >= 0; i--) {
       const node = chat.branchTree.nodes[path[i]];
       if (node?.role === 'assistant') {
-        const key = `${chat.id}:::${node.id}`;
-        return state.verifiedStats[key];
+        const key = buildVerifiedStatsKey(chat.id, node.id);
+        return {
+          verifiedStats: state.verifiedStats[key],
+          pendingVerification: state.pendingVerifications[key],
+          lastAssistantStatsKey: key,
+        };
       }
     }
-    return undefined;
+    return {
+      verifiedStats: undefined,
+      pendingVerification: undefined,
+      lastAssistantStatsKey: null,
+    };
   });
   const latestInputRef = useRef({ messages, generatingSession, model });
   const currentCountsRef = useRef<TokenCounts>({
@@ -240,6 +266,46 @@ const TokenCount = React.memo(() => {
     });
   }, [verifiedStats, generatingSession, t]);
 
+  const verificationStatusDisplay = useMemo(() => {
+    if (generatingSession || !pendingVerification) return null;
+    if (pendingVerification.status === 'fetching') {
+      return t('openrouterVerificationChecking', {
+        ns: 'main',
+        defaultValue: 'Checking OpenRouter verified usage...',
+      });
+    }
+    if (pendingVerification.status === 'failed') {
+      return t('openrouterVerificationFailed', {
+        ns: 'main',
+        defaultValue: 'OpenRouter verified usage is not available yet.',
+      });
+    }
+    return t('openrouterVerificationPending', {
+      ns: 'main',
+      defaultValue: 'OpenRouter verified usage will be checked shortly.',
+    });
+  }, [pendingVerification, generatingSession, t]);
+
+  const handleRetryVerifiedStats = () => {
+    if (!lastAssistantStatsKey) return;
+    if (pendingVerification) {
+      useStore.getState().retryVerificationNow(lastAssistantStatsKey);
+      return;
+    }
+    if (!verifiedStats) return;
+
+    const separatorIndex = lastAssistantStatsKey.indexOf(':::');
+    if (separatorIndex < 0) return;
+    const chatId = lastAssistantStatsKey.slice(0, separatorIndex);
+    const targetNodeId = lastAssistantStatsKey.slice(separatorIndex + 3);
+    useStore.getState().queueVerification(lastAssistantStatsKey, {
+      generationId: verifiedStats.generationId,
+      chatId,
+      targetNodeId,
+      nextAttemptAt: Date.now(),
+    });
+  };
+
   latestInputRef.current = { messages, generatingSession, model };
 
   useEffect(() => {
@@ -347,9 +413,20 @@ const TokenCount = React.memo(() => {
               })
             : `Tokens: ${promptTokenCount} (${costDisplay})`}
       </div>
-      {verifiedDisplay && (
-        <div className='text-xs tabular-nums text-green-700 dark:text-green-400'>
-          {verifiedDisplay}
+      {(verifiedDisplay || verificationStatusDisplay) && (
+        <div className='mt-1 flex items-center gap-2 text-xs tabular-nums'>
+          <span className={verifiedDisplay ? 'text-green-700 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}>
+            {verifiedDisplay ?? verificationStatusDisplay}
+          </span>
+          {lastAssistantStatsKey && (
+            <button
+              className='rounded border border-gray-300 px-2 py-0.5 text-[11px] transition-colors hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800'
+              onClick={handleRetryVerifiedStats}
+              type='button'
+            >
+              {t('retry')}
+            </button>
+          )}
         </div>
       )}
     </div>

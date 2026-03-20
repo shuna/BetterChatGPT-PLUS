@@ -9,6 +9,7 @@ import {
   saveRequest,
   getRequest,
   appendText,
+  setGenerationId,
   updateStatus,
   getAllPending,
   deleteRequest,
@@ -101,6 +102,13 @@ describe('appendText', () => {
     expect(result!.lastProxyEventId).toBe(10);
   });
 
+  it('stores generationId when provided', async () => {
+    await saveRequest(makeRecord({ requestId: 'append-gen' }));
+    await appendText('append-gen', 'chunk', 7, 'gen-123');
+    const result = await getRequest('append-gen');
+    expect(result!.generationId).toBe('gen-123');
+  });
+
   it('accumulates text over multiple appends', async () => {
     await saveRequest(makeRecord({ requestId: 'append-multi' }));
     await appendText('append-multi', 'a');
@@ -171,5 +179,12 @@ describe('proxy recovery fields', () => {
     const result = await getRequest('proxy-1');
     expect(result!.proxySessionId).toBe('chat:uuid');
     expect(result!.lastProxyEventId).toBe(150);
+  });
+
+  it('updates generationId independently', async () => {
+    await saveRequest(makeRecord({ requestId: 'proxy-gen' }));
+    await setGenerationId('proxy-gen', 'gen-xyz');
+    const result = await getRequest('proxy-gen');
+    expect(result!.generationId).toBe('gen-xyz');
   });
 });

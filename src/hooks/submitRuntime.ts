@@ -10,7 +10,12 @@ import { cloneChatAt } from '@store/branch-domain';
 import { upsertActivePathMessage } from '@utils/branchUtils';
 import { materializeActivePath } from '@utils/branchUtils';
 import { addContent, releaseContent, resolveContent } from '@utils/contentStore';
-import { appendText as appendStreamText, deleteRequest as deleteStreamRecord, saveRequest as saveStreamRecord } from '@utils/streamDb';
+import {
+  appendText as appendStreamText,
+  deleteRequest as deleteStreamRecord,
+  saveRequest as saveStreamRecord,
+  setGenerationId as setStreamGenerationId,
+} from '@utils/streamDb';
 import { sendAck, parseProxySse, type ProxyConfig } from '@utils/proxyClient';
 import {
   appendToStreamingBuffer,
@@ -315,6 +320,32 @@ export interface ExecuteSubmitStreamResult {
   generationId?: string;
 }
 
+class SubmitStreamError extends Error {
+  generationId?: string;
+}
+
+const withCapturedGenerationId = (
+  error: unknown,
+  generationId?: string
+): Error => {
+  if (!generationId) {
+    return error instanceof Error ? error : new Error(String(error));
+  }
+
+  const wrapped = new SubmitStreamError(
+    error instanceof Error ? error.message : String(error)
+  );
+  wrapped.name = error instanceof Error ? error.name : 'SubmitStreamError';
+  wrapped.stack = error instanceof Error ? error.stack : wrapped.stack;
+  wrapped.generationId = generationId;
+  return wrapped;
+};
+
+export const getGenerationIdFromSubmitError = (
+  error: unknown
+): string | undefined =>
+  error instanceof SubmitStreamError ? error.generationId : undefined;
+
 export const executeSubmitStream = async ({
   sessionId,
   chatId,
@@ -366,6 +397,14 @@ export const executeSubmitStream = async ({
       if (!data?.choices?.[0]?.message?.content) {
         throw new Error(t('errors.failedToRetrieveData'));
       }
+      if (
+        !capturedGenerationId &&
+        data &&
+        typeof data.id === 'string' &&
+        data.id.startsWith('gen-')
+      ) {
+        capturedGenerationId = data.id;
+      }
 
       writeChunkToStore(chatId, targetNodeId, data.choices[0].message.content);
       return;
@@ -378,7 +417,10 @@ export const executeSubmitStream = async ({
       throw new Error(t('noApiKeyWarning'));
     }
 
-    const onChunk = (text: string) => {
+    const onChunk = (text: string, meta?: { generationId?: string }) => {
+      if (meta?.generationId && !capturedGenerationId) {
+        capturedGenerationId = meta.generationId;
+      }
       queueChunkToStore(chatId, targetNodeId, text);
     };
 
@@ -436,8 +478,11 @@ export const executeSubmitStream = async ({
             }
             resolve();
           },
-          onError: (error) => {
+          onError: (error, meta) => {
             cleanup();
+            if (meta?.generationId) {
+              capturedGenerationId = meta.generationId;
+            }
             reject(new Error(error));
           },
           proxyConfig: swProxyConfig,
@@ -536,7 +581,14 @@ export const executeSubmitStream = async ({
         if (!snapshot) return;
         dbBuffered = '';
         dbFlushChain = dbFlushChain
-          .then(() => appendStreamText(requestId, snapshot, eventIdSnapshot))
+          .then(() =>
+            appendStreamText(
+              requestId,
+              snapshot,
+              eventIdSnapshot,
+              capturedGenerationId
+            )
+          )
           .catch(() => {});
       }
 
@@ -583,6 +635,7 @@ export const executeSubmitStream = async ({
                 for (const e of llmParsed.events) {
                   if (e.id && typeof e.id === 'string' && e.id.startsWith('gen-')) {
                     capturedGenerationId = e.id;
+                    void setStreamGenerationId(requestId, capturedGenerationId);
                     break;
                   }
                 }
@@ -713,9 +766,13 @@ export const executeSubmitStream = async ({
     await runRequest(messages);
   } catch (error) {
     if (!shouldRetryWithoutSystemMessages(error, messages)) {
-      throw error;
+      throw withCapturedGenerationId(error, capturedGenerationId);
     }
-    await runRequest(removeSystemMessages(messages));
+    try {
+      await runRequest(removeSystemMessages(messages));
+    } catch (retryError) {
+      throw withCapturedGenerationId(retryError, capturedGenerationId);
+    }
   } finally {
     flushQueuedChunks(chatId, targetNodeId);
     finalizeStreamingNode(chatId, targetNodeId);

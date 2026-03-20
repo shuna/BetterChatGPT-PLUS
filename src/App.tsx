@@ -5,6 +5,7 @@ import Chat from '@components/Chat';
 import Menu from '@components/Menu';
 
 import useStreamRecovery from '@hooks/useStreamRecovery';
+import useOpenRouterVerification from '@hooks/useOpenRouterVerification';
 import useIosStatusBarScroll from '@hooks/useIosStatusBarScroll';
 import useAppBootstrap from '@hooks/useAppBootstrap';
 import Toast from '@components/Toast';
@@ -18,6 +19,7 @@ import OnboardingModal from '@components/Onboarding/OnboardingModal';
 function App() {
   const isBootstrapped = useAppBootstrap();
   useStreamRecovery();
+  useOpenRouterVerification();
   useIosStatusBarScroll();
 
   if (!isBootstrapped) {
