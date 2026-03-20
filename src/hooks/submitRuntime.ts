@@ -492,7 +492,6 @@ export const executeSubmitStream = async ({
           headers: prepared.headers,
           body: prepared.body,
           sessionId: proxySessionId,
-          intermediateCache: true,
         }),
         signal: abortController.signal,
       });

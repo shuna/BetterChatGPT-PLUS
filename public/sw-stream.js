@@ -234,7 +234,6 @@ async function handleStartStream(msg, port) {
       headers,
       body,
       sessionId: proxyConfig.sessionId,
-      intermediateCache: true,
     });
   } else {
     fetchEndpoint = endpoint;

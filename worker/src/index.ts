@@ -8,13 +8,20 @@
  * 1. Client POSTs to /api/stream with LLM endpoint, headers, and body
  * 2. Worker forwards request to LLM API and streams SSE back to client
  * 3. Each chunk is tagged with a sequential event ID
- * 4. On stream completion, the full response is saved to KV (1 write per session)
- * 5. If client disconnects, waitUntil() keeps the Worker alive to finish reading
- * 6. Client can recover missed chunks via GET /api/recover/:sessionId
+ * 4. Chunks are buffered in memory during streaming (write-back cache)
+ * 5. On stream completion, a single KV write persists the full response
+ * 6. If client disconnects, waitUntil() keeps the Worker alive to finish reading
+ * 7. Client can recover missed chunks via GET /api/recover/:sessionId
  *
  * Free plan limits:
  * - 100k requests/day, 10ms CPU/request (I/O wait excluded)
  * - KV: 100k reads/day, 1k writes/day → ~1000 sessions/day
+ *
+ * KV storage format (NDJSON):
+ *   Line 1: metadata JSON  {"totalChunks":N,"done":true|false,"error":"..."}
+ *   Line 2+: each chunk individually JSON-stringified, one per line
+ * This avoids re-serializing the entire chunk array on every write,
+ * keeping CPU cost O(N) linear instead of O(N²) quadratic.
  */
 
 export interface Env {
@@ -27,24 +34,15 @@ interface StreamRequest {
   headers: Record<string, string>;
   body: unknown;
   sessionId: string;
-  /** Enable periodic KV writes during streaming (for long responses) */
-  intermediateCache?: boolean;
 }
-
-/** Number of chunks between intermediate KV writes */
-const INTERMEDIATE_CACHE_INTERVAL = 50;
 
 /** KV TTL in seconds - safety net if client never sends ACK */
 const KV_EXPIRATION_TTL = 21600; // 6 hours
 
-interface CachedSession {
-  /** Raw text chunks as received from LLM API */
-  chunks: string[];
-  /** Total number of chunks received so far */
+/** Metadata stored in the first line of the NDJSON KV value */
+interface SessionMeta {
   totalChunks: number;
-  /** Whether the LLM stream completed successfully */
   done: boolean;
-  /** Error message if stream failed */
   error?: string;
 }
 
@@ -119,7 +117,7 @@ async function handleStream(
     return jsonResponse({ error: 'Invalid JSON body' }, 400);
   }
 
-  const { endpoint, headers: reqHeaders, body, sessionId, intermediateCache } = parsed;
+  const { endpoint, headers: reqHeaders, body, sessionId } = parsed;
 
   if (!endpoint || !sessionId) {
     return jsonResponse({ error: 'endpoint and sessionId are required' }, 400);
@@ -158,25 +156,13 @@ async function handleStream(
     return jsonResponse({ error: 'LLM API returned no body' }, 502);
   }
 
-  // Set up the pass-through stream
-  const allChunks: string[] = [];
+  // Write-back cache: chunks are buffered in memory as pre-serialized NDJSON
+  // lines. Only a single KV write happens at stream completion.
+  // Each chunk is JSON.stringify'd on arrival (O(chunk_size)), so the final
+  // KV write is a plain string concatenation with zero re-serialization.
+  let ndjsonBody = '';
   let eventId = 0;
   const { readable, writable } = new TransformStream();
-
-  /** Write current state to KV (fire-and-forget via waitUntil) */
-  const writeToKV = (done: boolean, error?: string) =>
-    env.STREAM_CACHE.put(
-      `session:${sessionId}`,
-      JSON.stringify({
-        chunks: allChunks,
-        totalChunks: allChunks.length,
-        done,
-        error,
-      } satisfies CachedSession),
-      { expirationTtl: KV_EXPIRATION_TTL }
-    ).catch((e) => {
-      console.error(`KV write failed for session:${sessionId}:`, (e as Error).message ?? e);
-    });
 
   const processStream = async () => {
     const writer = writable.getWriter();
@@ -192,24 +178,20 @@ async function handleStream(
         if (done) break;
 
         const text = dec.decode(value, { stream: true });
-        allChunks.push(text);
+        // Serialize once per chunk, reuse for both NDJSON buffer and SSE output
+        const serialized = JSON.stringify(text);
+        ndjsonBody += serialized + '\n';
         eventId++;
 
         if (!clientGone) {
           try {
             await writer.write(
-              enc.encode(`id: ${eventId}\ndata: ${JSON.stringify(text)}\n\n`)
+              enc.encode(`id: ${eventId}\ndata: ${serialized}\n\n`)
             );
           } catch {
             // Client disconnected - continue reading from LLM to buffer
             clientGone = true;
           }
-        }
-
-        // Intermediate cache: periodically persist to KV so that
-        // even if the Worker is killed, partial data is recoverable.
-        if (intermediateCache && eventId % INTERMEDIATE_CACHE_INTERVAL === 0) {
-          ctx.waitUntil(writeToKV(false));
         }
       }
 
@@ -250,9 +232,23 @@ async function handleStream(
         // Already closed or errored
       }
 
-      // Final KV write with completion status
-      if (allChunks.length > 0) {
-        await writeToKV(!streamError, streamError);
+      // Single KV write at completion (write-back).
+      // NDJSON format: metadata line + one pre-serialized chunk per line.
+      // No re-serialization needed — just string concatenation.
+      if (eventId > 0) {
+        const meta: SessionMeta = {
+          totalChunks: eventId,
+          done: !streamError,
+          ...(streamError ? { error: streamError } : {}),
+        };
+        const kvValue = JSON.stringify(meta) + '\n' + ndjsonBody;
+        await env.STREAM_CACHE.put(
+          `session:${sessionId}`,
+          kvValue,
+          { expirationTtl: KV_EXPIRATION_TTL }
+        ).catch((e) => {
+          console.error(`KV write failed for session:${sessionId}:`, (e as Error).message ?? e);
+        });
       }
     }
   };
@@ -280,51 +276,63 @@ async function handleRecover(
     );
   }
 
-  let session: CachedSession;
-  try {
-    session = JSON.parse(raw);
-  } catch {
+  // Parse NDJSON: first line is metadata, remaining lines are pre-serialized chunks
+  const newlineIdx = raw.indexOf('\n');
+  if (newlineIdx === -1) {
     return jsonResponse({ error: 'Corrupt session data' }, 500);
   }
 
-  // Return missed chunks as SSE
-  const missedChunks = session.chunks.slice(lastEventId);
+  let meta: SessionMeta;
+  try {
+    meta = JSON.parse(raw.slice(0, newlineIdx));
+  } catch {
+    return jsonResponse({ error: 'Corrupt session metadata' }, 500);
+  }
+
+  // Each chunk line is already JSON-stringified, ready to use as SSE data
+  const chunkLines = raw.slice(newlineIdx + 1);
+  const allLines = chunkLines.split('\n');
+  // Remove trailing empty element from final newline
+  if (allLines.length > 0 && allLines[allLines.length - 1] === '') {
+    allLines.pop();
+  }
+  const missedLines = allLines.slice(lastEventId);
   const enc = new TextEncoder();
 
   const stream = new ReadableStream({
     start(controller) {
       let id = lastEventId;
-      for (const chunk of missedChunks) {
+      for (const line of missedLines) {
         id++;
+        // line is already JSON.stringify'd — use directly as SSE data
         controller.enqueue(
-          enc.encode(`id: ${id}\ndata: ${JSON.stringify(chunk)}\n\n`)
+          enc.encode(`id: ${id}\ndata: ${line}\n\n`)
         );
       }
-      if (session.done) {
+      if (meta.done) {
         controller.enqueue(
           enc.encode(
             `event: done\ndata: ${JSON.stringify({
-              totalChunks: session.totalChunks,
+              totalChunks: meta.totalChunks,
               complete: true,
             })}\n\n`
           )
         );
-      } else if (session.error) {
+      } else if (meta.error) {
         controller.enqueue(
           enc.encode(
             `event: error\ndata: ${JSON.stringify({
-              totalChunks: session.totalChunks,
+              totalChunks: meta.totalChunks,
               complete: false,
-              error: session.error,
+              error: meta.error,
             })}\n\n`
           )
         );
       } else {
-        // Stream was interrupted (intermediate cache, Worker killed)
         controller.enqueue(
           enc.encode(
             `event: interrupted\ndata: ${JSON.stringify({
-              totalChunks: session.totalChunks,
+              totalChunks: meta.totalChunks,
               complete: false,
             })}\n\n`
           )
