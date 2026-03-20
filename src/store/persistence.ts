@@ -1,4 +1,4 @@
-import { materializeActivePath } from '@utils/branchUtils';
+import { materializeActivePath, buildPathToLeaf } from '@utils/branchUtils';
 import { ensureUniqueChatIds } from '@utils/chatIdentity';
 import { ContentStoreData, validateDeltaIntegrity } from '@utils/contentStore';
 import {
@@ -176,18 +176,48 @@ const buildPersistedChats = (state: StoreState): PersistedChat[] | undefined =>
     rest.branchTree ? rest : { ...rest, messages }
   );
 
-function sanitizeBranchTreeReferences(chat: ChatInterface): void {
-  if (!chat.branchTree) return;
+function sanitizeBranchTreeReferences(chat: ChatInterface): boolean {
+  if (!chat.branchTree) return false;
 
+  let repaired = false;
   const { branchTree } = chat;
+  if (!branchTree.nodes || typeof branchTree.nodes !== 'object') {
+    branchTree.nodes = {};
+    repaired = true;
+  }
+
+  if (!branchTree.nodes[branchTree.rootId]) {
+    branchTree.rootId = Object.keys(branchTree.nodes)[0] ?? '';
+    repaired = true;
+  }
+
+  const prevLen = Array.isArray(branchTree.activePath)
+    ? branchTree.activePath.length
+    : -1;
+
+  if (!Array.isArray(branchTree.activePath)) {
+    branchTree.activePath = [];
+  }
   branchTree.activePath = branchTree.activePath.filter((id) => {
     const node = branchTree.nodes[id];
     return !!node && typeof node.contentHash === 'string';
   });
 
-  if (!branchTree.nodes[branchTree.rootId]) {
-    branchTree.rootId = branchTree.activePath[0] ?? Object.keys(branchTree.nodes)[0] ?? '';
+  if (branchTree.activePath.length !== prevLen) {
+    repaired = true;
   }
+
+  // Rebuild activePath when it became empty but nodes still exist
+  if (
+    branchTree.activePath.length === 0 &&
+    branchTree.rootId &&
+    branchTree.nodes[branchTree.rootId]
+  ) {
+    branchTree.activePath = buildPathToLeaf(branchTree, branchTree.rootId);
+    repaired = true;
+  }
+
+  return repaired;
 }
 
 function sanitizeClipboard(
@@ -382,21 +412,41 @@ export const rehydrateStoreState = (state: StoreState) => {
 
   const contentStore: ContentStoreData = state.contentStore ?? {};
   validateDeltaIntegrity(contentStore);
+  const repairedChatTitles: string[] = [];
   state.chats?.forEach((chat: ChatInterface) => {
     if (!chat.messages) chat.messages = [];
     if (chat.branchTree) {
-      sanitizeBranchTreeReferences(chat);
-      // Replace orphaned streaming markers (from interrupted streams) with empty content
-      for (const node of Object.values(chat.branchTree.nodes)) {
-        if (isStreamingContentHash(node.contentHash)) {
-          node.contentHash = addContent(contentStore, []);
+      try {
+        const chatRepaired = sanitizeBranchTreeReferences(chat);
+        if (chatRepaired) {
+          repairedChatTitles.push(chat.title || chat.id);
         }
-      }
-      if (chat.branchTree.activePath.length > 0) {
-        chat.messages = materializeActivePath(chat.branchTree, contentStore);
+        // Replace orphaned streaming markers (from interrupted streams) with empty content
+        for (const node of Object.values(chat.branchTree.nodes)) {
+          if (isStreamingContentHash(node.contentHash)) {
+            node.contentHash = addContent(contentStore, []);
+          }
+        }
+        if (chat.branchTree.activePath.length > 0) {
+          chat.messages = materializeActivePath(chat.branchTree, contentStore);
+        }
+      } catch (e) {
+        console.warn('[rehydrate] skipping corrupt branchTree for chat', chat.id, e);
+        repairedChatTitles.push(chat.title || chat.id);
       }
     }
   });
+  if (repairedChatTitles.length > 0) {
+    repaired = true;
+    setTimeout(() => {
+      import('react-toastify').then(({ toast }) => {
+        toast.warn(
+          `${repairedChatTitles.length}件のチャットデータを修復しました: ${repairedChatTitles.join(', ')}`,
+          { autoClose: false }
+        );
+      });
+    }, 0);
+  }
 
   if (!state.verifiedStats || typeof state.verifiedStats !== 'object') {
     state.verifiedStats = {};
