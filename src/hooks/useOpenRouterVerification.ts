@@ -8,8 +8,14 @@ import {
   resolveOpenRouterApiKey,
 } from '@utils/openrouterVerification';
 
+const EMPTY_PENDING_VERIFICATIONS = {};
+
 export default function useOpenRouterVerification() {
-  const pendingVerifications = useStore((state) => state.pendingVerifications);
+  const pendingVerifications = useStore((state) =>
+    state.pendingVerifications && typeof state.pendingVerifications === 'object'
+      ? state.pendingVerifications
+      : EMPTY_PENDING_VERIFICATIONS
+  );
   const providers = useStore((state) => state.providers);
   const apiEndpoint = useStore((state) => state.apiEndpoint);
   const apiKey = useStore((state) => state.apiKey);

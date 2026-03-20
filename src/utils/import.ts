@@ -16,7 +16,7 @@ import {
   _defaultChatConfig,
   _defaultImageDetail,
 } from '@constants/chat';
-import { ExportV1, ExportV2, OpenAIChat, OpenAIPlaygroundJSON } from '@type/export';
+import { ExportV1, ExportV2, ExportV3, OpenAIChat, OpenAIPlaygroundJSON } from '@type/export';
 import { BranchNode, BranchTree } from '@type/chat';
 import { ContentStoreData, addContent, resolveContent } from '@utils/contentStore';
 import { ensureUniqueChatIds } from '@utils/chatIdentity';
@@ -210,6 +210,48 @@ export const validateExportV2 = (data: ExportV2): data is ExportV2 => {
       }
     }
   }
+  return true;
+};
+
+const validateContentStore = (contentStore: unknown): contentStore is ContentStoreData => {
+  if (!isRecord(contentStore)) return false;
+
+  for (const entry of Object.values(contentStore)) {
+    if (!isRecord(entry)) return false;
+    if (!Array.isArray(entry.content)) return false;
+    if (typeof entry.refCount !== 'number') return false;
+    if (!entry.content.every(isContentInterface)) return false;
+  }
+
+  return true;
+};
+
+export const validateExportV3 = (data: ExportV3): data is ExportV3 => {
+  if (
+    !validateAndFixChats(data.chats) ||
+    !validateFolders(data.folders) ||
+    !validateContentStore(data.contentStore)
+  ) {
+    return false;
+  }
+
+  if (data.chats) {
+    for (const chat of data.chats) {
+      if (!chat.branchTree) continue;
+      const bt = chat.branchTree;
+      if (typeof bt.nodes !== 'object' || !Array.isArray(bt.activePath)) {
+        return false;
+      }
+
+      for (const nodeId of bt.activePath) {
+        const node = bt.nodes[nodeId];
+        if (!node || typeof node.contentHash !== 'string') {
+          return false;
+        }
+      }
+    }
+  }
+
   return true;
 };
 

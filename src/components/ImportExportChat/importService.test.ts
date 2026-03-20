@@ -300,7 +300,12 @@ describe('importService', () => {
       JSON.stringify({
         version: 3,
         folders: {},
-        contentStore: { abc: { value: 'hello', refCount: 1 } },
+        contentStore: {
+          abc: {
+            content: [{ type: 'text', text: 'hello' }],
+            refCount: 1,
+          },
+        },
         chats: [createChat('imported-chat', 'Imported')],
       }),
     ], 'replace-v3.json', {
@@ -319,6 +324,34 @@ describe('importService', () => {
     expect(testContext.storeState.apiKey).toBeUndefined();
     expect(testContext.storeState.theme).toBe('dark');
     expect(testContext.storeState.currentChatIndex).toBe(0);
+  });
+
+  it('rejects invalid export v3 data with broken branch references', async () => {
+    const file = new File([
+      JSON.stringify({
+        version: 3,
+        folders: {},
+        contentStore: {},
+        chats: [{
+          ...createChat('broken-chat', 'Broken'),
+          branchTree: {
+            rootId: 'missing-node',
+            activePath: ['missing-node'],
+            nodes: {},
+          },
+        }],
+      }),
+    ], 'broken-v3.json', {
+      type: 'application/json',
+    });
+
+    const result = await importChatFromFile(file, t);
+
+    expect(result).toEqual({
+      success: false,
+      message: 'notifications.invalidFormatForVersion',
+    });
+    expect(testContext.storeState.chats[0].id).toBe('existing-chat');
   });
 
   it('quota retry for OpenAI array pops chats until success', async () => {

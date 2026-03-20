@@ -13,6 +13,7 @@ import {
   validateAndFixChats,
   validateExportV1,
   validateExportV2,
+  validateExportV3,
 } from '@utils/import';
 import { flatMessagesToBranchTree } from '@utils/branchUtils';
 import { assignFreshChatIds } from '@utils/chatIdentity';
@@ -245,13 +246,14 @@ const importLegacyChats = (
 };
 
 const importExportV3 = (parsedData: ExportV3, t: Translator): ImportResult => {
-  if (!(parsedData.chats && parsedData.contentStore && parsedData.folders)) {
+  if (!validateExportV3(parsedData)) {
     return buildFailureResult(
       t('notifications.invalidFormatForVersion', { ns: 'import' })
     );
   }
+  const chats = parsedData.chats ?? [];
 
-  clearMissingFolderReferences(parsedData.chats, parsedData.folders);
+  clearMissingFolderReferences(chats, parsedData.folders);
 
   shiftAndMergeFolders(parsedData.folders);
 
@@ -265,9 +267,9 @@ const importExportV3 = (parsedData: ExportV3, t: Translator): ImportResult => {
     }
   }
   useStore.setState({ contentStore: existingContentStore });
-  mergeChats(parsedData.chats);
+  mergeChats(chats);
 
-  return parsedData.chats.length > 0
+  return chats.length > 0
     ? buildSuccessResult(t('notifications.successfulImport', { ns: 'import' }))
     : buildFailureResult(t('notifications.quotaExceeded', { ns: 'import' }));
 };

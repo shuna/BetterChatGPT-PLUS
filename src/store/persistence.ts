@@ -176,6 +176,20 @@ const buildPersistedChats = (state: StoreState): PersistedChat[] | undefined =>
     rest.branchTree ? rest : { ...rest, messages }
   );
 
+function sanitizeBranchTreeReferences(chat: ChatInterface): void {
+  if (!chat.branchTree) return;
+
+  const { branchTree } = chat;
+  branchTree.activePath = branchTree.activePath.filter((id) => {
+    const node = branchTree.nodes[id];
+    return !!node && typeof node.contentHash === 'string';
+  });
+
+  if (!branchTree.nodes[branchTree.rootId]) {
+    branchTree.rootId = branchTree.activePath[0] ?? Object.keys(branchTree.nodes)[0] ?? '';
+  }
+}
+
 function sanitizeClipboard(
   clipboard: BranchClipboard | null,
   contentStore: ContentStoreData
@@ -371,6 +385,7 @@ export const rehydrateStoreState = (state: StoreState) => {
   state.chats?.forEach((chat: ChatInterface) => {
     if (!chat.messages) chat.messages = [];
     if (chat.branchTree) {
+      sanitizeBranchTreeReferences(chat);
       // Replace orphaned streaming markers (from interrupted streams) with empty content
       for (const node of Object.values(chat.branchTree.nodes)) {
         if (isStreamingContentHash(node.contentHash)) {
@@ -383,19 +398,43 @@ export const rehydrateStoreState = (state: StoreState) => {
     }
   });
 
-  if (state.pendingVerifications) {
+  if (!state.verifiedStats || typeof state.verifiedStats !== 'object') {
+    state.verifiedStats = {};
+  }
+
+  if (!state.pendingVerifications || typeof state.pendingVerifications !== 'object') {
+    state.pendingVerifications = {};
+  } else {
     const now = Date.now();
     state.pendingVerifications = Object.fromEntries(
-      Object.entries(state.pendingVerifications).map(([key, verification]) => [
-        key,
-        verification.status === 'fetching'
-          ? {
-              ...verification,
-              status: 'pending',
-              nextAttemptAt: Math.min(verification.nextAttemptAt, now),
-            }
-          : verification,
-      ])
+      Object.entries(state.pendingVerifications).flatMap(([key, verification]) => {
+        if (!verification || typeof verification !== 'object') {
+          return [];
+        }
+        const normalized = {
+          ...verification,
+          status:
+            verification.status === 'fetching' ||
+            verification.status === 'pending' ||
+            verification.status === 'failed'
+              ? verification.status
+              : 'pending',
+          nextAttemptAt:
+            typeof verification.nextAttemptAt === 'number'
+              ? verification.nextAttemptAt
+              : now,
+        };
+        return [[
+          key,
+          normalized.status === 'fetching'
+            ? {
+                ...normalized,
+                status: 'pending',
+                nextAttemptAt: Math.min(normalized.nextAttemptAt, now),
+              }
+            : normalized,
+        ]];
+      })
     );
   }
 

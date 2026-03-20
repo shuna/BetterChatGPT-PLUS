@@ -183,6 +183,55 @@ describe('persistence', () => {
     ]);
   });
 
+  it('normalizes malformed verification state during rehydration', () => {
+    const state = buildStoreState() as ReturnType<typeof buildStoreState> & {
+      verifiedStats: unknown;
+      pendingVerifications: unknown;
+    };
+    state.verifiedStats = null;
+    state.pendingVerifications = {
+      broken: null,
+      stuck: {
+        generationId: 'gen-1',
+        chatId: 'chat-1',
+        targetNodeId: 'node-1',
+        requestedAt: 1,
+        nextAttemptAt: Date.now() + 60_000,
+        attemptCount: 1,
+        status: 'fetching',
+      },
+      unknownStatus: {
+        generationId: 'gen-2',
+        chatId: 'chat-1',
+        targetNodeId: 'node-2',
+        requestedAt: 2,
+        nextAttemptAt: 'later',
+        attemptCount: 0,
+        status: 'wat',
+      },
+    };
+
+    expect(() => rehydrateStoreState(state as never)).not.toThrow();
+    expect(state.verifiedStats).toEqual({});
+    expect(state.pendingVerifications).not.toHaveProperty('broken');
+    expect(state.pendingVerifications).toMatchObject({
+      stuck: {
+        status: 'pending',
+      },
+      unknownStatus: {
+        status: 'pending',
+      },
+    });
+    expect(
+      (state.pendingVerifications as Record<string, { nextAttemptAt: number }>).stuck
+        .nextAttemptAt
+    ).toBeLessThanOrEqual(Date.now());
+    expect(
+      typeof (state.pendingVerifications as Record<string, { nextAttemptAt: number }>)
+        .unknownStatus.nextAttemptAt
+    ).toBe('number');
+  });
+
   it('round-trips persisted chat data independently from localStorage state', () => {
     const state = buildStoreState();
     const chatData = createPersistedChatDataState(state as never);
@@ -285,6 +334,22 @@ describe('persistence', () => {
     expect(state.chats[0].id).toBe('chat-1');
     expect(state.chats[1].id).not.toBe('chat-1');
     expect(state.chats[1].id).toEqual(expect.any(String));
+  });
+
+  it('drops broken branch activePath references during rehydration', () => {
+    const state = buildStoreState();
+    state.chats[0].branchTree = {
+      ...state.chats[0].branchTree!,
+      rootId: 'missing-node',
+      activePath: ['missing-node', 'node-2'],
+    };
+
+    expect(() => rehydrateStoreState(state as never)).not.toThrow();
+    expect(state.chats[0].branchTree?.activePath).toEqual(['node-2']);
+    expect(state.chats[0].branchTree?.rootId).toBe('node-2');
+    expect(state.chats[0].messages).toEqual([
+      { role: 'assistant', content: [{ type: 'text', text: 'world' }] },
+    ]);
   });
 
   it('persists and restores splitPanelRatio and splitPanelSwapped', () => {
