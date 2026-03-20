@@ -13,6 +13,7 @@ import {
 } from '@utils/liveTokenUsage';
 import { isTextContent, type MessageInterface } from '@type/chat';
 import { peekBufferedContent } from '@utils/streamingBuffer';
+import type { VerifiedStats } from '@store/openrouter-stats-slice';
 
 type TokenCounts = {
   promptTokenCount: number;
@@ -60,6 +61,22 @@ const TokenCount = React.memo(() => {
   const favoriteModels = useStore((state) => state.favoriteModels) || [];
   const providerCustomModels = useStore((state) => state.providerCustomModels);
   const providerModelCache = useStore((state) => state.providerModelCache);
+
+  // Look up verified stats for the last assistant message's node
+  const verifiedStats: VerifiedStats | undefined = useStore((state) => {
+    const chat = state.chats?.[state.currentChatIndex];
+    if (!chat?.branchTree) return undefined;
+    const path = chat.branchTree.activePath;
+    // Walk backwards to find the last assistant node
+    for (let i = path.length - 1; i >= 0; i--) {
+      const node = chat.branchTree.nodes[path[i]];
+      if (node?.role === 'assistant') {
+        const key = `${chat.id}:::${node.id}`;
+        return state.verifiedStats[key];
+      }
+    }
+    return undefined;
+  });
   const latestInputRef = useRef({ messages, generatingSession, model });
   const currentCountsRef = useRef<TokenCounts>({
     promptTokenCount,
@@ -207,6 +224,22 @@ const TokenCount = React.memo(() => {
     t,
   ]);
 
+  const verifiedDisplay = useMemo(() => {
+    if (!verifiedStats || generatingSession) return null;
+    const cost = verifiedStats.totalCost;
+    const costStr = cost === 0 ? 'Free' : `$${cost.toPrecision(3)}`;
+    const modelShort = verifiedStats.model.split('/').pop() ?? verifiedStats.model;
+    return t('verifiedStats', {
+      ns: 'main',
+      defaultValue:
+        'Verified: {{prompt}}+{{completion}} tokens, {{cost}} ({{model}})',
+      prompt: verifiedStats.nativePromptTokens,
+      completion: verifiedStats.nativeCompletionTokens,
+      cost: costStr,
+      model: modelShort,
+    });
+  }, [verifiedStats, generatingSession, t]);
+
   latestInputRef.current = { messages, generatingSession, model };
 
   useEffect(() => {
@@ -314,6 +347,11 @@ const TokenCount = React.memo(() => {
               })
             : `Tokens: ${promptTokenCount} (${costDisplay})`}
       </div>
+      {verifiedDisplay && (
+        <div className='text-xs tabular-nums text-green-700 dark:text-green-400'>
+          {verifiedDisplay}
+        </div>
+      )}
     </div>
   );
 });

@@ -97,6 +97,16 @@ function extractText(events) {
   return text;
 }
 
+/** Extract the first non-empty generation ID (e.g. `gen-xxxxx`) from events. */
+function extractGenerationId(events) {
+  for (const evt of events) {
+    if (evt.id && typeof evt.id === 'string' && evt.id.startsWith('gen-')) {
+      return evt.id;
+    }
+  }
+  return null;
+}
+
 // --- Proxy SSE Parser ---
 // Proxy format: id: N\ndata: "JSON-stringified raw text"\n\n
 // Control events: event: done\ndata: {"totalChunks":N,"complete":true}\n\n
@@ -160,6 +170,7 @@ async function handleStartStream(msg, port) {
   let flushTimer = null;
   let flushChain = Promise.resolve();
   let lastProxyEventId = 0;
+  let generationId = null;
 
   // Save initial record
   const initialRecord = {
@@ -302,6 +313,7 @@ async function handleStartStream(msg, port) {
             const llmParsed = parseEventSource(llmChunk, false);
             llmPartial = llmParsed.partial;
 
+            if (!generationId) generationId = extractGenerationId(llmParsed.events);
             const text = extractText(llmParsed.events);
             if (text) {
               postToClient({ type: 'sw-chunk', requestId, text });
@@ -336,6 +348,7 @@ async function handleStartStream(msg, port) {
         const parsed = parseEventSource(chunk, done);
         partial = parsed.partial;
 
+        if (!generationId) generationId = extractGenerationId(parsed.events);
         const text = extractText(parsed.events);
         if (text) {
           postToClient({ type: 'sw-chunk', requestId, text });
@@ -354,6 +367,7 @@ async function handleStartStream(msg, port) {
     postToClient({
       type: 'sw-done',
       requestId,
+      generationId,
       ...(proxyMode ? { proxySessionId: proxyConfig.sessionId, lastProxyEventId } : {}),
     });
   } catch (err) {

@@ -91,6 +91,7 @@
   "added": "追加",
   "removed": "削除",
   "changed": "変更",
+  "verifiedStats": "実測: {{prompt}}+{{completion}} トークン, {{cost}} ({{model}})",
   "displayChatSize": "会話リストに各チャットサイズを表示",
   "showDebugPanel": "デバッグパネルを表示",
   "debugPanel": "デバッグ",

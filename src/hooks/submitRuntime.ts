@@ -311,6 +311,10 @@ function getProxyConfig(): ProxyConfig | undefined {
   };
 }
 
+export interface ExecuteSubmitStreamResult {
+  generationId?: string;
+}
+
 export const executeSubmitStream = async ({
   sessionId,
   chatId,
@@ -323,10 +327,11 @@ export const executeSubmitStream = async ({
   abortController,
   apiVersion,
   t,
-}: ExecuteSubmitStreamParams) => {
+}: ExecuteSubmitStreamParams): Promise<ExecuteSubmitStreamResult> => {
   sessionChunkTargets.set(sessionId, { chatId, targetNodeId });
   const isStreamSupported = getEffectiveStreamEnabled(config);
   const proxyConfig = getProxyConfig();
+  let capturedGenerationId: string | undefined;
   const runRequest = async (requestMessages: MessageInterface[]) => {
     if (!isStreamSupported) {
       let data;
@@ -424,6 +429,7 @@ export const executeSubmitStream = async ({
           onChunk,
           onDone: (meta) => {
             cleanup();
+            if (meta?.generationId) capturedGenerationId = meta.generationId;
             // ACK proxy to free KV cache
             if (meta?.proxySessionId && proxyConfig) {
               sendAck(proxyConfig, meta.proxySessionId);
@@ -574,6 +580,14 @@ export const executeSubmitStream = async ({
               const llmParsed = parseEventSource(llmChunk, false);
               llmPartial = llmParsed.partial;
 
+              if (!capturedGenerationId) {
+                for (const e of llmParsed.events) {
+                  if (e.id && typeof e.id === 'string' && e.id.startsWith('gen-')) {
+                    capturedGenerationId = e.id;
+                    break;
+                  }
+                }
+              }
               const resultString = llmParsed.events.reduce(
                 (output: string, current) => {
                   if (!current.choices?.[0]?.delta) return output;
@@ -666,6 +680,14 @@ export const executeSubmitStream = async ({
         const parsed = parseEventSource(chunk, done);
         partial = parsed.partial;
 
+        if (!capturedGenerationId) {
+          for (const e of parsed.events) {
+            if (e.id && typeof e.id === 'string' && e.id.startsWith('gen-')) {
+              capturedGenerationId = e.id;
+              break;
+            }
+          }
+        }
         if (parsed.done || done) reading = false;
 
         const resultString = parsed.events.reduce((output: string, current) => {
@@ -699,4 +721,5 @@ export const executeSubmitStream = async ({
     flushQueuedChunks(chatId, targetNodeId);
     finalizeStreamingNode(chatId, targetNodeId);
   }
+  return { generationId: capturedGenerationId };
 };

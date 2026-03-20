@@ -11,6 +11,7 @@ import { ProviderSlice, createProviderSlice } from './provider-slice';
 import { BranchSlice, createBranchSlice } from './branch-slice';
 import { MigrationSlice, createMigrationSlice } from './migration-slice';
 import { SearchSlice, createSearchSlice } from './search-slice';
+import { OpenRouterStatsSlice, createOpenRouterStatsSlice } from './openrouter-stats-slice';
 import { STORE_VERSION } from './version';
 import {
   createLocalStoragePartializedState,
@@ -29,7 +30,8 @@ export type StoreState = ChatSlice &
   ProviderSlice &
   BranchSlice &
   MigrationSlice &
-  SearchSlice;
+  SearchSlice &
+  OpenRouterStatsSlice;
 
 export type StoreSlice<T> = (
   set: StoreApi<StoreState>['setState'],
@@ -49,6 +51,7 @@ const useStore = create<StoreState>()(
       ...createBranchSlice(set, get),
       ...createMigrationSlice(set, get),
       ...createSearchSlice(set, get),
+      ...createOpenRouterStatsSlice(set, get),
     }),
     {
       name: 'free-chat-gpt',

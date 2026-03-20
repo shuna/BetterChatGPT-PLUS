@@ -22,6 +22,8 @@ import {
   stopSubmitSession,
   stopSubmitSessionsForChat,
 } from './submitRuntime';
+import { fetchGenerationStats } from '@api/openrouter';
+import { toVerifiedStats } from '@store/openrouter-stats-slice';
 
 export function stopSession(sessionId: string) {
   stopSubmitSession(sessionId);
@@ -124,7 +126,7 @@ const useSubmit = () => {
         chats[chatIndex].config.providerId
       );
 
-      await executeSubmitStream({
+      const streamResult = await executeSubmitStream({
         sessionId,
         chatId,
         chatIndex,
@@ -139,6 +141,22 @@ const useSubmit = () => {
       });
 
       await applySubmitTokenUsage(chatId, targetNodeId);
+
+      // Fetch verified stats from OpenRouter (non-blocking)
+      if (
+        streamResult.generationId &&
+        chats[chatIndex].config.providerId === 'openrouter' &&
+        resolved.key
+      ) {
+        const genId = streamResult.generationId;
+        const apiKey = resolved.key;
+        const statsKey = `${chatId}:::${targetNodeId}`;
+        fetchGenerationStats(genId, apiKey).then((raw) => {
+          if (raw) {
+            useStore.getState().setVerifiedStats(statsKey, toVerifiedStats(raw));
+          }
+        }).catch((err) => { console.warn('[OpenRouter] Failed to fetch generation stats:', err); });
+      }
 
       if (mode === 'append') {
         await maybeGenerateAutoTitle({
