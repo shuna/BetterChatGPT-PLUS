@@ -1,0 +1,37 @@
+{
+  "name": "iCloud 同期",
+  "tagline": "iCloud でワークスペースを同期します。",
+
+  "button": {
+    "connect": "iCloud に接続",
+    "disconnect": "iCloud を切断",
+    "pull": "iCloud から取得",
+    "push": "iCloud に送信"
+  },
+
+  "status": {
+    "connected": "iCloud に接続中です。",
+    "syncing": "iCloud と同期中です。",
+    "disconnected": "iCloud 同期は接続されていません。",
+    "authenticating": "iCloud に接続しています。"
+  },
+
+  "toast": {
+    "pull": "iCloud のデータを読み込みました。",
+    "push": "iCloud のスナップショットをローカルデータで上書きしました。",
+    "conflict": "同期の競合を解決しました。最新版を保存しました。"
+  },
+
+  "error": {
+    "auth": "iCloud セッションが切れました。再接続してください。",
+    "origin": "このドメインは CloudKit へのアクセスが許可されていません。",
+    "quota": "iCloud のストレージ容量を超えています。",
+    "config": "CloudKit が設定されていません。環境変数を確認してください。",
+    "popupBlocked": "ポップアップがブロックされました。このサイトのポップアップを許可してください。",
+    "cancelled": "iCloud への接続がキャンセルされました。",
+    "timeout": "iCloud への接続がタイムアウトしました。再試行してください。"
+  },
+
+  "notice": "データはプライベート iCloud コンテナに保存されます。",
+  "unavailable": "必要な環境変数が設定されていないため、CloudKit 同期は利用できません。"
+}

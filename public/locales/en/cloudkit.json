@@ -1,0 +1,37 @@
+{
+  "name": "iCloud Sync",
+  "tagline": "Sync your workspace via iCloud.",
+
+  "button": {
+    "connect": "Connect to iCloud",
+    "disconnect": "Disconnect iCloud",
+    "pull": "Pull from iCloud",
+    "push": "Push to iCloud"
+  },
+
+  "status": {
+    "connected": "Connected to iCloud.",
+    "syncing": "Syncing with iCloud.",
+    "disconnected": "iCloud Sync is not connected.",
+    "authenticating": "Connecting to iCloud."
+  },
+
+  "toast": {
+    "pull": "Loaded iCloud data into this device.",
+    "push": "iCloud snapshot overwritten with local data.",
+    "conflict": "Sync conflict resolved. Latest version saved."
+  },
+
+  "error": {
+    "auth": "iCloud session expired. Please reconnect.",
+    "origin": "This domain is not allowed to access CloudKit. Check CloudKit Dashboard settings.",
+    "quota": "iCloud storage quota exceeded.",
+    "config": "CloudKit is not configured. Check environment variables.",
+    "popupBlocked": "Popup was blocked. Please allow popups for this site.",
+    "cancelled": "iCloud connection was cancelled.",
+    "timeout": "iCloud connection timed out. Please try again."
+  },
+
+  "notice": "Your data is stored in your private iCloud container.",
+  "unavailable": "CloudKit sync is unavailable because the required environment variables are not configured."
+}

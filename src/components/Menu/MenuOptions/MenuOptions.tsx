@@ -7,11 +7,9 @@ import { TotalTokenCostDisplay } from '@components/SettingsMenu/TotalTokenCost';
 const ImportExportChat = React.lazy(
   () => import('@components/ImportExportChat')
 );
-const GoogleSync = React.lazy(() => import('@components/GoogleSync'));
+const CloudSync = React.lazy(() => import('@components/GoogleSync'));
 const SettingsMenu = React.lazy(() => import('@components/SettingsMenu'));
 const HelpMenu = React.lazy(() => import('@components/HelpMenu/HelpMenu'));
-
-const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || undefined;
 
 const MenuOptions = () => {
   const hideMenuOptions = useStore((state) => state.hideMenuOptions);
@@ -40,7 +38,7 @@ const MenuOptions = () => {
         {countTotalTokens && <TotalTokenCostDisplay />}
         {mounted && (
           <Suspense fallback={null}>
-            {googleClientId && <GoogleSync clientId={googleClientId} />}
+            <CloudSync />
             <ImportExportChat />
             <SettingsMenu />
             <HelpMenu />

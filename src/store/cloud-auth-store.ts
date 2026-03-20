@@ -1,6 +1,11 @@
 import { StoreApi, create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { CloudAuthSlice, createCloudAuthSlice } from './cloud-auth-slice';
+import {
+  CLOUD_AUTH_STORAGE_VERSION,
+  createCloudAuthPersistedState,
+  migrateCloudAuthPersistedState,
+} from './cloud-auth-types';
 
 export type StoreState = CloudAuthSlice;
 
@@ -16,12 +21,22 @@ const useCloudAuthStore = create<StoreState>()(
     }),
     {
       name: 'cloud',
-      partialize: (state) => ({
-        cloudSync: state.cloudSync,
-        fileId: state.fileId,
-        syncTargetConfirmed: state.syncTargetConfirmed,
-      }),
-      version: 2,
+      partialize: (state) =>
+        createCloudAuthPersistedState({
+          provider: state.provider,
+          cloudSync: state.cloudSync,
+          syncStatus: state.syncStatus,
+          syncTargetConfirmed: state.syncTargetConfirmed,
+          remoteTargetId: state.remoteTargetId,
+          remoteTargetLabel: state.remoteTargetLabel,
+          googleAccessToken: state.googleAccessToken,
+          googleRefreshToken: state.googleRefreshToken,
+          fileId: state.fileId,
+          providers: state.providers,
+        }),
+      version: CLOUD_AUTH_STORAGE_VERSION,
+      migrate: (persistedState, version) =>
+        migrateCloudAuthPersistedState(persistedState, version),
     }
   )
 );

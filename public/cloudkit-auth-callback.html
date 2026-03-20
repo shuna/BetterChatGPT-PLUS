@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html><head><title>iCloud Auth</title></head>
+<body>
+<script>
+  var params = new URLSearchParams(window.location.search);
+  var token = params.get('ckWebAuthToken');
+  if (window.opener) {
+    if (token) {
+      window.opener.postMessage(
+        { type: 'cloudkit-auth', ckWebAuthToken: token },
+        location.origin
+      );
+    } else {
+      window.opener.postMessage(
+        { type: 'cloudkit-auth-error' },
+        location.origin
+      );
+    }
+  }
+  // callback.html は token 取得後に閉じるだけで十分。
+  // history.replaceState で query を消す必要はない（popup は即座に close される）。
+  window.close();
+</script>
+</body></html>
