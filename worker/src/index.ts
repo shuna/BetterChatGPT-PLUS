@@ -13,12 +13,19 @@
  * 6. If client disconnects, waitUntil() keeps the Worker alive to finish reading
  * 7. Client can recover missed chunks via GET /api/recover/:sessionId
  *
+ * Recovery strategies (toggle via RECOVERY_STRATEGY):
+ * - "progressive": After client disconnect, periodic KV snapshots every
+ *   PROGRESSIVE_SNAPSHOT_INTERVAL_MS. Recovery endpoint polls KV and
+ *   streams chunks progressively as they become available.
+ * - "batch": KV write only at completion. Recovery endpoint polls until
+ *   stream is done, then replays all chunks at once.
+ *
  * Free plan limits:
  * - 100k requests/day, 10ms CPU/request (I/O wait excluded)
  * - KV: 100k reads/day, 1k writes/day → ~1000 sessions/day
  *
  * KV storage format (NDJSON):
- *   Line 1: metadata JSON  {"totalChunks":N,"done":true|false,"error":"..."}
+ *   Line 1: metadata JSON  {"totalChunks":N,"done":true|false,"error":"...","streaming":true|false}
  *   Line 2+: each chunk individually JSON-stringified, one per line
  * This avoids re-serializing the entire chunk array on every write,
  * keeping CPU cost O(N) linear instead of O(N²) quadratic.
@@ -36,6 +43,27 @@ interface StreamRequest {
   sessionId: string;
 }
 
+// ---------------------------------------------------------------------------
+// Recovery strategy toggle
+// ---------------------------------------------------------------------------
+
+/**
+ * "progressive" — after client disconnect, write KV snapshots every
+ *   PROGRESSIVE_SNAPSHOT_INTERVAL_MS. Recovery streams chunks progressively.
+ * "batch" — write KV only at completion. Recovery waits until done,
+ *   then replays everything at once.
+ */
+const RECOVERY_STRATEGY: 'progressive' | 'batch' = 'progressive';
+
+/** Interval (ms) for periodic KV snapshots after client disconnect (progressive mode) */
+const PROGRESSIVE_SNAPSHOT_INTERVAL_MS = 10_000;
+
+/** How long the recovery endpoint polls KV before giving up (ms) */
+const RECOVERY_POLL_TIMEOUT_MS = 300_000; // 5 minutes
+
+/** Interval (ms) between KV reads during recovery polling */
+const RECOVERY_POLL_INTERVAL_MS = 2_000;
+
 /** KV TTL in seconds - safety net if client never sends ACK */
 const KV_EXPIRATION_TTL = 21600; // 6 hours
 
@@ -44,6 +72,8 @@ interface SessionMeta {
   totalChunks: number;
   done: boolean;
   error?: string;
+  /** true while the Worker is still receiving from the LLM */
+  streaming?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -100,6 +130,53 @@ function authenticate(request: Request, env: Env): boolean {
   if (!auth) return false;
   return auth === `Bearer ${env.PROXY_AUTH_TOKEN}`;
 }
+
+// ---------------------------------------------------------------------------
+// KV helpers
+// ---------------------------------------------------------------------------
+
+/** Parse KV content into metadata + chunk lines */
+function parseKvContent(raw: string): { meta: SessionMeta; chunkLines: string[] } | null {
+  const newlineIdx = raw.indexOf('\n');
+  if (newlineIdx === -1) return null;
+
+  try {
+    const meta: SessionMeta = JSON.parse(raw.slice(0, newlineIdx));
+    const rest = raw.slice(newlineIdx + 1);
+    const lines = rest.split('\n');
+    if (lines.length > 0 && lines[lines.length - 1] === '') {
+      lines.pop();
+    }
+    return { meta, chunkLines: lines };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Write a snapshot of the current stream state to KV.
+ * Returns the wall-clock time of the write for rate-limit tracking.
+ */
+async function writeSnapshot(
+  env: Env,
+  sessionId: string,
+  meta: SessionMeta,
+  ndjsonBody: string
+): Promise<number> {
+  const kvValue = JSON.stringify(meta) + '\n' + ndjsonBody;
+  const writeTime = Date.now();
+  await env.STREAM_CACHE.put(
+    `session:${sessionId}`,
+    kvValue,
+    { expirationTtl: KV_EXPIRATION_TTL }
+  ).catch((e) => {
+    console.error(`KV write failed for session:${sessionId}:`, (e as Error).message ?? e);
+  });
+  return writeTime;
+}
+
+/** Minimum gap (ms) between KV writes to the same key to avoid rate-limit 429s */
+const KV_WRITE_COOLDOWN_MS = 1100;
 
 // ---------------------------------------------------------------------------
 // Stream handler - proxies SSE from LLM API with event IDs
@@ -171,6 +248,40 @@ async function handleStream(
     const dec = new TextDecoder();
     let clientGone = false;
     let streamError: string | undefined;
+    let snapshotTimer: ReturnType<typeof setTimeout> | null = null;
+    /** Timestamp of the last KV write — used to enforce KV_WRITE_COOLDOWN_MS */
+    let lastKvWriteAt = 0;
+
+    /** Start periodic KV snapshots (progressive mode only, after client disconnect) */
+    async function startProgressiveSnapshots() {
+      if (RECOVERY_STRATEGY !== 'progressive' || snapshotTimer !== null) return;
+
+      // Write an immediate snapshot so recovery can start right away.
+      // Await to guarantee lastKvWriteAt is set before we resume reading
+      // chunks — prevents the final write from racing this one.
+      const immediateMeta: SessionMeta = {
+        totalChunks: eventId,
+        done: false,
+        streaming: true,
+      };
+      lastKvWriteAt = await writeSnapshot(env, sessionId, immediateMeta, ndjsonBody);
+
+      snapshotTimer = setInterval(async () => {
+        const meta: SessionMeta = {
+          totalChunks: eventId,
+          done: false,
+          streaming: true,
+        };
+        lastKvWriteAt = await writeSnapshot(env, sessionId, meta, ndjsonBody);
+      }, PROGRESSIVE_SNAPSHOT_INTERVAL_MS);
+    }
+
+    function stopProgressiveSnapshots() {
+      if (snapshotTimer !== null) {
+        clearInterval(snapshotTimer);
+        snapshotTimer = null;
+      }
+    }
 
     try {
       while (true) {
@@ -191,6 +302,7 @@ async function handleStream(
           } catch {
             // Client disconnected - continue reading from LLM to buffer
             clientGone = true;
+            await startProgressiveSnapshots();
           }
         }
       }
@@ -226,6 +338,8 @@ async function handleStream(
         }
       }
     } finally {
+      stopProgressiveSnapshots();
+
       try {
         writer.close();
       } catch {
@@ -236,19 +350,20 @@ async function handleStream(
       // NDJSON format: metadata line + one pre-serialized chunk per line.
       // No re-serialization needed — just string concatenation.
       if (eventId > 0) {
+        // Respect KV write cooldown to avoid 429 when a snapshot was just written
+        if (lastKvWriteAt > 0) {
+          const elapsed = Date.now() - lastKvWriteAt;
+          if (elapsed < KV_WRITE_COOLDOWN_MS) {
+            await sleep(KV_WRITE_COOLDOWN_MS - elapsed);
+          }
+        }
         const meta: SessionMeta = {
           totalChunks: eventId,
           done: !streamError,
+          streaming: false,
           ...(streamError ? { error: streamError } : {}),
         };
-        const kvValue = JSON.stringify(meta) + '\n' + ndjsonBody;
-        await env.STREAM_CACHE.put(
-          `session:${sessionId}`,
-          kvValue,
-          { expirationTtl: KV_EXPIRATION_TTL }
-        ).catch((e) => {
-          console.error(`KV write failed for session:${sessionId}:`, (e as Error).message ?? e);
-        });
+        await writeSnapshot(env, sessionId, meta, ndjsonBody);
       }
     }
   };
@@ -260,89 +375,160 @@ async function handleStream(
 }
 
 // ---------------------------------------------------------------------------
-// Recovery handler - replays missed chunks from KV
+// Recovery handler - replays missed chunks from KV (with polling)
 // ---------------------------------------------------------------------------
 
 async function handleRecover(
   sessionId: string,
   lastEventId: number,
-  env: Env
+  env: Env,
+  ctx: ExecutionContext
 ): Promise<Response> {
-  const raw = await env.STREAM_CACHE.get(`session:${sessionId}`);
-  if (!raw) {
-    return jsonResponse(
-      { found: false, message: 'Session not found or expired' },
-      404
-    );
-  }
-
-  // Parse NDJSON: first line is metadata, remaining lines are pre-serialized chunks
-  const newlineIdx = raw.indexOf('\n');
-  if (newlineIdx === -1) {
-    return jsonResponse({ error: 'Corrupt session data' }, 500);
-  }
-
-  let meta: SessionMeta;
-  try {
-    meta = JSON.parse(raw.slice(0, newlineIdx));
-  } catch {
-    return jsonResponse({ error: 'Corrupt session metadata' }, 500);
-  }
-
-  // Each chunk line is already JSON-stringified, ready to use as SSE data
-  const chunkLines = raw.slice(newlineIdx + 1);
-  const allLines = chunkLines.split('\n');
-  // Remove trailing empty element from final newline
-  if (allLines.length > 0 && allLines[allLines.length - 1] === '') {
-    allLines.pop();
-  }
-  const missedLines = allLines.slice(lastEventId);
   const enc = new TextEncoder();
 
-  const stream = new ReadableStream({
-    start(controller) {
-      let id = lastEventId;
-      for (const line of missedLines) {
-        id++;
-        // line is already JSON.stringify'd — use directly as SSE data
-        controller.enqueue(
-          enc.encode(`id: ${id}\ndata: ${line}\n\n`)
-        );
-      }
-      if (meta.done) {
-        controller.enqueue(
-          enc.encode(
-            `event: done\ndata: ${JSON.stringify({
+  const { readable, writable } = new TransformStream();
+  const writer = writable.getWriter();
+
+  const streamRecovery = async () => {
+    let sentUpTo = lastEventId;
+    const startTime = Date.now();
+
+    try {
+      while (true) {
+        const raw = await env.STREAM_CACHE.get(`session:${sessionId}`);
+
+        if (!raw) {
+          // No data in KV yet — if within timeout, send a waiting event and poll
+          if (Date.now() - startTime > RECOVERY_POLL_TIMEOUT_MS) {
+            await writer.write(
+              enc.encode(`event: error\ndata: ${JSON.stringify({
+                totalChunks: 0,
+                complete: false,
+                error: 'Recovery timeout: session not found',
+              })}\n\n`)
+            );
+            break;
+          }
+          await writer.write(
+            enc.encode(`event: waiting\ndata: ${JSON.stringify({ sentUpTo })}\n\n`)
+          );
+          await sleep(RECOVERY_POLL_INTERVAL_MS);
+          continue;
+        }
+
+        const parsed = parseKvContent(raw);
+        if (!parsed) {
+          await writer.write(
+            enc.encode(`event: error\ndata: ${JSON.stringify({
+              error: 'Corrupt session data',
+            })}\n\n`)
+          );
+          break;
+        }
+
+        const { meta, chunkLines } = parsed;
+
+        // Decide whether to send chunks now:
+        // - progressive: send immediately as they become available
+        // - batch: only send once the stream is complete (done/error)
+        const shouldSendChunks =
+          RECOVERY_STRATEGY === 'progressive' || !meta.streaming;
+
+        if (shouldSendChunks) {
+          // Send any new chunks since our last position
+          const newChunks = chunkLines.slice(sentUpTo);
+          for (let i = 0; i < newChunks.length; i++) {
+            sentUpTo++;
+            // Chunk lines are already JSON.stringify'd — use directly as SSE data
+            await writer.write(
+              enc.encode(`id: ${sentUpTo}\ndata: ${newChunks[i]}\n\n`)
+            );
+          }
+        }
+
+        // Stream is complete — send final event and exit
+        if (meta.done) {
+          await writer.write(
+            enc.encode(`event: done\ndata: ${JSON.stringify({
               totalChunks: meta.totalChunks,
               complete: true,
-            })}\n\n`
-          )
-        );
-      } else if (meta.error) {
-        controller.enqueue(
-          enc.encode(
-            `event: error\ndata: ${JSON.stringify({
+            })}\n\n`)
+          );
+          break;
+        }
+
+        if (meta.error) {
+          await writer.write(
+            enc.encode(`event: error\ndata: ${JSON.stringify({
               totalChunks: meta.totalChunks,
               complete: false,
               error: meta.error,
-            })}\n\n`
-          )
-        );
-      } else {
-        controller.enqueue(
-          enc.encode(
-            `event: interrupted\ndata: ${JSON.stringify({
-              totalChunks: meta.totalChunks,
-              complete: false,
-            })}\n\n`
-          )
-        );
-      }
-      controller.close();
-    },
-  });
+            })}\n\n`)
+          );
+          break;
+        }
 
-  return sseResponse(stream);
+        // Stream is still in progress — poll again
+        if (meta.streaming) {
+          // Check timeout
+          if (Date.now() - startTime > RECOVERY_POLL_TIMEOUT_MS) {
+            // Send whatever we have as interrupted
+            await writer.write(
+              enc.encode(`event: interrupted\ndata: ${JSON.stringify({
+                totalChunks: meta.totalChunks,
+                complete: false,
+              })}\n\n`)
+            );
+            break;
+          }
+
+          await writer.write(
+            enc.encode(`event: waiting\ndata: ${JSON.stringify({
+              sentUpTo,
+              streaming: true,
+            })}\n\n`)
+          );
+          await sleep(RECOVERY_POLL_INTERVAL_MS);
+          continue;
+        }
+
+        // meta.streaming === false and meta.done === false — shouldn't happen normally
+        // but treat as interrupted
+        await writer.write(
+          enc.encode(`event: interrupted\ndata: ${JSON.stringify({
+            totalChunks: meta.totalChunks,
+            complete: false,
+          })}\n\n`)
+        );
+        break;
+      }
+    } catch (e) {
+      try {
+        await writer.write(
+          enc.encode(`event: error\ndata: ${JSON.stringify({
+            error: (e as Error).message,
+          })}\n\n`)
+        );
+      } catch {
+        // Writer already closed
+      }
+    } finally {
+      try {
+        writer.close();
+      } catch {
+        // Already closed
+      }
+    }
+  };
+
+  // Use waitUntil so the polling continues even if client reads slowly
+  ctx.waitUntil(streamRecovery());
+
+  return sseResponse(readable);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // ---------------------------------------------------------------------------
@@ -362,7 +548,7 @@ async function handleAck(
 // ---------------------------------------------------------------------------
 
 function handleHealth(): Response {
-  return jsonResponse({ status: 'ok', version: '0.1.0' });
+  return jsonResponse({ status: 'ok', version: '0.2.0' });
 }
 
 // ---------------------------------------------------------------------------
@@ -422,7 +608,7 @@ export default {
       if (!sessionId) {
         return jsonResponse({ error: 'sessionId is required' }, 400);
       }
-      return handleRecover(sessionId, lastEventId, env);
+      return handleRecover(sessionId, lastEventId, env, ctx);
     }
 
     return jsonResponse({ error: 'Not Found' }, 404);
