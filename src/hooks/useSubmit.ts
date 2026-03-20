@@ -155,7 +155,7 @@ const useSubmit = () => {
           if (raw) {
             useStore.getState().setVerifiedStats(statsKey, toVerifiedStats(raw));
           }
-        }).catch(() => {});
+        }).catch((err) => { console.warn('[OpenRouter] Failed to fetch generation stats:', err); });
       }
 
       if (mode === 'append') {

@@ -43,6 +43,7 @@
   "tokenCountWithImages": "Tokens: {{tokens}} / Images: {{images}} ({{cost}})",
   "liveTokenCount": "Input: {{prompt}} / Output: {{completion}} ({{cost}})",
   "liveTokenCountWithImages": "Input: {{prompt}} / Output: {{completion}} / Images: {{images}} ({{cost}})",
+  "verifiedStats": "Verified: {{prompt}}+{{completion}} tokens, {{cost}} ({{model}})",
   "displayChatSize": "Display chat size in title",
   "showDebugPanel": "Show debug panel",
   "debugPanel": "Debug",

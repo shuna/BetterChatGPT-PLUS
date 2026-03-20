@@ -56,32 +56,3 @@ export async function fetchGenerationStats(
   return null;
 }
 
-// ── Auth / key info ─────────────────────────────────────────────────────
-
-export interface OpenRouterKeyInfo {
-  label: string;
-  /** Total credits used (USD). */
-  usage: number;
-  /** Credit limit set on this key (null = unlimited). */
-  limit: number | null;
-  is_free_tier: boolean;
-  rate_limit: {
-    requests: number;
-    interval: string;
-  };
-}
-
-export async function fetchKeyInfo(
-  apiKey: string
-): Promise<OpenRouterKeyInfo | null> {
-  try {
-    const res = await fetch(`${OPENROUTER_BASE}/auth/key`, {
-      headers: { Authorization: `Bearer ${apiKey}` },
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return (json as { data: OpenRouterKeyInfo }).data ?? null;
-  } catch {
-    return null;
-  }
-}
