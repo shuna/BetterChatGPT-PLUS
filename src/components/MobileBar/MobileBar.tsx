@@ -3,9 +3,14 @@ import React from 'react';
 import useStore from '@store/store';
 import PlusIcon from '@icon/PlusIcon';
 import MenuIcon from '@icon/MenuIcon';
+import SearchIcon from '@icon/SearchIcon';
 import useAddChat from '@hooks/useAddChat';
 
-const MobileBar = () => {
+interface MobileBarProps {
+  onSearchOpen?: () => void;
+}
+
+const MobileBar = ({ onSearchOpen }: MobileBarProps) => {
   const setHideSideMenu = useStore((state) => state.setHideSideMenu);
   const chatTitle = useStore((state) =>
     state.chats &&
@@ -34,6 +39,16 @@ const MobileBar = () => {
       <h1 className='flex-1 text-center text-base font-normal px-2 truncate'>
         {chatTitle}
       </h1>
+      {onSearchOpen && (
+        <button
+          type='button'
+          className='px-2 text-gray-400 cursor-pointer hover:text-gray-600 dark:hover:text-gray-200'
+          onClick={onSearchOpen}
+          aria-label='ページ内検索'
+        >
+          <SearchIcon className='h-5 w-5' />
+        </button>
+      )}
       <button
         type='button'
         className='mr-1 px-3 text-gray-400 cursor-pointer opacity-100'

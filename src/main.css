@@ -206,6 +206,22 @@
 }
 
 @layer components {
+  /* Chat find-in-page highlights */
+  mark.chat-find-highlight {
+    background-color: rgba(250, 204, 21, 0.4);
+    color: inherit;
+    border-radius: 2px;
+  }
+  mark.chat-find-highlight-active {
+    background-color: rgba(249, 115, 22, 0.6);
+  }
+  .dark mark.chat-find-highlight {
+    background-color: rgba(250, 204, 21, 0.3);
+  }
+  .dark mark.chat-find-highlight-active {
+    background-color: rgba(249, 115, 22, 0.5);
+  }
+
   .btn {
     align-items: center;
     border-color: transparent;

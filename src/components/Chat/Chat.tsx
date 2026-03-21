@@ -1,4 +1,4 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useState } from 'react';
 import useStore from '@store/store';
 import { isSplitView } from '@type/chat';
 
@@ -20,13 +20,14 @@ const Chat = () => {
   const setActiveView = useStore((state) => state.setChatActiveView);
   const isDesktop = useIsDesktop();
   const desktopOffset = isDesktop && !hideSideMenu ? `${menuWidth}px` : '0';
+  const [isChatFindOpen, setIsChatFindOpen] = useState(false);
 
   // Mobile fallback: split views degrade to chat view
   const effectiveView = !isDesktop && isSplitView(activeView) ? 'chat' : activeView;
 
   return (
     <div className='flex h-full flex-1 flex-col' style={{ paddingLeft: desktopOffset }}>
-      <MobileBar />
+      <MobileBar onSearchOpen={() => setIsChatFindOpen(true)} />
       <main className='relative h-full w-full transition-width flex flex-col overflow-hidden items-stretch flex-1'>
         <ChatViewTabs activeView={effectiveView} setActiveView={setActiveView} />
         {isSplitView(effectiveView) ? (
@@ -34,7 +35,7 @@ const Chat = () => {
         ) : (
           <>
             <div className={effectiveView === 'chat' ? 'flex flex-col flex-1 overflow-hidden' : 'hidden'}>
-              <ChatContent />
+              <ChatContent isChatFindOpen={isChatFindOpen} onChatFindClose={() => setIsChatFindOpen(false)} />
             </div>
             {effectiveView === 'branch-editor' && (
               <div className='flex flex-col flex-1 overflow-hidden'>

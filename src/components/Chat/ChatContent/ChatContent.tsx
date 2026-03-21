@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import ScrollToBottomButton from './ScrollToBottomButton';
 import CollapseAllButtons from './CollapseAllButtons';
+import ChatFindBar from './ChatFindBar';
 import Message from './Message';
 import NewMessageButton from './Message/NewMessageButton';
 import CrossIcon from '@icon/CrossIcon';
@@ -100,7 +101,12 @@ function isEditableTarget(target: EventTarget | null): boolean {
   );
 }
 
-const ChatContent = () => {
+interface ChatContentProps {
+  isChatFindOpen?: boolean;
+  onChatFindClose?: () => void;
+}
+
+const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {}) => {
   const { t } = useTranslation();
   const inputRole = useStore((state) => state.inputRole);
   const setError = useStore((state) => state.setError);
@@ -681,6 +687,9 @@ const ChatContent = () => {
           scrollToBottom={handleScrollToBottom}
         />
         <CollapseAllButtons />
+        {isChatFindOpen && onChatFindClose && (
+          <ChatFindBar scrollerRef={scrollerRef} onClose={onChatFindClose} />
+        )}
 
         <div
           ref={scrollerCallbackRef}

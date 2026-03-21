@@ -72,6 +72,7 @@ const ConversationEditMenu = ({ entries }: { entries: MultiLayoutEntry[] }) => {
   const [open, setOpen] = React.useState(false);
   const [confirming, setConfirming] = React.useState(false);
   const pruneHiddenNodes = useStore((state) => state.pruneHiddenNodes);
+  const openSearch = useStore((state) => state.openSearch);
   const btnRef = React.useRef<HTMLButtonElement>(null);
   const [menuPos, setMenuPos] = React.useState({ left: 0, top: 0 });
 
@@ -127,17 +128,28 @@ const ConversationEditMenu = ({ entries }: { entries: MultiLayoutEntry[] }) => {
             style={{ left: menuPos.left, top: menuPos.top }}
           >
             {!confirming ? (
-              <button
-                className={`w-full text-left px-4 py-2 text-sm ${
-                  hasHiddenNodes
-                    ? 'text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700'
-                    : 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
-                }`}
-                onClick={() => hasHiddenNodes && setConfirming(true)}
-                disabled={!hasHiddenNodes}
-              >
-                非表示ノードを削除
-              </button>
+              <>
+                <button
+                  className='w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700'
+                  onClick={() => {
+                    openSearch();
+                    setOpen(false);
+                  }}
+                >
+                  ノード検索
+                </button>
+                <button
+                  className={`w-full text-left px-4 py-2 text-sm ${
+                    hasHiddenNodes
+                      ? 'text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      : 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
+                  }`}
+                  onClick={() => hasHiddenNodes && setConfirming(true)}
+                  disabled={!hasHiddenNodes}
+                >
+                  非表示ノードを削除
+                </button>
+              </>
             ) : (
               <div className='px-4 py-2'>
                 <p className='text-sm text-gray-700 dark:text-gray-300 mb-2'>
