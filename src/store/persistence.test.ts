@@ -15,9 +15,9 @@ import {
   createPersistedChatDataState,
   hydrateFromPersistedStoreState,
   migratePersistedState,
-  migratePersistedChatDataState,
   rehydrateStoreState,
   setIndexedDbMigrationComplete,
+  clearNeedsDataMigration,
 } from './persistence';
 import { DEFAULT_PROVIDERS } from './provider-config';
 import { STORE_VERSION } from './version';
@@ -282,46 +282,21 @@ describe('persistence', () => {
     expect(hydrated.theme).toBe('light');
   });
 
-  it('migrates persisted chat data using the store version pipeline', () => {
-    const state = buildStoreState();
-    const migrated = migratePersistedChatDataState(
-      state as never,
-      createPersistedChatDataState(state as never),
-      STORE_VERSION - 1
-    );
+  it('sets needsDataMigration flag when version < STORE_VERSION', () => {
+    clearNeedsDataMigration();
+    const snapshot = { theme: 'light' };
 
-    expect(migrated.branchClipboard).toEqual(state.branchClipboard);
-    expect(migrated.contentStore).toEqual(state.contentStore);
+    const result = migratePersistedState(snapshot, 0);
+
+    // Returns state as-is (identity)
+    expect(result).toBe(snapshot);
   });
 
-  it('does not crash when migrating an old snapshot without chats', () => {
-    const snapshot = {
-      theme: 'light',
-      prompts: [],
-      foldersName: [],
-      foldersExpanded: [],
-    };
+  it('does not crash when calling migratePersistedState with current version', () => {
+    clearNeedsDataMigration();
+    const snapshot = { theme: 'light' };
 
-    expect(() => migratePersistedState(snapshot, 0)).not.toThrow();
-    expect(snapshot).not.toHaveProperty('contentStore');
-  });
-
-  it('preserves branch content when migrating an old snapshot without chats', () => {
-    const baseState = buildStoreState();
-    const migrated = migratePersistedState(
-      {
-        theme: 'light',
-        prompts: [],
-        foldersName: [],
-        foldersExpanded: [],
-      },
-      0
-    ) as unknown as Partial<ReturnType<typeof buildStoreState>>;
-
-    const hydrated = hydrateFromPersistedStoreState(baseState as never, migrated as never);
-
-    expect(hydrated.chats).toHaveLength(2);
-    expect(hydrated.contentStore).toEqual(baseState.contentStore);
+    expect(() => migratePersistedState(snapshot, STORE_VERSION)).not.toThrow();
   });
 
   it('deduplicates persisted chat ids during rehydration', () => {

@@ -9,46 +9,6 @@ import {
 import { addContent } from '@utils/contentStore';
 import { getBufferedContent } from '@utils/streamingBuffer';
 import { BranchClipboard, ChatInterface } from '@type/chat';
-import {
-  LocalStorageInterfaceV9ToV10,
-  LocalStorageInterfaceV0ToV1,
-  LocalStorageInterfaceV1ToV2,
-  LocalStorageInterfaceV2ToV3,
-  LocalStorageInterfaceV3ToV4,
-  LocalStorageInterfaceV4ToV5,
-  LocalStorageInterfaceV5ToV6,
-  LocalStorageInterfaceV6ToV7,
-  LocalStorageInterfaceV7oV8,
-  LocalStorageInterfaceV8_1ToV8_2,
-  LocalStorageInterfaceV8oV8_1,
-  LocalStorageInterfaceV8_2ToV9,
-  LocalStorageInterfaceV10ToV11,
-  LocalStorageInterfaceV11ToV12,
-  LocalStorageInterfaceV12ToV13,
-  LocalStorageInterfaceV13ToV14,
-  LocalStorageInterfaceV14ToV15,
-  LocalStorageInterfaceV15ToV16,
-} from '@type/chat';
-import {
-  migrateV10,
-  migrateV11,
-  migrateV12,
-  migrateV9,
-  migrateV0,
-  migrateV1,
-  migrateV2,
-  migrateV3,
-  migrateV4,
-  migrateV5,
-  migrateV6,
-  migrateV7,
-  migrateV8_1,
-  migrateV8_1_fix,
-  migrateV8_2,
-  migrateV13,
-  migrateV14,
-  migrateV15,
-} from './migrate';
 import type { StoreState } from './store';
 import { setLocalStorageItem } from './storage/storageErrors';
 import { STORE_VERSION } from './version';
@@ -557,89 +517,37 @@ export const hydrateFromPersistedStoreState = (
   };
 };
 
-export const migratePersistedChatDataState = (
-  baseState: StoreState,
-  persistedChatData: PersistedChatData,
-  version: number
-): PersistedChatData => {
-  if (version >= STORE_VERSION) {
-    return persistedChatData;
-  }
+/**
+ * Flag set when persisted data was loaded from an older store version.
+ * Bootstrap checks this to show an export/import prompt instead of
+ * auto-migrating.
+ */
+let _needsDataMigration = false;
 
-  const mergedState = JSON.parse(
-    JSON.stringify({
-      ...createPartializedState(baseState),
-      chats: persistedChatData.chats,
-      contentStore: persistedChatData.contentStore,
-      branchClipboard: persistedChatData.branchClipboard,
-    })
-  ) as PersistedStoreState;
+export function needsDataMigration(): boolean {
+  return _needsDataMigration;
+}
 
-  const migrated = migratePersistedState(mergedState, version) as PersistedStoreState;
-  return {
-    chats: migrated.chats,
-    contentStore: migrated.contentStore ?? {},
-    branchClipboard: migrated.branchClipboard ?? null,
-  };
-};
+export function clearNeedsDataMigration(): void {
+  _needsDataMigration = false;
+}
 
-type PersistedStateVersion =
-  | LocalStorageInterfaceV0ToV1
-  | LocalStorageInterfaceV1ToV2
-  | LocalStorageInterfaceV2ToV3
-  | LocalStorageInterfaceV3ToV4
-  | LocalStorageInterfaceV4ToV5
-  | LocalStorageInterfaceV5ToV6
-  | LocalStorageInterfaceV6ToV7
-  | LocalStorageInterfaceV7oV8
-  | LocalStorageInterfaceV8oV8_1
-  | LocalStorageInterfaceV8_1ToV8_2
-  | LocalStorageInterfaceV8_2ToV9
-  | LocalStorageInterfaceV9ToV10
-  | LocalStorageInterfaceV10ToV11
-  | LocalStorageInterfaceV11ToV12
-  | LocalStorageInterfaceV12ToV13
-  | LocalStorageInterfaceV13ToV14
-  | LocalStorageInterfaceV14ToV15
-  | LocalStorageInterfaceV15ToV16;
-
-type MigrationEntry = {
-  version: number;
-  apply: (state: PersistedStateVersion) => void;
-};
-
-const MIGRATIONS: MigrationEntry[] = [
-  { version: 0, apply: (state) => migrateV0(state as LocalStorageInterfaceV0ToV1) },
-  { version: 1, apply: (state) => migrateV1(state as LocalStorageInterfaceV1ToV2) },
-  { version: 2, apply: (state) => migrateV2(state as LocalStorageInterfaceV2ToV3) },
-  { version: 3, apply: (state) => migrateV3(state as LocalStorageInterfaceV3ToV4) },
-  { version: 4, apply: (state) => migrateV4(state as LocalStorageInterfaceV4ToV5) },
-  { version: 5, apply: (state) => migrateV5(state as LocalStorageInterfaceV5ToV6) },
-  { version: 6, apply: (state) => migrateV6(state as LocalStorageInterfaceV6ToV7) },
-  { version: 7, apply: (state) => migrateV7(state as LocalStorageInterfaceV7oV8) },
-  { version: 8, apply: (state) => migrateV8_1(state as LocalStorageInterfaceV8oV8_1) },
-  { version: 8.1, apply: (state) => migrateV8_1_fix(state as LocalStorageInterfaceV8_1ToV8_2) },
-  { version: 8.2, apply: (state) => migrateV8_2(state as LocalStorageInterfaceV8_2ToV9) },
-  { version: 9, apply: (state) => migrateV9(state as LocalStorageInterfaceV9ToV10) },
-  { version: 10, apply: (state) => migrateV10(state as LocalStorageInterfaceV10ToV11) },
-  { version: 11, apply: (state) => migrateV11(state as LocalStorageInterfaceV11ToV12) },
-  { version: 12, apply: (state) => migrateV12(state as LocalStorageInterfaceV12ToV13) },
-  { version: 13, apply: (state) => migrateV13(state as LocalStorageInterfaceV13ToV14) },
-  { version: 14, apply: (state) => migrateV14(state as LocalStorageInterfaceV14ToV15) },
-  { version: 15, apply: (state) => migrateV15(state as LocalStorageInterfaceV15ToV16) },
-];
-
+/**
+ * Called by zustand persist middleware when the stored version differs
+ * from STORE_VERSION.  Auto-migration has been removed — the persisted
+ * state is returned as-is and a flag is raised so the UI can prompt the
+ * user to export and re-import.
+ */
 export const migratePersistedState = (
   persistedState: unknown,
   version: number
 ) => {
-  const state = persistedState as PersistedStateVersion;
-
-  for (const migration of MIGRATIONS) {
-    if (version <= migration.version) {
-      migration.apply(state);
-    }
+  if (version < STORE_VERSION) {
+    _needsDataMigration = true;
+    console.warn(
+      `[persistence] Persisted data version ${version} < ${STORE_VERSION}. ` +
+      'Auto-migration removed. Please export and re-import your data.'
+    );
   }
-
   return persistedState as StoreState;
 };

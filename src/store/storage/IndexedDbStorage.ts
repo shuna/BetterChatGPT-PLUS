@@ -2,8 +2,8 @@ import { getStreamingChatIds } from '@utils/streamingBuffer';
 import { debugReport } from '@store/debug-store';
 import { STORE_VERSION } from '@store/version';
 import {
-  migratePersistedChatDataState,
   type PersistedChatData,
+  migratePersistedState,
 } from '@store/persistence';
 import type { StoreState } from '@store/store';
 import type { ContentStoreData } from '@utils/contentStore';
@@ -63,37 +63,9 @@ type LegacyChatDataRecord = PersistedChatData & {
   version: number;
 };
 
-// ─── Migration types ───
-
-const MIGRATION_META_KEY = 'migration-meta';
-const MIGRATION_SNAPSHOT_KEY = 'migration-snapshot';
-const LARGE_MIGRATION_THRESHOLD = 8 * 1024 * 1024; // 8MB
-
-export interface MigrationMetaRecord {
-  status: 'idle' | 'running' | 'finalizing' | 'done' | 'failed';
-  source: 'localStorage' | 'indexeddb-legacy';
-  sourceVersion: number;
-  sourceSizeBytes: number;
-  totalChats: number;
-  migratedChats: number;
-  migratedContentHashes: number;
-  startedAt: number;
-  updatedAt: number;
-  lastChatIndex: number;
-  lastError?: string;
-}
-
-interface MigrationSnapshotRecord {
-  data: PersistedChatData;
-  version: number;
-}
-
-export type MigrationProgressCallback = (meta: MigrationMetaRecord) => void;
-
 let currentGeneration = 0;
 let previousContentStoreSnapshot: ContentStoreData = {};
 let migrationInProgress = false;
-let migrationResumeRunning = false;
 
 const hasIndexedDb = () =>
   typeof window !== 'undefined' && typeof indexedDB !== 'undefined';
@@ -242,383 +214,17 @@ export function isMigrationInProgress(): boolean {
   return migrationInProgress;
 }
 
-/**
- * Estimate the byte size of a persisted payload (rough JSON.stringify length).
- */
-export function estimatePersistedPayloadSize(data: unknown): number {
-  try {
-    return JSON.stringify(data).length;
-  } catch {
-    return 0;
-  }
-}
-
-/**
- * Read migration-meta from IndexedDB. Returns null if not present.
- */
-export async function loadMigrationMeta(): Promise<MigrationMetaRecord | null> {
-  if (!hasIndexedDb()) return null;
-  return withTransaction('readonly', async (store) => {
-    return (await idbGet<MigrationMetaRecord>(store, MIGRATION_META_KEY)) ?? null;
-  });
-}
-
-/**
- * Begin a large migration: save snapshot and create migration-meta.
- *
- * When source is 'indexeddb-legacy', the existing LEGACY_KEY is used as the
- * snapshot to avoid duplicating the entire payload in IndexedDB (which would
- * nearly double storage usage and risk QuotaExceeded).
- */
-export async function beginLargeMigration(
-  sourceData: PersistedChatData,
-  sourceVersion: number,
-  source: 'localStorage' | 'indexeddb-legacy'
-): Promise<MigrationMetaRecord> {
-  const chats = sourceData.chats ?? [];
-  const sizeBytesEstimate = estimatePersistedPayloadSize(sourceData);
-
-  const meta: MigrationMetaRecord = {
-    status: 'running',
-    source,
-    sourceVersion,
-    sourceSizeBytes: sizeBytesEstimate,
-    totalChats: chats.length,
-    migratedChats: 0,
-    migratedContentHashes: 0,
-    startedAt: Date.now(),
-    updatedAt: Date.now(),
-    lastChatIndex: 0,
-  };
-
-  if (source === 'indexeddb-legacy') {
-    // Legacy key already contains the full data — reuse it as snapshot
-    // to avoid duplicating multi-MB payload in IndexedDB.
-    await withTransaction('readwrite', async (store) => {
-      await idbPut(store, MIGRATION_META_KEY, meta);
-    });
-  } else {
-    // localStorage source: must write snapshot into IndexedDB
-    await withTransaction('readwrite', async (store) => {
-      await idbPut(store, MIGRATION_SNAPSHOT_KEY, {
-        data: sourceData,
-        version: sourceVersion,
-      } satisfies MigrationSnapshotRecord);
-      await idbPut(store, MIGRATION_META_KEY, meta);
-    });
-  }
-
-  migrationInProgress = true;
-  debugReport('migration', { label: 'Migration', status: 'active', detail: `${chats.length} chats` });
-  return meta;
-}
-
-/**
- * Migrate a single chat from snapshot to new format.
- * Returns the updated migration meta.
- */
-export async function migrateSingleChat(
-  snapshot: PersistedChatData,
-  index: number,
-  accumulatedContentStore: ContentStoreData
-): Promise<void> {
-  const chats = (snapshot.chats ?? []) as PersistedChat[];
-  if (index >= chats.length) return;
-
-  const chat = chats[index];
-  const sourceContentStore = snapshot.contentStore ?? {};
-
-  // Add only contentHashes referenced by this chat
-  if (chat.branchTree) {
-    for (const node of Object.values(chat.branchTree.nodes)) {
-      const hash = node.contentHash;
-      if (!(hash in accumulatedContentStore) && hash in sourceContentStore) {
-        accumulatedContentStore[hash] = { ...sourceContentStore[hash] };
-        // Also follow delta chains
-        let cur = hash;
-        while (sourceContentStore[cur]?.delta) {
-          const baseHash = sourceContentStore[cur].delta!.baseHash;
-          if (!(baseHash in accumulatedContentStore) && baseHash in sourceContentStore) {
-            accumulatedContentStore[baseHash] = { ...sourceContentStore[baseHash] };
-          }
-          cur = baseHash;
-        }
-      }
-    }
-  }
-
-  const gen = 1;
-
-  // Write content-store (incremental) and chat in one transaction
-  await withTransaction('readwrite', async (store) => {
-    await idbPut(store, CONTENT_STORE_KEY, {
-      data: accumulatedContentStore,
-      generation: gen,
-    } satisfies ContentStoreRecord);
-    await idbPut(store, chatKey(chat.id), {
-      chat,
-      generation: gen,
-    } satisfies ChatRecord);
-  });
-}
-
-/**
- * Resume a large migration from where it left off.
- * Calls onProgress after each chat. Returns when complete or on error.
- */
-export async function resumeLargeMigration(
-  baseState: StoreState,
-  onProgress?: MigrationProgressCallback
-): Promise<PersistedChatData | null> {
-  if (migrationResumeRunning) {
-    console.warn('[Migration] resumeLargeMigration already running — skipping');
-    return null;
-  }
-  migrationResumeRunning = true;
-  try {
-    return await resumeLargeMigrationInner(baseState, onProgress);
-  } finally {
-    migrationResumeRunning = false;
-  }
-}
-
-async function resumeLargeMigrationInner(
-  baseState: StoreState,
-  onProgress?: MigrationProgressCallback
-): Promise<PersistedChatData | null> {
-  const meta = await loadMigrationMeta();
-  if (!meta || (meta.status !== 'running' && meta.status !== 'finalizing' && meta.status !== 'failed')) {
-    return null;
-  }
-
-  // If retrying from failed, reset status to running
-  if (meta.status === 'failed') {
-    await updateMigrationMeta({ status: 'running', lastError: undefined, updatedAt: Date.now() });
-    meta.status = 'running';
-  }
-
-  if (meta.status === 'finalizing') {
-    return finalizeLargeMigration(baseState, onProgress);
-  }
-
-  // Load snapshot — try dedicated snapshot key first, fall back to legacy key
-  let snapshot = await withTransaction('readonly', async (store) => {
-    return idbGet<MigrationSnapshotRecord>(store, MIGRATION_SNAPSHOT_KEY);
-  });
-
-  // For indexeddb-legacy source, the legacy key IS the snapshot (no duplication)
-  if (!snapshot?.data && meta.source === 'indexeddb-legacy') {
-    const legacy = await withTransaction('readonly', async (store) => {
-      return idbGet<LegacyChatDataRecord>(store, LEGACY_KEY);
-    });
-    if (legacy) {
-      const version = typeof legacy.version === 'number' ? legacy.version : 0;
-      snapshot = {
-        data: { chats: legacy.chats, contentStore: legacy.contentStore, branchClipboard: legacy.branchClipboard ?? null },
-        version,
-      };
-    }
-  }
-
-  if (!snapshot?.data) {
-    // Snapshot missing — mark failed
-    await updateMigrationMeta({ status: 'failed', lastError: 'Migration snapshot not found' });
-    onProgress?.({ ...meta, status: 'failed', lastError: 'Migration snapshot not found' });
-    return null;
-  }
-
-  let sourceData = snapshot.data;
-  if (snapshot.version < STORE_VERSION) {
-    sourceData = migratePersistedChatDataState(baseState, sourceData, snapshot.version);
-  }
-
-  const chats = (sourceData.chats ?? []) as PersistedChat[];
-
-  // Load accumulated content store so far
-  let accumulatedContentStore: ContentStoreData = {};
-  const existingCs = await withTransaction('readonly', async (store) => {
-    return idbGet<ContentStoreRecord>(store, CONTENT_STORE_KEY);
-  });
-  if (existingCs?.data) {
-    accumulatedContentStore = { ...existingCs.data };
-  }
-
-  // Migrate chat by chat from lastChatIndex
-  let currentMeta = { ...meta };
-  for (let i = currentMeta.lastChatIndex; i < chats.length; i++) {
-    try {
-      await migrateSingleChat(sourceData, i, accumulatedContentStore);
-    } catch (e) {
-      const errorMsg = e instanceof Error ? e.message : String(e);
-      await updateMigrationMeta({
-        status: 'failed',
-        lastError: `Chat ${i} migration failed: ${errorMsg}`,
-        lastChatIndex: i,
-      });
-      currentMeta = { ...currentMeta, status: 'failed', lastError: errorMsg, lastChatIndex: i };
-      onProgress?.(currentMeta);
-      return null;
-    }
-
-    currentMeta = {
-      ...currentMeta,
-      migratedChats: i + 1,
-      lastChatIndex: i + 1,
-      updatedAt: Date.now(),
-    };
-    debugReport('migration', { status: 'active', detail: `${i + 1}/${chats.length} chats` });
-    await updateMigrationMeta({
-      migratedChats: currentMeta.migratedChats,
-      lastChatIndex: currentMeta.lastChatIndex,
-      updatedAt: currentMeta.updatedAt,
-    });
-    onProgress?.(currentMeta);
-
-    // Yield to event loop
-    await new Promise<void>((r) => setTimeout(r, 0));
-  }
-
-  // All chats migrated — finalize
-  return finalizeLargeMigration(baseState, onProgress);
-}
-
-/**
- * Finalize: write branch-clipboard, meta, clean up snapshot and legacy data.
- */
-async function finalizeLargeMigration(
-  baseState: StoreState,
-  onProgress?: MigrationProgressCallback
-): Promise<PersistedChatData | null> {
-  await updateMigrationMeta({ status: 'finalizing', updatedAt: Date.now() });
-
-  const migMeta = await loadMigrationMeta();
-  if (migMeta) {
-    onProgress?.({ ...migMeta, status: 'finalizing' });
-  }
-
-  // Load snapshot for branch-clipboard (try snapshot key, then legacy key)
-  let snapshot = await withTransaction('readonly', async (store) => {
-    return idbGet<MigrationSnapshotRecord>(store, MIGRATION_SNAPSHOT_KEY);
-  });
-
-  if (!snapshot?.data && migMeta?.source === 'indexeddb-legacy') {
-    const legacy = await withTransaction('readonly', async (store) => {
-      return idbGet<LegacyChatDataRecord>(store, LEGACY_KEY);
-    });
-    if (legacy) {
-      const version = typeof legacy.version === 'number' ? legacy.version : 0;
-      snapshot = {
-        data: { chats: legacy.chats, contentStore: legacy.contentStore, branchClipboard: legacy.branchClipboard ?? null },
-        version,
-      };
-    }
-  }
-
-  if (!snapshot?.data) {
-    // Snapshot was already consumed by a prior finalization — nothing to do
-    console.warn('[Migration] finalizeLargeMigration: no snapshot data found, skipping');
-    await updateMigrationMeta({ status: 'done', updatedAt: Date.now() });
-    return null;
-  }
-
-  let sourceData = snapshot.data;
-  if (snapshot.version < STORE_VERSION) {
-    sourceData = migratePersistedChatDataState(baseState, sourceData, snapshot.version);
-  }
-
-  const gen = 1;
-  const chats = (sourceData.chats ?? []) as PersistedChat[];
-
-  // Write branch-clipboard + meta
-  await withTransaction('readwrite', async (store) => {
-    await idbPut(store, BRANCH_CLIPBOARD_KEY, {
-      data: sourceData.branchClipboard ?? null,
-      generation: gen,
-    } satisfies BranchClipboardRecord);
-    await idbPut(store, META_KEY, {
-      version: STORE_VERSION,
-      generation: gen,
-      chatIds: chats.map((c) => c.id),
-    } satisfies MetaRecord);
-  });
-
-  currentGeneration = gen;
-
-  // Load final content-store
-  const csRecord = await withTransaction('readonly', async (store) => {
-    return idbGet<ContentStoreRecord>(store, CONTENT_STORE_KEY);
-  });
-  const contentStore = csRecord?.data ?? {};
-
-  // Run residual GC
-  const cleanedContentStore = runResidualGC(
-    contentStore,
-    chats,
-    sourceData.branchClipboard ?? null
-  );
-
-  // Write cleaned content store if GC removed anything
-  if (Object.keys(cleanedContentStore).length < Object.keys(contentStore).length) {
-    await withTransaction('readwrite', async (store) => {
-      await idbPut(store, CONTENT_STORE_KEY, {
-        data: cleanedContentStore,
-        generation: gen,
-      } satisfies ContentStoreRecord);
-    });
-  }
-
-  // Delete legacy data, snapshot, and migration-meta
-  await withTransaction('readwrite', async (store) => {
-    await idbDelete(store, LEGACY_KEY);
-    await idbDelete(store, MIGRATION_SNAPSHOT_KEY);
-  });
-
-  await updateMigrationMeta({ status: 'done', updatedAt: Date.now() });
-  debugReport('migration', { status: 'done' });
-
-  if (migMeta) {
-    onProgress?.({ ...migMeta, status: 'done' });
-  }
-
-  previousContentStoreSnapshot = { ...cleanedContentStore };
-  previousChatSnapshot = new Map();
-  for (const chat of chats) {
-    previousChatSnapshot.set(chat.id, computeChatFingerprint(chat));
-  }
-
-  return {
-    chats,
-    contentStore: cleanedContentStore,
-    branchClipboard: sourceData.branchClipboard ?? null,
-  };
-}
-
-/**
- * Partial update of migration-meta.
- */
-async function updateMigrationMeta(
-  partial: Partial<MigrationMetaRecord>
-): Promise<void> {
-  await withTransaction('readwrite', async (store) => {
-    const existing = await idbGet<MigrationMetaRecord>(store, MIGRATION_META_KEY);
-    if (existing) {
-      await idbPut(store, MIGRATION_META_KEY, { ...existing, ...partial });
-    }
-  });
-}
-
 // ─── Migration from legacy single-key format ───
 
 /**
- * Migrate legacy single-key data. For large payloads (>=8MB), defers to
- * background migration and returns 'large-migration-started' sentinel.
+ * Migrate legacy single-key data to the split-key format.
+ * No schema-level migration is performed — data is moved as-is.
  */
 async function migrateLegacyData(
-  baseState: StoreState
-): Promise<PersistedChatData | null | 'large-migration-started'> {
+  _baseState: StoreState
+): Promise<PersistedChatData | null> {
   const database = await openDatabase();
   try {
-    // Read legacy key
     const tx1 = database.transaction(STORE_NAME, 'readonly');
     const store1 = tx1.objectStore(STORE_NAME);
     const legacy = await idbGet<LegacyChatDataRecord>(store1, LEGACY_KEY);
@@ -626,39 +232,30 @@ async function migrateLegacyData(
 
     if (!legacy) return null;
 
-    let chatData: PersistedChatData = {
+    const legacyVersion = typeof legacy.version === 'number' ? legacy.version : 0;
+
+    // Raise the needs-migration flag if data predates current schema
+    if (legacyVersion < STORE_VERSION) {
+      migratePersistedState(legacy, legacyVersion);
+    }
+
+    const chatData: PersistedChatData = {
       chats: legacy.chats,
       contentStore: legacy.contentStore,
       branchClipboard: legacy.branchClipboard ?? null,
     };
-    const version = typeof legacy.version === 'number' ? legacy.version : 0;
 
-    if (version < STORE_VERSION) {
-      chatData = migratePersistedChatDataState(baseState, chatData, version);
-    }
-
-    // Large payload check — defer to background migration
-    const payloadSize = estimatePersistedPayloadSize(chatData);
-    if (payloadSize >= LARGE_MIGRATION_THRESHOLD) {
-      database.close();
-      await beginLargeMigration(chatData, version, 'indexeddb-legacy');
-      return 'large-migration-started';
-    }
-
-    // Small payload — immediate migration (existing path)
     const chats = (chatData.chats ?? []) as PersistedChat[];
     const gen = 1;
 
     const tx2 = database.transaction(STORE_NAME, 'readwrite');
     const store2 = tx2.objectStore(STORE_NAME);
 
-    // content-store first
     await idbPut(store2, CONTENT_STORE_KEY, {
       data: chatData.contentStore ?? {},
       generation: gen,
     });
 
-    // individual chats
     for (const chat of chats) {
       await idbPut(store2, chatKey(chat.id), {
         chat,
@@ -666,20 +263,19 @@ async function migrateLegacyData(
       });
     }
 
-    // branch-clipboard
     await idbPut(store2, BRANCH_CLIPBOARD_KEY, {
       data: chatData.branchClipboard ?? null,
       generation: gen,
     });
 
-    // meta last (commit marker)
+    // Preserve the original version so subsequent loads can detect
+    // that the data has not been schema-migrated.
     await idbPut(store2, META_KEY, {
-      version: STORE_VERSION,
+      version: legacyVersion,
       generation: gen,
       chatIds: chats.map((c) => c.id),
     } satisfies MetaRecord);
 
-    // Delete legacy key
     await idbDelete(store2, LEGACY_KEY);
 
     await new Promise<void>((resolve, reject) => {
@@ -714,34 +310,20 @@ export const loadChatData = async (
     const tx = database.transaction(STORE_NAME, 'readonly');
     const store = tx.objectStore(STORE_NAME);
 
-    // Check if legacy key exists
     const legacy = await idbGet<LegacyChatDataRecord>(store, LEGACY_KEY);
     const meta = await idbGet<MetaRecord>(store, META_KEY);
-    const migMeta = await idbGet<MigrationMetaRecord>(store, MIGRATION_META_KEY);
 
     await new Promise<void>((r) => { tx.oncomplete = () => r(); });
     database.close();
 
-    // Check for in-progress large migration
-    if (migMeta && (migMeta.status === 'running' || migMeta.status === 'finalizing' || migMeta.status === 'failed')) {
-      // Return null — caller (useAppBootstrap) will handle resumption
-      return null;
-    }
-
-    // If legacy data exists and no meta, do migration
+    // If legacy data exists and no meta, migrate storage format (not schema)
     if (legacy && !meta) {
-      const result = await migrateLegacyData(baseState);
-      if (result === 'large-migration-started') {
-        // Large migration deferred — return null, bootstrap will resume
-        return null;
-      }
-      return result;
+      return migrateLegacyData(baseState);
     }
 
     if (!meta) return null;
 
-    // Load from new format
-    return loadSplitData(baseState, meta);
+    return loadSplitData(meta);
   } catch (e) {
     database.close();
     throw e;
@@ -749,7 +331,6 @@ export const loadChatData = async (
 };
 
 async function loadSplitData(
-  baseState: StoreState,
   meta: MetaRecord
 ): Promise<PersistedChatData | null> {
   const G = meta.generation;
@@ -870,6 +451,11 @@ async function loadSplitData(
 
     currentGeneration = committedGen;
 
+    // Raise the needs-migration flag if stored data predates current schema
+    if (meta.version < STORE_VERSION) {
+      migratePersistedState({}, meta.version);
+    }
+
     let contentStore = csRecord?.data ?? {};
 
     // Run residual GC to clean up any leftover superset entries
@@ -882,18 +468,6 @@ async function loadSplitData(
     previousChatSnapshot = new Map();
     for (const chat of chats) {
       previousChatSnapshot.set(chat.id, computeChatFingerprint(chat as PersistedChat));
-    }
-
-    // Version migration if needed
-    if (meta.version < STORE_VERSION) {
-      const chatData: PersistedChatData = {
-        chats,
-        contentStore,
-        branchClipboard: clipboard,
-      };
-      const migrated = migratePersistedChatDataState(baseState, chatData, meta.version);
-      await saveChatData(migrated);
-      return migrated;
     }
 
     return {
@@ -1288,9 +862,6 @@ export {
   decompressSingleChat,
   currentGeneration as _currentGeneration,
   previousContentStoreSnapshot as _previousContentStoreSnapshot,
-  LARGE_MIGRATION_THRESHOLD,
-  MIGRATION_META_KEY as _MIGRATION_META_KEY,
-  MIGRATION_SNAPSHOT_KEY as _MIGRATION_SNAPSHOT_KEY,
 };
 
 export const _resetInternalState = () => {

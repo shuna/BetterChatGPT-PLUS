@@ -2,14 +2,7 @@ import { StoreSlice } from './store';
 
 export interface MigrationUiState {
   visible: boolean;
-  status: 'running' | 'finalizing' | 'failed' | 'done';
-  progress: number; // 0..1
-  migratedChats: number;
-  totalChats: number;
-  sourceSizeBytes: number;
-  currentPhase: 'snapshot' | 'migrating-chats' | 'finalizing';
-  resumable: boolean;
-  lastError?: string;
+  status: 'needs-export-import' | 'done';
 }
 
 export interface MigrationSlice {

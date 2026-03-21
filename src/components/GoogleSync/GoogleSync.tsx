@@ -22,6 +22,7 @@ import {
   createPartializedState,
   hydrateFromPersistedStoreState,
   migratePersistedState,
+  needsDataMigration,
   PersistedStoreState,
 } from '@store/persistence';
 import { saveChatData } from '@store/storage/IndexedDbStorage';
@@ -405,6 +406,14 @@ const GooglePopup = ({
       useStore.setState(hydratedState);
       await saveChatData(createPersistedChatDataState(useStore.getState()));
       activateCloudSyncTarget(_fileId);
+
+      if (needsDataMigration()) {
+        useStore.getState().setMigrationUiState({
+          visible: true,
+          status: 'needs-export-import',
+        });
+      }
+
       setToastStatus('success');
       setToastMessage(t('toast.pull'));
       setToastShow(true);

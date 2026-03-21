@@ -18,6 +18,7 @@ import {
   createPersistedChatDataState,
   hydrateFromPersistedStoreState,
   migratePersistedState,
+  needsDataMigration,
   type PersistedStoreState,
 } from '@store/persistence';
 import { saveChatData } from '@store/storage/IndexedDbStorage';
@@ -254,6 +255,13 @@ const CloudKitSync = () => {
       );
       useStore.setState(hydratedState);
       await saveChatData(createPersistedChatDataState(useStore.getState()));
+
+      if (needsDataMigration()) {
+        useStore.getState().setMigrationUiState({
+          visible: true,
+          status: 'needs-export-import',
+        });
+      }
 
       enableCloudKitPersistence();
       setSyncStatus('synced');
