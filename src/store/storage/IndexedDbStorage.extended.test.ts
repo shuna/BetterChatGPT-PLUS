@@ -414,6 +414,17 @@ describe('Phase 2 generation consistency', () => {
     expect(result!.contentStore['h-orphan']).toBeUndefined();
   });
 
+  it('runResidualGC keeps clipboard delta base chain', () => {
+    const store: ContentStoreData = {
+      base: textEntry('base'),
+      d1: { content: [], refCount: 1, delta: { baseHash: 'base', patches: 'p1' } },
+    };
+    const clipboard = makeClipboard(['d1']);
+    const result = runResidualGC(store, [], clipboard);
+    expect(result).toHaveProperty('base');
+    expect(result).toHaveProperty('d1');
+  });
+
   it('deleted chat cleanup removes both raw and packed keys', async () => {
     // Save with two chats
     const data1 = {

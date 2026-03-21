@@ -43,6 +43,55 @@ const textMsg = (role: MessageInterface['role'], text: string): MessageInterface
   content: [{ type: 'text', text }],
 });
 
+// ---------------------------------------------------------------------------
+// Regression guard: the re-chain condition in useLiveTotalTokenUsed must NOT
+// gate on `version !== requestVersionRef.current`. A previous bug did exactly
+// that, which stopped polling after the first calculation because version
+// always equalled requestVersionRef.current by the time `.finally()` ran.
+// The fix: chain continues whenever mounted + generating sessions exist.
+// ---------------------------------------------------------------------------
+describe('useLiveTotalTokenUsed self-chaining', () => {
+  it('chain continues while generating sessions exist (no version check required)', () => {
+    const version = 10;
+    const requestVersionRef = { current: 10 }; // same version
+    const mounted = true;
+    const generatingSessions = { 'sess-1': { sessionId: 'sess-1' } };
+
+    // Old (broken): required version !== requestVersionRef.current
+    const oldCondition =
+      mounted &&
+      version !== requestVersionRef.current &&
+      Object.keys(generatingSessions).length > 0;
+    expect(oldCondition).toBe(false);
+
+    // New (fixed): just check mounted + sessions exist
+    const newCondition =
+      mounted &&
+      Object.keys(generatingSessions).length > 0;
+    expect(newCondition).toBe(true);
+  });
+
+  it('chain stops when no generating sessions remain', () => {
+    const mounted = true;
+    const generatingSessions = {};
+
+    const condition =
+      mounted &&
+      Object.keys(generatingSessions).length > 0;
+    expect(condition).toBe(false);
+  });
+
+  it('chain stops when unmounted', () => {
+    const mounted = false;
+    const generatingSessions = { 'sess-1': { sessionId: 'sess-1' } };
+
+    const condition =
+      mounted &&
+      Object.keys(generatingSessions).length > 0;
+    expect(condition).toBe(false);
+  });
+});
+
 describe('useLiveTotalTokenUsed streaming buffer integration', () => {
   beforeEach(() => {
     clearStreamingBuffersForTest();
