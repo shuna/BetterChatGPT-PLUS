@@ -351,12 +351,26 @@
   color: #f22c3d;
 }
 
+/* Align selection highlight between view-mode and edit-mode */
+.markdown.prose ::selection,
+.overtype-preview ::selection {
+  background: rgba(59, 130, 246, 0.3);
+}
+.dark .markdown.prose ::selection,
+.dark .overtype-preview ::selection {
+  background: rgba(96, 165, 250, 0.3);
+}
+
+/* Align view-mode line-height with edit-mode (OverType lineHeight: 1.75) */
+.markdown.prose {
+  line-height: 1.75;
+}
+
 /* OverType editor integration - blend with app styles */
 .overtype-container {
   border: none !important;
   border-radius: 0 !important;
   padding: 0 !important;
-  font-family: inherit !important;
 }
 
 .overtype-wrapper {
@@ -370,11 +384,13 @@
   min-height: 0 !important;
 }
 
-.overtype-wrapper .overtype-input,
-.overtype-wrapper .overtype-preview,
+.overtype-container.overtype-container,
+.overtype-container .overtype-wrapper .overtype-input,
+.overtype-container .overtype-wrapper .overtype-preview,
 .overtype-container[data-mode="preview"] .overtype-wrapper .overtype-preview,
 .overtype-container[data-mode="normal"] .overtype-wrapper .overtype-preview {
   font-family: inherit !important;
+  font-kerning: auto !important;
 }
 
 .overtype-wrapper .overtype-preview,
@@ -386,7 +402,7 @@
 .overtype-container[data-mode="preview"] .overtype-wrapper .overtype-preview {
   font-family: inherit !important;
   font-size: inherit !important;
-  line-height: inherit !important;
+  line-height: var(--instance-line-height) !important;
   background: transparent !important;
 }
 
@@ -394,7 +410,7 @@
   color: inherit !important;
   font-family: inherit !important;
   font-size: inherit !important;
-  line-height: inherit !important;
+  line-height: var(--instance-line-height) !important;
 }
 
 .overtype-wrapper .overtype-input::placeholder {
