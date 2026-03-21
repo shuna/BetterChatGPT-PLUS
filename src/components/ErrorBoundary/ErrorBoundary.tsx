@@ -113,7 +113,7 @@ class ErrorBoundary extends Component<Props, State> {
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          height: '100vh',
+          height: '100dvh',
           padding: 24,
           fontFamily: 'system-ui, sans-serif',
           background: '#111',
