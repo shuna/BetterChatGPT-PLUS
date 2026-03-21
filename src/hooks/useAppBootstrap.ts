@@ -115,16 +115,17 @@ const useAppBootstrap = () => {
 
       // Clean up legacy localStorage keys
       const legacyApiKey = localStorage.getItem('apiKey');
-      const legacyTheme = localStorage.getItem('theme');
 
       if (legacyApiKey) {
         setApiKey(legacyApiKey);
         localStorage.removeItem('apiKey');
       }
 
-      if (legacyTheme) {
-        setTheme(legacyTheme as Theme);
-        localStorage.removeItem('theme');
+      // Apply theme immediately after rehydration to avoid FOUC
+      const rehydratedTheme = useStore.getState().theme;
+      if (rehydratedTheme) {
+        document.documentElement.className = rehydratedTheme;
+        try { localStorage.setItem('theme', rehydratedTheme); } catch {}
       }
 
       // Load chat data from IndexedDB
