@@ -3,6 +3,10 @@ main = "src/index.ts"
 compatibility_date = "2024-09-23"
 compatibility_flags = ["nodejs_compat"]
 
+[observability]
+enabled = true
+head_sampling_rate = 1
+
 # KV namespace for stream recovery
 # To create: wrangler kv namespace create STREAM_CACHE
 # Then replace the id below with the output

@@ -43,6 +43,14 @@ interface StreamRequest {
   sessionId: string;
 }
 
+function isStringRecord(value: unknown): value is Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  return Object.values(value).every((entry) => typeof entry === 'string');
+}
+
 // ---------------------------------------------------------------------------
 // Recovery strategy toggle
 // ---------------------------------------------------------------------------
@@ -208,8 +216,12 @@ async function handleStream(
 
   const { endpoint, headers: reqHeaders, body, sessionId } = parsed;
 
-  if (!endpoint || !sessionId) {
+  if (typeof endpoint !== 'string' || typeof sessionId !== 'string' || !endpoint || !sessionId) {
     return jsonResponse({ error: 'endpoint and sessionId are required' }, 400);
+  }
+
+  if (!isStringRecord(reqHeaders)) {
+    return jsonResponse({ error: 'headers must be an object of string values' }, 400);
   }
 
   // SECURITY NOTE: The client sends LLM API keys inside `headers`.

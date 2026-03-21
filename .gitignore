@@ -27,3 +27,4 @@ release/
 
 .env
 .claude/
+worker/.wrangler/
