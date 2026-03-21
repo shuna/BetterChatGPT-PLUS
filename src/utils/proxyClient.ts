@@ -24,6 +24,34 @@ function authHeaders(config: ProxyConfig): Record<string, string> {
 }
 
 /**
+ * Ask the proxy to cancel the upstream LLM stream and optionally
+ * forward a provider-level cancel request (e.g. OpenRouter generation cancel).
+ *
+ * Best-effort — KV TTL will clean up eventually if the request fails.
+ */
+export async function sendCancel(
+  config: ProxyConfig,
+  sessionId: string,
+  providerCancel?: { generationId: string; apiKey: string }
+): Promise<void> {
+  try {
+    await fetch(
+      `${config.endpoint}/api/cancel/${encodeURIComponent(sessionId)}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(config),
+        },
+        body: JSON.stringify({ providerCancel }),
+      }
+    );
+  } catch {
+    // Best-effort — the Worker may have already finished
+  }
+}
+
+/**
  * Notify the proxy that the client has fully received all chunks.
  * The proxy will delete the KV cache immediately.
  */
