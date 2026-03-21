@@ -26,11 +26,22 @@
     <meta name="twitter:title" content="Weavelet Canvas" />
     <meta name="twitter:card" content="summary_large_image" />
     <title>Weavelet Canvas</title>
+    <script>
+      // Apply saved theme immediately to prevent flash of light mode
+      (function() {
+        try {
+          var theme = localStorage.getItem('theme') || 'dark';
+          document.documentElement.className = theme;
+        } catch(e) {
+          document.documentElement.className = 'dark';
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <div id="modal-root"></div>
-    <div id="boot-status" style="position:fixed;bottom:16px;left:0;right:0;text-align:center;font-size:12px;color:#999;font-family:system-ui,sans-serif;z-index:9999;pointer-events:none">initializing</div>
+    <div id="boot-status" style="position:fixed;bottom:16px;left:0;right:0;text-align:center;font-size:12px;color:#666;font-family:system-ui,sans-serif;z-index:9999;pointer-events:none">initializing</div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

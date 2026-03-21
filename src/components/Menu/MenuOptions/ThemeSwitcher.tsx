@@ -23,6 +23,7 @@ const ThemeSwitcher = () => {
 
   useEffect(() => {
     document.documentElement.className = theme;
+    try { localStorage.setItem('theme', theme); } catch {}
   }, [theme]);
 
   return theme ? (
