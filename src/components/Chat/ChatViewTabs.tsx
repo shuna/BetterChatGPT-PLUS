@@ -146,7 +146,7 @@ const ChatViewTabs = ({
 
   return (
     <>
-      <div ref={containerRef} className={`flex items-center border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 ${isModelDropdownOpen || isLayoutDropdownOpen ? 'z-20' : 'z-10'} px-2 min-h-[40px]`}>
+      <div ref={containerRef} className={`flex items-center border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 ${isModelDropdownOpen || isLayoutDropdownOpen ? 'z-30' : 'z-10'} px-2 min-h-[40px]`}>
         <div className='flex min-w-0 items-center gap-2'>
           {hideSideMenu && (
             <button
