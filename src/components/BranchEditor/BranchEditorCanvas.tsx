@@ -613,6 +613,8 @@ const BranchEditorCanvas = ({
             if (!data.isActive) return '#6b7280';
             return data.conversationColor || '#3b82f6';
           }}
+          pannable
+          zoomable
           className='!bg-gray-400 dark:!bg-gray-900'
         />
       </ReactFlow>
