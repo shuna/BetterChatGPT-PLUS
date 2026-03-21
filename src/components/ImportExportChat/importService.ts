@@ -92,6 +92,7 @@ const resetChatsOnlyForReplace = () => {
     chats: [],
     folders: {},
     contentStore: {},
+    branchClipboard: null,
   });
   useStore.getState().setCurrentChatIndex(-1);
 };

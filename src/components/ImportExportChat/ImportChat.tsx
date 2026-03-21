@@ -20,7 +20,8 @@ const ImportChat = () => {
     if (!inputRef || !inputRef.current) return;
     const file = inputRef.current.files?.[0];
     if (!file) return;
-    const replaceConfirmation = translate('confirmReplaceAll', {
+    const confirmKey = includeSettings ? 'confirmReplaceAllWithSettings' : 'confirmReplaceAll';
+    const replaceConfirmation = translate(confirmKey, {
       ns: 'import',
       defaultValue: 'Replace all existing chats with the imported file?',
     });
@@ -83,7 +84,7 @@ const ImportChat = () => {
         {mode === 'replace' && (
           <>
             <div className='rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-amber-700 dark:text-amber-200'>
-              {t('replaceWarning', { ns: 'import' })}
+              {t(includeSettings ? 'replaceWarningWithSettings' : 'replaceWarning', { ns: 'import' })}
             </div>
             <label className='flex items-center gap-1.5 cursor-pointer mt-1'>
               <input
