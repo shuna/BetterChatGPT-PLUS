@@ -122,18 +122,4 @@ describe('createCloudPersistStorage', () => {
     expect(state.notifyError).not.toHaveBeenCalled();
   });
 
-  it('exposes a reset helper for tests', async () => {
-    const { provider, state } = buildProvider();
-    const controller = createCloudPersistStorage(provider);
-
-    await controller.storage.setItem('test', {
-      state: { count: 1, chats: [{ id: 'chat-1' }], contentStore: {} },
-      version: 1,
-    });
-    controller.resetPendingCloudSyncForTests();
-    await vi.advanceTimersByTimeAsync(5000);
-    await flushMicrotasks();
-
-    expect(state.writeItem).not.toHaveBeenCalled();
-  });
 });

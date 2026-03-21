@@ -28,7 +28,7 @@ describe('getOrCreateDeviceId', () => {
   });
 
   it('returns a fallback UUID when localStorage is unavailable', () => {
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+    vi.spyOn(localStorage, 'getItem').mockImplementation(() => {
       throw new Error('localStorage disabled');
     });
 

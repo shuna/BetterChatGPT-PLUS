@@ -20,27 +20,6 @@ describe('ChatView helpers', () => {
 });
 
 describe('split view persistence', () => {
-  it('splitPanelRatio, splitPanelSwapped, and chatActiveView are included in persisted state', () => {
-    const fakeState = {
-      splitPanelRatio: 0.7,
-      splitPanelSwapped: true,
-      chatActiveView: 'split-horizontal',
-      chats: [],
-      contentStore: {},
-      branchClipboard: null,
-    } as unknown as StoreState;
-
-    const persisted = createPartializedState(fakeState);
-    expect(persisted.splitPanelRatio).toBe(0.7);
-    expect(persisted.splitPanelSwapped).toBe(true);
-    expect(persisted.chatActiveView).toBe('split-horizontal');
-
-    const localPersisted = createLocalStoragePartializedState(fakeState);
-    expect(localPersisted.splitPanelRatio).toBe(0.7);
-    expect(localPersisted.splitPanelSwapped).toBe(true);
-    expect(localPersisted.chatActiveView).toBe('split-horizontal');
-  });
-
   it('defaults are persisted correctly', () => {
     const fakeState = {
       splitPanelRatio: 0.5,

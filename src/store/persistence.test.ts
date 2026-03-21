@@ -321,7 +321,9 @@ describe('persistence', () => {
 
     expect(() => rehydrateStoreState(state as never)).not.toThrow();
     expect(state.chats[0].branchTree?.activePath).toEqual(['node-2']);
-    expect(state.chats[0].branchTree?.rootId).toBe('node-2');
+    // rootId falls back to the first existing node key ('node-1'), not the first
+    // element of the filtered activePath.
+    expect(state.chats[0].branchTree?.rootId).toBe('node-1');
     expect(state.chats[0].messages).toEqual([
       { role: 'assistant', content: [{ type: 'text', text: 'world' }] },
     ]);

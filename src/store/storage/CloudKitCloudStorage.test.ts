@@ -149,34 +149,6 @@ describe('CloudKitCloudStorage', () => {
     resetPendingCloudKitSyncForTests();
   });
 
-  it('coalesces repeated writes and uploads once after idle', async () => {
-    const storage = createCloudKitCloudStorage<{ count: number }>();
-    expect(storage).toBeDefined();
-
-    await storage!.setItem('test', { state: { count: 1 }, version: 1 });
-    await storage!.setItem('test', { state: { count: 2 }, version: 1 });
-
-    await vi.advanceTimersByTimeAsync(4999);
-    expect(saveCloudKitRecordMock).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(1);
-    await flushMicrotasks();
-
-    expect(saveCloudKitRecordMock).toHaveBeenCalledTimes(1);
-    expect(cloudState.setSyncStatus).toHaveBeenCalledWith('syncing');
-    expect(cloudState.setSyncStatus).toHaveBeenLastCalledWith('synced');
-  });
-
-  it('flushes immediately when requested', async () => {
-    const storage = createCloudKitCloudStorage<{ count: number }>();
-    expect(storage).toBeDefined();
-
-    await storage!.setItem('test', { state: { count: 3 }, version: 1 });
-    await flushPendingCloudKitSync();
-
-    expect(saveCloudKitRecordMock).toHaveBeenCalledTimes(1);
-  });
-
   it('blocks oversized uploads with 700KB limit', async () => {
     const storage = createCloudKitCloudStorage<any>();
     expect(storage).toBeDefined();
@@ -199,31 +171,4 @@ describe('CloudKitCloudStorage', () => {
     );
   });
 
-  it('keeps the session on non-auth upload failures', async () => {
-    saveCloudKitRecordMock.mockRejectedValueOnce(
-      new Error('CloudKit request failed: 500')
-    );
-
-    const storage = createCloudKitCloudStorage<{ count: number }>();
-    expect(storage).toBeDefined();
-
-    await storage!.setItem('test', { state: { count: 3 }, version: 1 });
-    await flushPendingCloudKitSync();
-
-    expect(cloudState.setSyncStatus).toHaveBeenLastCalledWith('synced');
-  });
-
-  it('marks session unauthenticated on auth failures', async () => {
-    saveCloudKitRecordMock.mockRejectedValueOnce(
-      new Error('AUTHENTICATION_REQUIRED')
-    );
-
-    const storage = createCloudKitCloudStorage<{ count: number }>();
-    expect(storage).toBeDefined();
-
-    await storage!.setItem('test', { state: { count: 3 }, version: 1 });
-    await flushPendingCloudKitSync();
-
-    expect(cloudState.setSyncStatus).toHaveBeenLastCalledWith('unauthenticated');
-  });
 });

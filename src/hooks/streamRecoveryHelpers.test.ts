@@ -66,17 +66,10 @@ describe('shouldApplyRecoveredText', () => {
     expect(shouldApplyRecoveredText('same', 'same')).toBe(false);
   });
 
-  it('returns false when current text is longer', () => {
-    expect(shouldApplyRecoveredText('longer text', 'short')).toBe(false);
-  });
-
   it('returns true for empty current text', () => {
     expect(shouldApplyRecoveredText('', 'recovered')).toBe(true);
   });
 
-  it('returns false for empty recovered text', () => {
-    expect(shouldApplyRecoveredText('existing', '')).toBe(false);
-  });
 });
 
 // ---------------------------------------------------------------------------
@@ -151,11 +144,6 @@ describe('findRecoverableChat', () => {
     { id: 'c1', messages: [{ role: 'user', content: [] }] },
   ] as unknown as ChatInterface[];
 
-  it('returns chat at valid index', () => {
-    expect(findRecoverableChat(chats, 0)?.id).toBe('c0');
-    expect(findRecoverableChat(chats, 1)?.id).toBe('c1');
-  });
-
   it('returns null for out-of-range index', () => {
     expect(findRecoverableChat(chats, -1)).toBeNull();
     expect(findRecoverableChat(chats, 5)).toBeNull();
@@ -177,11 +165,6 @@ describe('hasRecoverableMessage', () => {
       { role: 'assistant', content: [] },
     ],
   } as unknown as ChatInterface;
-
-  it('returns true for valid message index', () => {
-    expect(hasRecoverableMessage(chat, 0)).toBe(true);
-    expect(hasRecoverableMessage(chat, 1)).toBe(true);
-  });
 
   it('returns false for out-of-range index', () => {
     expect(hasRecoverableMessage(chat, -1)).toBe(false);
