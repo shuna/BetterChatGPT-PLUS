@@ -22,7 +22,7 @@ const Menu = () => {
   const menuRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
 
-  const { edgeHandlers, menuHandlers } = useSwipeGesture(menuRef, backdropRef);
+  const { menuHandlers } = useSwipeGesture(menuRef, backdropRef);
 
   useEffect(() => {
     if (window.innerWidth < 768) setHideSideMenu(true);
@@ -114,11 +114,6 @@ const Menu = () => {
           setHideSideMenu(true);
         }}
         {...menuHandlers}
-      />
-      {/* Swipe edge zone — invisible touch target on the left edge for opening */}
-      <div
-        className='md:hidden fixed top-0 left-0 h-full w-5 z-[998]'
-        {...edgeHandlers}
       />
     </>
   );

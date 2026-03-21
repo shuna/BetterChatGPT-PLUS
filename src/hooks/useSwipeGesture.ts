@@ -1,9 +1,12 @@
 import { useRef, useCallback, useEffect } from 'react';
 import useStore from '@store/store';
 
+
 const SWIPE_THRESHOLD = 0.3;
 const DIRECTION_LOCK_THRESHOLD = 10;
 const SCROLL_TOP_SUPPRESSION_MS = 400;
+const EDGE_ZONE_WIDTH = 20;
+const MD_BREAKPOINT = 768;
 
 export default function useSwipeGesture(
   menuRef: React.RefObject<HTMLDivElement | null>,
@@ -19,6 +22,7 @@ export default function useSwipeGesture(
   const lockedRef = useRef(false);
   const horizontalRef = useRef(false);
   const modeRef = useRef<'open' | 'close'>('open');
+  const edgeActiveRef = useRef(false);
   const preventScrollListenerRef = useRef<((event: Event) => void) | null>(
     null
   );
@@ -214,19 +218,87 @@ export default function useSwipeGesture(
     cancelSwipe();
   }, [cancelSwipe]);
 
-  const onEdgeTouchStart = useCallback(
-    (e: React.TouchEvent) => {
-      if (!hideSideMenu) return;
+  // Edge swipe detection via document-level listeners so no blocking div
+  // is needed (avoids z-index conflict with collapse buttons).
+  useEffect(() => {
+    const handleEdgeTouchStart = (e: TouchEvent) => {
+      if (window.innerWidth >= MD_BREAKPOINT) return;
+      if (!useStore.getState().hideSideMenu) return;
       const touch = e.touches[0];
+      if (touch.clientX > EDGE_ZONE_WIDTH) return;
+
       startXRef.current = touch.clientX;
       startYRef.current = touch.clientY;
       trackingRef.current = true;
       lockedRef.current = false;
       horizontalRef.current = false;
       modeRef.current = 'open';
-    },
-    [hideSideMenu]
-  );
+      edgeActiveRef.current = true;
+    };
+
+    const handleEdgeTouchMove = (e: TouchEvent) => {
+      if (!edgeActiveRef.current || !trackingRef.current) return;
+      const touch = e.touches[0];
+      const dx = touch.clientX - startXRef.current;
+      const dy = touch.clientY - startYRef.current;
+
+      if (!lockedRef.current) {
+        if (
+          Math.abs(dx) > DIRECTION_LOCK_THRESHOLD ||
+          Math.abs(dy) > DIRECTION_LOCK_THRESHOLD
+        ) {
+          lockedRef.current = true;
+          horizontalRef.current = Math.abs(dx) > Math.abs(dy);
+          if (horizontalRef.current) setBodySwiping(true);
+        }
+        return;
+      }
+      if (!horizontalRef.current) return;
+
+      e.preventDefault();
+
+      const width = getEffectiveWidth();
+      if (dx <= 0) return;
+      applyTransform(Math.min(dx / width, 1));
+    };
+
+    const handleEdgeTouchEnd = (e: TouchEvent) => {
+      if (!edgeActiveRef.current || !trackingRef.current) return;
+      edgeActiveRef.current = false;
+      trackingRef.current = false;
+      if (!lockedRef.current || !horizontalRef.current) {
+        setBodySwiping(false);
+        return;
+      }
+
+      const touch = e.changedTouches[0];
+      const dx = touch.clientX - startXRef.current;
+      const width = getEffectiveWidth();
+      finishSwipe(dx / width > SWIPE_THRESHOLD);
+    };
+
+    const handleEdgeTouchCancel = () => {
+      if (!edgeActiveRef.current) return;
+      edgeActiveRef.current = false;
+      cancelSwipe();
+    };
+
+    document.addEventListener('touchstart', handleEdgeTouchStart, {
+      passive: true,
+    });
+    document.addEventListener('touchmove', handleEdgeTouchMove, {
+      passive: false,
+    });
+    document.addEventListener('touchend', handleEdgeTouchEnd);
+    document.addEventListener('touchcancel', handleEdgeTouchCancel);
+
+    return () => {
+      document.removeEventListener('touchstart', handleEdgeTouchStart);
+      document.removeEventListener('touchmove', handleEdgeTouchMove);
+      document.removeEventListener('touchend', handleEdgeTouchEnd);
+      document.removeEventListener('touchcancel', handleEdgeTouchCancel);
+    };
+  }, [getEffectiveWidth, applyTransform, setBodySwiping, finishSwipe, cancelSwipe]);
 
   const onMenuTouchStart = useCallback(
     (e: React.TouchEvent) => {
@@ -264,12 +336,6 @@ export default function useSwipeGesture(
   }, []);
 
   return {
-    edgeHandlers: {
-      onTouchStart: onEdgeTouchStart,
-      onTouchMove,
-      onTouchEnd,
-      onTouchCancel,
-    },
     menuHandlers: {
       onTouchStart: onMenuTouchStart,
       onTouchMove,
