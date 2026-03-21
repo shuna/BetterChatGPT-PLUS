@@ -3,6 +3,7 @@ import { debugReport } from '@store/debug-store';
 import { STORE_VERSION } from '@store/version';
 import {
   type PersistedChatData,
+  migratePersistedState,
 } from '@store/persistence';
 import type { StoreState } from '@store/store';
 import type { ContentStoreData } from '@utils/contentStore';
@@ -231,6 +232,13 @@ async function migrateLegacyData(
 
     if (!legacy) return null;
 
+    const legacyVersion = typeof legacy.version === 'number' ? legacy.version : 0;
+
+    // Raise the needs-migration flag if data predates current schema
+    if (legacyVersion < STORE_VERSION) {
+      migratePersistedState(legacy, legacyVersion);
+    }
+
     const chatData: PersistedChatData = {
       chats: legacy.chats,
       contentStore: legacy.contentStore,
@@ -260,8 +268,10 @@ async function migrateLegacyData(
       generation: gen,
     });
 
+    // Preserve the original version so subsequent loads can detect
+    // that the data has not been schema-migrated.
     await idbPut(store2, META_KEY, {
-      version: STORE_VERSION,
+      version: legacyVersion,
       generation: gen,
       chatIds: chats.map((c) => c.id),
     } satisfies MetaRecord);
@@ -440,6 +450,11 @@ async function loadSplitData(
     }
 
     currentGeneration = committedGen;
+
+    // Raise the needs-migration flag if stored data predates current schema
+    if (meta.version < STORE_VERSION) {
+      migratePersistedState({}, meta.version);
+    }
 
     let contentStore = csRecord?.data ?? {};
 
