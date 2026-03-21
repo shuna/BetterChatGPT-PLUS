@@ -178,6 +178,8 @@ const BranchEditorCanvas = ({
   chatIndices: number[];
   primaryChatIndex: number;
 }) => {
+  const pageDragLockCountRef = useRef(0);
+  const touchMoveBlockerRef = useRef<((event: TouchEvent) => void) | null>(null);
   const chats = useStore((state) => state.chats);
   const isSearchOpen = useStore((state) => state.isSearchOpen);
   const openSearch = useStore((state) => state.openSearch);
@@ -189,6 +191,40 @@ const BranchEditorCanvas = ({
   const setChatActiveView = useStore((state) => state.setChatActiveView);
   const ensureBranchTree = useStore((state) => state.ensureBranchTree);
   const setPendingChatFocus = useStore((state) => state.setPendingChatFocus);
+
+  const lockPageDragBounce = useCallback(() => {
+    pageDragLockCountRef.current += 1;
+    if (pageDragLockCountRef.current > 1) return;
+
+    const html = document.documentElement;
+    const body = document.body;
+    html.classList.add('page-drag-lock');
+    body.classList.add('page-drag-lock');
+
+    const blocker = (event: TouchEvent) => {
+      if (event.touches.length <= 1) {
+        event.preventDefault();
+      }
+    };
+
+    touchMoveBlockerRef.current = blocker;
+    window.addEventListener('touchmove', blocker, { passive: false });
+  }, []);
+
+  const unlockPageDragBounce = useCallback(() => {
+    pageDragLockCountRef.current = Math.max(0, pageDragLockCountRef.current - 1);
+    if (pageDragLockCountRef.current > 0) return;
+
+    const html = document.documentElement;
+    const body = document.body;
+    html.classList.remove('page-drag-lock');
+    body.classList.remove('page-drag-lock');
+
+    if (touchMoveBlockerRef.current) {
+      window.removeEventListener('touchmove', touchMoveBlockerRef.current);
+      touchMoveBlockerRef.current = null;
+    }
+  }, []);
 
   // Build layout entries from chat indices (memoized to avoid re-renders)
   const entries: MultiLayoutEntry[] = React.useMemo(() =>
@@ -213,6 +249,13 @@ const BranchEditorCanvas = ({
   React.useEffect(() => {
     perfEnd('branch-editor-switch');
   }, [chatIndices]);
+
+  useEffect(() => {
+    return () => {
+      pageDragLockCountRef.current = 1;
+      unlockPageDragBounce();
+    };
+  }, [unlockPageDragBounce]);
 
   const { rfNodes: layoutNodes, rfEdges, isComputing } = useMultiBranchEditorLayout(entries);
 
@@ -440,6 +483,7 @@ const BranchEditorCanvas = ({
   // Cross-conversation drag handlers
   const onNodeDragStart = useCallback(
     (_: React.MouseEvent, node: Node<MessageNodeData>) => {
+      lockPageDragBounce();
       if (entries.length <= 1) return;
       dragSourceRef.current = {
         nodeId: node.id,
@@ -447,11 +491,12 @@ const BranchEditorCanvas = ({
         originalPos: { ...node.position },
       };
     },
-    [entries.length, primaryChatIndex]
+    [entries.length, lockPageDragBounce, primaryChatIndex]
   );
 
   const onNodeDragStop = useCallback(
     (event: React.MouseEvent, node: Node<MessageNodeData>) => {
+      unlockPageDragBounce();
       if (!dragSourceRef.current || entries.length <= 1) {
         dragSourceRef.current = null;
         return;
@@ -506,7 +551,7 @@ const BranchEditorCanvas = ({
 
       dragSourceRef.current = null;
     },
-    [entries, primaryChatIndex, chatNodeIndex, setNodes]
+    [entries, primaryChatIndex, chatNodeIndex, setNodes, unlockPageDragBounce]
   );
 
   const handleDropCopy = useCallback(() => {
@@ -546,6 +591,8 @@ const BranchEditorCanvas = ({
         onNodeContextMenu={onNodeContextMenu}
         onNodeDragStart={onNodeDragStart}
         onNodeDragStop={onNodeDragStop}
+        onMoveStart={lockPageDragBounce}
+        onMoveEnd={unlockPageDragBounce}
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.2 }}

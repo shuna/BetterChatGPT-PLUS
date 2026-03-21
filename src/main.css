@@ -177,6 +177,13 @@
     overscroll-behavior: none;
   }
 
+  html.page-drag-lock,
+  body.page-drag-lock {
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: none;
+  }
+
   .sidebar-swiping [data-chat-scroller] {
     touch-action: none !important;
     pointer-events: none !important;
