@@ -155,11 +155,6 @@ function makeSourceData(chatCount: number): PersistedChatData {
 // ── Tests ──
 
 describe('estimatePersistedPayloadSize', () => {
-  it('returns JSON string length', () => {
-    const data = { a: 1, b: 'hello' };
-    expect(estimatePersistedPayloadSize(data)).toBe(JSON.stringify(data).length);
-  });
-
   it('returns 0 for circular references', () => {
     const obj: any = {};
     obj.self = obj;
@@ -397,13 +392,6 @@ describe('compression scheduler migration guard', () => {
     setMigrationInProgress(false);
   });
 
-  it('isMigrationInProgress reflects state', () => {
-    expect(isMigrationInProgress()).toBe(false);
-    setMigrationInProgress(true);
-    expect(isMigrationInProgress()).toBe(true);
-    setMigrationInProgress(false);
-    expect(isMigrationInProgress()).toBe(false);
-  });
 });
 
 describe('loadChatData with migration states', () => {

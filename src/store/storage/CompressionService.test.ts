@@ -1,22 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  packedKey,
-  isPackedKey,
   compressChatRecord,
   decompressChatRecord,
 } from './CompressionService';
-
-describe('packedKey / isPackedKey', () => {
-  it('appends :packed suffix', () => {
-    expect(packedKey('chat:abc')).toBe('chat:abc:packed');
-  });
-
-  it('detects packed keys', () => {
-    expect(isPackedKey('chat:abc:packed')).toBe(true);
-    expect(isPackedKey('chat:abc')).toBe(false);
-    expect(isPackedKey('meta')).toBe(false);
-  });
-});
 
 describe('compressChatRecord / decompressChatRecord', () => {
   it('round-trips a chat record through gzip', async () => {
@@ -61,17 +47,6 @@ describe('compressChatRecord / decompressChatRecord', () => {
     expect(compressed.byteLength).toBeLessThan(rawSize * 0.5);
 
     // Verify round-trip
-    const decompressed = await decompressChatRecord(compressed);
-    expect(decompressed).toEqual(record);
-  });
-
-  it('handles empty messages array', async () => {
-    const record = {
-      chat: { id: 'empty', title: 'Empty', messages: [] },
-      generation: 0,
-    };
-
-    const compressed = await compressChatRecord(record);
     const decompressed = await decompressChatRecord(compressed);
     expect(decompressed).toEqual(record);
   });

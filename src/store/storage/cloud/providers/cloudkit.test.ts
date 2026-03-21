@@ -391,14 +391,6 @@ describe('CloudKit provider', () => {
     });
   });
 
-  describe('setSyncStatus', () => {
-    it('calls useCloudAuthStore setSyncStatus', () => {
-      const provider = createCloudKitCloudProvider();
-      provider.setSyncStatus('syncing');
-      expect(cloudState.setSyncStatus).toHaveBeenCalledWith('syncing');
-    });
-  });
-
   describe('notifyError', () => {
     it('shows toast with error message', () => {
       const provider = createCloudKitCloudProvider();

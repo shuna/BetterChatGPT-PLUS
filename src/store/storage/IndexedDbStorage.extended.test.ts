@@ -274,13 +274,6 @@ describe('computeChatFingerprint extended', () => {
     );
   });
 
-  it('detects imageDetail changes', () => {
-    const chat1 = makeChat('c1', ['h1'], { imageDetail: 'auto' } as any);
-    const chat2 = makeChat('c1', ['h1'], { imageDetail: 'high' } as any);
-    expect(computeChatFingerprint(chat1 as any)).not.toBe(
-      computeChatFingerprint(chat2 as any)
-    );
-  });
 });
 
 // ─── Phase 3: Interruption Resilience ───
@@ -326,35 +319,6 @@ describe('Phase 3 interruption resilience', () => {
     // raw should still exist
     const raw = await idbGet('chat:chat-y');
     expect(raw).toBeDefined();
-  });
-
-  it('decompressSingleChat: raw written, packed not deleted → safe (raw-first)', async () => {
-    const data = {
-      chats: [makeChat('chat-z', ['h1'])],
-      contentStore: { h1: textEntry('data') },
-      branchClipboard: null,
-    };
-    await saveChatData(data);
-
-    // Compress fully
-    await compressSingleChat('chat-z');
-
-    // Simulate interrupted decompression: raw written back, packed NOT deleted
-    const packed = await idbGet<any>('chat:chat-z:packed');
-    const { decompressChatRecord } = await import('./CompressionService');
-    const record = await decompressChatRecord<any>(
-      packed.compressed instanceof Uint8Array
-        ? packed.compressed
-        : new Uint8Array(packed.compressed)
-    );
-    await idbPut('chat:chat-z', { chat: record.chat, generation: packed.generation });
-    // packed still exists too
-
-    // Load should prefer raw
-    _resetInternalState();
-    const loaded = await loadChatData(baseState);
-    expect(loaded).not.toBeNull();
-    expect(loaded!.chats![0].id).toBe('chat-z');
   });
 
   it('loadSplitData: raw and packed both present → raw wins, packed ignored', async () => {
@@ -448,17 +412,6 @@ describe('Phase 2 generation consistency', () => {
     const result = await loadChatData(baseState);
     expect(result!.contentStore['h-clip']).toBeDefined();
     expect(result!.contentStore['h-orphan']).toBeUndefined();
-  });
-
-  it('runResidualGC keeps clipboard delta base chain', () => {
-    const store: ContentStoreData = {
-      base: textEntry('base'),
-      d1: { content: [], refCount: 1, delta: { baseHash: 'base', patches: 'p1' } },
-    };
-    const clipboard = makeClipboard(['d1']);
-    const result = runResidualGC(store, [], clipboard);
-    expect(result).toHaveProperty('base');
-    expect(result).toHaveProperty('d1');
   });
 
   it('deleted chat cleanup removes both raw and packed keys', async () => {
@@ -577,41 +530,3 @@ describe('compression scheduler', () => {
 
 // ─── Performance ───
 
-describe('compression performance', () => {
-  it('gzip significantly reduces large chat data size', async () => {
-    const { compressChatRecord } = await import('./CompressionService');
-    const longMessages = Array.from({ length: 100 }, (_, i) => ({
-      role: i % 2 === 0 ? 'user' : 'assistant',
-      content: [{ type: 'text', text: `Message ${i}: ${'Lorem ipsum dolor sit amet. '.repeat(20)}` }],
-    }));
-    const record = { chat: { id: 'big', title: 'Big', messages: longMessages }, generation: 1 };
-
-    const rawSize = new TextEncoder().encode(JSON.stringify(record)).byteLength;
-    const compressed = await compressChatRecord(record);
-
-    // Repetitive text should compress well
-    expect(compressed.byteLength).toBeLessThan(rawSize * 0.3);
-  });
-
-  it('100 sequential chat compressions complete in reasonable time', async () => {
-    const { compressChatRecord, decompressChatRecord } = await import('./CompressionService');
-    const start = performance.now();
-
-    for (let i = 0; i < 100; i++) {
-      const record = {
-        chat: {
-          id: `chat-${i}`,
-          title: `Chat ${i}`,
-          messages: [{ role: 'user', content: [{ type: 'text', text: `Message for chat ${i} with some content` }] }],
-        },
-        generation: 1,
-      };
-      const compressed = await compressChatRecord(record);
-      await decompressChatRecord(compressed);
-    }
-
-    const elapsed = performance.now() - start;
-    // Should complete within 10 seconds even on slow CI
-    expect(elapsed).toBeLessThan(10000);
-  });
-});

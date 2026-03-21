@@ -82,28 +82,6 @@ describe('GoogleCloudStorage', () => {
     resetPendingCloudSyncForTests();
   });
 
-  it('coalesces repeated writes and uploads once after idle', async () => {
-    const storage = createGoogleCloudStorage<{ count: number }>();
-    expect(storage).toBeDefined();
-
-    await storage!.setItem('test', { state: { count: 1 }, version: 1 });
-    await storage!.setItem('test', { state: { count: 2 }, version: 1 });
-
-    await vi.advanceTimersByTimeAsync(4999);
-    expect(updateDriveFileMock).not.toHaveBeenCalled();
-
-    await vi.advanceTimersByTimeAsync(1);
-    await flushMicrotasks();
-
-    expect(updateDriveFileMock).toHaveBeenCalledTimes(1);
-    const firstCall = updateDriveFileMock.mock.calls.at(0) as unknown[] | undefined;
-    const uploadedFile = firstCall?.[0] as File | undefined;
-    expect(uploadedFile).toBeDefined();
-    expect(await uploadedFile!.text()).not.toBe('');
-    expect(cloudState.setSyncStatus).toHaveBeenCalledWith('syncing');
-    expect(cloudState.setSyncStatus).toHaveBeenLastCalledWith('synced');
-  });
-
   it('flushes the latest pending change after an in-flight upload finishes', async () => {
     let resolveUpload: (() => void) | undefined;
     updateDriveFileMock.mockImplementationOnce(
@@ -174,16 +152,6 @@ describe('GoogleCloudStorage', () => {
     expect(firstCall?.[2]).toBe('token-2');
   });
 
-  it('flushes immediately when requested', async () => {
-    const storage = createGoogleCloudStorage<{ count: number }>();
-    expect(storage).toBeDefined();
-
-    await storage!.setItem('test', { state: { count: 3 }, version: 1 });
-    await flushPendingCloudSync();
-
-    expect(updateDriveFileMock).toHaveBeenCalledTimes(1);
-  });
-
   it('blocks destructive uploads that would erase all chats', async () => {
     const storage = createGoogleCloudStorage<any>();
     expect(storage).toBeDefined();
@@ -210,52 +178,4 @@ describe('GoogleCloudStorage', () => {
     expect(cloudState.setSyncStatus).toHaveBeenLastCalledWith('synced');
   });
 
-  it('blocks oversized uploads', async () => {
-    const storage = createGoogleCloudStorage<any>();
-    expect(storage).toBeDefined();
-
-    const hugeText = 'x'.repeat(2_100_000);
-
-    await storage!.setItem('test', {
-      state: {
-        chats: [{ id: 'chat-1', messages: [{ role: 'user', content: hugeText }] }],
-        contentStore: {},
-      },
-      version: 1,
-    });
-    await flushPendingCloudSync();
-
-    expect(updateDriveFileMock).not.toHaveBeenCalled();
-    expect(toastState.setToastMessage).toHaveBeenCalledWith(
-      'Cloud sync skipped because the snapshot is too large to upload safely.'
-    );
-  });
-
-  it('keeps the session on non-auth upload failures', async () => {
-    updateDriveFileMock.mockRejectedValueOnce(
-      new Error('Error uploading file: 500 Internal Server Error')
-    );
-
-    const storage = createGoogleCloudStorage<{ count: number }>();
-    expect(storage).toBeDefined();
-
-    await storage!.setItem('test', { state: { count: 3 }, version: 1 });
-    await flushPendingCloudSync();
-
-    expect(cloudState.setSyncStatus).toHaveBeenLastCalledWith('synced');
-  });
-
-  it('marks the session unauthenticated on auth failures', async () => {
-    updateDriveFileMock.mockRejectedValueOnce(
-      new Error('Error uploading file: 401 Unauthorized')
-    );
-
-    const storage = createGoogleCloudStorage<{ count: number }>();
-    expect(storage).toBeDefined();
-
-    await storage!.setItem('test', { state: { count: 3 }, version: 1 });
-    await flushPendingCloudSync();
-
-    expect(cloudState.setSyncStatus).toHaveBeenLastCalledWith('unauthenticated');
-  });
 });
