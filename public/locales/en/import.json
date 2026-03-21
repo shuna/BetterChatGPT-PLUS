@@ -15,8 +15,11 @@
       "append": "Append to existing data",
       "replace": "Replace all local data"
     },
-    "replaceWarning": "Replace all resets local conversations and settings before applying the imported data.",
-    "confirmReplaceAll": "This will delete all local conversations and settings, then replace them with the imported data. Continue?",
+    "replaceWarning": "Replace all resets local conversations before applying the imported data.",
+    "replaceWarningWithSettings": "Replace all resets local conversations and settings before applying the imported data.",
+    "includeSettings": "Include settings",
+    "confirmReplaceAll": "This will delete all local conversations, then replace them with the imported data. Continue?",
+    "confirmReplaceAllWithSettings": "This will delete all local conversations and settings, then replace them with the imported data. Continue?",
     "reduceMessagesSuccess": "{{count}} messages were reduced.",
     "partialImportMessages": "expected {{total}} messages but found {{count}}"
   }

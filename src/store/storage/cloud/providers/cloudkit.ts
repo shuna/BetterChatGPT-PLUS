@@ -18,6 +18,7 @@ import {
   hydrateFromPersistedStoreState,
   createPersistedChatDataState,
   migratePersistedState,
+  needsDataMigration,
   type PersistedStoreState,
 } from '@store/persistence';
 import { saveChatData } from '@store/storage/IndexedDbStorage';
@@ -131,6 +132,13 @@ const hydrateFromServerRecord = async (record: CloudKitRecord) => {
   );
   useStore.setState(hydratedState);
   await saveChatData(createPersistedChatDataState(useStore.getState()));
+
+  if (needsDataMigration()) {
+    useStore.getState().setMigrationUiState({
+      visible: true,
+      status: 'needs-export-import',
+    });
+  }
 };
 
 // --- Validate ---

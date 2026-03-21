@@ -1,82 +1,22 @@
 import { useEffect, useState } from 'react';
 import useStore, { type StoreState } from '@store/store';
 import i18n from '../i18n';
-import { ChatInterface } from '@type/chat';
 import { Theme } from '@type/theme';
 import useInitialiseNewChat from './useInitialiseNewChat';
 import {
   applyPersistedChatDataState,
   createPersistedChatDataState,
   setIndexedDbMigrationComplete,
-  type PersistedChatData,
+  needsDataMigration,
 } from '@store/persistence';
-import { STORE_VERSION } from '@store/version';
 import {
   loadChatData,
   saveChatData,
   initCompressionScheduler,
   notifyActiveChatChanged,
-  loadMigrationMeta,
-  resumeLargeMigration,
-  setMigrationInProgress,
-  isMigrationInProgress,
-  beginLargeMigration,
-  estimatePersistedPayloadSize,
-  LARGE_MIGRATION_THRESHOLD,
 } from '@store/storage/IndexedDbStorage';
-import type { MigrationMetaRecord } from '@store/storage/IndexedDbStorage';
 import { notifyStorageError } from '@store/storage/storageErrors';
 import { registerSnapshotFlushCallback } from '@utils/streamingBuffer';
-
-function migMetaToUiState(meta: MigrationMetaRecord) {
-  const status = meta.status === 'idle' || meta.status === 'done' ? 'done' : meta.status;
-  return {
-    visible: status !== 'done',
-    status: status as 'running' | 'finalizing' | 'failed' | 'done',
-    progress: meta.totalChats > 0 ? meta.migratedChats / meta.totalChats : 0,
-    migratedChats: meta.migratedChats,
-    totalChats: meta.totalChats,
-    sourceSizeBytes: meta.sourceSizeBytes,
-    currentPhase: meta.status === 'finalizing' ? 'finalizing' as const : 'migrating-chats' as const,
-    resumable: meta.status === 'failed',
-    lastError: meta.lastError,
-  };
-}
-
-export function resumeLargeMigrationInBackground(baseState: StoreState) {
-  resumeLargeMigration(baseState, (meta) => {
-    useStore.getState().setMigrationUiState(migMetaToUiState(meta));
-  }).then((result) => {
-    setMigrationInProgress(false);
-    setIndexedDbMigrationComplete(true);
-    if (result) {
-      // Apply migrated data to store
-      const nextState = { ...useStore.getState() };
-      applyPersistedChatDataState(nextState, result);
-      useStore.setState({
-        chats: nextState.chats,
-        contentStore: nextState.contentStore,
-        currentChatIndex: nextState.currentChatIndex,
-      });
-      // Now safe to start compression scheduler
-      const activeChatId = nextState.chats?.[nextState.currentChatIndex]?.id;
-      initCompressionScheduler(activeChatId);
-    }
-    useStore.getState().setMigrationUiState({
-      visible: false,
-      status: 'done',
-      progress: 1,
-      migratedChats: 0,
-      totalChats: 0,
-      sourceSizeBytes: 0,
-      currentPhase: 'finalizing',
-      resumable: false,
-    });
-  }).catch((e) => {
-    setMigrationInProgress(false);
-    console.error('[Migration] Background migration failed', e);
-  });
-}
 
 function setBootPhase(phase: string) {
   const el = document.getElementById('boot-status');
@@ -124,7 +64,6 @@ const useAppBootstrap = () => {
     let saveTimer: number | undefined;
     let unsubscribe: (() => void) | undefined;
     let cleanupCompression: (() => void) | undefined;
-    let migrationStarted = false;
     let saving = false;
     let pendingSave = false;
 
@@ -182,7 +121,7 @@ const useAppBootstrap = () => {
 
       const persistedFolderCount = Object.keys(useStore.getState().folders).length;
 
-      const oldChats = localStorage.getItem('chats');
+      // Clean up legacy localStorage keys
       const legacyApiKey = localStorage.getItem('apiKey');
       const legacyTheme = localStorage.getItem('theme');
 
@@ -196,15 +135,7 @@ const useAppBootstrap = () => {
         localStorage.removeItem('theme');
       }
 
-      let legacyChats: ChatInterface[] | null = null;
-      if (oldChats) {
-        try {
-          legacyChats = JSON.parse(oldChats) as ChatInterface[];
-        } catch {
-          legacyChats = null;
-        }
-      }
-
+      // Load chat data from IndexedDB
       let indexedDbChatData = null;
       let indexedDbLoadFailed = false;
       try {
@@ -220,9 +151,6 @@ const useAppBootstrap = () => {
         (indexedDbChatData?.chats && indexedDbChatData.chats.length > 0) ||
         (indexedDbChatData?.contentStore && Object.keys(indexedDbChatData.contentStore).length > 0)
       ) {
-        // Set migration complete BEFORE setState so that the synchronous
-        // persist subscriber does not try to write all chats to localStorage
-        // (which would exceed the quota).
         setIndexedDbMigrationComplete(true);
         const nextState = { ...useStore.getState() };
         applyPersistedChatDataState(nextState, indexedDbChatData);
@@ -232,82 +160,40 @@ const useAppBootstrap = () => {
           currentChatIndex: nextState.currentChatIndex,
         });
       } else if (
-        !isMigrationInProgress() && (
-          useStore.getState().chats ||
-          Object.keys(useStore.getState().contentStore ?? {}).length > 0 ||
-          useStore.getState().branchClipboard
-        )
+        useStore.getState().chats ||
+        Object.keys(useStore.getState().contentStore ?? {}).length > 0 ||
+        useStore.getState().branchClipboard
       ) {
-        // First launch after introducing IndexedDB: migrate any existing chat payloads
-        // from localStorage-backed zustand state into IndexedDB and keep localStorage slim.
+        // First launch with IndexedDB: move existing chat data to IndexedDB
         const chatDataState = createPersistedChatDataState(useStore.getState());
-        const payloadSize = estimatePersistedPayloadSize(chatDataState);
         try {
-          if (payloadSize >= LARGE_MIGRATION_THRESHOLD) {
-            await beginLargeMigration(chatDataState, STORE_VERSION, 'localStorage');
-            migrationStarted = true;
-            setMigrationInProgress(true);
-            // Do NOT set migrationComplete yet — chats must stay in localStorage
-            // until resumeLargeMigration finishes and applies data to store.
-          } else {
-            await saveChatData(chatDataState);
-            // IndexedDB write succeeded — safe to strip chats from localStorage
-            setIndexedDbMigrationComplete(true);
-          }
+          await saveChatData(chatDataState);
+          setIndexedDbMigrationComplete(true);
         } catch (error) {
           notifyStorageError(error);
-          // Do NOT set migrationComplete — keep chats in localStorage as safety net
-        }
-      } else if (legacyChats && legacyChats.length > 0) {
-        // Check if localStorage chats are large enough for background migration
-        const lsPayload: PersistedChatData = { chats: legacyChats, contentStore: {}, branchClipboard: null };
-        const lsSize = estimatePersistedPayloadSize(lsPayload);
-        if (lsSize >= LARGE_MIGRATION_THRESHOLD) {
-          // Defer to background migration
-          try {
-            await beginLargeMigration(lsPayload, STORE_VERSION, 'localStorage');
-            migrationStarted = true;
-            setMigrationInProgress(true);
-            setIndexedDbMigrationComplete(true);
-          } catch (error) {
-            notifyStorageError(error);
-            // Fallback: immediate save
-            setChats(legacyChats);
-            setCurrentChatIndex(0);
-            useStore.setState({ contentStore: {} });
-            try {
-              await saveChatData(createPersistedChatDataState(useStore.getState()));
-              setIndexedDbMigrationComplete(true);
-            } catch (err) {
-              notifyStorageError(err);
-            }
-          }
-        } else {
-          setChats(legacyChats);
-          setCurrentChatIndex(0);
-          useStore.setState({ contentStore: {} });
-          try {
-            await saveChatData(createPersistedChatDataState(useStore.getState()));
-            setIndexedDbMigrationComplete(true);
-          } catch (error) {
-            notifyStorageError(error);
-          }
         }
       } else {
-        // No chat data anywhere — safe to strip (nothing to lose)
         setIndexedDbMigrationComplete(true);
       }
 
-      setBootPhase('finalizing');
+      // Remove legacy 'chats' key from localStorage
       localStorage.removeItem('chats');
 
+      setBootPhase('finalizing');
+
+      // Check if persisted data needs schema migration
+      if (needsDataMigration()) {
+        useStore.getState().setMigrationUiState({
+          visible: true,
+          status: 'needs-export-import',
+        });
+      }
+
       const { chats, currentChatIndex } = useStore.getState();
-      const largeMigrationRunning = migrationStarted || isMigrationInProgress();
+
       const missingChatDataWhileFoldersRemain =
-        !largeMigrationRunning &&
         persistedFolderCount > 0 &&
         (!chats || chats.length === 0) &&
-        !(legacyChats && legacyChats.length > 0) &&
         !indexedDbChatData?.chats?.length;
 
       if (missingChatDataWhileFoldersRemain) {
@@ -333,33 +219,14 @@ const useAppBootstrap = () => {
         setIsBootstrapped(true);
       }
 
-      // Check for in-progress large migration
-      const migMeta = await loadMigrationMeta();
-      if (migMeta && (migMeta.status === 'running' || migMeta.status === 'finalizing' || migMeta.status === 'failed')) {
-        setMigrationInProgress(true);
-
-        // Show initial migration UI state
-        const initialUiState = migMetaToUiState(migMeta);
-        useStore.getState().setMigrationUiState(initialUiState);
-
-        if (migMeta.status === 'failed') {
-          // Show failed state, user can retry via banner
-        } else {
-          // Resume migration in background
-          resumeLargeMigrationInBackground(useStore.getState());
-        }
-      }
-
-      // Register streaming snapshot flush callback so that in-flight
-      // streaming buffers are periodically persisted to IndexedDB (every 5s).
+      // Register streaming snapshot flush callback
       registerSnapshotFlushCallback(() => void flushChatDataSave());
 
-      // Initialize compression scheduler (skips if migration in progress)
+      // Initialize compression scheduler
       const activeChatId = useStore.getState().chats?.[useStore.getState().currentChatIndex]?.id;
       cleanupCompression = initCompressionScheduler(activeChatId);
 
       unsubscribe = useStore.subscribe((state, prev) => {
-        // Track active chat changes for compression scheduler
         if (state.currentChatIndex !== prev.currentChatIndex || state.chats !== prev.chats) {
           const newActiveChatId = state.chats?.[state.currentChatIndex]?.id;
           if (newActiveChatId !== prev.chats?.[prev.currentChatIndex]?.id) {

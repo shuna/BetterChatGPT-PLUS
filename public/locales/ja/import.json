@@ -15,8 +15,11 @@
       "append": "既存データに追加",
       "replace": "ローカルデータを全置換"
     },
-    "replaceWarning": "全置換を選ぶと、ローカルの会話と設定は初期化され、インポート内容で置き換えられます。",
-    "confirmReplaceAll": "ローカルの会話および設定をすべて削除して、インポート内容で置き換えます。続行しますか？",
+    "replaceWarning": "全置換を選ぶと、ローカルの会話は初期化され、インポート内容で置き換えられます。",
+    "replaceWarningWithSettings": "全置換を選ぶと、ローカルの会話と設定は初期化され、インポート内容で置き換えられます。",
+    "includeSettings": "設定も含める",
+    "confirmReplaceAll": "ローカルの会話をすべて削除して、インポート内容で置き換えます。続行しますか？",
+    "confirmReplaceAllWithSettings": "ローカルの会話および設定をすべて削除して、インポート内容で置き換えます。続行しますか？",
     "reduceMessagesSuccess": "{{count}}件のメッセージが削減されました。",
     "partialImportMessages": "{{total}}件のメッセージを想定していましたが、{{count}}件しか見つかりませんでした"
   }

@@ -87,6 +87,16 @@ const resetPersistedStateForReplace = () => {
   useStore.getState().setCurrentChatIndex(initialState.chats?.length ? 0 : -1);
 };
 
+const resetChatsOnlyForReplace = () => {
+  useStore.setState({
+    chats: [],
+    folders: {},
+    contentStore: {},
+    branchClipboard: null,
+  });
+  useStore.getState().setCurrentChatIndex(-1);
+};
+
 const mergeChats = (chatsToImport: ChatInterface[]) => {
   assignFreshChatIds(chatsToImport);
   const existingChats = useStore.getState().chats;
@@ -398,7 +408,8 @@ const importParsedData = async (
   type: ImportType,
   t: Translator,
   shouldAllowPartialImport: boolean,
-  mode: ImportMode
+  mode: ImportMode,
+  includeSettings: boolean = true
 ): Promise<ImportResult> => {
   let chatsToImport = parsedData;
   let removedChatsCount = 0;
@@ -407,7 +418,11 @@ const importParsedData = async (
   while (true) {
     try {
       if (mode === 'replace') {
-        resetPersistedStateForReplace();
+        if (includeSettings) {
+          resetPersistedStateForReplace();
+        } else {
+          resetChatsOnlyForReplace();
+        }
       }
 
       switch (type) {
@@ -497,7 +512,8 @@ const importParsedData = async (
 export const importChatFromFile = async (
   file: File,
   t: Translator,
-  mode: ImportMode = 'append'
+  mode: ImportMode = 'append',
+  includeSettings: boolean = true
 ): Promise<ImportResult> => {
   const snapshot = takeSnapshot();
 
@@ -512,7 +528,8 @@ export const importChatFromFile = async (
       type,
       t,
       false,
-      mode
+      mode,
+      includeSettings
     );
 
     if (!result.success) {
