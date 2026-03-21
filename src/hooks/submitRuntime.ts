@@ -16,7 +16,8 @@ import {
   saveRequest as saveStreamRecord,
   setGenerationId as setStreamGenerationId,
 } from '@utils/streamDb';
-import { sendAck, parseProxySse, type ProxyConfig } from '@utils/proxyClient';
+import { sendAck, sendCancel, parseProxySse, type ProxyConfig } from '@utils/proxyClient';
+import { cancelGeneration } from '@api/openrouter';
 import {
   appendToStreamingBuffer,
   createStreamingContentHash,
@@ -40,6 +41,23 @@ const swCancellers = new Map<string, () => void>();
 const sessionChunkTargets = new Map<string, { chatId: string; targetNodeId: string }>();
 const pendingChunkBuffers = new Map<string, string>();
 const pendingChunkTimers = new Map<string, number>();
+
+/** Per-session metadata needed to send provider-level cancel requests on stop. */
+interface SessionCancelMeta {
+  generationId?: string;
+  proxySessionId?: string;
+  proxyConfig?: ProxyConfig;
+  apiKey?: string;
+}
+const sessionCancelMetas = new Map<string, SessionCancelMeta>();
+
+export const setSessionCancelMeta = (
+  sessionId: string,
+  patch: Partial<SessionCancelMeta>
+) => {
+  const existing = sessionCancelMetas.get(sessionId) ?? {};
+  sessionCancelMetas.set(sessionId, { ...existing, ...patch });
+};
 
 // Align chunk flushes with the display refresh rate (VSync).
 // Falls back to ~16ms setTimeout for environments without rAF (tests / SSR).
@@ -102,11 +120,31 @@ export const clearSubmitSessionRuntime = (sessionId: string) => {
   }
   abortControllers.delete(sessionId);
   swCancellers.delete(sessionId);
+  sessionCancelMetas.delete(sessionId);
 };
 
 export const stopSubmitSession = (sessionId: string) => {
   abortControllers.get(sessionId)?.abort();
   swCancellers.get(sessionId)?.();
+
+  // Fire provider-level cancel (best-effort, non-blocking)
+  const meta = sessionCancelMetas.get(sessionId);
+  if (meta) {
+    if (meta.proxyConfig && meta.proxySessionId) {
+      // Proxy path: tell the Worker to abort upstream + call provider cancel
+      sendCancel(
+        meta.proxyConfig,
+        meta.proxySessionId,
+        meta.generationId && meta.apiKey
+          ? { generationId: meta.generationId, apiKey: meta.apiKey }
+          : undefined
+      );
+    } else if (meta.generationId && meta.apiKey) {
+      // Direct path: call provider cancel API from the client
+      cancelGeneration(meta.generationId, meta.apiKey);
+    }
+  }
+
   clearSubmitSessionRuntime(sessionId);
   useStore.getState().removeSession(sessionId);
 };
@@ -363,6 +401,12 @@ export const executeSubmitStream = async ({
   const isStreamSupported = getEffectiveStreamEnabled(config);
   const proxyConfig = getProxyConfig();
   let capturedGenerationId: string | undefined;
+
+  // Seed cancel metadata so stopSubmitSession can reach the provider
+  setSessionCancelMeta(sessionId, {
+    apiKey: resolvedProvider.key || undefined,
+    proxyConfig,
+  });
   const runRequest = async (requestMessages: MessageInterface[]) => {
     if (!isStreamSupported) {
       let data;
@@ -404,6 +448,7 @@ export const executeSubmitStream = async ({
         data.id.startsWith('gen-')
       ) {
         capturedGenerationId = data.id;
+        setSessionCancelMeta(sessionId, { generationId: capturedGenerationId });
       }
 
       writeChunkToStore(chatId, targetNodeId, data.choices[0].message.content);
@@ -420,6 +465,7 @@ export const executeSubmitStream = async ({
     const onChunk = (text: string, meta?: { generationId?: string }) => {
       if (meta?.generationId && !capturedGenerationId) {
         capturedGenerationId = meta.generationId;
+        setSessionCancelMeta(sessionId, { generationId: capturedGenerationId });
       }
       queueChunkToStore(chatId, targetNodeId, text);
     };
@@ -437,13 +483,18 @@ export const executeSubmitStream = async ({
       );
 
       // Build proxy bridge config for SW if proxy is configured
+      const swProxySessionId = proxyConfig ? `${chatId}:${requestId}` : undefined;
       const swProxyConfig = proxyConfig
         ? {
             endpoint: proxyConfig.endpoint,
             authToken: proxyConfig.authToken,
-            sessionId: `${chatId}:${requestId}`,
+            sessionId: swProxySessionId!,
           }
         : undefined;
+
+      if (swProxySessionId) {
+        setSessionCancelMeta(sessionId, { proxySessionId: swProxySessionId });
+      }
 
       await new Promise<void>((resolve, reject) => {
         let swHandle: swBridge.SwStreamHandle | undefined;
@@ -501,6 +552,7 @@ export const executeSubmitStream = async ({
     if (proxyConfig) {
       const requestId = crypto.randomUUID();
       const proxySessionId = `${chatId}:${requestId}`;
+      setSessionCancelMeta(sessionId, { proxySessionId });
       const prepared = prepareStreamRequest(
         resolvedProvider.endpoint,
         requestMessages,
@@ -635,6 +687,7 @@ export const executeSubmitStream = async ({
                 for (const e of llmParsed.events) {
                   if (e.id && typeof e.id === 'string' && e.id.startsWith('gen-')) {
                     capturedGenerationId = e.id;
+                    setSessionCancelMeta(sessionId, { generationId: capturedGenerationId });
                     void setStreamGenerationId(requestId, capturedGenerationId);
                     break;
                   }
@@ -736,6 +789,7 @@ export const executeSubmitStream = async ({
           for (const e of parsed.events) {
             if (e.id && typeof e.id === 'string' && e.id.startsWith('gen-')) {
               capturedGenerationId = e.id;
+              setSessionCancelMeta(sessionId, { generationId: capturedGenerationId });
               break;
             }
           }

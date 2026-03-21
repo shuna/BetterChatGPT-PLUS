@@ -25,6 +25,29 @@ export interface OpenRouterGenerationStats {
 }
 
 /**
+ * Cancel a running generation on OpenRouter.
+ *
+ * Best-effort: failures are silently ignored because the generation may
+ * have already finished or the ID may not be cancellable.
+ */
+export async function cancelGeneration(
+  generationId: string,
+  apiKey: string
+): Promise<void> {
+  try {
+    await fetch(
+      `${OPENROUTER_BASE}/generation/${encodeURIComponent(generationId)}/cancel`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}` },
+      }
+    );
+  } catch {
+    // Best-effort — generation may have already finished
+  }
+}
+
+/**
  * Fetch generation stats from OpenRouter.
  *
  * The stats endpoint may return 404 if called too early (the generation

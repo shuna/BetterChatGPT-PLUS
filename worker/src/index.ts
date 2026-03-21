@@ -67,6 +67,18 @@ const RECOVERY_POLL_INTERVAL_MS = 2_000;
 /** KV TTL in seconds - safety net if client never sends ACK */
 const KV_EXPIRATION_TTL = 21600; // 6 hours
 
+// ---------------------------------------------------------------------------
+// Active stream tracking — allows cancel endpoint to abort upstream reads
+// ---------------------------------------------------------------------------
+
+interface ActiveStream {
+  abortController: AbortController;
+  /** LLM API key from the original request headers (for provider cancel) */
+  apiKey?: string;
+}
+
+const activeStreams = new Map<string, ActiveStream>();
+
 /** Metadata stored in the first line of the NDJSON KV value */
 interface SessionMeta {
   totalChunks: number;
@@ -205,14 +217,21 @@ async function handleStream(
   // transit through Cloudflare's network but are NOT logged or stored
   // by this Worker.  Operators should be aware that deploying this proxy
   // means LLM API keys pass through the Worker.  See README for details.
+  const llmAbort = new AbortController();
+  const apiKey = reqHeaders['Authorization']?.replace(/^Bearer\s+/i, '') ||
+    reqHeaders['authorization']?.replace(/^Bearer\s+/i, '');
+  activeStreams.set(sessionId, { abortController: llmAbort, apiKey });
+
   let llmRes: Response;
   try {
     llmRes = await fetch(endpoint, {
       method: 'POST',
       headers: reqHeaders,
       body: JSON.stringify(body),
+      signal: llmAbort.signal,
     });
   } catch (e) {
+    activeStreams.delete(sessionId);
     return jsonResponse(
       { error: `Failed to reach LLM API: ${(e as Error).message}` },
       502
@@ -338,6 +357,7 @@ async function handleStream(
         }
       }
     } finally {
+      activeStreams.delete(sessionId);
       stopProgressiveSnapshots();
 
       try {
@@ -544,6 +564,58 @@ async function handleAck(
 }
 
 // ---------------------------------------------------------------------------
+// Cancel handler - abort upstream LLM read and optionally call provider cancel
+// ---------------------------------------------------------------------------
+
+interface CancelRequest {
+  providerCancel?: {
+    generationId: string;
+    apiKey: string;
+  };
+}
+
+async function handleCancel(
+  sessionId: string,
+  request: Request,
+  env: Env
+): Promise<Response> {
+  let cancelReq: CancelRequest = {};
+  try {
+    cancelReq = (await request.json()) as CancelRequest;
+  } catch {
+    // Body is optional
+  }
+
+  const stream = activeStreams.get(sessionId);
+  if (stream) {
+    // Abort the upstream LLM fetch — this will cause reader.read() to throw
+    // in processStream, ending the while loop and triggering cleanup.
+    stream.abortController.abort();
+  }
+
+  // Call provider cancel API if generation ID is provided
+  const pc = cancelReq.providerCancel;
+  if (pc?.generationId && pc?.apiKey) {
+    try {
+      await fetch(
+        `https://openrouter.ai/api/v1/generation/${encodeURIComponent(pc.generationId)}/cancel`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${pc.apiKey}` },
+        }
+      );
+    } catch {
+      // Best-effort
+    }
+  }
+
+  // Clean up KV cache — the buffered data up to this point is already
+  // available for recovery if needed (the final snapshot in processStream's
+  // finally block will still run with whatever was buffered before abort).
+  return jsonResponse({ cancelled: true });
+}
+
+// ---------------------------------------------------------------------------
 // Health check
 // ---------------------------------------------------------------------------
 
@@ -583,6 +655,17 @@ export default {
     // POST /api/stream - Start proxied SSE stream
     if (url.pathname === '/api/stream' && request.method === 'POST') {
       return handleStream(request, env, ctx);
+    }
+
+    // POST /api/cancel/:sessionId - Cancel upstream LLM stream
+    if (url.pathname.startsWith('/api/cancel/') && request.method === 'POST') {
+      const sessionId = decodeURIComponent(
+        url.pathname.slice('/api/cancel/'.length)
+      );
+      if (!sessionId) {
+        return jsonResponse({ error: 'sessionId is required' }, 400);
+      }
+      return handleCancel(sessionId, request, env);
     }
 
     // POST /api/ack/:sessionId - Client confirms full receipt, deletes KV
