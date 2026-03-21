@@ -1,94 +1,103 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 import useCloudAuthStore from '@store/cloud-auth-store';
 import type { CloudSyncProvider as CloudSyncProviderType } from '@store/cloud-auth-types';
 import GoogleSync from './GoogleSync';
 import CloudKitSync from './CloudKitSync';
+import RefreshIcon from '@icon/RefreshIcon';
 
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || undefined;
 
-type ProviderOption = {
-  id: CloudSyncProviderType;
-  title: string;
-  description: string;
+const providerLabels: Record<CloudSyncProviderType, string> = {
+  google: 'Google Drive',
+  cloudkit: 'iCloud',
 };
-
-const providerOptions: ProviderOption[] = [
-  {
-    id: 'google',
-    title: 'Google Drive',
-    description: 'Keeps the current Drive-based sync flow available for web and desktop.',
-  },
-  {
-    id: 'cloudkit',
-    title: 'iCloud / CloudKit',
-    description: 'iPhone-friendly sync via your private iCloud container.',
-  },
-];
 
 const CloudSync = () => {
   const selectedProvider = useCloudAuthStore((s) => s.provider);
+  const cloudSync = useCloudAuthStore((s) => s.cloudSync);
   const setProvider = useCloudAuthStore((s) => s.setProvider);
 
+  const [expanded, setExpanded] = useState(false);
+  // Track when user picked a provider to set up (before cloudSync is true)
+  const [setupProvider, setSetupProvider] = useState<CloudSyncProviderType | null>(null);
+
+  const isActive = cloudSync;
+  // Show the provider panel when active OR when user is in setup flow
+  const showingProvider = isActive ? selectedProvider : setupProvider;
+
   return (
-    <div className='rounded-md border border-gray-200 bg-white/60 p-3 text-sm text-gray-700 shadow-sm dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-200'>
-      <div className='mb-3'>
-        <div className='text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400'>
-          Sync provider
-        </div>
-        <div className='mt-1 text-sm text-gray-600 dark:text-gray-300'>
-          Choose the cloud backend that should own this workspace snapshot.
-        </div>
-      </div>
-
-      <div className='grid gap-2 md:grid-cols-2'>
-        {providerOptions.map((provider) => {
-          const active = selectedProvider === provider.id;
-          return (
-            <button
-              key={provider.id}
-              type='button'
-              onClick={() => setProvider(provider.id)}
-              className={`rounded-lg border px-4 py-3 text-left transition-colors ${
-                active
-                  ? 'border-emerald-400 bg-emerald-50/80 text-emerald-950 dark:border-emerald-500 dark:bg-emerald-950/30 dark:text-emerald-50'
-                  : 'border-gray-200 bg-white/80 text-gray-700 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-200 dark:hover:border-gray-600 dark:hover:bg-gray-900/70'
-              }`}
-            >
-              <div className='text-sm font-semibold'>{provider.title}</div>
-              <div className='mt-1 text-xs leading-5 text-gray-600 dark:text-gray-300'>
-                {provider.description}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className='mt-4 rounded-lg border border-dashed border-gray-300 bg-gray-50/90 p-3 dark:border-gray-700 dark:bg-gray-900/40'>
-        {selectedProvider === 'google' ? (
-          <div className='space-y-3'>
-            <div className='text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400'>
-              Google Drive
-            </div>
-            {googleClientId ? (
-              <GoogleSync clientId={googleClientId} />
-            ) : (
-              <div className='rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100'>
-                Google sync is unavailable because `VITE_GOOGLE_CLIENT_ID` is
-                not configured.
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className='space-y-3'>
-            <div className='text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400'>
-              iCloud / CloudKit
-            </div>
-            <CloudKitSync />
-          </div>
+    <>
+      <a
+        className='flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-gray-700 transition-colors duration-200 hover:bg-gray-100 dark:text-white dark:hover:bg-gray-500/10'
+        onClick={() => {
+          setExpanded((v) => !v);
+          if (expanded) setSetupProvider(null);
+        }}
+      >
+        <RefreshIcon className='w-4 h-4' />
+        クラウド同期
+        {isActive && (
+          <span className='ml-auto text-xs text-gray-400 dark:text-gray-500'>
+            {providerLabels[selectedProvider]}
+          </span>
         )}
-      </div>
-    </div>
+      </a>
+
+      {expanded && (
+        <div className='px-2 pb-2'>
+          {showingProvider ? (
+            /* --- Provider panel (active or setting up) --- */
+            <>
+              {showingProvider === 'google' ? (
+                googleClientId ? (
+                  <GoogleSync clientId={googleClientId} />
+                ) : (
+                  <div className='text-xs text-amber-600 dark:text-amber-400'>
+                    VITE_GOOGLE_CLIENT_ID 未設定
+                  </div>
+                )
+              ) : (
+                <CloudKitSync />
+              )}
+              {!isActive && (
+                <button
+                  type='button'
+                  onClick={() => setSetupProvider(null)}
+                  className='mt-1 text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'
+                >
+                  ← 戻る
+                </button>
+              )}
+            </>
+          ) : (
+            /* --- No sync: show provider choices --- */
+            <div className='flex flex-col gap-1'>
+              <button
+                type='button'
+                onClick={() => {
+                  setProvider('google');
+                  setSetupProvider('google');
+                }}
+                className='rounded px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700/50'
+              >
+                Google Drive で同期
+              </button>
+              <button
+                type='button'
+                onClick={() => {
+                  setProvider('cloudkit');
+                  setSetupProvider('cloudkit');
+                }}
+                className='rounded px-2 py-1.5 text-left text-xs text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700/50'
+              >
+                iCloud で同期
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </>
   );
 };
 

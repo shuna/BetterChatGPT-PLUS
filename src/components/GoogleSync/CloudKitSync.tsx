@@ -303,56 +303,39 @@ const CloudKitSync = () => {
 
   if (!config) {
     return (
-      <div className='rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100'>
+      <div className='rounded-md border border-amber-300/60 bg-amber-50/50 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-700/40 dark:bg-amber-950/30 dark:text-amber-200'>
         {t('unavailable')}
       </div>
     );
   }
 
-  return (
-    <div className='space-y-3'>
-      <div className='rounded-md border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-700 dark:border-gray-600 dark:bg-gray-800/60 dark:text-gray-300'>
-        <p>{t('tagline')}</p>
-        <p className='mt-2 text-xs'>{t('notice')}</p>
-      </div>
+  const compactBtnBase =
+    'rounded px-2 py-1 text-xs font-medium transition-colors disabled:opacity-40';
+  const compactBtnPrimary = `${compactBtnBase} bg-emerald-600 text-white hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600`;
+  const compactBtnNeutral = `${compactBtnBase} bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600`;
 
+  return (
+    <div className='space-y-1.5'>
       {isConnected && (
-        <div className='flex items-center gap-2 text-sm text-gray-700 dark:text-gray-200'>
+        <div className='flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300'>
           <SyncIcon status={syncStatus} />
-          <span>
-            {syncStatus === 'syncing' ? t('status.syncing') : t('status.connected')}
-          </span>
+          <span>{syncStatus === 'syncing' ? t('status.syncing') : t('status.connected')}</span>
         </div>
       )}
 
-      <div className='grid gap-2 md:grid-cols-2'>
+      <div className='flex flex-wrap gap-1.5'>
         {!isConnected && !needsReconnect && (
-          <button
-            type='button'
-            className='btn btn-primary'
-            onClick={handleConnect}
-            disabled={busy}
-          >
+          <button type='button' className={compactBtnPrimary} onClick={handleConnect} disabled={busy}>
             {busy ? t('status.authenticating') : t('button.connect')}
           </button>
         )}
 
         {needsReconnect && (
           <>
-            <button
-              type='button'
-              className='btn btn-primary'
-              onClick={handleConnect}
-              disabled={busy}
-            >
+            <button type='button' className={compactBtnPrimary} onClick={handleConnect} disabled={busy}>
               {busy ? t('status.authenticating') : t('button.connect')}
             </button>
-            <button
-              type='button'
-              className='btn btn-neutral'
-              onClick={handleDisconnect}
-              disabled={busy}
-            >
+            <button type='button' className={compactBtnNeutral} onClick={handleDisconnect} disabled={busy}>
               {t('button.disconnect')}
             </button>
           </>
@@ -360,28 +343,13 @@ const CloudKitSync = () => {
 
         {isConnected && (
           <>
-            <button
-              type='button'
-              className='btn btn-primary'
-              onClick={handlePull}
-              disabled={busy}
-            >
+            <button type='button' className={compactBtnPrimary} onClick={handlePull} disabled={busy}>
               {t('button.pull')}
             </button>
-            <button
-              type='button'
-              className='btn btn-primary'
-              onClick={handlePush}
-              disabled={busy}
-            >
+            <button type='button' className={compactBtnPrimary} onClick={handlePush} disabled={busy}>
               {t('button.push')}
             </button>
-            <button
-              type='button'
-              className='btn btn-neutral md:col-span-2'
-              onClick={handleDisconnect}
-              disabled={busy}
-            >
+            <button type='button' className={compactBtnNeutral} onClick={handleDisconnect} disabled={busy}>
               {t('button.disconnect')}
             </button>
           </>
