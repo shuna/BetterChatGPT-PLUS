@@ -39,14 +39,6 @@ const useAppBootstrap = () => {
   };
 
   useEffect(() => {
-    // Auto-open provider menu if no favorites and no provider custom models
-    // (only if onboarding is already completed — otherwise the onboarding flow handles it)
-    const { favoriteModels, providerCustomModels, setShowProviderMenu, onboardingCompleted } = useStore.getState();
-    const hasCustomModels = Object.values(providerCustomModels).some((m) => m && m.length > 0);
-    if (onboardingCompleted && (!favoriteModels || favoriteModels.length === 0) && !hasCustomModels) {
-      setShowProviderMenu(true);
-    }
-
     document.documentElement.lang = i18n.language;
 
     const handleLanguageChanged = (language: string) => {
