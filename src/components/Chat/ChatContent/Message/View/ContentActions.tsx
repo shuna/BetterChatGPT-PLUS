@@ -48,7 +48,7 @@ export default function ContentActions({
   onDelete,
 }: ContentActionsProps) {
   return (
-    <div className='absolute inset-x-0 bottom-2 z-20 flex min-h-[2.75rem] items-end justify-center gap-2 px-2 md:bottom-3 md:px-3 pointer-events-none translate-y-1 opacity-0 transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100'>
+    <div className='sticky bottom-2 z-20 mt-2.5 flex min-h-[2.75rem] items-end justify-center gap-2 px-2 md:bottom-3 md:px-3 pointer-events-none translate-y-1 opacity-0 transition duration-150 group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100'>
       <div className='absolute left-2 bottom-1.5 min-w-0 shrink-0 md:left-3 md:bottom-2'>
         {nodeId && (
           <BranchSwitcher

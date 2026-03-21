@@ -8,6 +8,7 @@ import { useModelType } from '@utils/modelLookup';
 import { hasMeaningfulContent } from '@utils/contentValidation';
 import useHideOnOutsideClick from '@hooks/useHideOnOutsideClick';
 import AttachmentIcon from '@icon/AttachmentIcon';
+import DownChevronArrow from '@icon/DownChevronArrow';
 import CommandPrompt from '../CommandPrompt';
 
 const EditViewButtons = memo(
@@ -73,9 +74,10 @@ const EditViewButtons = memo(
     const isNotLast = !sticky && messageIndex < lastMessageIndex;
     const canSubmitDraft = hasMeaningfulContent(_content);
     const [attachDropDown, setAttachDropDown, attachDropDownRef] = useHideOnOutsideClick();
+    const [generateMenuOpen, setGenerateMenuOpen, generateMenuRef] = useHideOnOutsideClick();
 
     return (
-      <div className='w-full'>
+      <div className='w-full min-h-[2.5rem]'>
         {isImageModel && (
           <>
             <div className='flex justify-center'>
@@ -124,52 +126,6 @@ const EditViewButtons = memo(
               multiple
             />
           </>
-        )}
-
-        {!sticky && isUser && (
-          <div className='flex md:hidden items-center justify-end gap-1 whitespace-nowrap mt-1'>
-            {isNotLast ? (
-              <>
-                <button
-                  className={`btn btn-small btn-primary ${
-                    isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
-                  }`}
-                  onClick={handleGenerateNextOnly}
-                  disabled={isCurrentChatGenerating || noModel}
-                  title={t('regenerateNextTooltip') as string}
-                >
-                  {t('regenerateNext')}
-                </button>
-                <button
-                  className={`btn btn-small btn-neutral ${
-                    isCurrentChatGenerating || noModel
-                      ? 'cursor-not-allowed opacity-40'
-                      : ''
-                  }`}
-                  onClick={() => {
-                    !isCurrentChatGenerating && !noModel && setIsModalOpen(true);
-                  }}
-                  disabled={isCurrentChatGenerating || noModel}
-                  title={t('regenerateBelowTooltip') as string}
-                >
-                  {t('regenerateBelow')}
-                </button>
-              </>
-            ) : (
-              <button
-                className={`btn btn-small btn-primary ${
-                  isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
-                }`}
-                onClick={() => {
-                  !isCurrentChatGenerating && !noModel && handleGenerate();
-                }}
-                disabled={isCurrentChatGenerating || noModel}
-                title={t('generateTooltip') as string}
-              >
-                {t('generate')}
-              </button>
-            )}
-          </div>
         )}
 
         <div className='flex items-center mt-1'>
@@ -242,35 +198,52 @@ const EditViewButtons = memo(
 
             {!sticky && isUser && (
               isNotLast ? (
-                <>
+                <div className='relative flex items-stretch' ref={generateMenuRef}>
                   <button
-                    className={`hidden md:inline-flex btn btn-small btn-primary ${
+                    className={`btn btn-small btn-primary rounded-r-none border-r-0 ${
                       isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
                     }`}
-                    onClick={handleGenerateNextOnly}
+                    onClick={() => {
+                      !isCurrentChatGenerating && !noModel && handleGenerateNextOnly();
+                    }}
                     disabled={isCurrentChatGenerating || noModel}
                     title={t('regenerateNextTooltip') as string}
                   >
-                    {t('regenerateNext')}
+                    {t('generate')}
                   </button>
                   <button
-                    className={`hidden md:inline-flex btn btn-small btn-neutral ${
-                      isCurrentChatGenerating || noModel
-                        ? 'cursor-not-allowed opacity-40'
-                        : ''
+                    className={`btn btn-small btn-primary rounded-l-none border-l border-white/20 !w-8 justify-center px-0 ${
+                      isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
                     }`}
                     onClick={() => {
-                      !isCurrentChatGenerating && !noModel && setIsModalOpen(true);
+                      if (isCurrentChatGenerating || noModel) return;
+                      setGenerateMenuOpen(!generateMenuOpen);
                     }}
                     disabled={isCurrentChatGenerating || noModel}
+                    aria-label={t('regenerateBelow') as string}
                     title={t('regenerateBelowTooltip') as string}
                   >
-                    {t('regenerateBelow')}
+                    <DownChevronArrow />
                   </button>
-                </>
+                  <div
+                    className={`${
+                      generateMenuOpen ? '' : 'hidden'
+                    } absolute right-0 bottom-full mb-1 z-10 w-max overflow-hidden rounded-lg border border-black/10 bg-white/95 p-1 shadow-lg backdrop-blur dark:border-white/10 dark:bg-gray-800/95`}
+                  >
+                    <button
+                      className='block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700'
+                      onClick={() => {
+                        setGenerateMenuOpen(false);
+                        !isCurrentChatGenerating && !noModel && setIsModalOpen(true);
+                      }}
+                    >
+                      {t('regenerateBelow')}
+                    </button>
+                  </div>
+                </div>
               ) : (
                 <button
-                  className={`hidden md:inline-flex btn btn-small btn-primary ${
+                  className={`btn btn-small btn-primary ${
                     isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
                   }`}
                   onClick={() => {

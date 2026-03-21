@@ -40,7 +40,7 @@ const UnifiedMessageView = memo(
     editSessionKey: string;
   }) => {
     const contentSurfaceClass =
-      'rounded-2xl bg-white/60 px-4 pt-2.5 pb-14 shadow-sm ring-1 ring-black/5 dark:bg-gray-900/20 dark:ring-white/10 md:px-5 md:pt-3 md:pb-16';
+      'rounded-2xl bg-white/60 px-4 pt-2.5 pb-2 shadow-sm ring-1 ring-black/5 dark:bg-gray-900/20 dark:ring-white/10 md:px-5 md:pt-3 md:pb-2.5';
     const contentMinHeightClass = 'min-h-[5.25rem]';
     const { t } = useTranslation();
     const { handleSubmit, handleSubmitMidChat } = useSubmit();
@@ -154,7 +154,8 @@ const UnifiedMessageView = memo(
                 minHeight='5.25rem'
               />
             </div>
-            <div className='absolute inset-x-4 bottom-3 md:inset-x-5 md:bottom-4'>
+            <div className='mt-2 min-h-[3rem]' aria-hidden='true' />
+            <div className='absolute inset-x-4 bottom-1 md:inset-x-5 md:bottom-2'>
               <EditViewButtons
                 sticky={false}
                 handleFileChange={editLogic.handleFileChange}
