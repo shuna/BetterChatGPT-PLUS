@@ -8,12 +8,12 @@ import { Role, roles } from '@type/chat';
 import useHideOnOutsideClick from '@hooks/useHideOnOutsideClick';
 
 type RoleSelectorProps =
-  | { role: Role; sticky: true; nodeId?: undefined }
-  | { role: Role; sticky?: false; nodeId: string };
+  | { role: Role; sticky: true; nodeId?: undefined; messageIndex?: undefined }
+  | { role: Role; sticky?: false; nodeId: string; messageIndex: number };
 
 const RoleSelector = React.memo(
   (props: RoleSelectorProps) => {
-    const { role, sticky, nodeId } = props;
+    const { role, sticky, nodeId, messageIndex } = props;
     const { t } = useTranslation();
     const setInputRole = useStore((state) => state.setInputRole);
     const updateNodeRole = useStore((state) => state.updateNodeRole);
@@ -51,7 +51,7 @@ const RoleSelector = React.memo(
                     setInputRole(r);
                   } else {
                     if (!nodeId) return;
-                    updateNodeRole(currentChatIndex, nodeId, r);
+                    updateNodeRole(currentChatIndex, nodeId, r, messageIndex);
                   }
                   setDropDown(false);
                 }}

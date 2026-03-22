@@ -130,7 +130,7 @@ export interface BranchSlice {
   ) => void;
   activateFolderOverview: (folderId: string) => void;
 
-  updateNodeRole: (chatIndex: number, nodeId: string, role: Role) => void;
+  updateNodeRole: (chatIndex: number, nodeId: string, role: Role, messageIndex?: number) => void;
 
   ensureBranchTree: (chatIndex: number) => void;
   createBranch: (
@@ -359,13 +359,20 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     });
   },
 
-  updateNodeRole: (chatIndex, nodeId, role) => {
+  updateNodeRole: (chatIndex, nodeId, role, messageIndex) => {
     const chats = get().chats;
     if (!chats) return;
     const { chats: ensured, contentStore } = ensureBranchTreeState(
       chats, chatIndex, get().contentStore
     );
-    const updated = updateNodeRoleState(ensured, chatIndex, nodeId, role, contentStore);
+    // Resolve fallback nodeId (e.g. "0") to real UUID from activePath
+    const tree = ensured[chatIndex].branchTree!;
+    let resolvedId = nodeId;
+    if (!tree.nodes[nodeId] && messageIndex != null) {
+      resolvedId = tree.activePath[messageIndex];
+    }
+    if (!resolvedId || !tree.nodes[resolvedId]) return;
+    const updated = updateNodeRoleState(ensured, chatIndex, resolvedId, role, contentStore);
     get().applyBranchState(updated, contentStore);
   },
 

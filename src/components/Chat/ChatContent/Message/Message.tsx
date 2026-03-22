@@ -158,7 +158,7 @@ const Message = React.memo(
               <div className='flex items-center gap-2.5'>
                 <Avatar role={role} />
                 {advancedMode && resolvedNodeId && (
-                  <RoleSelector role={role} nodeId={resolvedNodeId} />
+                  <RoleSelector role={role} nodeId={resolvedNodeId} messageIndex={messageIndex} />
                 )}
               </div>
               <div className='min-w-0'>
