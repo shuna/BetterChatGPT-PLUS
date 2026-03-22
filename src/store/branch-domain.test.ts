@@ -13,7 +13,9 @@ import {
   removeMessageAtIndexState,
   replaceMessageAndPruneFollowingState,
   updateLastNodeContentState,
+  updateNodeRoleState,
   upsertMessageAtIndexState,
+  upsertWithAutoBranchState,
 } from './branch-domain';
 import { resolveContent } from '@utils/contentStore';
 
@@ -434,5 +436,111 @@ describe('branch-domain delta compression', () => {
 
     const origHash = deleted.chats[0].branchTree!.nodes[sourceNodeId].contentHash;
     expect(resolveContent(deleted.contentStore, origHash)).toEqual(longContent(' assistant msg'));
+  });
+});
+
+describe('updateNodeRoleState', () => {
+  it('persists role change through materializeActivePath', () => {
+    const ensured = ensureBranchTreeState([createChat()], 0, {});
+    const nodeId = ensured.chats[0].branchTree!.activePath[0];
+
+    const updated = updateNodeRoleState(
+      ensured.chats, 0, nodeId, 'system', ensured.contentStore
+    );
+
+    const tree = updated[0].branchTree!;
+    expect(tree.nodes[nodeId].role).toBe('system');
+    expect(updated[0].messages[0].role).toBe('system');
+  });
+});
+
+describe('upsertWithAutoBranchState', () => {
+  const createThreeNodeChat = () => {
+    const chat = createChat();
+    chat.messages.push({ role: 'user', content: textContent('third') });
+    return ensureBranchTreeState([chat], 0, {});
+  };
+
+  it('returns noOp when content and role are identical', () => {
+    const ensured = ensureBranchTreeState([createChat()], 0, {});
+    const treeBefore = ensured.chats[0].branchTree!;
+    const nodeCountBefore = Object.keys(treeBefore.nodes).length;
+
+    const result = upsertWithAutoBranchState(
+      ensured.chats, 0, 0,
+      { role: 'user', content: textContent('hello') },
+      ensured.contentStore
+    );
+
+    expect(result.noOp).toBe(true);
+    const nodeCountAfter = Object.keys(result.chats[0].branchTree!.nodes).length;
+    expect(nodeCountAfter).toBe(nodeCountBefore);
+  });
+
+  it('updates role in-place when only role changes', () => {
+    const ensured = ensureBranchTreeState([createChat()], 0, {});
+    const nodeId = ensured.chats[0].branchTree!.activePath[0];
+
+    const result = upsertWithAutoBranchState(
+      ensured.chats, 0, 0,
+      { role: 'system', content: textContent('hello') },
+      ensured.contentStore
+    );
+
+    expect(result.noOp).toBeUndefined();
+    expect(result.chats[0].branchTree!.nodes[nodeId].role).toBe('system');
+    expect(result.chats[0].messages[0].role).toBe('system');
+    // No new node created
+    expect(Object.keys(result.chats[0].branchTree!.nodes).length).toBe(2);
+  });
+
+  it('updates last node in-place when content changes', () => {
+    const ensured = ensureBranchTreeState([createChat()], 0, {});
+    const nodeCountBefore = Object.keys(ensured.chats[0].branchTree!.nodes).length;
+
+    const result = upsertWithAutoBranchState(
+      ensured.chats, 0, 1,
+      { role: 'assistant', content: textContent('updated world') },
+      ensured.contentStore
+    );
+
+    expect(result.noOp).toBeUndefined();
+    expect(result.chats[0].messages[1].content).toEqual(textContent('updated world'));
+    // No new node — in-place update for last node
+    expect(Object.keys(result.chats[0].branchTree!.nodes).length).toBe(nodeCountBefore);
+  });
+
+  it('creates sibling and truncates activePath for mid-chain content edit', () => {
+    const ensured = createThreeNodeChat();
+    const pathBefore = ensured.chats[0].branchTree!.activePath.slice();
+    const oldNodeId = pathBefore[1]; // middle node (assistant)
+
+    const result = upsertWithAutoBranchState(
+      ensured.chats, 0, 1,
+      { role: 'assistant', content: textContent('edited response') },
+      ensured.contentStore
+    );
+
+    expect(result.noOp).toBeUndefined();
+    expect(result.newId).toBeDefined();
+
+    const tree = result.chats[0].branchTree!;
+
+    // activePath should be truncated: [node0, newNode] (no third node)
+    expect(tree.activePath).toHaveLength(2);
+    expect(tree.activePath[0]).toBe(pathBefore[0]);
+    expect(tree.activePath[1]).toBe(result.newId);
+
+    // New node is sibling of old node (same parent)
+    expect(tree.nodes[result.newId!].parentId).toBe(tree.nodes[oldNodeId].parentId);
+
+    // Old node and its descendant (third) still exist in tree
+    expect(tree.nodes[oldNodeId]).toBeDefined();
+    expect(tree.nodes[pathBefore[2]]).toBeDefined();
+    expect(tree.nodes[pathBefore[2]].parentId).toBe(oldNodeId);
+
+    // Messages reflect the new truncated path
+    expect(result.chats[0].messages).toHaveLength(2);
+    expect(result.chats[0].messages[1].content).toEqual(textContent('edited response'));
   });
 });

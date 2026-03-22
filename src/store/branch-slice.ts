@@ -28,7 +28,9 @@ import {
   switchActivePathState,
   switchBranchAtNodeState,
   truncateActivePathState,
+  updateNodeRoleState,
   upsertMessageAtIndexState,
+  upsertWithAutoBranchState,
   updateLastNodeContentState,
 } from './branch-domain';
 import { cloneChatAt } from './branch-domain';
@@ -128,6 +130,8 @@ export interface BranchSlice {
   ) => void;
   activateFolderOverview: (folderId: string) => void;
 
+  updateNodeRole: (chatIndex: number, nodeId: string, role: Role) => void;
+
   ensureBranchTree: (chatIndex: number) => void;
   createBranch: (
     chatIndex: number,
@@ -156,6 +160,12 @@ export interface BranchSlice {
   ) => void;
   truncateActivePathAt: (chatIndex: number, nodeId: string) => void;
   upsertMessageAtIndex: (
+    chatIndex: number,
+    messageIndex: number,
+    role: Role,
+    content: ContentInterface[]
+  ) => void;
+  upsertWithAutoBranch: (
     chatIndex: number,
     messageIndex: number,
     role: Role,
@@ -349,6 +359,16 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     });
   },
 
+  updateNodeRole: (chatIndex, nodeId, role) => {
+    const chats = get().chats;
+    if (!chats) return;
+    const { chats: ensured, contentStore } = ensureBranchTreeState(
+      chats, chatIndex, get().contentStore
+    );
+    const updated = updateNodeRoleState(ensured, chatIndex, nodeId, role, contentStore);
+    get().applyBranchState(updated, contentStore);
+  },
+
   ensureBranchTree: (chatIndex) => {
     const chats = get().chats;
     if (!chats || chats[chatIndex]?.branchTree) return;
@@ -460,6 +480,14 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
       get().contentStore
     );
     get().applyBranchState(chats, contentStore);
+  },
+
+  upsertWithAutoBranch: (chatIndex, messageIndex, role, content) => {
+    const result = upsertWithAutoBranchState(
+      get().chats!, chatIndex, messageIndex, { role, content }, get().contentStore
+    );
+    if (result.noOp) return;
+    get().applyBranchState(result.chats, result.contentStore);
   },
 
   insertMessageAtIndex: (chatIndex, messageIndex, role, content) => {

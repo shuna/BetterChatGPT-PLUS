@@ -17,6 +17,7 @@ import {
   ContentStoreData,
   addContent,
   addContentDelta,
+  isContentEqual,
   releaseContent,
   retainContent,
 } from '@utils/contentStore';
@@ -635,4 +636,100 @@ export const pasteBranchSequenceState = (
   updatedChats[targetChatIndex].messages = materializeActivePath(tree, contentStore);
 
   return { chats: updatedChats, contentStore };
+};
+
+/**
+ * Update a branch node's role in place.
+ * Precondition: chats[chatIndex].branchTree must already exist
+ * (caller must run ensureBranchTreeState first).
+ */
+export const updateNodeRoleState = (
+  chats: ChatInterface[],
+  chatIndex: number,
+  nodeId: string,
+  role: Role,
+  contentStore: ContentStoreData
+) => {
+  const updatedChats = cloneChatAt(chats, chatIndex);
+  const tree = updatedChats[chatIndex].branchTree!;
+  tree.nodes[nodeId] = { ...tree.nodes[nodeId], role };
+  updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
+  return updatedChats;
+};
+
+export type UpsertWithAutoBranchResult = {
+  chats: ChatInterface[];
+  contentStore: ContentStoreData;
+  newId?: string;
+  noOp?: boolean;
+};
+
+/**
+ * Upsert a message with automatic branch preservation.
+ *
+ * - No content/role change → no-op (returns noOp: true)
+ * - Role-only change → in-place role update
+ * - Content change + last node → in-place update (no descendants to preserve)
+ * - Content change + mid-chain node → create new sibling node, truncate activePath
+ *   (old node and its descendants remain intact on the original branch)
+ */
+export const upsertWithAutoBranchState = (
+  chats: ChatInterface[],
+  chatIndex: number,
+  messageIndex: number,
+  message: MessageInterface,
+  currentContentStore: ContentStoreData
+): UpsertWithAutoBranchResult => {
+  const { chats: ensuredChats, contentStore: ensuredStore } =
+    ensureBranchReadyState(chats, chatIndex, currentContentStore);
+  const tree = ensuredChats[chatIndex].branchTree!;
+  const existingId = tree.activePath[messageIndex];
+
+  if (!existingId) {
+    return upsertMessageAtIndexState(
+      ensuredChats, chatIndex, messageIndex, message, ensuredStore
+    );
+  }
+
+  const node = tree.nodes[existingId];
+  const contentChanged = !isContentEqual(ensuredStore, node.contentHash, message.content);
+  const roleChanged = node.role !== message.role;
+
+  // Complete no-op: no change to tree or contentStore, skip undo history
+  if (!contentChanged && !roleChanged) {
+    return { chats: ensuredChats, contentStore: ensuredStore, noOp: true };
+  }
+
+  // Role-only change: in-place update
+  if (!contentChanged) {
+    const state = prepareBranchMutationState(ensuredChats, chatIndex, ensuredStore);
+    state.tree.nodes[existingId] = { ...state.tree.nodes[existingId], role: message.role };
+    return finalizePreparedBranchMutationState(state);
+  }
+
+  // Content changed + last node: in-place update (no descendants)
+  const isLastNode = messageIndex === tree.activePath.length - 1;
+  if (isLastNode) {
+    return upsertMessageAtIndexState(
+      ensuredChats, chatIndex, messageIndex, message, ensuredStore
+    );
+  }
+
+  // Content changed + mid-chain: create sibling, truncate activePath
+  // Old node (existingId) stays with its descendants (D→E hang off it)
+  const state = prepareBranchMutationState(ensuredChats, chatIndex, ensuredStore);
+  const { tree: mutableTree, contentStore } = state;
+  const newId = uuidv4();
+  const parentId = mutableTree.nodes[existingId].parentId;
+
+  mutableTree.nodes[newId] = {
+    id: newId,
+    parentId,
+    role: message.role,
+    contentHash: addContentDelta(contentStore, message.content, node.contentHash),
+    createdAt: Date.now(),
+  };
+
+  mutableTree.activePath = [...mutableTree.activePath.slice(0, messageIndex), newId];
+  return { ...finalizePreparedBranchMutationState(state), newId };
 };

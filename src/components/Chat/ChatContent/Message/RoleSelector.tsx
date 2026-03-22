@@ -3,23 +3,20 @@ import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 
 import DownChevronArrow from '@icon/DownChevronArrow';
-import { ChatInterface, Role, roles } from '@type/chat';
+import { Role, roles } from '@type/chat';
 
 import useHideOnOutsideClick from '@hooks/useHideOnOutsideClick';
 
+type RoleSelectorProps =
+  | { role: Role; sticky: true; nodeId?: undefined }
+  | { role: Role; sticky?: false; nodeId: string };
+
 const RoleSelector = React.memo(
-  ({
-    role,
-    messageIndex,
-    sticky,
-  }: {
-    role: Role;
-    messageIndex: number;
-    sticky?: boolean;
-  }) => {
+  (props: RoleSelectorProps) => {
+    const { role, sticky, nodeId } = props;
     const { t } = useTranslation();
     const setInputRole = useStore((state) => state.setInputRole);
-    const setChats = useStore((state) => state.setChats);
+    const updateNodeRole = useStore((state) => state.updateNodeRole);
     const currentChatIndex = useStore((state) => state.currentChatIndex);
 
     const [dropDown, setDropDown, dropDownRef] = useHideOnOutsideClick();
@@ -50,15 +47,11 @@ const RoleSelector = React.memo(
               <li
                 className='px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white cursor-pointer'
                 onClick={() => {
-                  if (!sticky) {
-                    const updatedChats: ChatInterface[] = JSON.parse(
-                      JSON.stringify(useStore.getState().chats)
-                    );
-                    updatedChats[currentChatIndex].messages[messageIndex].role =
-                      r;
-                    setChats(updatedChats);
-                  } else {
+                  if (sticky) {
                     setInputRole(r);
+                  } else {
+                    if (!nodeId) return;
+                    updateNodeRole(currentChatIndex, nodeId, r);
                   }
                   setDropDown(false);
                 }}

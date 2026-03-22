@@ -336,6 +336,21 @@ export function resolveContent(
 }
 
 /**
+ * Check if stored content at the given hash equals the provided content.
+ * Uses resolveContent to follow delta chains, then compares serialized form.
+ * Safer than comparing computeContentHash directly because stored hashes
+ * may have collision-avoidance suffixes (see addContent).
+ */
+export function isContentEqual(
+  store: ContentStoreData,
+  hash: string,
+  content: ContentInterface[]
+): boolean {
+  const resolved = resolveContent(store, hash);
+  return JSON.stringify(resolved) === JSON.stringify(content);
+}
+
+/**
  * Resolve a contentHash to plain text (all text content joined).
  * Useful for search and preview — follows delta chains via resolveContent.
  */

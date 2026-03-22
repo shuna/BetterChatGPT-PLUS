@@ -74,7 +74,7 @@ export function useEditViewLogic({
   const inputRole = useStore((state) => state.inputRole);
   const appendNodeToActivePath = useStore((state) => state.appendNodeToActivePath);
   const replaceMessageAndPruneFollowing = useStore((state) => state.replaceMessageAndPruneFollowing);
-  const upsertMessageAtIndex = useStore((state) => state.upsertMessageAtIndex);
+  const upsertWithAutoBranch = useStore((state) => state.upsertWithAutoBranch);
   var currentChatIndex = useStore((state) => state.currentChatIndex);
   const { model, providerId } = useStore((state) => {
     const isInitialised =
@@ -233,7 +233,7 @@ export function useEditViewLogic({
       clearDraft();
       resetTextAreaHeight();
     } else {
-      upsertMessageAtIndex(
+      upsertWithAutoBranch(
         currentChatIndex,
         resolvedMessageIndex,
         useStore.getState().chats![currentChatIndex].messages[resolvedMessageIndex].role,
