@@ -102,6 +102,7 @@ const SettingsMenu = () => {
 
   useEffect(() => {
     document.documentElement.className = theme;
+    try { localStorage.setItem('theme', theme); } catch {}
   }, [theme]);
 
   useEffect(() => {
@@ -245,6 +246,7 @@ const ThemeRadioGroup = () => {
 
   useEffect(() => {
     document.documentElement.className = theme;
+    try { localStorage.setItem('theme', theme); } catch {}
   }, [theme]);
 
   const options: { value: Theme; label: string }[] = [

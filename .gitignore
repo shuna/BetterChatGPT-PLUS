@@ -27,5 +27,9 @@ dist-ssr
 release/
 
 .env
-.claude/
+.claude/*
+!.claude/settings.json
+!.claude/hooks/
+.claude/hooks/*
+!.claude/hooks/gh-setup.sh
 worker/.wrangler/

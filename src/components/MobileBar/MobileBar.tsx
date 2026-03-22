@@ -21,6 +21,21 @@ const MobileBar = ({ onSearchOpen }: MobileBarProps) => {
       : 'New Chat'
   );
 
+  const currentChatId = useStore((state) =>
+    state.chats &&
+    state.chats.length > 0 &&
+    state.currentChatIndex >= 0 &&
+    state.currentChatIndex < state.chats.length
+      ? state.chats[state.currentChatIndex].id
+      : ''
+  );
+
+  const isCurrentChatGenerating = useStore((state) =>
+    Object.values(state.generatingSessions).some((s) => s.chatId === currentChatId)
+  );
+
+  const isProxyMode = useStore((state) => !!state.proxyEndpoint);
+
   const addChat = useAddChat();
 
   return (
@@ -36,7 +51,7 @@ const MobileBar = ({ onSearchOpen }: MobileBarProps) => {
         <span className='sr-only'>Open sidebar</span>
         <MenuIcon />
       </button>
-      <h1 className='flex-1 text-center text-base font-normal px-2 truncate'>
+      <h1 className='flex-1 text-center text-base font-normal px-2 truncate min-w-0'>
         {chatTitle}
       </h1>
       {onSearchOpen && (
@@ -48,6 +63,20 @@ const MobileBar = ({ onSearchOpen }: MobileBarProps) => {
         >
           <SearchIcon className='h-5 w-5' />
         </button>
+      )}
+      {isCurrentChatGenerating && (
+        <div className='flex shrink-0 items-center gap-1.5 mr-1'>
+          <span
+            className={`inline-block h-2 w-2 rounded-full animate-pulse ${
+              isProxyMode
+                ? 'bg-indigo-400 dark:bg-indigo-400'
+                : 'bg-green-400 dark:bg-green-400'
+            }`}
+          />
+          <span className='text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap'>
+            {isProxyMode ? 'proxy' : ''}
+          </span>
+        </div>
       )}
       <button
         type='button'

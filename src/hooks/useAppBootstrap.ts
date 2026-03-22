@@ -39,14 +39,6 @@ const useAppBootstrap = () => {
   };
 
   useEffect(() => {
-    // Auto-open provider menu if no favorites and no provider custom models
-    // (only if onboarding is already completed — otherwise the onboarding flow handles it)
-    const { favoriteModels, providerCustomModels, setShowProviderMenu, onboardingCompleted } = useStore.getState();
-    const hasCustomModels = Object.values(providerCustomModels).some((m) => m && m.length > 0);
-    if (onboardingCompleted && (!favoriteModels || favoriteModels.length === 0) && !hasCustomModels) {
-      setShowProviderMenu(true);
-    }
-
     document.documentElement.lang = i18n.language;
 
     const handleLanguageChanged = (language: string) => {
@@ -123,16 +115,17 @@ const useAppBootstrap = () => {
 
       // Clean up legacy localStorage keys
       const legacyApiKey = localStorage.getItem('apiKey');
-      const legacyTheme = localStorage.getItem('theme');
 
       if (legacyApiKey) {
         setApiKey(legacyApiKey);
         localStorage.removeItem('apiKey');
       }
 
-      if (legacyTheme) {
-        setTheme(legacyTheme as Theme);
-        localStorage.removeItem('theme');
+      // Apply theme immediately after rehydration to avoid FOUC
+      const rehydratedTheme = useStore.getState().theme;
+      if (rehydratedTheme) {
+        document.documentElement.className = rehydratedTheme;
+        try { localStorage.setItem('theme', rehydratedTheme); } catch {}
       }
 
       // Load chat data from IndexedDB

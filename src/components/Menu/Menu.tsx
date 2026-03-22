@@ -22,7 +22,7 @@ const Menu = () => {
   const menuRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
 
-  const { edgeHandlers, menuHandlers } = useSwipeGesture(menuRef, backdropRef);
+  const { menuHandlers } = useSwipeGesture(menuRef, backdropRef);
 
   useEffect(() => {
     if (window.innerWidth < 768) setHideSideMenu(true);
@@ -67,7 +67,7 @@ const Menu = () => {
       <div
         id='menu'
         ref={menuRef}
-        className={`group/menu fixed top-0 left-0 z-[999] h-full overflow-visible bg-gray-100 text-gray-800 transition-transform dark:bg-gray-900 dark:text-gray-100 md:inset-y-0 md:flex md:flex-col max-md:w-3/4 ${
+        className={`group/menu fixed top-0 left-0 z-[999] h-full overflow-visible bg-gray-100 text-gray-800 transition-transform dark:bg-gray-900 dark:text-gray-100 md:inset-y-0 md:flex md:flex-col max-md:w-3/4 max-md:shadow-[4px_0_16px_rgba(0,0,0,0.12)] max-md:dark:shadow-[4px_0_16px_rgba(0,0,0,0.4)] ${
           hideSideMenu ? 'translate-x-[-100%]' : 'translate-x-[0%]'
         }`}
         style={{ width: `${menuWidth}px` }}
@@ -114,11 +114,6 @@ const Menu = () => {
           setHideSideMenu(true);
         }}
         {...menuHandlers}
-      />
-      {/* Swipe edge zone — invisible touch target on the left edge for opening */}
-      <div
-        className='md:hidden fixed top-0 left-0 h-full w-5 z-[998]'
-        {...edgeHandlers}
       />
     </>
   );
