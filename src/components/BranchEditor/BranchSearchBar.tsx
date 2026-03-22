@@ -27,10 +27,7 @@ const BranchSearchBar = ({ entries }: { entries: MultiLayoutEntry[] }) => {
   const hasSearchQuery = searchQuery.trim().length > 0;
   const [historyContentOffset, setHistoryContentOffset] = useState(0);
 
-  // Focus input on mount
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+  // No auto-focus on mount to prevent Mobile Safari zoom
 
   useEffect(() => {
     const handlePointerDown = (event: MouseEvent) => {
@@ -132,7 +129,7 @@ const BranchSearchBar = ({ entries }: { entries: MultiLayoutEntry[] }) => {
             onBlur={handleInputBlur}
             onKeyDown={handleKeyDown}
             placeholder='検索...'
-            className={`w-full text-sm bg-transparent outline-none text-gray-800 dark:text-gray-200 placeholder-gray-400 ${
+            className={`w-full text-base bg-transparent outline-none text-gray-800 dark:text-gray-200 placeholder-gray-400 ${
               hasSearchQuery ? 'pr-6' : ''
             }`}
           />
