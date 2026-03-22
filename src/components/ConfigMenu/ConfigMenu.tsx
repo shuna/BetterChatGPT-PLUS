@@ -65,7 +65,7 @@ const ConfigMenu = ({
       stream: _stream,
       providerId: _providerId,
       reasoning_effort: reasoningSupported ? _reasoningEffort : undefined,
-      reasoning_budget_tokens: reasoningSupported && _reasoningBudget > 0 ? _reasoningBudget : undefined,
+      reasoning_budget_tokens: reasoningSupported && _reasoningBudget >= 1024 ? _reasoningBudget : undefined,
     }));
     setImageDetail(_imageDetail);
     setIsModalOpen(false);
@@ -476,7 +476,11 @@ export const ReasoningBudgetInput = ({
       <FieldDescription>{t('reasoningBudget.description')}</FieldDescription>
       <input
         type='number'
-        className='mt-2 w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-3 py-1.5 text-sm text-gray-900 dark:text-white focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500'
+        className={`mt-2 w-full rounded-md border px-3 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+          _reasoningBudget > 0 && _reasoningBudget < 1024
+            ? 'border-amber-400 dark:border-amber-500 bg-amber-50 dark:bg-amber-900/20 focus:border-amber-500'
+            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:border-blue-500'
+        }`}
         value={_reasoningBudget || ''}
         placeholder='0'
         min={0}
@@ -486,6 +490,11 @@ export const ReasoningBudgetInput = ({
           _setReasoningBudget(Number.isNaN(val) ? 0 : Math.max(0, val));
         }}
       />
+      {_reasoningBudget > 0 && _reasoningBudget < 1024 && (
+        <p className='mt-1 text-xs text-amber-600 dark:text-amber-400'>
+          {t('reasoningBudget.minWarning', 'Value must be at least 1024. Values below 1024 will be ignored.')}
+        </p>
+      )}
     </div>
   );
 };

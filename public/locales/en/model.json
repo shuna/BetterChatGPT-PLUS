@@ -30,6 +30,9 @@
     "label": "Streaming",
     "description": "Enable streaming to display responses in real-time as they are generated."
   },
+  "reasoning": {
+    "label": "Thinking"
+  },
   "reasoningEffort": {
     "label": "Reasoning Effort",
     "description": "Controls how much effort the model spends on internal reasoning. Higher effort produces more thorough answers but uses more tokens.",
@@ -40,7 +43,8 @@
   },
   "reasoningBudget": {
     "label": "Reasoning Budget (tokens)",
-    "description": "Advanced: set an explicit token budget for the model's internal reasoning. Leave at 0 to use the provider's default. (Min: 1024)"
+    "description": "Advanced: set an explicit token budget for the model's internal reasoning. Leave at 0 to use the provider's default. (Min: 1024)",
+    "minWarning": "Value must be at least 1024. Values below 1024 will be ignored."
   },
   "imageDetail": {
     "label": "Image Detail",

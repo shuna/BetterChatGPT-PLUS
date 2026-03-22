@@ -125,6 +125,7 @@ function extractReasoning(events) {
 // --- ThinkTagParser (plain-JS copy of src/utils/thinkTagParser.ts) ---
 // Handles <think>...</think> tags in content for open-source reasoning models.
 // Keep both implementations in sync.
+// Verified by: src/utils/thinkTagParser.sync.test.ts
 
 function createThinkTagParser() {
   let state = 'outside'; // 'outside' | 'inside'

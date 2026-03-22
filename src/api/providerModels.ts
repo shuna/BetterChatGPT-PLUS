@@ -69,20 +69,22 @@ const isSupportedModelId = (modelId: string) => {
 };
 
 /** Heuristic: detect reasoning models by well-known ID patterns. */
-const isReasoningModel = (modelId: string): boolean => {
+const REASONING_MODEL_RE =
+  // OpenAI o-series: o1, o1-mini, o3, o3-mini, o4-mini, etc.
+  // Uses word-boundary to avoid false positives like "proto1", "falcon-40b"
+  /(?:^|[-/])o[134](?:$|[-/])/;
+
+const REASONING_MODEL_NAMES = [
+  'deepseek-r1',
+  'deepseek-reasoner',
+  'qwq',
+] as const;
+
+export const isReasoningModel = (modelId: string): boolean => {
   const id = modelId.toLowerCase();
   return (
-    // OpenAI o-series
-    /\bo[1-9][\b\-\/]/.test(id) ||
-    /\bo[1-9]-/.test(id) ||
-    id.includes('o1') ||
-    id.includes('o3') ||
-    id.includes('o4-mini') ||
-    // DeepSeek reasoning
-    id.includes('deepseek-r1') ||
-    id.includes('deepseek-reasoner') ||
-    // Qwen QwQ
-    id.includes('qwq') ||
+    REASONING_MODEL_RE.test(id) ||
+    REASONING_MODEL_NAMES.some((name) => id.includes(name)) ||
     // Claude with extended thinking (via OpenRouter)
     (id.includes('claude') && id.includes('thinking'))
   );

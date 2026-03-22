@@ -26,3 +26,22 @@ export interface EventSourceDataChoices {
   finish_reason?: string;
   index: number;
 }
+
+/** Shape of a non-streaming chat completion response choice. */
+export interface NonStreamingChoice {
+  message: {
+    role: string;
+    content: string;
+    reasoning?: string;
+    reasoning_content?: string;
+  };
+  finish_reason?: string;
+  index: number;
+}
+
+export interface NonStreamingResponse {
+  id: string;
+  choices: NonStreamingChoice[];
+  model: string;
+  object: string;
+}

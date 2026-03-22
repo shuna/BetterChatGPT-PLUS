@@ -28,7 +28,7 @@ import {
   isStreamingContentHash,
   notifyStreamingUpdate,
 } from '@utils/streamingBuffer';
-import type { EventSourceDataInterface, ReasoningDetail } from '@type/api';
+import type { EventSourceDataInterface, ReasoningDetail, NonStreamingResponse } from '@type/api';
 import { ThinkTagParser } from '@utils/thinkTagParser';
 import { getEffectiveStreamEnabled } from '@utils/streamSupport';
 import { useStreamEndStatusStore, type StreamEndReason } from '@store/stream-end-status-store';
@@ -506,9 +506,10 @@ export const executeSubmitStream = async ({
         setSessionCancelMeta(sessionId, { generationId: capturedGenerationId });
       }
 
-      lastFinishReason = data.choices[0].finish_reason ?? 'stop';
+      const nonStreamData = data as NonStreamingResponse;
+      lastFinishReason = nonStreamData.choices[0].finish_reason ?? 'stop';
       // Extract reasoning from non-streaming response
-      const msg = data.choices[0].message;
+      const msg = nonStreamData.choices[0].message;
       const reasoningText = msg.reasoning ?? msg.reasoning_content ?? '';
       // Parse <think> tags from content
       const parsedContent = thinkTagParser.process(msg.content);

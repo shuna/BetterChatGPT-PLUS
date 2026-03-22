@@ -104,21 +104,19 @@ export const peekBufferedReasoning = (nodeId: string): string | undefined => {
 export const finalizeStreamingBuffer = (nodeId: string): ContentInterface[] => {
   const entry = streamingBuffers.get(nodeId);
   const content = entry ? cloneContent(entry.content) : [];
+
   // Prepend reasoning content if present
-  if (entry?.reasoning) {
-    const reasoningItem: ReasoningContentInterface = { type: 'reasoning', text: entry.reasoning };
-    // Remove any existing reasoning items, then prepend fresh one
-    const filtered = content.filter((c) => c.type !== 'reasoning');
-    const result = [reasoningItem, ...filtered];
-    streamingBuffers.delete(nodeId);
-    streamingListeners.delete(nodeId);
-    nodeToChatId.delete(nodeId);
-    return result;
-  }
+  const result = entry?.reasoning
+    ? [
+        { type: 'reasoning', text: entry.reasoning } as ReasoningContentInterface,
+        ...content.filter((c) => c.type !== 'reasoning'),
+      ]
+    : content;
+
   streamingBuffers.delete(nodeId);
   streamingListeners.delete(nodeId);
   nodeToChatId.delete(nodeId);
-  return content;
+  return result;
 };
 
 export const hasActiveStreamingBuffers = (): boolean => streamingBuffers.size > 0;

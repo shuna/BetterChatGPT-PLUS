@@ -1,4 +1,5 @@
 import React, { memo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 const CollapsibleReasoning = memo(function CollapsibleReasoning({
   reasoning,
@@ -8,6 +9,7 @@ const CollapsibleReasoning = memo(function CollapsibleReasoning({
   isGenerating: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const { t } = useTranslation('model');
 
   if (!reasoning) return null;
 
@@ -28,7 +30,7 @@ const CollapsibleReasoning = memo(function CollapsibleReasoning({
           <path strokeLinecap='round' strokeLinejoin='round' d='M9 5l7 7-7 7' />
         </svg>
         <span>
-          思考過程
+          {t('reasoning.label', 'Thinking')}
           {isGenerating && (
             <span className='ml-1 animate-pulse'>...</span>
           )}
