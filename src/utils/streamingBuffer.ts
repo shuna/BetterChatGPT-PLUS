@@ -1,4 +1,4 @@
-import type { ChatInterface, ContentInterface, TextContentInterface } from '@type/chat';
+import type { ChatInterface, ContentInterface, TextContentInterface, ReasoningContentInterface } from '@type/chat';
 import { isTextContent } from '@type/chat';
 import { cloneChatAt } from '@store/branch-domain';
 import type { ContentStoreData } from './contentStore';
@@ -9,6 +9,7 @@ const STREAMING_CONTENT_HASH_PREFIX = '__streaming:';
 
 interface StreamingBufferEntry {
   content: ContentInterface[];
+  reasoning: string;
 }
 
 const streamingBuffers = new Map<string, StreamingBufferEntry>();
@@ -16,10 +17,11 @@ const streamingBuffers = new Map<string, StreamingBufferEntry>();
 /** Tracks which chatId each streaming nodeId belongs to. */
 const nodeToChatId = new Map<string, string>();
 
-const cloneContentItem = (content: ContentInterface): ContentInterface =>
-  content.type === 'text'
-    ? { ...content }
-    : { ...content, image_url: { ...content.image_url } };
+const cloneContentItem = (content: ContentInterface): ContentInterface => {
+  if (content.type === 'text') return { ...content };
+  if (content.type === 'reasoning') return { ...content };
+  return { ...content, image_url: { ...content.image_url } };
+};
 
 const cloneContent = (content: ContentInterface[]): ContentInterface[] =>
   content.map(cloneContentItem);
@@ -58,16 +60,29 @@ export const initializeStreamingBuffer = (
   content: ContentInterface[],
   chatId?: string,
 ): void => {
-  streamingBuffers.set(nodeId, { content: cloneContent(content) });
+  // Extract existing reasoning text from content if present
+  const existingReasoning = content
+    .filter((c): c is ReasoningContentInterface => c.type === 'reasoning')
+    .map((c) => c.text)
+    .join('');
+  streamingBuffers.set(nodeId, { content: cloneContent(content), reasoning: existingReasoning });
   if (chatId) nodeToChatId.set(nodeId, chatId);
   ensureSnapshotFlushRunning();
 };
 
 export const appendToStreamingBuffer = (nodeId: string, text: string): void => {
-  const current = streamingBuffers.get(nodeId)?.content ?? [];
+  const entry = streamingBuffers.get(nodeId);
+  const current = entry?.content ?? [];
   streamingBuffers.set(nodeId, {
     content: upsertTextContent(current, (existing) => existing + text),
+    reasoning: entry?.reasoning ?? '',
   });
+};
+
+export const appendReasoningToStreamingBuffer = (nodeId: string, text: string): void => {
+  const entry = streamingBuffers.get(nodeId);
+  if (!entry) return;
+  entry.reasoning += text;
 };
 
 export const getBufferedContent = (nodeId: string): ContentInterface[] | undefined => {
@@ -80,8 +95,26 @@ export const peekBufferedContent = (nodeId: string): ContentInterface[] | undefi
   return streamingBuffers.get(nodeId)?.content;
 };
 
+/** Read-only reference to buffered reasoning text. */
+export const peekBufferedReasoning = (nodeId: string): string | undefined => {
+  const r = streamingBuffers.get(nodeId)?.reasoning;
+  return r || undefined;
+};
+
 export const finalizeStreamingBuffer = (nodeId: string): ContentInterface[] => {
-  const content = getBufferedContent(nodeId) ?? [];
+  const entry = streamingBuffers.get(nodeId);
+  const content = entry ? cloneContent(entry.content) : [];
+  // Prepend reasoning content if present
+  if (entry?.reasoning) {
+    const reasoningItem: ReasoningContentInterface = { type: 'reasoning', text: entry.reasoning };
+    // Remove any existing reasoning items, then prepend fresh one
+    const filtered = content.filter((c) => c.type !== 'reasoning');
+    const result = [reasoningItem, ...filtered];
+    streamingBuffers.delete(nodeId);
+    streamingListeners.delete(nodeId);
+    nodeToChatId.delete(nodeId);
+    return result;
+  }
   streamingBuffers.delete(nodeId);
   streamingListeners.delete(nodeId);
   nodeToChatId.delete(nodeId);

@@ -33,6 +33,11 @@ export interface TextContentInterface {
   text: string;
 }
 
+export interface ReasoningContentInterface {
+  type: 'reasoning';
+  text: string;
+}
+
 export function strToTextContent(ob: string): TextContentInterface {
   return {
     type: 'text',
@@ -48,7 +53,11 @@ export function isImageContent(ob: ContentInterface | undefined): ob is ImageCon
   return ob !== undefined && ob !== null && (ob as ImageContentInterface).image_url !== undefined;
 }
 
-export type ContentInterface = TextContentInterface | ImageContentInterface;
+export function isReasoningContent(ob: ContentInterface | undefined): ob is ReasoningContentInterface {
+  return ob !== undefined && ob !== null && ob.type === 'reasoning';
+}
+
+export type ContentInterface = TextContentInterface | ImageContentInterface | ReasoningContentInterface;
 
 export interface MessageInterface {
   role: Role;

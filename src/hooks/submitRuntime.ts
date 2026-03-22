@@ -20,6 +20,7 @@ import { sendAck, sendCancel, parseProxySse, type ProxyConfig } from '@utils/pro
 import { cancelGeneration } from '@api/openrouter';
 import {
   appendToStreamingBuffer,
+  appendReasoningToStreamingBuffer,
   createStreamingContentHash,
   finalizeStreamingBuffer,
   initializeStreamingBuffer,
@@ -27,6 +28,7 @@ import {
   isStreamingContentHash,
   notifyStreamingUpdate,
 } from '@utils/streamingBuffer';
+import type { EventSourceDataInterface, ReasoningDetail } from '@type/api';
 import { getEffectiveStreamEnabled } from '@utils/streamSupport';
 import { useStreamEndStatusStore, type StreamEndReason } from '@store/stream-end-status-store';
 import * as swBridge from '@utils/swBridge';
@@ -84,6 +86,41 @@ const hasSystemMessages = (messages: MessageInterface[]): boolean =>
 const removeSystemMessages = (
   messages: MessageInterface[]
 ): MessageInterface[] => messages.filter((message) => message.role !== 'system');
+
+/**
+ * Extract reasoning text from an SSE event delta.
+ * Handles three formats:
+ *  1. delta.reasoning (simple string — most providers via OpenRouter)
+ *  2. delta.reasoning_content (DeepSeek-style)
+ *  3. delta.reasoning_details (structured array with type: "reasoning.text")
+ */
+const extractReasoningFromEvent = (event: EventSourceDataInterface): string => {
+  const delta = event.choices?.[0]?.delta;
+  if (!delta) return '';
+
+  // Format 1: simple reasoning string
+  if (delta.reasoning) return delta.reasoning;
+
+  // Format 2: DeepSeek reasoning_content
+  if (delta.reasoning_content) return delta.reasoning_content;
+
+  // Format 3: reasoning_details array
+  if (delta.reasoning_details && Array.isArray(delta.reasoning_details)) {
+    return delta.reasoning_details
+      .filter((d: ReasoningDetail) => d.type === 'reasoning.text' && d.text)
+      .map((d: ReasoningDetail) => d.text!)
+      .join('');
+  }
+
+  return '';
+};
+
+/** Write reasoning chunk to the streaming buffer (not the Zustand store). */
+const writeReasoningChunk = (targetNodeId: string, text: string): void => {
+  if (!text || !isBufferingNode(targetNodeId)) return;
+  appendReasoningToStreamingBuffer(targetNodeId, text);
+  notifyStreamingUpdate(targetNodeId);
+};
 
 const shouldRetryWithoutSystemMessages = (
   error: unknown,
@@ -465,7 +502,13 @@ export const executeSubmitStream = async ({
       }
 
       lastFinishReason = data.choices[0].finish_reason ?? 'stop';
-      writeChunkToStore(chatId, targetNodeId, data.choices[0].message.content);
+      // Extract reasoning from non-streaming response
+      const msg = data.choices[0].message;
+      const reasoningText = msg.reasoning ?? msg.reasoning_content ?? '';
+      writeChunkToStore(chatId, targetNodeId, msg.content);
+      if (reasoningText) {
+        writeReasoningChunk(targetNodeId, reasoningText);
+      }
       return;
     }
 
@@ -476,12 +519,22 @@ export const executeSubmitStream = async ({
       throw new Error(t('noApiKeyWarning'));
     }
 
-    const onChunk = (text: string, meta?: { generationId?: string }) => {
+    const onChunk = (text: string, meta?: { generationId?: string; reasoning?: string }) => {
       if (meta?.generationId && !capturedGenerationId) {
         capturedGenerationId = meta.generationId;
         setSessionCancelMeta(sessionId, { generationId: capturedGenerationId });
       }
-      queueChunkToStore(chatId, targetNodeId, text);
+      // Handle reasoning from SW path
+      if (meta?.reasoning) {
+        writeReasoningChunk(targetNodeId, meta.reasoning);
+      }
+      if (text) {
+        queueChunkToStore(chatId, targetNodeId, text);
+      }
+    };
+
+    const onReasoningChunk = (text: string) => {
+      writeReasoningChunk(targetNodeId, text);
     };
 
     // --- Path 1: SW available (with optional proxy) ---
@@ -717,18 +770,22 @@ export const executeSubmitStream = async ({
                   }
                 }
               }
+              let reasoningString = '';
               const resultString = llmParsed.events.reduce(
                 (output: string, current) => {
                   if (!current.choices?.[0]?.delta) return output;
                   if (current.choices[0]?.finish_reason) {
                     lastFinishReason = current.choices[0].finish_reason;
                   }
+                  const reasoning = extractReasoningFromEvent(current);
+                  if (reasoning) reasoningString += reasoning;
                   const content = current.choices[0]?.delta?.content ?? null;
                   if (content) output += content;
                   return output;
                 },
                 ''
               );
+              if (reasoningString) onReasoningChunk(reasoningString);
               if (resultString) {
                 onChunk(resultString);
                 dbBuffered += resultString;
@@ -747,15 +804,19 @@ export const executeSubmitStream = async ({
         // Flush remaining LLM partial
         if (llmPartial) {
           const llmFlushed = parseEventSource(llmPartial, true);
+          let flushReasoningString = '';
           const resultString = llmFlushed.events.reduce(
             (output: string, current) => {
               if (!current.choices?.[0]?.delta) return output;
+              const reasoning = extractReasoningFromEvent(current);
+              if (reasoning) flushReasoningString += reasoning;
               const content = current.choices[0]?.delta?.content ?? null;
               if (content) output += content;
               return output;
             },
             ''
           );
+          if (flushReasoningString) onReasoningChunk(flushReasoningString);
           if (resultString) {
             onChunk(resultString);
             dbBuffered += resultString;
@@ -823,16 +884,20 @@ export const executeSubmitStream = async ({
         }
         if (parsed.done || done) reading = false;
 
+        let reasoningString = '';
         const resultString = parsed.events.reduce((output: string, current) => {
           if (!current.choices?.[0]?.delta) return output;
           if (current.choices[0]?.finish_reason) {
             lastFinishReason = current.choices[0].finish_reason;
           }
+          const reasoning = extractReasoningFromEvent(current);
+          if (reasoning) reasoningString += reasoning;
           const content = current.choices[0]?.delta?.content ?? null;
           if (content) output += content;
           return output;
         }, '');
 
+        if (reasoningString) onReasoningChunk(reasoningString);
         if (resultString) onChunk(resultString);
       }
     } finally {

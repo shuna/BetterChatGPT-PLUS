@@ -97,6 +97,31 @@ function extractText(events) {
   return text;
 }
 
+/**
+ * Extract reasoning text from events.
+ * Supports three formats:
+ *  1. delta.reasoning (simple string)
+ *  2. delta.reasoning_content (DeepSeek-style)
+ *  3. delta.reasoning_details (structured array with type: "reasoning.text")
+ */
+function extractReasoning(events) {
+  let reasoning = '';
+  for (const evt of events) {
+    if (!evt.choices || !evt.choices[0] || !evt.choices[0].delta) continue;
+    const delta = evt.choices[0].delta;
+    if (delta.reasoning) {
+      reasoning += delta.reasoning;
+    } else if (delta.reasoning_content) {
+      reasoning += delta.reasoning_content;
+    } else if (delta.reasoning_details && Array.isArray(delta.reasoning_details)) {
+      for (const d of delta.reasoning_details) {
+        if (d.type === 'reasoning.text' && d.text) reasoning += d.text;
+      }
+    }
+  }
+  return reasoning;
+}
+
 /** Extract the last non-null finish_reason from events. */
 function extractFinishReason(events) {
   let reason = null;
@@ -332,6 +357,10 @@ async function handleStartStream(msg, port) {
             }
             const fr = extractFinishReason(llmParsed.events);
             if (fr) finishReason = fr;
+            const reasoning = extractReasoning(llmParsed.events);
+            if (reasoning) {
+              postToClient({ type: 'sw-chunk', requestId, text: '', reasoning, generationId });
+            }
             const text = extractText(llmParsed.events);
             if (text) {
               postToClient({ type: 'sw-chunk', requestId, text, generationId });
@@ -354,6 +383,10 @@ async function handleStartStream(msg, port) {
         const llmFlushed = parseEventSource(llmPartial, true);
         const fr = extractFinishReason(llmFlushed.events);
         if (fr) finishReason = fr;
+        const reasoning = extractReasoning(llmFlushed.events);
+        if (reasoning) {
+          postToClient({ type: 'sw-chunk', requestId, text: '', reasoning });
+        }
         const text = extractText(llmFlushed.events);
         if (text) {
           postToClient({ type: 'sw-chunk', requestId, text });
@@ -376,6 +409,10 @@ async function handleStartStream(msg, port) {
         }
         const fr = extractFinishReason(parsed.events);
         if (fr) finishReason = fr;
+        const reasoning = extractReasoning(parsed.events);
+        if (reasoning) {
+          postToClient({ type: 'sw-chunk', requestId, text: '', reasoning, generationId });
+        }
         const text = extractText(parsed.events);
         if (text) {
           postToClient({ type: 'sw-chunk', requestId, text, generationId });

@@ -20,6 +20,9 @@ import { useTranslation } from 'react-i18next';
 import { useModelType } from '@utils/modelLookup';
 import { TextContentInterface } from '@type/chat';
 import { useStreamingText } from '@hooks/useStreamingText';
+import { useStreamingReasoning } from '@hooks/useStreamingReasoning';
+import { isReasoningContent } from '@type/chat';
+import CollapsibleReasoning from './CollapsibleReasoning';
 
 const UnifiedMessageView = memo(
   ({
@@ -116,6 +119,12 @@ const UnifiedMessageView = memo(
     };
 
     const streamingText = useStreamingText(isGeneratingMessage ? nodeId : undefined);
+    const streamingReasoning = useStreamingReasoning(isGeneratingMessage ? nodeId : undefined);
+    // Resolve reasoning: from streaming buffer during generation, from persisted content otherwise
+    const persistedReasoning = Array.isArray(content)
+      ? content.filter(isReasoningContent).map((c) => c.text).join('')
+      : '';
+    const currentReasoning = streamingReasoning ?? persistedReasoning;
     const currentTextContent = streamingText ?? (content?.[0] && isTextContent(content[0]) ? content[0].text : '');
     const handleCopy = () => {
       navigator.clipboard.writeText(currentTextContent);
@@ -188,6 +197,12 @@ const UnifiedMessageView = memo(
           </div>
         ) : (
           <div className={contentSurfaceClass}>
+            {role === 'assistant' && currentReasoning && (
+              <CollapsibleReasoning
+                reasoning={currentReasoning}
+                isGenerating={isGeneratingMessage}
+              />
+            )}
             <div className={contentMinHeightClass}>
               <ContentBody
                 currentTextContent={currentTextContent}
