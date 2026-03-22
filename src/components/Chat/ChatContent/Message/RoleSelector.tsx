@@ -51,7 +51,7 @@ const RoleSelector = React.memo(
                     setInputRole(r);
                   } else {
                     if (!nodeId) return;
-                    updateNodeRole(currentChatIndex, nodeId, r, messageIndex);
+                    updateNodeRole(currentChatIndex, nodeId, r);
                   }
                   setDropDown(false);
                 }}

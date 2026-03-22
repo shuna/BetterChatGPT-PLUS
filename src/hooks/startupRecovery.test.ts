@@ -248,7 +248,7 @@ describe('Startup: corrupt branch tree recovery', () => {
 
     const node2Hash = state.chats[0].branchTree.nodes.n2.contentHash;
     expect(node2Hash.startsWith('__streaming:')).toBe(false);
-    expect(contentStore[node2Hash]?.content).toEqual([]);
+    expect((contentStore as Record<string, any>)[node2Hash]?.content).toEqual([]);
   });
 
   it('does not crash when branchTree nodes is null/undefined', () => {

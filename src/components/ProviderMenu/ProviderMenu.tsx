@@ -84,7 +84,7 @@ const ProviderMenu = ({
     setProviderEndpoint(s.selectedProvider, s.endpointInput);
     setApiVersion(s.apiVersionInput);
 
-    showToast(`${providerName}: ${t('provider.saved', '設定を保存しました')}`, 'success');
+    showToast(`${s.selectedProvider}: ${t('provider.saved', '設定を保存しました')}`, 'success');
   }, []);
 
   // Auto-save on unmount
