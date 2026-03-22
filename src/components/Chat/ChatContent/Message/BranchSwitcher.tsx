@@ -25,6 +25,8 @@ const BranchSwitcher = ({
   const currentIdx = siblings.findIndex((s) => s.id === nodeId);
   const total = siblings.length;
 
+  if (total <= 1) return null;
+
   const handlePrev = () => {
     if (currentIdx > 0) {
       switchBranchAtNode(chatIndex, siblings[currentIdx - 1].id);
