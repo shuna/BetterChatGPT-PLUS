@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import useStore from '@store/store';
 
-export type ToastStatus = 'success' | 'error' | 'warning';
+export type ToastStatus = 'success' | 'error' | 'warning' | 'info';
 
 const Toast = () => {
   const message = useStore((state) => state.toastMessage);
   const status = useStore((state) => state.toastStatus);
   const toastShow = useStore((state) => state.toastShow);
+  const duration = useStore((state) => state.toastDuration);
   const setToastShow = useStore((state) => state.setToastShow);
 
   const [timeoutID, setTimeoutID] = useState<number>();
@@ -15,20 +16,19 @@ const Toast = () => {
     if (toastShow) {
       window.clearTimeout(timeoutID);
 
-      // Warning and error toasts persist until manually dismissed
-      if (status === 'success') {
+      if (duration > 0) {
         const newTimeoutID = window.setTimeout(() => {
           setToastShow(false);
-        }, 5000);
+        }, duration);
 
         setTimeoutID(newTimeoutID);
       }
     }
-  }, [toastShow, status, message]);
+  }, [toastShow, status, message, duration]);
 
   return toastShow ? (
     <div
-      className={`flex fixed right-5 bottom-5 z-[1000] items-center w-3/4 md:w-full max-w-xs p-4 mb-4 text-gray-500 dark:text-gray-400 rounded-lg shadow-md border border-gray-400/30 animate-bounce`}
+      className={`flex fixed right-5 bottom-5 z-[1000] items-center w-3/4 md:w-full max-w-xs p-4 mb-4 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 rounded-lg shadow-md border border-gray-400/30 animate-bounce`}
       role='alert'
     >
       <StatusIcon status={status} />
@@ -54,6 +54,7 @@ const StatusIcon = ({ status }: { status: ToastStatus }) => {
     success: <CheckIcon />,
     error: <ErrorIcon />,
     warning: <WarningIcon />,
+    info: <InfoIcon />,
   };
   return statusToIcon[status] || null;
 };
@@ -131,6 +132,25 @@ const WarningIcon = () => (
       ></path>
     </svg>
     <span className='sr-only'>Warning icon</span>
+  </div>
+);
+
+const InfoIcon = () => (
+  <div className='inline-flex items-center justify-center flex-shrink-0 w-8 h-8 text-blue-500 bg-blue-100 rounded-lg dark:bg-blue-800 dark:text-blue-200'>
+    <svg
+      aria-hidden='true'
+      className='w-5 h-5'
+      fill='currentColor'
+      viewBox='0 0 20 20'
+      xmlns='http://www.w3.org/2000/svg'
+    >
+      <path
+        fillRule='evenodd'
+        d='M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z'
+        clipRule='evenodd'
+      ></path>
+    </svg>
+    <span className='sr-only'>Info icon</span>
   </div>
 );
 

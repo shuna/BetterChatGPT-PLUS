@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { toast } from 'react-toastify';
+import { showToast } from '@utils/showToast';
 import { ImportMode, importChatFromFile } from './importService';
 
 const ImportChat = () => {
@@ -35,9 +35,9 @@ const ImportChat = () => {
 
     importChatFromFile(file, translate, mode, mode === 'replace' ? includeSettings : true).then((result) => {
       if (result.success) {
-        toast.success(result.message);
+        showToast(result.message, 'success');
       } else {
-        toast.error(result.message, { autoClose: 15000 });
+        showToast(result.message, 'error', 15000);
       }
       setAlert({ message: result.message, success: result.success });
     });

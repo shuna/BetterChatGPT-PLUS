@@ -60,10 +60,11 @@ const testContext = vi.hoisted(() => {
   };
 });
 
-vi.mock('react-toastify', () => ({
-  toast: {
-    info: testContext.toastInfo,
-    warning: testContext.toastWarning,
+vi.mock('@utils/showToast', () => ({
+  showToast: (...args: unknown[]) => {
+    const [, status] = args;
+    if (status === 'info') testContext.toastInfo(...args);
+    if (status === 'warning') testContext.toastWarning(...args);
   },
 }));
 

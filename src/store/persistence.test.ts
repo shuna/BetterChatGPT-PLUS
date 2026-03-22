@@ -1,4 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('@utils/showToast', () => ({
+  showToast: vi.fn(),
+}));
 
 import { _defaultChatConfig, _defaultImageDetail } from '@constants/chat';
 import type { ChatInterface } from '@type/chat';

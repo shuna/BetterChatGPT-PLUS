@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { BranchTree } from '@type/chat';
 import { Node, Edge } from 'reactflow';
 import useStore from '@store/store';
+import { showToast } from '@utils/showToast';
 import type { ContentStoreData } from '@utils/contentStore';
 import { resolveContentText } from '@utils/contentStore';
 import type { WorkerInput, WorkerOutput } from './branchLayout.worker';
@@ -119,10 +120,7 @@ export function useMultiBranchEditorLayout(entries: MultiLayoutEntry[]) {
     setIsComputing(true);
     perfStart('layout-worker-roundtrip');
     const toastTimer = setTimeout(() => {
-      const store = useStore.getState();
-      store.setToastMessage('レイアウト計算に時間がかかっています...');
-      store.setToastStatus('warning');
-      store.setToastShow(true);
+      showToast('レイアウト計算に時間がかかっています...', 'warning');
     }, 3000);
 
     worker.onmessage = (e: MessageEvent<WorkerOutput>) => {
@@ -138,10 +136,7 @@ export function useMultiBranchEditorLayout(entries: MultiLayoutEntry[]) {
     worker.onerror = () => {
       clearTimeout(toastTimer);
       setIsComputing(false);
-      const store = useStore.getState();
-      store.setToastMessage('レイアウト計算に失敗しました');
-      store.setToastStatus('error');
-      store.setToastShow(true);
+      showToast('レイアウト計算に失敗しました', 'error');
     };
 
     worker.postMessage(input);

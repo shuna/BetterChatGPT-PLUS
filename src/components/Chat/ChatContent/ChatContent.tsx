@@ -18,7 +18,7 @@ import { MessageInterface, TextContentInterface } from '@type/chat';
 import countTokens, { limitMessageTokens } from '@utils/messageUtils';
 import { perfStart, perfEnd } from '@utils/perfTrace';
 import { defaultModel, reduceMessagesToTotalToken } from '@constants/chat';
-import { toast } from 'react-toastify';
+import { showToast } from '@utils/showToast';
 
 const EMPTY_MESSAGES: never[] = [];
 const SCROLL_ALIGN_TOLERANCE = 0.5;
@@ -181,8 +181,8 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
       const updatedChats = chats.slice();
       updatedChats[currentChatIndex] = { ...chats[currentChatIndex], messages: messagesLimited };
       setChats(updatedChats);
-      toast.dismiss();
-      toast.success(t('reduceMessagesSuccess', { count: removedMessagesCount }));
+      useStore.getState().setToastShow(false);
+      showToast(t('reduceMessagesSuccess', { count: removedMessagesCount }), 'success');
     }
   };
 
@@ -208,20 +208,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
             return;
           }
           const hiddenTokens = allTokens - limitedTokens;
-          const message = (
-            <div>
-              <span>
-                {t('hiddenMessagesWarning', { hiddenTokens, reduceMessagesToTotalToken })}
-              </span><br />
-              <button
-                onClick={handleReduceMessages}
-                className="px-2 py-1 bg-blue-500 text-white rounded"
-              >
-                {t('reduceMessagesButton')}
-              </button>
-            </div>
-          );
-          toast.error(message);
+          showToast(t('hiddenMessagesWarning', { hiddenTokens, reduceMessagesToTotalToken }), 'warning');
         });
       }
     }

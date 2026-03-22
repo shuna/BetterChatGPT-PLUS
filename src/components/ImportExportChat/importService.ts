@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { toast } from 'react-toastify';
+import { showToast } from '@utils/showToast';
 
 import useStore from '@store/store';
 import { createPartializedState } from '@store/store';
@@ -140,13 +140,14 @@ const warnUnsupportedModels = (chats: unknown[], t: Translator) => {
 
   if (unsupportedModels.length === 0) return false;
 
-  toast.warning(
+  showToast(
     t('notifications.unsupportedModels', {
       ns: 'import',
       models: unsupportedModels.join(', '),
     }) ||
       `Unsupported model(s): ${unsupportedModels.join(', ')}. Please add them in AI Provider Settings → Custom tab before importing.`,
-    { autoClose: 15000 }
+    'warning',
+    15000
   );
   return true;
 };
@@ -240,13 +241,14 @@ const importLegacyChats = (
   mergeChats(chatsToImport);
 
   if (removedChatsCount > 0) {
-    toast.info(
+    showToast(
       `${t('reduceMessagesSuccess', { count: removedChatsCount })}. ${t('notifications.chatsImported', {
         ns: 'import',
         imported: chatsToImport.length,
         total: originalParsedData.length,
       })}`,
-      { autoClose: 15000 }
+      'info',
+      15000
     );
   }
 
@@ -352,13 +354,14 @@ const importExportV1 = (
 
   if (removedChatsCount > 0 && parsedData.chats && parsedData.chats.length > 0) {
     const originalChats = originalParsedData.chats ?? [];
-    toast.info(
+    showToast(
       `${t('reduceMessagesSuccess', { count: removedChatsCount })}. ${t('notifications.chatsImported', {
         ns: 'import',
         imported: originalChats.length - removedChatsCount,
         total: originalChats.length,
       })}`,
-      { autoClose: 15000 }
+      'info',
+      15000
     );
   }
 
@@ -387,13 +390,14 @@ const importOpenAIData = (
   mergeChats(chats);
 
   if (removedChatsCount > 0) {
-    toast.info(
+    showToast(
       `${t('reduceMessagesSuccess', { count: removedChatsCount })}. ${t('notifications.chatsImported', {
         ns: 'import',
         imported: chats.length,
         total: originalParsedData.length,
       })}`,
-      { autoClose: 15000 }
+      'info',
+      15000
     );
   }
 

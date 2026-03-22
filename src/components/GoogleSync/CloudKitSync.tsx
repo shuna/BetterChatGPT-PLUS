@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createJSONStorage } from 'zustand/middleware';
 
@@ -24,6 +24,7 @@ import {
 import { saveChatData } from '@store/storage/IndexedDbStorage';
 import { STORE_VERSION } from '@store/version';
 import compressedStorage from '@store/storage/CompressedStorage';
+import { showToast } from '@utils/showToast';
 
 import TickIcon from '@icon/TickIcon';
 import RefreshIcon from '@icon/RefreshIcon';
@@ -88,23 +89,10 @@ const CloudKitSync = () => {
   const resetCloudSyncProvider = useCloudAuthStore((s) => s.resetCloudSyncProvider);
   const disconnectCloudSync = useCloudAuthStore((s) => s.disconnectCloudSync);
 
-  const setToastStatus = useStore((s) => s.setToastStatus);
-  const setToastMessage = useStore((s) => s.setToastMessage);
-  const setToastShow = useStore((s) => s.setToastShow);
-
   const [busy, setBusy] = useState(false);
   const popupRef = useRef<Window | null>(null);
 
   const config = getCloudKitConfig();
-
-  const showToast = useCallback(
-    (message: string, status: 'success' | 'error' | 'warning' = 'error') => {
-      setToastMessage(message);
-      setToastShow(true);
-      setToastStatus(status);
-    },
-    [setToastMessage, setToastShow, setToastStatus]
-  );
 
   // Auto-reconnect when returning to mounted component with confirmed target
   useEffect(() => {
@@ -139,7 +127,7 @@ const CloudKitSync = () => {
 
   const handleConnect = async () => {
     if (!config) {
-      showToast(t('error.config'));
+      showToast(t('error.config'), 'error');
       return;
     }
 
@@ -150,7 +138,7 @@ const CloudKitSync = () => {
 
     const popup = window.open(authUrl, 'cloudkit-auth', 'width=600,height=700');
     if (!popup) {
-      showToast(t('error.popupBlocked'));
+      showToast(t('error.popupBlocked'), 'error');
       setBusy(false);
       return;
     }
@@ -187,7 +175,7 @@ const CloudKitSync = () => {
           enableCloudKitPersistence();
           showToast(t('status.connected'), 'success');
         } catch {
-          showToast(t('error.auth'));
+          showToast(t('error.auth'), 'error');
           setSyncStatus('unauthenticated');
         }
         setBusy(false);
@@ -196,7 +184,7 @@ const CloudKitSync = () => {
 
       if (event.data?.type === 'cloudkit-auth-error') {
         cleanup();
-        showToast(t('error.auth'));
+        showToast(t('error.auth'), 'error');
         setBusy(false);
         return;
       }
@@ -208,7 +196,7 @@ const CloudKitSync = () => {
       if (settled) return;
       if (popup.closed) {
         cleanup();
-        showToast(t('error.cancelled'));
+        showToast(t('error.cancelled'), 'error');
         setBusy(false);
       }
     }, POPUP_CLOSED_POLL_MS);
@@ -217,7 +205,7 @@ const CloudKitSync = () => {
       if (settled) return;
       cleanup();
       popup.close();
-      showToast(t('error.timeout'));
+      showToast(t('error.timeout'), 'error');
       setBusy(false);
     }, AUTH_POPUP_TIMEOUT_MS);
   };
@@ -230,7 +218,7 @@ const CloudKitSync = () => {
     try {
       const storage = createCloudKitCloudStorage();
       if (!storage) {
-        showToast(t('error.auth'));
+        showToast(t('error.auth'), 'error');
         setSyncStatus('unauthenticated');
         setBusy(false);
         return;
@@ -267,7 +255,7 @@ const CloudKitSync = () => {
       setSyncStatus('synced');
       showToast(t('toast.pull'), 'success');
     } catch {
-      showToast(t('error.auth'));
+      showToast(t('error.auth'), 'error');
       setSyncStatus('unauthenticated');
     }
     setBusy(false);
@@ -284,7 +272,7 @@ const CloudKitSync = () => {
       setSyncStatus('synced');
       showToast(t('toast.push'), 'success');
     } catch {
-      showToast(t('error.auth'));
+      showToast(t('error.auth'), 'error');
       setSyncStatus('unauthenticated');
     }
     setBusy(false);

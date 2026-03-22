@@ -130,7 +130,7 @@ export interface BranchSlice {
   ) => void;
   activateFolderOverview: (folderId: string) => void;
 
-  updateNodeRole: (chatIndex: number, nodeId: string, role: Role, messageIndex?: number) => void;
+  updateNodeRole: (chatIndex: number, nodeId: string, role: Role) => void;
 
   ensureBranchTree: (chatIndex: number) => void;
   createBranch: (
@@ -359,7 +359,7 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     });
   },
 
-  updateNodeRole: (chatIndex, nodeId, role, messageIndex) => {
+  updateNodeRole: (chatIndex, nodeId, role) => {
     const chats = get().chats;
     if (!chats) return;
     const { chats: ensured, contentStore } = ensureBranchTreeState(
@@ -368,10 +368,13 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     // Resolve fallback nodeId (e.g. "0") to real UUID from activePath
     const tree = ensured[chatIndex].branchTree!;
     let resolvedId = nodeId;
-    if (!tree.nodes[nodeId] && messageIndex != null) {
-      resolvedId = tree.activePath[messageIndex];
+    if (!tree.nodes[nodeId]) {
+      const idx = parseInt(nodeId, 10);
+      if (!isNaN(idx) && tree.activePath[idx]) {
+        resolvedId = tree.activePath[idx];
+      }
     }
-    if (!resolvedId || !tree.nodes[resolvedId]) return;
+    if (!tree.nodes[resolvedId]) return;
     const updated = updateNodeRoleState(ensured, chatIndex, resolvedId, role, contentStore);
     get().applyBranchState(updated, contentStore);
   },

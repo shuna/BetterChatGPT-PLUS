@@ -399,10 +399,10 @@ export const rehydrateStoreState = (state: StoreState) => {
   if (repairedChatTitles.length > 0) {
     repaired = true;
     setTimeout(() => {
-      import('react-toastify').then(({ toast }) => {
-        toast.warn(
+      import('@utils/showToast').then(({ showToast }) => {
+        showToast(
           `${repairedChatTitles.length}件のチャットデータを修復しました: ${repairedChatTitles.join(', ')}`,
-          { autoClose: false }
+          'warning'
         );
       });
     }, 0);

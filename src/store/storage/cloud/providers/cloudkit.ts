@@ -24,6 +24,7 @@ import {
 import { saveChatData } from '@store/storage/IndexedDbStorage';
 import { STORE_VERSION } from '@store/version';
 import i18next from 'i18next';
+import { showToast } from '@utils/showToast';
 import type { CloudSyncProvider, CloudSyncTarget } from '../types';
 
 // --- Base64 helpers ---
@@ -77,9 +78,7 @@ const getCloudSyncTarget = (): CloudSyncTarget | null => {
 };
 
 const notifyCloudError = (message: string) => {
-  useStore.getState().setToastMessage(message);
-  useStore.getState().setToastShow(true);
-  useStore.getState().setToastStatus('error');
+  showToast(message, 'error');
 };
 
 const maybeUpdateToken = (newWebAuthToken?: string) => {
@@ -255,9 +254,7 @@ export const createCloudKitCloudProvider = <S>(): CloudSyncProvider<S> => ({
           const normalized = normalizeRemoteRecord(fetchResult.record);
           await hydrateFromServerRecord(fetchResult.record);
 
-          useStore.getState().setToastMessage(i18next.t('toast.conflict', { ns: 'cloudkit' }));
-          useStore.getState().setToastShow(true);
-          useStore.getState().setToastStatus('warning');
+          showToast(i18next.t('toast.conflict', { ns: 'cloudkit' }), 'warning');
 
           return {
             effectiveState: { state: normalized.state, version: normalized.version },

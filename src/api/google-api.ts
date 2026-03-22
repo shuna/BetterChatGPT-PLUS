@@ -3,6 +3,7 @@ import { decompress } from 'lz-string';
 import { StorageValue } from 'zustand/middleware';
 import useStore from '@store/store';
 import useCloudAuthStore from '@store/cloud-auth-store';
+import { showToast } from '@utils/showToast';
 import {
   GoogleTokenInfo,
   GoogleFileResource,
@@ -193,9 +194,7 @@ export const updateDriveFileDebounced = debounce(
       useCloudAuthStore.getState().setSyncStatus('synced');
       return result;
     } catch (e: unknown) {
-      useStore.getState().setToastMessage((e as Error).message);
-      useStore.getState().setToastShow(true);
-      useStore.getState().setToastStatus('error');
+      showToast((e as Error).message, 'error');
       useCloudAuthStore.getState().setSyncStatus(
         isGoogleAuthError(e) ? 'unauthenticated' : 'synced'
       );

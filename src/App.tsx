@@ -9,8 +9,6 @@ import useOpenRouterVerification from '@hooks/useOpenRouterVerification';
 import useIosStatusBarScroll from '@hooks/useIosStatusBarScroll';
 import useAppBootstrap from '@hooks/useAppBootstrap';
 import Toast from '@components/Toast';
-import { ToastContainer } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
 import LegacyCustomModelsBanner from '@components/LegacyCustomModelsBanner';
 import MigrationProgressBanner from '@components/MigrationProgressBanner';
 import OnboardingModal from '@components/Onboarding/OnboardingModal';
@@ -37,7 +35,6 @@ function App() {
       <div className={`flex h-full flex-1 flex-col`}>
         <Chat />
         <Toast />
-        <ToastContainer />
       </div>
     </div>
   );
