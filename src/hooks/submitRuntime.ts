@@ -344,10 +344,10 @@ type ExecuteSubmitStreamParams = {
   t: (key: string) => string;
 };
 
-/** Resolve proxy config from store, returns undefined if not configured */
+/** Resolve proxy config from store, returns undefined if not configured or disabled */
 function getProxyConfig(): ProxyConfig | undefined {
-  const { proxyEndpoint, proxyAuthToken } = useStore.getState();
-  if (!proxyEndpoint) return undefined;
+  const { proxyEnabled, proxyEndpoint, proxyAuthToken } = useStore.getState();
+  if (!proxyEnabled || !proxyEndpoint) return undefined;
   return {
     endpoint: proxyEndpoint.replace(/\/+$/, ''),
     authToken: proxyAuthToken || undefined,

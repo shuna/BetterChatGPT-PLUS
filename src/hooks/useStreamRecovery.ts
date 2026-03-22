@@ -120,8 +120,8 @@ async function tryProxyRecovery(
   currentText: string,
   signal: AbortSignal
 ): Promise<string | null> {
-  const { proxyEndpoint, proxyAuthToken } = useStore.getState();
-  if (!proxyEndpoint || !record.proxySessionId) return null;
+  const { proxyEnabled, proxyEndpoint, proxyAuthToken } = useStore.getState();
+  if (!proxyEnabled || !proxyEndpoint || !record.proxySessionId) return null;
 
   const config: ProxyConfig = {
     endpoint: proxyEndpoint.replace(/\/+$/, ''),

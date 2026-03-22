@@ -2,19 +2,29 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import PopupModal from '@components/PopupModal';
+import Toggle from '@components/Toggle';
+import { SettingsGroup } from './SettingsMenu';
 
 export const ProxySettingsInline = () => {
   const { t } = useTranslation();
 
+  const setProxyEnabled = useStore((state) => state.setProxyEnabled);
   const setProxyEndpoint = useStore((state) => state.setProxyEndpoint);
   const setProxyAuthToken = useStore((state) => state.setProxyAuthToken);
 
+  const [isChecked, setIsChecked] = useState<boolean>(
+    useStore.getState().proxyEnabled
+  );
   const [endpoint, setEndpoint] = useState<string>(
     useStore.getState().proxyEndpoint
   );
   const [authToken, setAuthToken] = useState<string>(
     useStore.getState().proxyAuthToken
   );
+
+  useEffect(() => {
+    setProxyEnabled(isChecked);
+  }, [isChecked]);
 
   useEffect(() => {
     const trimmed = endpoint.trim();
@@ -34,33 +44,48 @@ export const ProxySettingsInline = () => {
     'w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm text-gray-900 dark:border-gray-600 dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500';
 
   return (
-    <div className='flex flex-col gap-4'>
-      <div>
-        <label className='block text-sm font-medium text-gray-900 dark:text-white mb-1'>
-          {t('proxyEndpoint') as string}
-        </label>
-        <input
-          type='url'
-          className={inputClass}
-          placeholder={t('proxyEndpointPlaceholder') as string}
-          value={endpoint}
-          onChange={(e) => setEndpoint(e.target.value)}
-          aria-label={t('proxyEndpoint') as string}
+    <div className='flex flex-col gap-5'>
+      <p className='text-sm text-gray-500 dark:text-gray-400 px-4'>
+        {t('proxyDescription') as string}
+      </p>
+      <SettingsGroup label={t('settingsSection.proxyConnection')}>
+        <Toggle
+          label={t('proxyEnabled') as string}
+          isChecked={isChecked}
+          setIsChecked={setIsChecked}
         />
-      </div>
-      <div>
-        <label className='block text-sm font-medium text-gray-900 dark:text-white mb-1'>
-          {t('proxyAuthToken') as string}
-        </label>
-        <input
-          type='password'
-          className={inputClass}
-          placeholder={t('proxyAuthTokenPlaceholder') as string}
-          value={authToken}
-          onChange={(e) => setAuthToken(e.target.value)}
-          aria-label={t('proxyAuthToken') as string}
-        />
-      </div>
+        <div className='px-4 py-3'>
+          <label className='block text-sm font-medium text-gray-900 dark:text-gray-300 mb-1'>
+            {t('proxyEndpoint') as string}
+          </label>
+          <input
+            type='url'
+            className={inputClass}
+            placeholder={t('proxyEndpointPlaceholder') as string}
+            value={endpoint}
+            onChange={(e) => setEndpoint(e.target.value)}
+            aria-label={t('proxyEndpoint') as string}
+
+          />
+        </div>
+      </SettingsGroup>
+
+      <SettingsGroup label={t('settingsSection.proxyAuth')}>
+        <div className='px-4 py-3'>
+          <label className='block text-sm font-medium text-gray-900 dark:text-gray-300 mb-1'>
+            {t('proxyAuthToken') as string}
+          </label>
+          <input
+            type='password'
+            className={inputClass}
+            placeholder={t('proxyAuthTokenPlaceholder') as string}
+            value={authToken}
+            onChange={(e) => setAuthToken(e.target.value)}
+            aria-label={t('proxyAuthToken') as string}
+
+          />
+        </div>
+      </SettingsGroup>
     </div>
   );
 };
@@ -92,9 +117,13 @@ const ProxySettingsPopup = ({
 }) => {
   const { t } = useTranslation();
 
+  const setProxyEnabled = useStore((state) => state.setProxyEnabled);
   const setProxyEndpoint = useStore((state) => state.setProxyEndpoint);
   const setProxyAuthToken = useStore((state) => state.setProxyAuthToken);
 
+  const [isChecked, setIsChecked] = useState<boolean>(
+    useStore.getState().proxyEnabled
+  );
   const [endpoint, setEndpoint] = useState<string>(
     useStore.getState().proxyEndpoint
   );
@@ -103,6 +132,7 @@ const ProxySettingsPopup = ({
   );
 
   const handleSave = () => {
+    setProxyEnabled(isChecked);
     setProxyEndpoint(endpoint.trim());
     setProxyAuthToken(authToken.trim());
     setIsModalOpen(false);
@@ -118,6 +148,11 @@ const ProxySettingsPopup = ({
       handleConfirm={handleSave}
     >
       <div className='p-6 border-b border-gray-200 dark:border-gray-600 flex flex-col gap-3 w-[90vw] max-w-full'>
+        <Toggle
+          label={t('proxyEnabled') as string}
+          isChecked={isChecked}
+          setIsChecked={setIsChecked}
+        />
         <div>
           <label className='block text-sm font-medium text-gray-900 dark:text-white mb-1'>
             {t('proxyEndpoint') as string}
@@ -129,6 +164,7 @@ const ProxySettingsPopup = ({
             value={endpoint}
             onChange={(e) => setEndpoint(e.target.value)}
             aria-label={t('proxyEndpoint') as string}
+
           />
         </div>
         <div>
@@ -142,6 +178,7 @@ const ProxySettingsPopup = ({
             value={authToken}
             onChange={(e) => setAuthToken(e.target.value)}
             aria-label={t('proxyAuthToken') as string}
+
           />
         </div>
       </div>

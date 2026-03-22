@@ -55,10 +55,12 @@
   "enterToSubmit": "Enterキーを押して送信",
   "animateBubbleNavigation": "アニメーション効果",
   "submitPlaceholder": "メッセージを入力するか、[/] をクリックしてプロンプトを表示します...",
-  "proxySettings": "ストリームプロキシ",
-  "proxyEndpoint": "プロキシURL",
-  "proxyEndpointPlaceholder": "https://stream-proxy.example.com",
-  "proxyAuthToken": "プロキシ認証トークン",
+  "proxyDescription": "AIの応答ストリームを中継サーバー経由で受信します。ネットワークが途切れた場合に、生成された応答を復旧できる場合があります。",
+  "proxySettings": "ストリーム中継",
+  "proxyEnabled": "ストリーム中継を使用",
+  "proxyEndpoint": "中継サーバーURL",
+  "proxyEndpointPlaceholder": "https://stream-relay.example.com",
+  "proxyAuthToken": "認証トークン",
   "proxyAuthTokenPlaceholder": "オプション: Bearerトークン",
   "tokenCostModelNotRegistered": "料金不明: モデル未登録",
   "tokenCostNoPricingData": "料金不明: 料金データなし",
@@ -112,7 +114,7 @@
     "general": "全般",
     "chatConfig": "チャット設定",
     "providers": "AIプロバイダー",
-    "proxy": "プロキシ",
+    "proxy": "ストリーム中継",
     "prompts": "プロンプト",
     "data": "データ"
   },
@@ -122,7 +124,9 @@
     "display": "表示",
     "rendering": "レンダリング",
     "features": "機能",
-    "dangerZone": "危険な操作"
+    "dangerZone": "危険な操作",
+    "proxyConnection": "接続",
+    "proxyAuth": "認証"
   },
   "settingsLabel": {
     "language": "言語",
@@ -134,7 +138,7 @@
   "streamingMarkdownPolicy.never": "受信中OFF（省電力）",
   "stopGenerating": "生成を停止",
   "retry": "再試行",
-  "recoverFromProxy": "プロキシからリカバリ",
+  "recoverFromProxy": "中継サーバーからリカバリ",
   "storageQuotaExceeded": "保存容量の上限に達したため、保存できませんでした",
   "searchDisabledDuringGeneration": "生成中...",
   "onboarding": {

@@ -227,17 +227,17 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
 
   const { error, handleRetry } = useSubmit();
   const lastSubmitMode = useStore((state) => state.lastSubmitMode);
-  const proxyEndpoint = useStore((state) => state.proxyEndpoint);
+  const proxyActive = useStore((state) => state.proxyEnabled && !!state.proxyEndpoint);
   const setLastSubmitContext = useStore((state) => state.setLastSubmitContext);
   const [hasPendingRecords, setHasPendingRecords] = useState(false);
 
   useEffect(() => {
-    if (error && proxyEndpoint) {
+    if (error && proxyActive) {
       getAllPending().then((records) => setHasPendingRecords(records.length > 0)).catch(() => setHasPendingRecords(false));
     } else {
       setHasPendingRecords(false);
     }
-  }, [error, proxyEndpoint]);
+  }, [error, proxyActive]);
 
   // Scroller refs — simplified from Virtuoso's dual-ref pattern
   const scrollerRef = useRef<HTMLDivElement>(null);

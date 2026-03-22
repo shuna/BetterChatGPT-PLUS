@@ -69,10 +69,12 @@
   "exportVisibleBranchOnly": "Include only the currently visible branch",
   "enterToSubmit": "Enter to submit",
   "animateBubbleNavigation": "Animation effects",
-  "proxySettings": "Stream Proxy",
-  "proxyEndpoint": "Proxy Endpoint URL",
-  "proxyEndpointPlaceholder": "https://stream-proxy.example.com",
-  "proxyAuthToken": "Proxy Auth Token",
+  "proxyDescription": "Route AI response streams through a relay server. May allow recovery of generated responses when the network connection is interrupted.",
+  "proxySettings": "Stream Relay",
+  "proxyEnabled": "Use Stream Relay",
+  "proxyEndpoint": "Relay Server URL",
+  "proxyEndpointPlaceholder": "https://stream-relay.example.com",
+  "proxyAuthToken": "Auth Token",
   "proxyAuthTokenPlaceholder": "Optional bearer token",
   "submitPlaceholder": "Type a message or click [/] for prompts...",
   "stopNonStreamGenerationWarning": "Stopping generation is not recommended for non-stream models. Only use it if UI is stuck. Do you want to proceed?",
@@ -120,7 +122,7 @@
     "general": "General",
     "chatConfig": "Chat Config",
     "providers": "AI Providers",
-    "proxy": "Proxy",
+    "proxy": "Stream Relay",
     "prompts": "Prompts",
     "data": "Data"
   },
@@ -130,7 +132,9 @@
     "display": "Display",
     "rendering": "Rendering",
     "features": "Features",
-    "dangerZone": "Danger Zone"
+    "dangerZone": "Danger Zone",
+    "proxyConnection": "Connection",
+    "proxyAuth": "Authentication"
   },
   "settingsLabel": {
     "language": "Language",
@@ -142,7 +146,7 @@
   "streamingMarkdownPolicy.never": "Power saver",
   "stopGenerating": "Stop generating",
   "retry": "Retry",
-  "recoverFromProxy": "Recover from proxy",
+  "recoverFromProxy": "Recover from relay",
   "storageQuotaExceeded": "Storage quota exceeded. Your changes could not be saved",
   "searchDisabledDuringGeneration": "Generating...",
   "onboarding": {
