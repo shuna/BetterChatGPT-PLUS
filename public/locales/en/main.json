@@ -47,6 +47,15 @@
   "openrouterVerificationPending": "OpenRouter verified usage will be checked shortly.",
   "openrouterVerificationChecking": "Checking OpenRouter verified usage...",
   "openrouterVerificationFailed": "OpenRouter verified usage is not available yet.",
+  "branchEditorMenu": {
+    "view": "View",
+    "edit": "Edit",
+    "nodeSearch": "Node Search",
+    "pruneHiddenNodes": "Delete Hidden Nodes",
+    "pruneConfirm": "Delete all hidden nodes? This can be undone with Undo.",
+    "undo": "Undo",
+    "redo": "Redo"
+  },
   "displayChatSize": "Display chat size in title",
   "showDebugPanel": "Show debug panel",
   "debugPanel": "Debug",

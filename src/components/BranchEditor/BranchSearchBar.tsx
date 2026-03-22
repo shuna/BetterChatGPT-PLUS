@@ -59,7 +59,16 @@ const BranchSearchBar = ({ entries }: { entries: MultiLayoutEntry[] }) => {
   );
 
   return (
-    <div className='absolute top-2 right-2 z-20 flex items-center gap-1 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg px-2 py-1.5'>
+    <div className='react-flow__panel !bg-white dark:!bg-gray-800 !border !border-gray-300 dark:!border-gray-600 !rounded-lg !shadow-lg flex items-center gap-1 px-2 py-1.5' style={{ position: 'absolute', right: 0, top: 4 }}>
+      {/* Scope toggle */}
+      <button
+        onClick={toggleSearchScope}
+        className='text-[10px] px-1.5 py-0.5 mr-0.5 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 whitespace-nowrap'
+        title={searchScope === 'all' ? '全ノード検索中' : 'アクティブパスのみ'}
+      >
+        {searchScope === 'all' ? '全体' : 'パス'}
+      </button>
+
       <input
         ref={inputRef}
         type='text'
@@ -69,15 +78,6 @@ const BranchSearchBar = ({ entries }: { entries: MultiLayoutEntry[] }) => {
         placeholder='検索...'
         className='w-48 text-sm bg-transparent outline-none text-gray-800 dark:text-gray-200 placeholder-gray-400'
       />
-
-      {/* Scope toggle */}
-      <button
-        onClick={toggleSearchScope}
-        className='text-[10px] px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 whitespace-nowrap'
-        title={searchScope === 'all' ? '全ノード検索中' : 'アクティブパスのみ'}
-      >
-        {searchScope === 'all' ? '全体' : 'パス'}
-      </button>
 
       {/* Result count */}
       <span className='text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap min-w-[3rem] text-center'>
