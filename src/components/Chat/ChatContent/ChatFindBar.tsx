@@ -15,9 +15,41 @@ type SearchTarget = {
 };
 
 /**
+ * Scroll a mark element into view within the given scroller only,
+ * without affecting any ancestor scroll containers (prevents the
+ * Mobile Safari keyboard from pushing the header off-screen).
+ */
+function scrollMarkIntoView(
+  mark: HTMLElement,
+  scroller: HTMLElement | null
+) {
+  if (!scroller) {
+    // Fallback: native, but constrained
+    mark.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    return;
+  }
+
+  const scrollerRect = scroller.getBoundingClientRect();
+  const markRect = mark.getBoundingClientRect();
+
+  // Target: centre the mark vertically inside the scroller
+  const markCenterInScroller =
+    markRect.top - scrollerRect.top + scroller.scrollTop + markRect.height / 2;
+  const desiredScrollTop = markCenterInScroller - scrollerRect.height / 2;
+
+  scroller.scrollTo({
+    top: Math.max(0, desiredScrollTop),
+    behavior: 'smooth',
+  });
+}
+
+/**
  * Find-in-page search bar for chat content.
  * Walks text nodes inside the scroller, wraps matches with <mark>, and
  * provides prev/next navigation.
+ *
+ * On mobile the bar uses fixed positioning so that the iOS virtual keyboard
+ * cannot push it off-screen.
  */
 const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -27,9 +59,45 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
   const marksRef = useRef<HTMLElement[]>([]);
 
-  // Focus on mount
+  // Focus on mount (preventScroll avoids Safari page-level scroll)
   useEffect(() => {
-    inputRef.current?.focus();
+    inputRef.current?.focus({ preventScroll: true });
+  }, []);
+
+  // ---- Mobile Safari: prevent window scroll while the find-bar input
+  //      is focused (keyboard visible).  The iOS status-bar-tap hack makes
+  //      the window scrollable by 1 px; Safari's auto-scroll on keyboard
+  //      appearance can scroll the page away from 1 → 0, pushing the
+  //      header off-screen.  We pin it back immediately.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    let prevHeight = vv.height;
+
+    const onResize = () => {
+      const delta = vv.height - prevHeight;
+      prevHeight = vv.height;
+
+      // Keyboard appeared (viewport shrank significantly)
+      if (delta < -50) {
+        const active = document.activeElement;
+        if (
+          active instanceof HTMLElement &&
+          active.closest('[data-chat-find-bar]')
+        ) {
+          // Restore the 1 px scroll offset the status-bar-tap hook relies on
+          requestAnimationFrame(() => {
+            if (window.scrollY !== 1) {
+              window.scrollTo(0, 1);
+            }
+          });
+        }
+      }
+    };
+
+    vv.addEventListener('resize', onResize);
+    return () => vv.removeEventListener('resize', onResize);
   }, []);
 
   const clearHighlights = useCallback(() => {
@@ -119,7 +187,7 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
       if (marks.length > 0) {
         setCurrentIndex(0);
         marks[0].classList.add(MARK_ACTIVE_CLASS);
-        marks[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+        scrollMarkIntoView(marks[0], scrollerRef.current);
       } else {
         setCurrentIndex(-1);
       }
@@ -147,10 +215,10 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
         marks[currentIndex].classList.remove(MARK_ACTIVE_CLASS);
       }
       marks[newIndex].classList.add(MARK_ACTIVE_CLASS);
-      marks[newIndex].scrollIntoView({ block: 'center', behavior: 'smooth' });
+      scrollMarkIntoView(marks[newIndex], scrollerRef.current);
       setCurrentIndex(newIndex);
     },
-    [currentIndex]
+    [currentIndex, scrollerRef]
   );
 
   const goNext = useCallback(() => {
@@ -180,7 +248,7 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
   return (
     <div
       data-chat-find-bar
-      className='absolute top-0 left-0 right-0 z-40 flex items-center gap-1.5 bg-white dark:bg-gray-800 border-b border-gray-300 dark:border-gray-600 shadow-md px-3 py-2'
+      className='fixed md:absolute top-0 left-0 right-0 z-50 md:z-40 flex items-center gap-1.5 bg-white dark:bg-gray-800 border-b border-gray-300 dark:border-gray-600 shadow-md px-3 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:pt-2'
     >
       <input
         ref={inputRef}
