@@ -36,6 +36,7 @@
   "description": "Weavelet Canvas is a visual workspace for AI conversations with branching, editing, and comparison tools.",
   "scripts": {
     "dev": "vite",
+    "dev:mock-proxy": "node scripts/mock-stream-proxy.cjs",
     "build": "tsc && vite build",
     "test": "vitest run",
     "preview": "vite preview",
