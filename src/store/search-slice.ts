@@ -4,6 +4,7 @@ import { buildPathToLeaf } from '@utils/branchUtils';
 
 export interface SearchSlice {
   searchQuery: string;
+  searchHistory: string[];
   searchScope: 'all' | 'activePath';
   searchResults: SearchResult[];
   currentResultIndex: number;
@@ -12,6 +13,8 @@ export interface SearchSlice {
   currentResultNodeId: string | null;
 
   setSearchQuery: (q: string) => void;
+  saveSearchQueryToHistory: (query?: string) => void;
+  clearSearchHistory: () => void;
   setSearchResults: (results: SearchResult[]) => void;
   toggleSearchScope: () => void;
   nextResult: () => void;
@@ -23,6 +26,7 @@ export interface SearchSlice {
 
 export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
   searchQuery: '',
+  searchHistory: [],
   searchScope: 'all',
   searchResults: [],
   currentResultIndex: -1,
@@ -34,17 +38,44 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
     set({ searchQuery: q });
   },
 
+  saveSearchQueryToHistory: (query) => {
+    const normalized = (query ?? get().searchQuery).trim();
+    if (!normalized) return;
+
+    const nextHistory = [
+      normalized,
+      ...get().searchHistory.filter((entry) => entry !== normalized),
+    ].slice(0, 20);
+
+    set({ searchHistory: nextHistory });
+  },
+
+  clearSearchHistory: () => {
+    set({ searchHistory: [] });
+  },
+
   setSearchResults: (results) => {
+    const previousResultNodeId = get().currentResultNodeId;
     const matchedNodeIds = new Set(results.map((r) => r.nodeId));
-    const currentResultIndex = results.length > 0 ? 0 : -1;
+    const preservedIndex = previousResultNodeId
+      ? results.findIndex((result) => result.nodeId === previousResultNodeId)
+      : -1;
+    const currentResultIndex =
+      results.length === 0
+        ? -1
+        : preservedIndex >= 0
+          ? preservedIndex
+          : 0;
     const currentResultNodeId =
       currentResultIndex >= 0 ? results[currentResultIndex].nodeId : null;
+    const shouldNavigateToCurrentResult =
+      currentResultNodeId !== null && currentResultNodeId !== previousResultNodeId;
 
     set({ searchResults: results, matchedNodeIds, currentResultIndex, currentResultNodeId });
 
-    if (currentResultNodeId) {
+    if (shouldNavigateToCurrentResult) {
       get().setBranchEditorFocusNodeId(currentResultNodeId);
-      navigateToResult(get, results[0]);
+      navigateToResult(get, results[currentResultIndex]);
     }
   },
 
@@ -55,6 +86,7 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
   nextResult: () => {
     const { searchResults, currentResultIndex } = get();
     if (searchResults.length === 0) return;
+    get().saveSearchQueryToHistory();
     const next = (currentResultIndex + 1) % searchResults.length;
     const result = searchResults[next];
     set({ currentResultIndex: next, currentResultNodeId: result.nodeId });
@@ -65,6 +97,7 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
   prevResult: () => {
     const { searchResults, currentResultIndex } = get();
     if (searchResults.length === 0) return;
+    get().saveSearchQueryToHistory();
     const prev = (currentResultIndex - 1 + searchResults.length) % searchResults.length;
     const result = searchResults[prev];
     set({ currentResultIndex: prev, currentResultNodeId: result.nodeId });
@@ -77,6 +110,7 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
   },
 
   closeSearch: () => {
+    get().saveSearchQueryToHistory();
     set({
       isSearchOpen: false,
       searchQuery: '',

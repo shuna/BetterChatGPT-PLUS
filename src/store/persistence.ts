@@ -59,6 +59,7 @@ export type PersistedStoreState = Omit<
   | 'proxyEndpoint'
   | 'proxyAuthToken'
   | 'showDebugPanel'
+  | 'searchHistory'
   | 'verifiedStats'
   | 'pendingVerifications'
   >,
@@ -90,6 +91,7 @@ const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'splitPanelRatio', 'splitPanelSwapped', 'chatActiveView',
   'proxyEndpoint', 'proxyAuthToken',
   'showDebugPanel',
+  'searchHistory',
   'verifiedStats',
   'pendingVerifications',
 ];
@@ -107,6 +109,7 @@ const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
   'splitPanelRatio', 'splitPanelSwapped', 'chatActiveView',
   'proxyEndpoint', 'proxyAuthToken',
   'showDebugPanel',
+  'searchHistory',
   'verifiedStats',
   'pendingVerifications',
 ];
@@ -247,6 +250,7 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     proxyEndpoint: state.proxyEndpoint,
     proxyAuthToken: state.proxyAuthToken,
     showDebugPanel: state.showDebugPanel,
+    searchHistory: state.searchHistory,
     verifiedStats: state.verifiedStats,
     pendingVerifications: state.pendingVerifications,
   };
@@ -293,6 +297,7 @@ function buildLocalStoragePartializedState(
     proxyEndpoint: state.proxyEndpoint,
     proxyAuthToken: state.proxyAuthToken,
     showDebugPanel: state.showDebugPanel,
+    searchHistory: state.searchHistory,
     verifiedStats: state.verifiedStats,
     pendingVerifications: state.pendingVerifications,
   };
