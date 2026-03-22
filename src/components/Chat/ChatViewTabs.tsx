@@ -5,6 +5,8 @@ import useStore from '@store/store';
 import BranchIcon from '@icon/BranchIcon';
 import MenuIcon from '@icon/MenuIcon';
 import ConfigMenu from '@components/ConfigMenu';
+import { CapabilityIconsInline } from '@components/ConfigMenu/fields';
+import { getModelCapabilities, useModelCapabilities } from '@utils/modelLookup';
 import { ChatInterface, ChatView, ConfigInterface, ImageDetail, isSplitView } from '@type/chat';
 import { _defaultChatConfig } from '@constants/chat';
 import { ModelOptions } from '@type/chat';
@@ -171,7 +173,12 @@ const ChatViewTabs = ({
                   setIsModelDropdownOpen(!isModelDropdownOpen);
                 }}
               >
-                <span ref={modelRef} className='truncate'>{t('model')}: {getModelDisplayName(chat.config.model)}</span>
+                <span className='truncate'>{t('model')}: {getModelDisplayName(chat.config.model)}</span>
+                <CapabilityIconsInline
+                  reasoning={getModelCapabilities(chat.config.model, chat.config.providerId).reasoning}
+                  vision={getModelCapabilities(chat.config.model, chat.config.providerId).vision}
+                  audio={getModelCapabilities(chat.config.model, chat.config.providerId).audio}
+                />
                 <svg className='w-3 h-3 ml-1' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
                   <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
                 </svg>
@@ -183,19 +190,23 @@ const ChatViewTabs = ({
                       {t('provider.noModelSelected', 'モデル未選択')}
                     </div>
                   ) : (
-                    favoriteModels.map((fav) => (
-                      <div
-                        key={`${fav.providerId}-${fav.modelId}`}
-                        className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                          chat.config.model === fav.modelId
-                            ? 'bg-gray-100 dark:bg-gray-700 font-medium'
-                            : ''
-                        }`}
-                        onClick={() => handleModelChange(fav.modelId, fav.providerId)}
-                      >
-                        {fav.modelId} ({providers[fav.providerId]?.name || fav.providerId})
-                      </div>
-                    ))
+                    favoriteModels.map((fav) => {
+                      const caps = getModelCapabilities(fav.modelId, fav.providerId);
+                      return (
+                        <div
+                          key={`${fav.providerId}-${fav.modelId}`}
+                          className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center ${
+                            chat.config.model === fav.modelId
+                              ? 'bg-gray-100 dark:bg-gray-700 font-medium'
+                              : ''
+                          }`}
+                          onClick={() => handleModelChange(fav.modelId, fav.providerId)}
+                        >
+                          <span className='truncate flex-1'>{fav.modelId} ({providers[fav.providerId]?.name || fav.providerId})</span>
+                          <span className='ml-auto shrink-0'><CapabilityIconsInline reasoning={caps.reasoning} vision={caps.vision} audio={caps.audio} /></span>
+                        </div>
+                      );
+                    })
                   )}
                 </div>
               )}

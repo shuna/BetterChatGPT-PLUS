@@ -1,19 +1,27 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
 import { ConfigInterface, ImageDetail, ReasoningEffort } from '@type/chat';
-import { getModelContextInfo, useModelSupportsReasoning } from '@utils/modelLookup';
+import { getModelContextInfo, useModelSupportsReasoning, useModelCapabilities } from '@utils/modelLookup';
 import { ModelOptions } from '@type/chat';
 import { isModelStreamSupported, normalizeConfigStream } from '@utils/streamSupport';
 import { clampCompletionTokens, getMaxCompletionTokensForContext } from '@utils/tokenBudget';
+import { _defaultChatConfig } from '@constants/chat';
 import useStore from '@store/store';
 import { ProviderId } from '@type/provider';
 import {
+  CapabilityBadges,
   DarkSelectField,
-  FieldDescription,
   FieldLabel,
+  FieldLabelWithInfo,
+  InfoTooltip,
   RangeField,
+  ResetButton,
+  SegmentedControl,
 } from './fields';
+
+const DEFAULT_REASONING_BUDGET = 8192;
+const DEFAULT_REASONING_EFFORT: ReasoningEffort = 'medium';
 
 const ConfigMenu = ({
   setIsModalOpen,
@@ -41,11 +49,13 @@ const ConfigMenu = ({
   );
   const [_imageDetail, _setImageDetail] = useState<ImageDetail>(imageDetail);
   const [_stream, _setStream] = useState<boolean>(config.stream !== false);
-  const [_reasoningEffort, _setReasoningEffort] = useState<ReasoningEffort | undefined>(config.reasoning_effort);
-  const [_reasoningBudget, _setReasoningBudget] = useState<number>(config.reasoning_budget_tokens ?? 0);
+  const [_reasoningEffort, _setReasoningEffort] = useState<ReasoningEffort | undefined>(config.reasoning_effort ?? DEFAULT_REASONING_EFFORT);
+  const [_reasoningBudget, _setReasoningBudget] = useState<number>(config.reasoning_budget_tokens ?? DEFAULT_REASONING_BUDGET);
   const { t } = useTranslation('model');
   const isStreamSupported = isModelStreamSupported(_model, _providerId);
   const reasoningSupported = useModelSupportsReasoning(_model, _providerId);
+  const capabilities = useModelCapabilities(_model, _providerId);
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
     if (!isStreamSupported && _stream) {
@@ -53,7 +63,12 @@ const ConfigMenu = ({
     }
   }, [isStreamSupported, _stream]);
 
-  const handleConfirm = () => {
+  // Auto-save on every change
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
     const modelContextLength = getModelContextInfo(_model, _providerId).contextLength;
     setConfig(normalizeConfigStream({
       max_tokens: clampCompletionTokens(_maxToken, modelContextLength),
@@ -68,17 +83,16 @@ const ConfigMenu = ({
       reasoning_budget_tokens: reasoningSupported && _reasoningBudget >= 1024 ? _reasoningBudget : undefined,
     }));
     setImageDetail(_imageDetail);
-    setIsModalOpen(false);
-  };
+  }, [_maxToken, _model, _providerId, _temperature, _presencePenalty, _topP, _frequencyPenalty, _imageDetail, _stream, _reasoningEffort, _reasoningBudget]);
 
   return (
     <PopupModal
       title={t('configuration') as string}
       setIsModalOpen={setIsModalOpen}
-      handleConfirm={handleConfirm}
-      handleClickBackdrop={handleConfirm}
+      cancelButton={false}
     >
-      <div className='p-6 border-b border-gray-200 dark:border-gray-600'>
+      <div className='flex flex-col'>
+      <div className='px-6 pt-4 pb-3 border-b border-gray-200 dark:border-gray-600 sticky top-0 bg-gray-50 dark:bg-gray-700 z-10'>
         <ModelSelector
           _model={_model}
           _setModel={_setModel}
@@ -87,13 +101,20 @@ const ConfigMenu = ({
             _setModel(modelId);
             _setProviderId(providerId);
           }}
-          _label={t('Model')}
+          _label={t('model')}
         />
-        <StreamToggle
-          _stream={_stream}
-          _setStream={_setStream}
-          disabled={!isStreamSupported}
+        <CapabilityBadges
+          reasoning={capabilities.reasoning}
+          vision={capabilities.vision}
+          audio={capabilities.audio}
+          labels={{
+            reasoning: t('capabilities.reasoning'),
+            vision: t('capabilities.vision'),
+            audio: t('capabilities.audio'),
+          }}
         />
+      </div>
+      <div className='px-6 py-4'>
         <MaxTokenSlider
           _maxToken={_maxToken}
           _setMaxToken={_setMaxToken}
@@ -114,7 +135,7 @@ const ConfigMenu = ({
           _setFrequencyPenalty={_setFrequencyPenalty}
         />
         {reasoningSupported && (
-          <>
+          <div className='mt-3 pt-3 border-t border-gray-200 dark:border-gray-600'>
             <ReasoningEffortSelector
               _reasoningEffort={_reasoningEffort}
               _setReasoningEffort={_setReasoningEffort}
@@ -123,12 +144,20 @@ const ConfigMenu = ({
               _reasoningBudget={_reasoningBudget}
               _setReasoningBudget={_setReasoningBudget}
             />
-          </>
+          </div>
         )}
-        <ImageDetailSelector
-          _imageDetail={_imageDetail}
-          _setImageDetail={_setImageDetail}
-        />
+        <div className='mt-3 pt-3 border-t border-gray-200 dark:border-gray-600'>
+          <ImageDetailSelector
+            _imageDetail={_imageDetail}
+            _setImageDetail={_setImageDetail}
+          />
+          <StreamToggle
+            _stream={_stream}
+            _setStream={_setStream}
+            disabled={!isStreamSupported}
+          />
+        </div>
+      </div>
       </div>
     </PopupModal>
   );
@@ -228,6 +257,7 @@ export const MaxTokenSlider = ({
       max={maxCompletionForModel}
       step={1}
       description={t('token.description')}
+      defaultValue={_defaultChatConfig.max_tokens}
     />
   );
 };
@@ -250,6 +280,7 @@ export const TemperatureSlider = ({
       max={2}
       step={0.1}
       description={t('temperature.description')}
+      defaultValue={_defaultChatConfig.temperature}
     />
   );
 };
@@ -272,6 +303,7 @@ export const TopPSlider = ({
       max={1}
       step={0.05}
       description={t('topP.description')}
+      defaultValue={_defaultChatConfig.top_p}
     />
   );
 };
@@ -294,6 +326,7 @@ export const PresencePenaltySlider = ({
       max={2}
       step={0.1}
       description={t('presencePenalty.description')}
+      defaultValue={_defaultChatConfig.presence_penalty}
     />
   );
 };
@@ -316,6 +349,7 @@ export const FrequencyPenaltySlider = ({
       max={2}
       step={0.1}
       description={t('frequencyPenalty.description')}
+      defaultValue={_defaultChatConfig.frequency_penalty}
     />
   );
 };
@@ -332,35 +366,24 @@ export const StreamToggle = ({
   const { t } = useTranslation('model');
 
   return (
-    <div className='mt-4 flex items-center justify-between'>
-      <div>
-        <FieldLabel>
-          <span
-          className={`block text-sm font-medium ${
+    <div className='mt-3 flex items-center justify-between'>
+      <div className='flex items-center'>
+        <span
+          className={`text-sm font-medium ${
             disabled
               ? 'text-gray-400 dark:text-gray-500'
               : 'text-gray-900 dark:text-white'
           }`}
         >
           {t('stream.label')}
-          </span>
-        </FieldLabel>
-        <FieldDescription>
-          <span
-          className={`text-sm ${
+        </span>
+        <InfoTooltip
+          text={
             disabled
-              ? 'text-gray-400 dark:text-gray-500'
-              : 'text-gray-500 dark:text-gray-300'
-          }`}
-        >
-          {disabled
-            ? t(
-                'stream.unsupportedDescription',
-                'This model does not support streaming.'
-              )
-            : t('stream.description')}
-          </span>
-        </FieldDescription>
+              ? t('stream.unsupportedDescription', 'This model does not support streaming.')
+              : t('stream.description')
+          }
+        />
       </div>
       <button
         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
@@ -399,20 +422,28 @@ export const ImageDetailSelector = ({
   _setImageDetail: React.Dispatch<React.SetStateAction<ImageDetail>>;
 }) => {
   const { t } = useTranslation('model');
+  const defaultImageDetail: ImageDetail = 'auto';
 
-  const imageDetailOptions: { value: ImageDetail; label: string }[] = [
+  const options: { value: ImageDetail; label: string }[] = [
     { value: 'low', label: t('imageDetail.low') },
     { value: 'high', label: t('imageDetail.high') },
     { value: 'auto', label: t('imageDetail.auto') },
   ];
 
   return (
-    <DarkSelectField
-      label={t('imageDetail.label') as string}
-      value={_imageDetail}
-      options={imageDetailOptions}
-      onChange={(value) => _setImageDetail((value ?? _imageDetail) as ImageDetail)}
-    />
+    <div className='mt-3'>
+      <FieldLabelWithInfo
+        onReset={() => _setImageDetail(defaultImageDetail)}
+        showReset={_imageDetail !== defaultImageDetail}
+      >
+        {t('imageDetail.label')}
+      </FieldLabelWithInfo>
+      <SegmentedControl
+        options={options}
+        value={_imageDetail}
+        onChange={(value) => _setImageDetail(value as ImageDetail)}
+      />
+    </div>
   );
 };
 
@@ -432,27 +463,19 @@ export const ReasoningEffortSelector = ({
   ];
 
   return (
-    <div className='mt-4'>
-      <FieldLabel>{t('reasoningEffort.label')}</FieldLabel>
-      <FieldDescription>{t('reasoningEffort.description')}</FieldDescription>
-      <div className='mt-2 inline-flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden'>
-        {options.map((opt) => (
-          <button
-            key={opt.value}
-            type='button'
-            className={`px-4 py-1.5 text-sm font-medium transition-colors ${
-              _reasoningEffort === opt.value
-                ? 'bg-blue-600 text-white'
-                : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
-            }`}
-            onClick={() =>
-              _setReasoningEffort(_reasoningEffort === opt.value ? undefined : opt.value)
-            }
-          >
-            {opt.label}
-          </button>
-        ))}
-      </div>
+    <div className='mt-3'>
+      <FieldLabelWithInfo
+        description={t('reasoningEffort.description')}
+        onReset={() => _setReasoningEffort(DEFAULT_REASONING_EFFORT)}
+        showReset={_reasoningEffort !== DEFAULT_REASONING_EFFORT}
+      >
+        {t('reasoningEffort.label')}
+      </FieldLabelWithInfo>
+      <SegmentedControl
+        options={options}
+        value={_reasoningEffort}
+        onChange={(value) => _setReasoningEffort(value as ReasoningEffort)}
+      />
     </div>
   );
 };
@@ -467,35 +490,16 @@ export const ReasoningBudgetInput = ({
   const { t } = useTranslation('model');
 
   return (
-    <div className='mt-4'>
-      <FieldLabel>
-        <span className='text-sm font-medium text-gray-900 dark:text-white'>
-          {t('reasoningBudget.label')}
-        </span>
-      </FieldLabel>
-      <FieldDescription>{t('reasoningBudget.description')}</FieldDescription>
-      <input
-        type='number'
-        className={`mt-2 w-full rounded-md border px-3 py-1.5 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 ${
-          _reasoningBudget > 0 && _reasoningBudget < 1024
-            ? 'border-amber-400 dark:border-amber-500 bg-amber-50 dark:bg-amber-900/20 focus:border-amber-500'
-            : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:border-blue-500'
-        }`}
-        value={_reasoningBudget || ''}
-        placeholder='0'
-        min={0}
-        step={1024}
-        onChange={(e) => {
-          const val = parseInt(e.target.value, 10);
-          _setReasoningBudget(Number.isNaN(val) ? 0 : Math.max(0, val));
-        }}
-      />
-      {_reasoningBudget > 0 && _reasoningBudget < 1024 && (
-        <p className='mt-1 text-xs text-amber-600 dark:text-amber-400'>
-          {t('reasoningBudget.minWarning', 'Value must be at least 1024. Values below 1024 will be ignored.')}
-        </p>
-      )}
-    </div>
+    <RangeField
+      label={t('reasoningBudget.label') as string}
+      value={_reasoningBudget}
+      onChange={_setReasoningBudget}
+      min={1024}
+      max={65536}
+      step={1024}
+      description={t('reasoningBudget.description')}
+      defaultValue={DEFAULT_REASONING_BUDGET}
+    />
   );
 };
 

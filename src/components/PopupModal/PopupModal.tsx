@@ -91,7 +91,9 @@ const PopupModal = ({
               </div>
             )}
 
-            {children}
+            <div className='overflow-y-auto'>
+              {children}
+            </div>
 
             {(footerStartContent || footerEndContent || handleConfirm || cancelButton) && (
               <div className='flex items-center justify-between p-6 gap-4'>

@@ -80,6 +80,28 @@ const REASONING_MODEL_NAMES = [
   'qwq',
 ] as const;
 
+/** Heuristic: detect vision-capable models by well-known ID patterns. */
+export const isVisionModel = (modelId: string): boolean => {
+  const id = modelId.toLowerCase();
+  // GPT-4o, GPT-4-turbo, GPT-4-vision
+  if (/gpt-4[o-]/.test(id) && !id.includes('audio-preview')) return true;
+  // Claude 3+
+  if (/claude-3/.test(id)) return true;
+  // Gemini (all versions support vision)
+  if (id.includes('gemini')) return true;
+  // Explicit vision models
+  if (id.includes('vision')) return true;
+  return false;
+};
+
+/** Heuristic: detect audio-capable models by well-known ID patterns. */
+export const isAudioModel = (modelId: string): boolean => {
+  const id = modelId.toLowerCase();
+  if (id.includes('audio')) return true;
+  if (id.includes('realtime')) return true;
+  return false;
+};
+
 export const isReasoningModel = (modelId: string): boolean => {
   const id = modelId.toLowerCase();
   return (
@@ -124,6 +146,8 @@ const normalizeModelEntry = (
     modelType,
     streamSupport: true,
     supportsReasoning: isReasoningModel(id),
+    supportsVision: modelType === 'image' || isVisionModel(id),
+    supportsAudio: isAudioModel(id),
   };
 };
 

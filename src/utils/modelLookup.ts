@@ -1,5 +1,6 @@
 import useStore from '@store/store';
 import type { CustomProviderModel, ProviderId, FavoriteModel, ProviderModel } from '@type/provider';
+import { isVisionModel, isAudioModel } from '@api/providerModels';
 import { UNKNOWN_MODEL_CONTEXT_LENGTH } from './tokenBudget';
 
 export interface ModelCostEntry {
@@ -206,6 +207,83 @@ export function isModelStreamSupported(
   if (cached?.streamSupport != null) return cached.streamSupport;
 
   return true;
+}
+
+export function getModelSupportsVision(
+  modelId: string,
+  providerId?: ProviderId
+): boolean {
+  const state = useStore.getState();
+
+  const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+  if (custom?.supportsVision != null) return custom.supportsVision;
+
+  const fav = findFavorite(state.favoriteModels, modelId, providerId);
+  if (fav?.supportsVision != null) return fav.supportsVision;
+
+  const cached = findCachedModel(state.providerModelCache, modelId, providerId);
+  if (cached?.supportsVision != null) return cached.supportsVision;
+
+  return isVisionModel(modelId);
+}
+
+export function getModelSupportsAudio(
+  modelId: string,
+  providerId?: ProviderId
+): boolean {
+  const state = useStore.getState();
+
+  const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+  if (custom?.supportsAudio != null) return custom.supportsAudio;
+
+  const fav = findFavorite(state.favoriteModels, modelId, providerId);
+  if (fav?.supportsAudio != null) return fav.supportsAudio;
+
+  const cached = findCachedModel(state.providerModelCache, modelId, providerId);
+  if (cached?.supportsAudio != null) return cached.supportsAudio;
+
+  return isAudioModel(modelId);
+}
+
+export interface ModelCapabilities {
+  reasoning: boolean;
+  vision: boolean;
+  audio: boolean;
+  stream: boolean;
+}
+
+export function getModelCapabilities(
+  modelId: string,
+  providerId?: ProviderId
+): ModelCapabilities {
+  return {
+    reasoning: getModelSupportsReasoning(modelId, providerId),
+    vision: getModelSupportsVision(modelId, providerId),
+    audio: getModelSupportsAudio(modelId, providerId),
+    stream: isModelStreamSupported(modelId, providerId),
+  };
+}
+
+export function useModelCapabilities(
+  modelId: string,
+  providerId?: ProviderId
+): ModelCapabilities {
+  return useStore((state) => {
+    const custom = findProviderCustomModel(state.providerCustomModels, modelId, providerId);
+    const fav = findFavorite(state.favoriteModels, modelId, providerId);
+    const cached = findCachedModel(state.providerModelCache, modelId, providerId);
+
+    const reasoning =
+      custom?.supportsReasoning ?? fav?.supportsReasoning ?? cached?.supportsReasoning ?? false;
+    const vision =
+      custom?.supportsVision ?? fav?.supportsVision ?? cached?.supportsVision ?? isVisionModel(modelId);
+    const audio =
+      custom?.supportsAudio ?? fav?.supportsAudio ?? cached?.supportsAudio ?? isAudioModel(modelId);
+    const stream =
+      custom?.streamSupport ?? fav?.streamSupport ?? cached?.streamSupport ?? true;
+
+    return { reasoning, vision, audio, stream };
+  });
 }
 
 export function isKnownModel(modelId: string): boolean {

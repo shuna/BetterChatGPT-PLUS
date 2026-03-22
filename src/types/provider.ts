@@ -30,6 +30,8 @@ export interface ProviderModel {
   modelType?: 'text' | 'image';
   streamSupport?: boolean;
   supportsReasoning?: boolean;
+  supportsVision?: boolean;
+  supportsAudio?: boolean;
 }
 
 export interface CustomProviderModel {
@@ -43,6 +45,8 @@ export interface CustomProviderModel {
   imagePrice?: number;
   streamSupport?: boolean;
   supportsReasoning?: boolean;
+  supportsVision?: boolean;
+  supportsAudio?: boolean;
 }
 
 export interface FavoriteModel {
@@ -55,4 +59,6 @@ export interface FavoriteModel {
   modelType?: 'text' | 'image';
   streamSupport?: boolean;
   supportsReasoning?: boolean;
+  supportsVision?: boolean;
+  supportsAudio?: boolean;
 }
