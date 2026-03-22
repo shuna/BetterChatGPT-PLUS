@@ -132,7 +132,7 @@ const UnifiedMessageView = memo(
     return (
       <>
         {isEditState ? (
-          <div className={`relative ${contentSurfaceClass}`}>
+          <div className={contentSurfaceClass}>
             <div className={contentMinHeightClass}>
               <OverTypeEditor
                 value={displayValue}
@@ -154,32 +154,29 @@ const UnifiedMessageView = memo(
                 minHeight='5.25rem'
               />
             </div>
-            <div className='mt-2 min-h-[3rem]' aria-hidden='true' />
-            <div className='absolute inset-x-4 bottom-1 md:inset-x-5 md:bottom-2'>
-              <EditViewButtons
-                sticky={false}
-                handleFileChange={editLogic.handleFileChange}
-                handleImageDetailChange={editLogic.handleImageDetailChange}
-                handleRemoveImage={editLogic.handleRemoveImage}
-                handleGenerate={editLogic.handleGenerate}
-                handleGenerateNextOnly={editLogic.handleGenerateNextOnly}
-                handleSave={editLogic.handleSave}
-                handleCancel={editLogic.handleCancel}
-                handleUploadButtonClick={editLogic.handleUploadButtonClick}
-                setIsModalOpen={editLogic.setIsModalOpen}
-                _setContent={editLogic._setContent}
-                _content={editLogic._content}
-                imageUrl={editLogic.imageUrl}
-                setImageUrl={editLogic.setImageUrl}
-                handleImageUrlChange={editLogic.handleImageUrlChange}
-                fileInputRef={editLogic.fileInputRef}
-                model={editLogic.model}
-                providerId={editLogic.providerId}
-                modelValid={editLogic.modelValid}
-                messageIndex={messageIndex}
-                role={role}
-              />
-            </div>
+            <EditViewButtons
+              sticky={false}
+              handleFileChange={editLogic.handleFileChange}
+              handleImageDetailChange={editLogic.handleImageDetailChange}
+              handleRemoveImage={editLogic.handleRemoveImage}
+              handleGenerate={editLogic.handleGenerate}
+              handleGenerateNextOnly={editLogic.handleGenerateNextOnly}
+              handleSave={editLogic.handleSave}
+              handleCancel={editLogic.handleCancel}
+              handleUploadButtonClick={editLogic.handleUploadButtonClick}
+              setIsModalOpen={editLogic.setIsModalOpen}
+              _setContent={editLogic._setContent}
+              _content={editLogic._content}
+              imageUrl={editLogic.imageUrl}
+              setImageUrl={editLogic.setImageUrl}
+              handleImageUrlChange={editLogic.handleImageUrlChange}
+              fileInputRef={editLogic.fileInputRef}
+              model={editLogic.model}
+              providerId={editLogic.providerId}
+              modelValid={editLogic.modelValid}
+              messageIndex={messageIndex}
+              role={role}
+            />
             {editLogic.isModalOpen && (
               <PopupModal
                 setIsModalOpen={editLogic.setIsModalOpen}
