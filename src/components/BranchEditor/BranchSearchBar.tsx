@@ -9,11 +9,13 @@ const BranchSearchBar = ({ entries }: { entries: MultiLayoutEntry[] }) => {
   const searchScope = useStore((s) => s.searchScope);
   const searchResults = useStore((s) => s.searchResults);
   const currentResultIndex = useStore((s) => s.currentResultIndex);
+  const starredOnly = useStore((s) => s.starredOnly);
   const setSearchQuery = useStore((s) => s.setSearchQuery);
   const saveSearchQueryToHistory = useStore((s) => s.saveSearchQueryToHistory);
   const clearSearchHistory = useStore((s) => s.clearSearchHistory);
   const setSearchResults = useStore((s) => s.setSearchResults);
   const toggleSearchScope = useStore((s) => s.toggleSearchScope);
+  const toggleStarredOnly = useStore((s) => s.toggleStarredOnly);
   const nextResult = useStore((s) => s.nextResult);
   const prevResult = useStore((s) => s.prevResult);
   const closeSearch = useStore((s) => s.closeSearch);
@@ -40,19 +42,25 @@ const BranchSearchBar = ({ entries }: { entries: MultiLayoutEntry[] }) => {
     return () => document.removeEventListener('mousedown', handlePointerDown);
   }, []);
 
-  // Run search on query/scope change (debounced)
+  // Run search on query/scope/starredOnly change (debounced)
   useEffect(() => {
     clearTimeout(debounceRef.current);
-    if (!searchQuery.trim()) {
+    if (!searchQuery.trim() && !starredOnly) {
       setSearchResults([]);
       return;
     }
     debounceRef.current = setTimeout(() => {
-      const results = searchBranchNodes(searchQuery, entries, contentStore, searchScope);
+      const results = searchBranchNodes(
+        searchQuery,
+        entries,
+        contentStore,
+        searchScope,
+        { starredOnly }
+      );
       setSearchResults(results);
     }, 200);
     return () => clearTimeout(debounceRef.current);
-  }, [searchQuery, searchScope, entries, contentStore, setSearchResults]);
+  }, [searchQuery, searchScope, starredOnly, entries, contentStore, setSearchResults]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -100,6 +108,8 @@ const BranchSearchBar = ({ entries }: { entries: MultiLayoutEntry[] }) => {
     return () => window.removeEventListener('resize', updateHistoryOffset);
   }, []);
 
+  const showResults = hasSearchQuery || starredOnly;
+
   return (
     <div
       ref={containerRef}
@@ -113,6 +123,21 @@ const BranchSearchBar = ({ entries }: { entries: MultiLayoutEntry[] }) => {
         title={searchScope === 'all' ? '全ノード検索中' : 'アクティブパスのみ'}
       >
         {searchScope === 'all' ? '全体' : 'パス'}
+      </button>
+
+      {/* Star filter toggle */}
+      <button
+        onClick={toggleStarredOnly}
+        className={`text-[10px] px-1 py-0.5 mr-0.5 rounded border whitespace-nowrap ${
+          starredOnly
+            ? 'border-yellow-400 bg-yellow-50 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-300'
+            : 'border-gray-300 dark:border-gray-600 text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700'
+        }`}
+        title={starredOnly ? 'スター付きのみ表示中' : 'スター付きのみ表示'}
+      >
+        <svg className='w-3 h-3' viewBox='0 0 24 24' fill='currentColor'>
+          <path d='M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z' />
+        </svg>
       </button>
 
       <div className='relative flex min-w-0 flex-1 items-center gap-1'>
@@ -150,7 +175,7 @@ const BranchSearchBar = ({ entries }: { entries: MultiLayoutEntry[] }) => {
           ) : null}
         </div>
 
-        {hasSearchQuery ? (
+        {showResults ? (
           <>
             <span className='text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap min-w-[3rem] text-center'>
               {searchResults.length > 0 ? `${currentResultIndex + 1}/${searchResults.length}` : '0件'}

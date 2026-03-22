@@ -166,6 +166,25 @@ export function buildPathToLeaf(
   return ancestors;
 }
 
+export function findLCA(
+  tree: BranchTree,
+  nodeIdA: string,
+  nodeIdB: string
+): string | null {
+  const ancestorsA = new Set<string>();
+  let cur: string | null = nodeIdA;
+  while (cur) {
+    ancestorsA.add(cur);
+    cur = tree.nodes[cur]?.parentId ?? null;
+  }
+  cur = nodeIdB;
+  while (cur) {
+    if (ancestorsA.has(cur)) return cur;
+    cur = tree.nodes[cur]?.parentId ?? null;
+  }
+  return null;
+}
+
 export function collectDescendants(
   tree: BranchTree,
   nodeId: string

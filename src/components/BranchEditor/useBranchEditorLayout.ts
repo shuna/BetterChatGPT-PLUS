@@ -21,6 +21,8 @@ export interface MessageNodeData {
   role: string;
   contentPreview: string;
   label?: string;
+  starred?: boolean;
+  pinned?: boolean;
   isActive: boolean;
   chatIndex: number;
   colorHue: number;
@@ -165,6 +167,8 @@ export function useMultiBranchEditorLayout(entries: MultiLayoutEntry[]) {
           ...node.data,
           contentPreview: resolveContentPreview(contentStore, sourceNode.contentHash),
           label: sourceNode.label,
+          starred: sourceNode.starred,
+          pinned: sourceNode.pinned,
           role: sourceNode.role,
           isActive: mapped.entry.tree.activePath.includes(node.id),
           colorHue: color.hue,

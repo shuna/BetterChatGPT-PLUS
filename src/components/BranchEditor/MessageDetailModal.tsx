@@ -15,6 +15,8 @@ const MessageDetailModal = ({ chatIndex, nodeId, onClose }: MessageDetailModalPr
   const { t } = useTranslation();
   const tree = useStore((state) => state.chats?.[chatIndex]?.branchTree);
   const contentStore = useStore((state) => state.contentStore);
+  const toggleNodeStar = useStore((state) => state.toggleNodeStar);
+  const toggleNodePin = useStore((state) => state.toggleNodePin);
   const modalRoot = document.getElementById('modal-root');
 
   const node = tree?.nodes[nodeId];
@@ -44,6 +46,28 @@ const MessageDetailModal = ({ chatIndex, nodeId, onClose }: MessageDetailModalPr
                   {node.label}
                 </span>
               )}
+              <button
+                className={`p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 ${
+                  node.starred ? 'text-yellow-500' : 'text-gray-400'
+                }`}
+                onClick={() => toggleNodeStar(chatIndex, nodeId)}
+                title={node.starred ? 'Unstar' : 'Star'}
+              >
+                <svg className='w-4 h-4' viewBox='0 0 24 24' fill='currentColor'>
+                  <path d='M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z' />
+                </svg>
+              </button>
+              <button
+                className={`p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-600 ${
+                  node.pinned ? 'text-blue-500' : 'text-gray-400'
+                }`}
+                onClick={() => toggleNodePin(chatIndex, nodeId)}
+                title={node.pinned ? 'Unpin' : 'Pin'}
+              >
+                <svg className='w-4 h-4' viewBox='0 0 24 24' fill='currentColor'>
+                  <path d='M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z' />
+                </svg>
+              </button>
             </div>
             <button
               type='button'

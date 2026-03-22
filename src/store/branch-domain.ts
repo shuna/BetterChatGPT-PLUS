@@ -267,17 +267,30 @@ export const pruneHiddenNodesState = (
   const tree = updatedChats[chatIndex].branchTree!;
   const activeSet = new Set(tree.activePath);
 
-  const toDelete = Object.keys(tree.nodes).filter((id) => !activeSet.has(id));
+  // Collect pinned subtrees (pinned nodes and all their descendants)
+  const protectedSet = new Set<string>();
+  for (const node of Object.values(tree.nodes)) {
+    if (node.pinned) {
+      for (const id of collectDescendants(tree, node.id)) {
+        protectedSet.add(id);
+      }
+    }
+  }
+
+  const toDelete = Object.keys(tree.nodes).filter(
+    (id) => !activeSet.has(id) && !protectedSet.has(id)
+  );
   toDelete.forEach((id) => {
     releaseContent(contentStore, tree.nodes[id].contentHash);
     delete tree.nodes[id];
   });
 
-  // Fix parent pointers: first node in activePath has no parent outside the path
-  for (const id of tree.activePath) {
+  // Fix parent pointers: nodes whose parent was deleted get parentId=null
+  for (const id of Object.keys(tree.nodes)) {
     const node = tree.nodes[id];
-    if (node.parentId && !activeSet.has(node.parentId)) {
-      node.parentId = null;
+    if (node.parentId && !tree.nodes[node.parentId]) {
+      tree.nodes[id] = cloneNode(node);
+      tree.nodes[id].parentId = null;
     }
   }
 
@@ -297,7 +310,31 @@ export const renameBranchNodeState = (
   const updatedChats = cloneChatAt(chats, chatIndex);
   const tree = updatedChats[chatIndex].branchTree!;
   tree.nodes[nodeId] = cloneNode(tree.nodes[nodeId]);
-  tree.nodes[nodeId].label = label;
+  tree.nodes[nodeId].label = label || undefined;
+  return updatedChats;
+};
+
+export const toggleNodeStarState = (
+  chats: ChatInterface[],
+  chatIndex: number,
+  nodeId: string
+) => {
+  const updatedChats = cloneChatAt(chats, chatIndex);
+  const tree = updatedChats[chatIndex].branchTree!;
+  tree.nodes[nodeId] = cloneNode(tree.nodes[nodeId]);
+  tree.nodes[nodeId].starred = !tree.nodes[nodeId].starred || undefined;
+  return updatedChats;
+};
+
+export const toggleNodePinState = (
+  chats: ChatInterface[],
+  chatIndex: number,
+  nodeId: string
+) => {
+  const updatedChats = cloneChatAt(chats, chatIndex);
+  const tree = updatedChats[chatIndex].branchTree!;
+  tree.nodes[nodeId] = cloneNode(tree.nodes[nodeId]);
+  tree.nodes[nodeId].pinned = !tree.nodes[nodeId].pinned || undefined;
   return updatedChats;
 };
 

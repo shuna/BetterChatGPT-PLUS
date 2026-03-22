@@ -11,12 +11,14 @@ export interface SearchSlice {
   isSearchOpen: boolean;
   matchedNodeIds: Set<string>;
   currentResultNodeId: string | null;
+  starredOnly: boolean;
 
   setSearchQuery: (q: string) => void;
   saveSearchQueryToHistory: (query?: string) => void;
   clearSearchHistory: () => void;
   setSearchResults: (results: SearchResult[]) => void;
   toggleSearchScope: () => void;
+  toggleStarredOnly: () => void;
   nextResult: () => void;
   prevResult: () => void;
   openSearch: () => void;
@@ -33,6 +35,7 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
   isSearchOpen: true,
   matchedNodeIds: new Set(),
   currentResultNodeId: null,
+  starredOnly: false,
 
   setSearchQuery: (q) => {
     set({ searchQuery: q });
@@ -83,6 +86,10 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
     set({ searchScope: get().searchScope === 'all' ? 'activePath' : 'all' });
   },
 
+  toggleStarredOnly: () => {
+    set({ starredOnly: !get().starredOnly });
+  },
+
   nextResult: () => {
     const { searchResults, currentResultIndex } = get();
     if (searchResults.length === 0) return;
@@ -118,6 +125,7 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
       currentResultIndex: -1,
       matchedNodeIds: new Set(),
       currentResultNodeId: null,
+      starredOnly: false,
     });
   },
 

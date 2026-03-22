@@ -27,6 +27,8 @@ import {
   replaceMessageAndPruneFollowingState,
   switchActivePathState,
   switchBranchAtNodeState,
+  toggleNodeStarState,
+  toggleNodePinState,
   truncateActivePathState,
   updateNodeRoleState,
   upsertMessageAtIndexState,
@@ -130,6 +132,9 @@ export interface BranchSlice {
   ) => void;
   activateFolderOverview: (folderId: string) => void;
 
+  compareTarget: { chatIndex: number; nodeId: string } | null;
+  setCompareTarget: (target: { chatIndex: number; nodeId: string } | null) => void;
+
   updateNodeRole: (chatIndex: number, nodeId: string, role: Role) => void;
 
   ensureBranchTree: (chatIndex: number) => void;
@@ -148,6 +153,8 @@ export interface BranchSlice {
     nodeId: string,
     label: string
   ) => void;
+  toggleNodeStar: (chatIndex: number, nodeId: string) => void;
+  toggleNodePin: (chatIndex: number, nodeId: string) => void;
 
   appendNodeToActivePath: (
     chatIndex: number,
@@ -313,6 +320,11 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     set({ chatScrollAnchors: rest });
   },
 
+  compareTarget: null,
+  setCompareTarget: (target) => {
+    set({ compareTarget: target });
+  },
+
   isMultiView: false,
   setIsMultiView: (enabled) => {
     if (get().isMultiView === enabled && (enabled || (
@@ -450,7 +462,18 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   },
 
   renameBranchNode: (chatIndex, nodeId, label) => {
-    get().setChats(renameBranchNodeState(get().chats!, chatIndex, nodeId, label));
+    const chats = renameBranchNodeState(get().chats!, chatIndex, nodeId, label);
+    get().applyBranchState(chats, get().contentStore);
+  },
+
+  toggleNodeStar: (chatIndex, nodeId) => {
+    const chats = toggleNodeStarState(get().chats!, chatIndex, nodeId);
+    get().applyBranchState(chats, get().contentStore);
+  },
+
+  toggleNodePin: (chatIndex, nodeId) => {
+    const chats = toggleNodePinState(get().chats!, chatIndex, nodeId);
+    get().applyBranchState(chats, get().contentStore);
   },
 
   appendNodeToActivePath: (chatIndex, role, content) => {

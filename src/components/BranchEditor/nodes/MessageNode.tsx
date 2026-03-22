@@ -12,11 +12,14 @@ const roleBadgeColors: Record<string, string> = {
 const MessageNode = memo(({ data, id }: NodeProps<MessageNodeData>) => {
   const hoveredNodeId = useStore((state) => state.hoveredNodeId);
   const setHoveredNodeId = useStore((state) => state.setHoveredNodeId);
+  const toggleNodeStar = useStore((state) => state.toggleNodeStar);
   const isSearchMatch = useStore((state) => state.matchedNodeIds.has(id));
   const isCurrentSearchResult = useStore((state) => state.currentResultNodeId === id);
+  const compareTarget = useStore((state) => state.compareTarget);
   const menuBtnRef = useRef<HTMLButtonElement>(null);
 
   const isHovered = hoveredNodeId === id;
+  const isCompareTarget = compareTarget?.nodeId === id;
 
   const handleMouseEnter = useCallback(() => {
     setHoveredNodeId(id);
@@ -38,19 +41,28 @@ const MessageNode = memo(({ data, id }: NodeProps<MessageNodeData>) => {
     menuBtnRef.current?.dispatchEvent(event);
   }, [id, data.chatIndex]);
 
+  const handleStarClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    toggleNodeStar(data.chatIndex, id);
+  }, [data.chatIndex, id, toggleNodeStar]);
+
   const borderColor = isCurrentSearchResult
     ? '#f97316'
     : isSearchMatch
       ? '#eab308'
-      : data.isActive
-        ? data.conversationColor || '#3b82f6'
-        : undefined;
+      : isCompareTarget
+        ? '#a855f7'
+        : data.isActive
+          ? data.conversationColor || '#3b82f6'
+          : undefined;
 
   const searchHighlightClass = isCurrentSearchResult
     ? 'ring-2 ring-orange-400 ring-offset-1'
     : isSearchMatch
       ? 'ring-1 ring-yellow-400'
-      : '';
+      : isCompareTarget
+        ? 'ring-2 ring-purple-400 ring-offset-1'
+        : '';
 
   return (
     <div
@@ -59,7 +71,7 @@ const MessageNode = memo(({ data, id }: NodeProps<MessageNodeData>) => {
           ? 'bg-gray-100 dark:bg-gray-600'
           : 'border-gray-400 dark:border-gray-500 bg-gray-200 dark:bg-gray-700 opacity-50'
       } ${isHovered ? 'outline outline-[3px] outline-blue-400 outline-offset-0' : ''} ${searchHighlightClass}`}
-      style={(data.isActive || isSearchMatch || isCurrentSearchResult) ? { borderColor } : undefined}
+      style={(data.isActive || isSearchMatch || isCurrentSearchResult || isCompareTarget) ? { borderColor } : undefined}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
@@ -83,17 +95,53 @@ const MessageNode = memo(({ data, id }: NodeProps<MessageNodeData>) => {
       <p className='text-xs text-gray-700 dark:text-gray-300 line-clamp-2 leading-relaxed' data-node-content>
         {data.contentPreview || '(empty)'}
       </p>
-      {/* Node context menu button */}
-      {isHovered && (
-        <button
-          ref={menuBtnRef}
-          className='absolute -top-1 -right-1 w-5 h-5 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500 text-xs shadow-sm'
-          onClick={handleMenuClick}
-          title='メニュー'
-        >
-          ⋯
-        </button>
-      )}
+      {/* Hover overlay buttons: pin → star → menu (right to left) */}
+      <div className={`absolute -top-1 -right-1 flex items-center gap-0.5 ${
+        isHovered || data.starred || data.pinned ? '' : 'hidden'
+      }`}>
+        {/* Pin icon */}
+        {(data.pinned || isHovered) && (
+          <span
+            className={`w-5 h-5 flex items-center justify-center rounded-full text-xs ${
+              data.pinned
+                ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300'
+                : 'bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500'
+            }`}
+            title={data.pinned ? 'Pinned' : ''}
+          >
+            <svg className='w-3 h-3' viewBox='0 0 24 24' fill='currentColor'>
+              <path d='M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z' />
+            </svg>
+          </span>
+        )}
+        {/* Star icon */}
+        {(data.starred || isHovered) && (
+          <button
+            className={`w-5 h-5 flex items-center justify-center rounded-full shadow-sm ${
+              data.starred
+                ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-500 dark:text-yellow-300'
+                : 'bg-gray-200 dark:bg-gray-600 text-gray-400 dark:text-gray-500 hover:bg-gray-300 dark:hover:bg-gray-500'
+            }`}
+            onClick={handleStarClick}
+            title={data.starred ? 'Unstar' : 'Star'}
+          >
+            <svg className='w-3 h-3' viewBox='0 0 24 24' fill='currentColor'>
+              <path d='M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z' />
+            </svg>
+          </button>
+        )}
+        {/* Menu button */}
+        {isHovered && (
+          <button
+            ref={menuBtnRef}
+            className='w-5 h-5 flex items-center justify-center rounded-full bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500 text-xs shadow-sm'
+            onClick={handleMenuClick}
+            title='メニュー'
+          >
+            ⋯
+          </button>
+        )}
+      </div>
       <Handle
         type='source'
         position={Position.Bottom}

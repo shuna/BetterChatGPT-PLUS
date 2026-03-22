@@ -62,6 +62,8 @@ export interface BranchNode {
   contentHash: string;
   createdAt: number;
   label?: string;
+  starred?: boolean;
+  pinned?: boolean;
 }
 
 /** @deprecated Pre-v12 format with inline content */

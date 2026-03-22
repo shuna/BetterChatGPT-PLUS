@@ -87,8 +87,8 @@ describe('search-slice', () => {
   it('preserves the current result when search results are recomputed', () => {
     const getState = createSearchState();
     const initialResults: SearchResult[] = [
-      { nodeId: 'branch-a', chatIndex: 0, snippet: 'first', isOnActivePath: true },
-      { nodeId: 'branch-b', chatIndex: 0, snippet: 'second', isOnActivePath: false },
+      { nodeId: 'branch-a', chatIndex: 0, snippet: 'first', isOnActivePath: true, matchType: 'content' as const },
+      { nodeId: 'branch-b', chatIndex: 0, snippet: 'second', isOnActivePath: false, matchType: 'content' as const },
     ];
 
     getState().setSearchResults(initialResults);
@@ -97,8 +97,8 @@ describe('search-slice', () => {
     expect(getState().currentResultIndex).toBe(1);
 
     getState().setSearchResults([
-      { nodeId: 'branch-a', chatIndex: 0, snippet: 'first', isOnActivePath: false },
-      { nodeId: 'branch-b', chatIndex: 0, snippet: 'second', isOnActivePath: true },
+      { nodeId: 'branch-a', chatIndex: 0, snippet: 'first', isOnActivePath: false, matchType: 'content' as const },
+      { nodeId: 'branch-b', chatIndex: 0, snippet: 'second', isOnActivePath: true, matchType: 'content' as const },
     ]);
 
     expect(getState().currentResultNodeId).toBe('branch-b');
@@ -109,8 +109,8 @@ describe('search-slice', () => {
     const getState = createSearchState();
 
     getState().setSearchResults([
-      { nodeId: 'branch-a', chatIndex: 0, snippet: 'first', isOnActivePath: true },
-      { nodeId: 'branch-b', chatIndex: 0, snippet: 'second', isOnActivePath: false },
+      { nodeId: 'branch-a', chatIndex: 0, snippet: 'first', isOnActivePath: true, matchType: 'content' as const },
+      { nodeId: 'branch-b', chatIndex: 0, snippet: 'second', isOnActivePath: false, matchType: 'content' as const },
     ]);
 
     getState().nextResult();

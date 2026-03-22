@@ -6,21 +6,35 @@ export interface SearchResult {
   chatIndex: number;
   snippet: string;
   isOnActivePath: boolean;
+  matchType: 'content' | 'label';
+  label?: string;
+  starred?: boolean;
+  pinned?: boolean;
+}
+
+export interface SearchOptions {
+  starredOnly?: boolean;
 }
 
 /**
  * Search branch nodes for a query string across one or more trees.
  * Returns results in DFS order with snippet context.
+ * Searches both content and labels. Supports starredOnly filter.
  */
 export function searchBranchNodes(
   query: string,
   entries: ReadonlyArray<{ tree: BranchTree; chatIndex: number }>,
   contentStore: ContentStoreData,
-  scope: 'all' | 'activePath'
+  scope: 'all' | 'activePath',
+  options?: SearchOptions
 ): SearchResult[] {
-  if (!query.trim()) return [];
+  const hasQuery = query.trim().length > 0;
+  const starredOnly = options?.starredOnly ?? false;
 
-  const lowerQuery = query.toLowerCase();
+  // If no query and no filter, return empty
+  if (!hasQuery && !starredOnly) return [];
+
+  const lowerQuery = hasQuery ? query.toLowerCase() : '';
   const results: SearchResult[] = [];
   const textCache = new Map<string, string>();
 
@@ -37,29 +51,60 @@ export function searchBranchNodes(
       const node = tree.nodes[nodeId];
       if (!node) continue;
 
+      // Apply starred filter
+      if (starredOnly && !node.starred) continue;
+
       let text = textCache.get(node.contentHash);
       if (text === undefined) {
         text = resolveContentText(contentStore, node.contentHash);
         textCache.set(node.contentHash, text);
       }
 
-      const lowerText = text.toLowerCase();
-      const matchIdx = lowerText.indexOf(lowerQuery);
-      if (matchIdx < 0) continue;
+      // Check label match
+      const labelMatch = hasQuery && node.label
+        ? node.label.toLowerCase().includes(lowerQuery)
+        : false;
 
-      // Build snippet: up to 40 chars before and after match
-      const start = Math.max(0, matchIdx - 40);
-      const end = Math.min(text.length, matchIdx + query.length + 40);
-      let snippet = '';
-      if (start > 0) snippet += '...';
-      snippet += text.slice(start, end);
-      if (end < text.length) snippet += '...';
+      // Check content match
+      const lowerText = text.toLowerCase();
+      const contentMatchIdx = hasQuery ? lowerText.indexOf(lowerQuery) : -1;
+      const contentMatch = contentMatchIdx >= 0;
+
+      // If we have a query, at least one must match
+      if (hasQuery && !contentMatch && !labelMatch) continue;
+
+      // Build snippet
+      let snippet: string;
+      let matchType: 'content' | 'label';
+
+      if (contentMatch) {
+        // Content match snippet
+        const start = Math.max(0, contentMatchIdx - 40);
+        const end = Math.min(text.length, contentMatchIdx + query.length + 40);
+        snippet = '';
+        if (start > 0) snippet += '...';
+        snippet += text.slice(start, end);
+        if (end < text.length) snippet += '...';
+        matchType = 'content';
+      } else if (labelMatch) {
+        // Label matched but content didn't - use content preview
+        snippet = text.length > 80 ? `${text.slice(0, 80)}...` : text;
+        matchType = 'label';
+      } else {
+        // No query (starredOnly mode) - use content preview
+        snippet = text.length > 80 ? `${text.slice(0, 80)}...` : text;
+        matchType = 'content';
+      }
 
       results.push({
         nodeId,
         chatIndex,
         snippet,
         isOnActivePath: activePathSet.has(nodeId),
+        matchType,
+        label: node.label,
+        starred: node.starred,
+        pinned: node.pinned,
       });
     }
   }
@@ -67,26 +112,41 @@ export function searchBranchNodes(
   return results;
 }
 
-/** Return all node IDs in DFS order from root */
+/**
+ * Return all node IDs in DFS order, starting from all roots.
+ * After prune, pinned subtrees may become orphans (parentId=null, not rootId).
+ * We find all root nodes to ensure orphan subtrees are included.
+ */
 function dfsOrder(tree: BranchTree): string[] {
   const result: string[] = [];
   const childrenMap = new Map<string, string[]>();
+  const hasParentInTree = new Set<string>();
 
   for (const node of Object.values(tree.nodes)) {
-    if (node.parentId) {
+    if (node.parentId && tree.nodes[node.parentId]) {
+      hasParentInTree.add(node.id);
       const siblings = childrenMap.get(node.parentId);
       if (siblings) siblings.push(node.id);
       else childrenMap.set(node.parentId, [node.id]);
     }
   }
 
-  const stack = [tree.rootId];
+  // Find all roots: nodes whose parent is null or not in the tree
+  const roots: string[] = [];
+  for (const node of Object.values(tree.nodes)) {
+    if (!hasParentInTree.has(node.id)) {
+      roots.push(node.id);
+    }
+  }
+  // Ensure the primary root comes first
+  roots.sort((a, b) => (a === tree.rootId ? -1 : b === tree.rootId ? 1 : 0));
+
+  const stack = [...roots].reverse();
   while (stack.length > 0) {
     const id = stack.pop()!;
     result.push(id);
     const children = childrenMap.get(id);
     if (children) {
-      // Reverse so first child is processed first (stack is LIFO)
       for (let i = children.length - 1; i >= 0; i--) {
         stack.push(children[i]);
       }
