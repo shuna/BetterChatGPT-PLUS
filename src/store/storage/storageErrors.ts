@@ -1,5 +1,5 @@
 import i18n from '@src/i18n';
-import { toast } from 'react-toastify';
+import { showToast } from '@utils/showToast';
 
 const QUOTA_EXCEEDED_MESSAGE = 'storageQuotaExceeded';
 
@@ -30,11 +30,11 @@ export const isQuotaExceededError = (error: unknown): boolean => {
 
 export const notifyStorageError = (error: unknown) => {
   if (isQuotaExceededError(error)) {
-    toast.error(getStorageQuotaExceededMessage());
+    showToast(getStorageQuotaExceededMessage(), 'error');
     return;
   }
 
-  toast.error(error instanceof Error ? error.message : String(error));
+  showToast(error instanceof Error ? error.message : String(error), 'error');
 };
 
 export const setLocalStorageItem = (name: string, value: string) => {

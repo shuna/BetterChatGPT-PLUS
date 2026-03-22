@@ -7,6 +7,7 @@ import {
   updateDriveFile,
   validateGoogleOath2AccessToken,
 } from '@api/google-api';
+import { showToast } from '@utils/showToast';
 import type { CloudSyncProvider, CloudSyncTarget } from '../types';
 
 const getCloudSyncTarget = (): CloudSyncTarget | null => {
@@ -22,9 +23,7 @@ const getCloudSyncTarget = (): CloudSyncTarget | null => {
 };
 
 const notifyCloudError = (message: string) => {
-  useStore.getState().setToastMessage(message);
-  useStore.getState().setToastShow(true);
-  useStore.getState().setToastStatus('error');
+  showToast(message, 'error');
 };
 
 export const validateGoogleCloudSync = () => {

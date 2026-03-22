@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import useStore, { type StoreState } from '@store/store';
+import { showToast } from '@utils/showToast';
 import i18n from '../i18n';
 import { Theme } from '@type/theme';
 import useInitialiseNewChat from './useInitialiseNewChat';
@@ -32,10 +33,7 @@ const useAppBootstrap = () => {
   const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
 
   const showBootstrapWarning = (message: string) => {
-    const store = useStore.getState();
-    store.setToastStatus('warning');
-    store.setToastMessage(message);
-    store.setToastShow(true);
+    showToast(message, 'warning');
   };
 
   useEffect(() => {

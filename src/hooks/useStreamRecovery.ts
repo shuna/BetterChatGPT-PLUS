@@ -12,7 +12,7 @@ import {
 } from '@utils/proxyClient';
 import { parseEventSource } from '@api/helper';
 import { debugReport } from '@store/debug-store';
-import { toast } from 'react-toastify';
+import { showToast } from '@utils/showToast';
 import {
   buildVerifiedStatsKey,
   OPENROUTER_VERIFICATION_INITIAL_DELAY_MS,
@@ -261,7 +261,7 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
   const hydrated = await waitForStoreHydration();
   if (!hydrated) {
     debugReport(debugId, { status: 'error', detail: 'Store hydration timeout' });
-    toast.error('リカバリ前のストア初期化がタイムアウトしました', { autoClose: false });
+    showToast('リカバリ前のストア初期化がタイムアウトしました', 'error');
     return;
   }
 
@@ -270,13 +270,13 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
     records = await getAllPending();
   } catch {
     debugReport(debugId, { status: 'error', detail: 'Failed to read pending records' });
-    toast.error('リカバリの準備に失敗しました', { autoClose: false });
+    showToast('リカバリの準備に失敗しました', 'error');
     return;
   }
 
   if (records.length === 0) {
     debugReport(debugId, { status: 'done', detail: 'No pending records' });
-    if (manual) toast.info('リカバリ対象のレコードがありません');
+    if (manual) showToast('リカバリ対象のレコードがありません', 'info');
     return;
   }
 
@@ -428,16 +428,16 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
     const sourceLabel = recoveredCount > 0
       ? ` ${recoveredCount}件はプロキシから追加復元しました。`
       : '';
-    toast.success(`リカバリ成功: ${restoredMessageCount}件のメッセージを復元しました。${sourceLabel}`.trim());
+    showToast(`リカバリ成功: ${restoredMessageCount}件のメッセージを復元しました。${sourceLabel}`.trim(), 'success');
   } else if (manual && !failedCount && !timedOut) {
-    toast.info('復元できる新しい内容はありませんでした');
+    showToast('復元できる新しい内容はありませんでした', 'info');
   }
 
   if (failedCount > 0) {
-    toast.error(`リカバリ失敗: ${failedCount}件はプロキシから復元できませんでした`, { autoClose: false });
+    showToast(`リカバリ失敗: ${failedCount}件はプロキシから復元できませんでした`, 'error');
   }
 
   if (timedOut) {
-    toast.error('リカバリがタイムアウトしました。しばらくしてから再試行してください', { autoClose: false });
+    showToast('リカバリがタイムアウトしました。しばらくしてから再試行してください', 'error');
   }
 }

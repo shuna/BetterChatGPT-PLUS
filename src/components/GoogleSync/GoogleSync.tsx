@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import useStore from '@store/store';
 import useGStore from '@store/cloud-auth-store';
+import { showToast } from '@utils/showToast';
 
 import {
   createDriveFile,
@@ -295,10 +296,6 @@ const GooglePopup = ({
   const currentFileId = useGStore((state) => state.fileId);
   const localFileSize = formatFileSize(String(stateToFile().size), navigator.language);
 
-  const setToastStatus = useStore((state) => state.setToastStatus);
-  const setToastMessage = useStore((state) => state.setToastMessage);
-  const setToastShow = useStore((state) => state.setToastShow);
-
   const syncButtonRef = useRef<GoogleSyncButtonHandle>(null);
   const refreshIntervalRef = useRef<number>();
 
@@ -381,9 +378,7 @@ const GooglePopup = ({
       setSyncStatus('synced');
     } catch (e: unknown) {
       setSyncStatus(resolveGoogleSyncErrorStatus(e));
-      setToastMessage((e as Error).message);
-      setToastShow(true);
-      setToastStatus('error');
+      showToast((e as Error).message, 'error');
     }
   };
 
@@ -414,16 +409,12 @@ const GooglePopup = ({
         });
       }
 
-      setToastStatus('success');
-      setToastMessage(t('toast.pull'));
-      setToastShow(true);
+      showToast(t('toast.pull'), 'success');
       setIsModalOpen(false);
       setSyncStatus('synced');
     } catch (e: unknown) {
       setSyncStatus(resolveGoogleSyncErrorStatus(e));
-      setToastMessage((e as Error).message);
-      setToastShow(true);
-      setToastStatus('error');
+      showToast((e as Error).message, 'error');
     }
   };
 
@@ -436,15 +427,11 @@ const GooglePopup = ({
       await updateDriveFile(stateToFile(), _fileId, googleAccessToken);
       const _files = await getFiles(googleAccessToken);
       if (_files) setFiles(_files);
-      setToastStatus('success');
-      setToastMessage(t('toast.push'));
-      setToastShow(true);
+      showToast(t('toast.push'), 'success');
       setSyncStatus('synced');
     } catch (e: unknown) {
       setSyncStatus(resolveGoogleSyncErrorStatus(e));
-      setToastMessage((e as Error).message);
-      setToastShow(true);
-      setToastStatus('error');
+      showToast((e as Error).message, 'error');
     }
   };
 
@@ -460,9 +447,7 @@ const GooglePopup = ({
       setSyncStatus('synced');
     } catch (e: unknown) {
       setSyncStatus(resolveGoogleSyncErrorStatus(e));
-      setToastMessage((e as Error).message);
-      setToastShow(true);
-      setToastStatus('error');
+      showToast((e as Error).message, 'error');
     }
   };
 
@@ -742,9 +727,6 @@ const FileSelector = ({
 }) => {
   const { t, i18n } = useTranslation(['drive']);
   const setSyncStatus = useGStore((state) => state.setSyncStatus);
-  const setToastStatus = useStore((state) => state.setToastStatus);
-  const setToastMessage = useStore((state) => state.setToastMessage);
-  const setToastShow = useStore((state) => state.setToastShow);
 
   const [isEditing, setIsEditing] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -769,9 +751,7 @@ const FileSelector = ({
       setSyncStatus('synced');
     } catch (e: unknown) {
       setSyncStatus(resolveGoogleSyncErrorStatus(e));
-      setToastMessage((e as Error).message);
-      setToastShow(true);
-      setToastStatus('error');
+      showToast((e as Error).message, 'error');
     }
   };
 
@@ -793,9 +773,7 @@ const FileSelector = ({
       setSyncStatus('synced');
     } catch (e: unknown) {
       setSyncStatus(resolveGoogleSyncErrorStatus(e));
-      setToastMessage((e as Error).message);
-      setToastShow(true);
-      setToastStatus('error');
+      showToast((e as Error).message, 'error');
     }
   };
 

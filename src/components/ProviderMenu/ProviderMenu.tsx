@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import ReactDOM from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
+import { showToast } from '@utils/showToast';
 import { ProviderId } from '@type/provider';
 import { PROVIDER_ORDER } from '@store/provider-config';
 import CrossIcon2 from '@icon/CrossIcon2';
@@ -77,9 +78,7 @@ const ProviderMenu = ({
     setApiVersion(apiVersionInput);
     const providerName = providers[selectedProvider]?.name || selectedProvider;
 
-    useStore.getState().setToastStatus('success');
-    useStore.getState().setToastMessage(`${providerName}: ${t('provider.saved', '設定を保存しました')}`);
-    useStore.getState().setToastShow(true);
+    showToast(`${providerName}: ${t('provider.saved', '設定を保存しました')}`, 'success');
 
     const updatedConfig = { ...currentProvider, apiKey: apiKeyInput, endpoint: endpointInput };
     refreshModels(selectedProvider, updatedConfig);

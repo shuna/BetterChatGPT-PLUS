@@ -1,4 +1,4 @@
-import { toast, type ToastOptions } from 'react-toastify';
+import { showToast } from '@utils/showToast';
 
 import type { ChatInterface, MessageInterface, TextContentInterface } from '@type/chat';
 import { isTextContent } from '@type/chat';
@@ -60,38 +60,31 @@ export const hasRecoverableMessage = (
 
 const RECOVERY_TOASTS: Record<
   RecoveryStatus,
-  { message: string; options: ToastOptions; show: () => void }
+  { message: string; status: 'info' | 'warning'; duration: number }
 > = {
   completed: {
     message: 'バックグラウンド中に応答が完了しました',
-    options: { autoClose: 4000 },
-    show: () => {
-      toast.info('バックグラウンド中に応答が完了しました', { autoClose: 4000 });
-    },
+    status: 'info',
+    duration: 4000,
   },
   interrupted: {
     message: 'バックグラウンド中に応答が途切れました',
-    options: { autoClose: 6000 },
-    show: () => {
-      toast.warning('バックグラウンド中に応答が途切れました', { autoClose: 6000 });
-    },
+    status: 'warning',
+    duration: 6000,
   },
   failed: {
     message: 'バックグラウンド中に応答が途切れました',
-    options: { autoClose: 6000 },
-    show: () => {
-      toast.warning('バックグラウンド中に応答が途切れました', { autoClose: 6000 });
-    },
+    status: 'warning',
+    duration: 6000,
   },
   'streaming-with-proxy': {
     message: 'プロキシ経由でストリームを復元中…',
-    options: { autoClose: 4000 },
-    show: () => {
-      toast.info('プロキシ経由でストリームを復元中…', { autoClose: 4000 });
-    },
+    status: 'info',
+    duration: 4000,
   },
 };
 
 export const showRecoveryToast = (status: RecoveryStatus) => {
-  RECOVERY_TOASTS[status].show();
+  const entry = RECOVERY_TOASTS[status];
+  showToast(entry.message, entry.status, entry.duration);
 };

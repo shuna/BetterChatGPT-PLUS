@@ -1,14 +1,12 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 
-const { errorMock, tMock } = vi.hoisted(() => ({
-  errorMock: vi.fn(),
+const { showToastMock, tMock } = vi.hoisted(() => ({
+  showToastMock: vi.fn(),
   tMock: vi.fn((key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key),
 }));
 
-vi.mock('react-toastify', () => ({
-  toast: {
-    error: errorMock,
-  },
+vi.mock('@utils/showToast', () => ({
+  showToast: showToastMock,
 }));
 
 vi.mock('@src/i18n', () => ({
@@ -25,7 +23,7 @@ import {
 
 describe('storageErrors', () => {
   beforeEach(() => {
-    errorMock.mockClear();
+    showToastMock.mockClear();
     tMock.mockClear();
   });
 
@@ -49,7 +47,7 @@ describe('storageErrors', () => {
     notifyStorageError(new Error('The quota has been exceeded.'));
     notifyStorageError(new Error('boom'));
 
-    expect(errorMock).toHaveBeenNthCalledWith(1, '保存容量の上限に達したため、保存できませんでした');
-    expect(errorMock).toHaveBeenNthCalledWith(2, 'boom');
+    expect(showToastMock).toHaveBeenNthCalledWith(1, '保存容量の上限に達したため、保存できませんでした', 'error');
+    expect(showToastMock).toHaveBeenNthCalledWith(2, 'boom', 'error');
   });
 });

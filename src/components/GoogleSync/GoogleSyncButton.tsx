@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useGoogleLogin, googleLogout } from '@react-oauth/google';
 import useGStore from '@store/cloud-auth-store';
 import useStore from '@store/store';
+import { showToast } from '@utils/showToast';
 import { createJSONStorage } from 'zustand/middleware';
 import { createLocalStoragePartializedState } from '@store/persistence';
 import compressedStorage from '@store/storage/CompressedStorage';
@@ -32,24 +33,16 @@ const GoogleSyncButton = forwardRef<
   const setSyncTargetConfirmed = useGStore((state) => state.setSyncTargetConfirmed);
   const cloudSync = useGStore((state) => state.cloudSync);
 
-  const setToastStatus = useStore((state) => state.setToastStatus);
-  const setToastMessage = useStore((state) => state.setToastMessage);
-  const setToastShow = useStore((state) => state.setToastShow);
-
   const login = useGoogleLogin({
     onSuccess: (codeResponse) => {
       setGoogleAccessToken(codeResponse.access_token);
       setCloudSync(true);
       loginHandler && loginHandler();
-      setToastStatus('success');
-      setToastMessage(t('toast.sync'));
-      setToastShow(true);
+      showToast(t('toast.sync'), 'success');
     },
     onError: (error) => {
       console.log('Login Failed');
-      setToastStatus('error');
-      setToastMessage(error?.error_description || 'Error in authenticating!');
-      setToastShow(true);
+      showToast(error?.error_description || 'Error in authenticating!', 'error');
     },
     scope: 'https://www.googleapis.com/auth/drive.file',
   });
@@ -90,9 +83,7 @@ const GoogleSyncButton = forwardRef<
       partialize: (state) => createLocalStoragePartializedState(state),
     });
     useStore.persist.rehydrate();
-    setToastStatus('success');
-    setToastMessage(t('toast.stop'));
-    setToastShow(true);
+    showToast(t('toast.stop'), 'success');
   };
 
   return (

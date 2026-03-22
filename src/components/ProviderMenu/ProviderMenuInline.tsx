@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
+import { showToast } from '@utils/showToast';
 import { ProviderId } from '@type/provider';
 import { PROVIDER_ORDER } from '@store/provider-config';
 import {
@@ -116,9 +117,7 @@ const ProviderMenuInline = () => {
     setApiVersion(apiVersionInput);
     const providerName = providers[selectedProvider]?.name || selectedProvider;
 
-    useStore.getState().setToastStatus('success');
-    useStore.getState().setToastMessage(`${providerName}: ${t('provider.saved', '設定を保存しました')}`);
-    useStore.getState().setToastShow(true);
+    showToast(`${providerName}: ${t('provider.saved', '設定を保存しました')}`, 'success');
 
     const updatedConfig = { ...currentProvider, apiKey: apiKeyInput, endpoint: endpointInput };
     refreshModels(selectedProvider, updatedConfig);

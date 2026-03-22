@@ -44,6 +44,7 @@ const {
     cloudState: state,
     toastState: {
       setToastMessage: vi.fn(),
+      setToastDuration: vi.fn(),
       setToastShow: vi.fn(),
       setToastStatus: vi.fn(),
     },
