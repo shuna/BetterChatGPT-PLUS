@@ -34,7 +34,7 @@ const MobileBar = ({ onSearchOpen }: MobileBarProps) => {
     Object.values(state.generatingSessions).some((s) => s.chatId === currentChatId)
   );
 
-  const isProxyMode = useStore((state) => !!state.proxyEndpoint);
+  const isProxyMode = useStore((state) => state.proxyEnabled && !!state.proxyEndpoint);
 
   const addChat = useAddChat();
 

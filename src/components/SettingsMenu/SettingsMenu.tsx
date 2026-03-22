@@ -216,13 +216,13 @@ const SettingsDialog = ({
   );
 };
 
-const SectionLabel = ({ children }: { children: React.ReactNode }) => (
+export const SectionLabel = ({ children }: { children: React.ReactNode }) => (
   <div className='text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1'>
     {children}
   </div>
 );
 
-const SettingsGroup = ({ label, children }: { label: string; children: React.ReactNode }) => (
+export const SettingsGroup = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div>
     <SectionLabel>{label}</SectionLabel>
     <div className='rounded-lg border border-gray-200 dark:border-gray-600 divide-y divide-gray-200 dark:divide-gray-600'>
@@ -231,7 +231,7 @@ const SettingsGroup = ({ label, children }: { label: string; children: React.Rea
   </div>
 );
 
-const SettingsRow = ({ label, children }: { label: string; children: React.ReactNode }) => (
+export const SettingsRow = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <div className='flex items-center justify-between gap-4 px-4 py-3'>
     <span className='text-sm font-medium text-gray-900 dark:text-gray-300'>{label}</span>
     <div className='flex-shrink-0'>{children}</div>

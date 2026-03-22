@@ -67,10 +67,13 @@ export interface ConfigSlice {
   splitPanelSwapped: boolean;
   setSplitPanelRatio: (ratio: number) => void;
   setSplitPanelSwapped: (swapped: boolean) => void;
+  /** Whether the proxy is enabled */
+  proxyEnabled: boolean;
   /** Base URL of the Weavelet Stream Proxy worker */
   proxyEndpoint: string;
   /** Bearer token for proxy authentication */
   proxyAuthToken: string;
+  setProxyEnabled: (enabled: boolean) => void;
   setProxyEndpoint: (endpoint: string) => void;
   setProxyAuthToken: (token: string) => void;
 }
@@ -259,8 +262,13 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
       splitPanelSwapped: swapped,
     }));
   },
+  proxyEnabled: false,
   proxyEndpoint: '',
   proxyAuthToken: '',
+  setProxyEnabled: (enabled: boolean) => {
+    if (get().proxyEnabled === enabled) return;
+    set((prev: ConfigSlice) => ({ ...prev, proxyEnabled: enabled }));
+  },
   setProxyEndpoint: (endpoint: string) => {
     if (get().proxyEndpoint === endpoint) return;
     set((prev: ConfigSlice) => ({ ...prev, proxyEndpoint: endpoint }));
