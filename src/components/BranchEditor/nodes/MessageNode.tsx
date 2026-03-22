@@ -83,7 +83,7 @@ const MessageNode = memo(({ data, id }: NodeProps<MessageNodeData>) => {
       <p className='text-xs text-gray-700 dark:text-gray-300 line-clamp-2 leading-relaxed' data-node-content>
         {data.contentPreview || '(empty)'}
       </p>
-      {/* Hover menu button */}
+      {/* Node context menu button */}
       {isHovered && (
         <button
           ref={menuBtnRef}

@@ -18,6 +18,7 @@ export interface SearchSlice {
   prevResult: () => void;
   openSearch: () => void;
   closeSearch: () => void;
+  toggleSearch: () => void;
 }
 
 export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
@@ -25,7 +26,7 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
   searchScope: 'all',
   searchResults: [],
   currentResultIndex: -1,
-  isSearchOpen: false,
+  isSearchOpen: true,
   matchedNodeIds: new Set(),
   currentResultNodeId: null,
 
@@ -84,6 +85,14 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
       matchedNodeIds: new Set(),
       currentResultNodeId: null,
     });
+  },
+
+  toggleSearch: () => {
+    if (get().isSearchOpen) {
+      get().closeSearch();
+    } else {
+      get().openSearch();
+    }
   },
 });
 
