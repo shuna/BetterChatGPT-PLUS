@@ -180,7 +180,7 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
         onChange={(e) => setQuery(e.target.value)}
         onKeyDown={handleKeyDown}
         placeholder='ページ内検索...'
-        className='flex-1 min-w-0 text-sm bg-transparent outline-none text-gray-800 dark:text-gray-200 placeholder-gray-400 border border-gray-300 dark:border-gray-600 rounded px-2 py-1'
+        className='flex-1 min-w-0 text-base bg-transparent outline-none text-gray-800 dark:text-gray-200 placeholder-gray-400 border border-gray-300 dark:border-gray-600 rounded px-2 py-1'
       />
 
       {/* Result count */}
