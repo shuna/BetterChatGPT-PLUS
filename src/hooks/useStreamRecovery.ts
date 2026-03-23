@@ -36,13 +36,20 @@ let recoveryInProgress = false;
 
 /** Module-level AbortController for cancelling in-flight proxy recovery */
 let activeRecoveryAbort: AbortController | null = null;
+let recoveryCancelledManually = false;
 
 /** Cancel any in-flight proxy recovery. Called externally for manual stop. */
 export function cancelActiveRecovery() {
   if (activeRecoveryAbort) {
+    recoveryCancelledManually = true;
     activeRecoveryAbort.abort();
     activeRecoveryAbort = null;
   }
+  debugReport('recovery-hook', {
+    label: 'Recovery Hook',
+    status: 'done',
+    detail: `${formatDebugTime()} cancelled`,
+  });
 }
 
 export default function useStreamRecovery() {
@@ -260,7 +267,14 @@ async function readProxyRecoveryStream(
 
 export async function recoverPending(opts?: { manual?: boolean }) {
   // Prevent concurrent calls (StrictMode double-mount, rapid visibility changes)
-  if (recoveryInProgress) return;
+  if (recoveryInProgress) {
+    debugReport('recovery-hook', {
+      label: 'Recovery Hook',
+      status: 'done',
+      detail: `${formatDebugTime()} recover skipped (already running)`,
+    });
+    return;
+  }
   recoveryInProgress = true;
 
   const manual = opts?.manual ?? false;
@@ -270,6 +284,11 @@ export async function recoverPending(opts?: { manual?: boolean }) {
   try {
     await recoverPendingInner(manual, debugId);
   } finally {
+    debugReport('recovery-hook', {
+      label: 'Recovery Hook',
+      status: 'done',
+      detail: `${formatDebugTime()} recover finished`,
+    });
     recoveryInProgress = false;
   }
 }
@@ -312,11 +331,13 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
   let failedCount = 0;
   let restoredMessageCount = 0;
   let timedOut = false;
+  let cancelled = false;
 
   try {
     for (const record of records) {
       if (abort.signal.aborted) {
-        timedOut = true;
+        cancelled = recoveryCancelledManually;
+        timedOut = !cancelled;
         break;
       }
 
@@ -361,7 +382,10 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
         detail: `${formatDebugTime()} status=${effectiveStatus}`,
       });
       if (effectiveStatus === 'streaming') {
-        // Still actively streaming without proxy, don't notify yet
+        debugReport(`recovery-record:${requestId}`, {
+          status: 'done',
+          detail: `${formatDebugTime()} still streaming`,
+        });
         continue;
       }
 
@@ -488,9 +512,15 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
     if (activeRecoveryAbort === abort) {
       activeRecoveryAbort = null;
     }
+    recoveryCancelledManually = false;
   }
 
-  debugReport(debugId, { status: 'done', detail: `Processed ${records.length} record(s)` });
+  debugReport(debugId, {
+    status: cancelled ? 'done' : 'done',
+    detail: cancelled
+      ? 'Recovery cancelled'
+      : `Processed ${records.length} record(s)`,
+  });
 
   if (restoredMessageCount > 0) {
     const sourceLabel = recoveredCount > 0

@@ -111,6 +111,7 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
   // immune to interference from browser extensions listening on
   // navigator.serviceWorker.onmessage.
   const channel = new MessageChannel();
+  let cleanedUp = false;
 
   channel.port1.onmessage = (event: MessageEvent) => {
     const data = event.data;
@@ -134,6 +135,11 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
           status: 'done',
           detail: `${formatDebugTime()} sw-done`,
         });
+        debugReport(`sw-pipeline:${requestId}`, {
+          label: 'SW Pipeline',
+          status: 'done',
+          detail: `${formatDebugTime()} sw-done delivered`,
+        });
         onDone({
           proxySessionId: data.proxySessionId,
           lastProxyEventId: data.lastProxyEventId,
@@ -148,6 +154,11 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
           status: 'error',
           detail: `${formatDebugTime()} sw-error ${data.error || 'unknown'}`,
         });
+        debugReport(`sw-pipeline:${requestId}`, {
+          label: 'SW Pipeline',
+          status: 'error',
+          detail: `${formatDebugTime()} sw-error delivered`,
+        });
         onError(data.error || 'Unknown error', {
           proxySessionId: data.proxySessionId,
           lastProxyEventId: data.lastProxyEventId,
@@ -156,15 +167,27 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
         break;
       case 'sw-cancelled':
         cleanup();
+        debugReport('streaming', {
+          label: 'Streaming',
+          status: 'done',
+          detail: requestId,
+        });
         debugReport(`stream:${requestId}`, {
-          status: 'error',
+          status: 'done',
           detail: `${formatDebugTime()} sw-cancelled`,
+        });
+        debugReport(`sw-pipeline:${requestId}`, {
+          label: 'SW Pipeline',
+          status: 'done',
+          detail: `${formatDebugTime()} sw-cancelled delivered`,
         });
         break;
     }
   };
 
   function cleanup() {
+    if (cleanedUp) return;
+    cleanedUp = true;
     channel.port1.close();
   }
 
@@ -193,8 +216,19 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
   return {
     cancel: () => {
       debugReport(`stream:${requestId}`, {
-        status: 'active',
+        label: 'SW Stream',
+        status: 'done',
         detail: `${formatDebugTime()} cancel requested`,
+      });
+      debugReport(`sw-pipeline:${requestId}`, {
+        label: 'SW Pipeline',
+        status: 'done',
+        detail: `${formatDebugTime()} cancel requested`,
+      });
+      debugReport('streaming', {
+        label: 'Streaming',
+        status: 'done',
+        detail: requestId,
       });
       sw.controller?.postMessage({
         type: 'cancelStream',
