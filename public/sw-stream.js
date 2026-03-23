@@ -52,6 +52,16 @@ async function dbUpdate(requestId, updates) {
   }
 }
 
+async function dbDelete(requestId) {
+  const db = await openDb();
+  return new Promise(function(resolve, reject) {
+    var store = db.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME);
+    var req = store.delete(requestId);
+    req.onsuccess = function() { db.close(); resolve(); };
+    req.onerror = function() { db.close(); reject(req.error); };
+  });
+}
+
 // --- SSE Parser (inline copy from src/api/helper.ts) ---
 
 function parseEventSource(data, flush) {
@@ -588,7 +598,10 @@ async function handleStartStream(msg, port) {
     }
 
     await flushBufferedText();
-    await dbUpdate(requestId, { status: 'completed' });
+    // Stream completed — delete the recovery record since we'll notify the
+    // client directly.  Using delete instead of dbUpdate avoids a get-put
+    // race where a concurrent client delete could be undone by a later put.
+    await dbDelete(requestId).catch(function() {});
     postToClient({
       type: 'sw-done',
       requestId,
@@ -603,10 +616,11 @@ async function handleStartStream(msg, port) {
     }
     const isAbort = err.name === 'AbortError';
     const isTimeout = !isAbort && err.message && err.message.includes('Chunk timeout');
-    const status = isAbort ? 'interrupted' : 'failed';
     const error = isAbort ? 'Cancelled' : (err.message || String(err));
     await flushBufferedText();
-    await dbUpdate(requestId, { status, error });
+    // For errors/cancellation, also delete — the client gets notified via
+    // sw-error/sw-cancelled and can decide how to handle it.
+    await dbDelete(requestId).catch(function() {});
     postToClient({
       type: isAbort ? 'sw-cancelled' : 'sw-error',
       requestId,
