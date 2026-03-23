@@ -35,11 +35,16 @@ export const buildRecoveredMessage = (
 
 export const resolveRecoveryStatus = (
   record: StreamRecord,
-  now: number = Date.now()
+  now: number = Date.now(),
+  hasActiveSession?: boolean
 ): StreamRecord['status'] | 'streaming-with-proxy' => {
   if (record.status !== 'streaming') return record.status;
   // If proxy is configured, allow recovery even during active streaming
   if (record.proxySessionId) return 'streaming-with-proxy';
+  // If this record no longer has a live generating session, it is orphaned
+  // and should be recovered immediately instead of waiting for staleness.
+  if (hasActiveSession === false) return 'interrupted';
+  if (hasActiveSession === true) return 'streaming';
   return now - record.updatedAt > STREAM_STALE_THRESHOLD_MS
     ? 'interrupted'
     : 'streaming';

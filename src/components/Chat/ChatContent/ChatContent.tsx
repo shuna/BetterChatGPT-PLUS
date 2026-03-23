@@ -233,7 +233,9 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
 
   useEffect(() => {
     if (error && proxyActive) {
-      getAllPending().then((records) => setHasPendingRecords(records.length > 0)).catch(() => setHasPendingRecords(false));
+      getAllPending()
+        .then((records) => setHasPendingRecords(records.some((record) => !!record.proxySessionId)))
+        .catch(() => setHasPendingRecords(false));
     } else {
       setHasPendingRecords(false);
     }

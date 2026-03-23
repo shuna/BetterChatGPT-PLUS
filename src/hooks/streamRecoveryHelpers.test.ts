@@ -52,6 +52,28 @@ describe('resolveRecoveryStatus', () => {
       resolveRecoveryStatus({ ...base, status: 'streaming', updatedAt: now - 30001 }, now)
     ).toBe('interrupted');
   });
+
+  it('returns "interrupted" immediately for orphaned non-proxy streams', () => {
+    const now = Date.now();
+    expect(
+      resolveRecoveryStatus(
+        { ...base, status: 'streaming', updatedAt: now - 5000 },
+        now,
+        false
+      )
+    ).toBe('interrupted');
+  });
+
+  it('returns "streaming" for active non-proxy streams when session is live', () => {
+    const now = Date.now();
+    expect(
+      resolveRecoveryStatus(
+        { ...base, status: 'streaming', updatedAt: now - 60000 },
+        now,
+        true
+      )
+    ).toBe('streaming');
+  });
 });
 
 // ---------------------------------------------------------------------------
