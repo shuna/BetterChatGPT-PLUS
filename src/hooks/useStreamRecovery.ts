@@ -322,6 +322,9 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
       }
 
       const currentText = getCurrentMessageText(chat.messages[messageIndex]);
+      const hasActiveSession = Object.values(useStore.getState().generatingSessions).some(
+        (session) => session.chatId === chat.id && session.messageIndex === messageIndex
+      );
 
       // First: apply IndexedDB buffered text (fast, local)
       const bestText = bufferedText;
@@ -342,7 +345,7 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
       }
 
       // Determine if stream is stale (SW probably died)
-      const effectiveStatus = resolveRecoveryStatus(record);
+      const effectiveStatus = resolveRecoveryStatus(record, Date.now(), hasActiveSession);
       if (effectiveStatus === 'streaming') {
         // Still actively streaming without proxy, don't notify yet
         continue;

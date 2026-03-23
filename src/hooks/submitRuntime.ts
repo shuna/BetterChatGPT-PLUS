@@ -148,12 +148,19 @@ const discardQueuedChunks = (chatId: string, targetNodeId: string) => {
   pendingChunkBuffers.delete(key);
 };
 
-export const clearSubmitSessionRuntime = (sessionId: string) => {
+export const clearSubmitSessionRuntime = (
+  sessionId: string,
+  options?: { discardQueued?: boolean }
+) => {
   const chunkTarget =
     sessionChunkTargets.get(sessionId) ??
     useStore.getState().generatingSessions[sessionId];
   if (chunkTarget) {
-    discardQueuedChunks(chunkTarget.chatId, chunkTarget.targetNodeId);
+    if (options?.discardQueued) {
+      discardQueuedChunks(chunkTarget.chatId, chunkTarget.targetNodeId);
+    } else {
+      flushQueuedChunks(chunkTarget.chatId, chunkTarget.targetNodeId);
+    }
     finalizeStreamingNode(chunkTarget.chatId, chunkTarget.targetNodeId);
     sessionChunkTargets.delete(sessionId);
   }
@@ -192,7 +199,7 @@ export const stopSubmitSession = (sessionId: string) => {
     }
   }
 
-  clearSubmitSessionRuntime(sessionId);
+  clearSubmitSessionRuntime(sessionId, { discardQueued: true });
   useStore.getState().removeSession(sessionId);
 };
 

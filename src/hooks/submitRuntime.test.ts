@@ -85,6 +85,69 @@ describe('abort controller lifecycle', () => {
     expect(() => clearSubmitSessionRuntime('nonexistent')).not.toThrow();
   });
 
+  it('clearSubmitSessionRuntime flushes queued chunks during normal cleanup', () => {
+    vi.useFakeTimers();
+    mockState = {
+      generatingSessions: {
+        'sess-cleanup': {
+          sessionId: 'sess-cleanup',
+          chatId: 'chat-1',
+          chatIndex: 0,
+          messageIndex: 1,
+          targetNodeId: 'node-assistant',
+          mode: 'append',
+          insertIndex: null,
+          requestPath: 'sw',
+          startedAt: 1,
+        },
+      },
+      chats: [
+        {
+          id: 'chat-1',
+          branchTree: {
+            rootId: 'node-user',
+            activePath: ['node-user', 'node-assistant'],
+            nodes: {
+              'node-user': {
+                id: 'node-user',
+                parentId: null,
+                role: 'user',
+                contentHash: 'user-hash',
+                createdAt: 1,
+              },
+              'node-assistant': {
+                id: 'node-assistant',
+                parentId: 'node-user',
+                role: 'assistant',
+                contentHash: 'assistant-hash',
+                createdAt: 2,
+              },
+            },
+          },
+          messages: [
+            { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+            { role: 'assistant', content: [{ type: 'text', text: '' }] },
+          ],
+        },
+      ],
+      contentStore: {
+        'user-hash': { content: [{ type: 'text', text: 'hi' }], refCount: 1 },
+        'assistant-hash': { content: [{ type: 'text', text: '' }], refCount: 1 },
+      },
+    };
+
+    createSubmitAbortController('sess-cleanup');
+    writeChunkToStore('chat-1', 'node-assistant', 'Hello');
+    queueChunkToStore('chat-1', 'node-assistant', ' world');
+
+    clearSubmitSessionRuntime('sess-cleanup');
+
+    const state = mockState as any;
+    const nodeHash = state.chats[0].branchTree.nodes['node-assistant'].contentHash;
+    expect(nodeHash.startsWith('__streaming:')).toBe(false);
+    expect(state.contentStore[nodeHash].content[0].text).toBe('Hello world');
+  });
+
   it('stopSubmitSession aborts and calls removeSession', () => {
     const ctrl = createSubmitAbortController('sess-2');
     stopSubmitSession('sess-2');
