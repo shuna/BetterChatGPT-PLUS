@@ -117,6 +117,13 @@ export async function startStream(params: StartStreamParams): Promise<SwStreamHa
     if (!data) return;
 
     switch (data.type) {
+      case 'sw-debug':
+        debugReport(`sw-pipeline:${requestId}`, {
+          label: 'SW Pipeline',
+          status: data.status || 'active',
+          detail: data.detail,
+        });
+        break;
       case 'sw-chunk':
         onChunk(data.text, { generationId: data.generationId, reasoning: data.reasoning });
         break;

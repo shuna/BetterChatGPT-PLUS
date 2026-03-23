@@ -8,6 +8,10 @@ const FLUSH_INTERVAL_MS = 800;
 
 const activeStreams = new Map();
 
+function formatDebugTime(time) {
+  return new Date(time || Date.now()).toISOString().slice(11, 23);
+}
+
 // --- IndexedDB helpers (duplicated for SW scope) ---
 
 function openDb() {
@@ -367,6 +371,15 @@ async function handleStartStream(msg, port) {
     }
   }
 
+  function postDebug(detail, status) {
+    postToClient({
+      type: 'sw-debug',
+      requestId,
+      detail: formatDebugTime() + ' ' + detail,
+      status: status || 'active',
+    });
+  }
+
   function flushBufferedText() {
     if (flushTimer) {
       clearTimeout(flushTimer);
@@ -414,12 +427,14 @@ async function handleStartStream(msg, port) {
   }
 
   try {
+    postDebug('fetch start ' + fetchEndpoint);
     const response = await fetch(fetchEndpoint, {
       method: 'POST',
       headers: fetchHeaders,
       body: fetchBody,
       signal: controller.signal,
     });
+    postDebug('fetch response ' + response.status);
 
     if (!response.ok) {
       let errorText = await response.text();
@@ -434,6 +449,16 @@ async function handleStartStream(msg, port) {
         errorText = 'Proxy error (' + code + '): The LLM API endpoint is unreachable. Check the URL and try again.';
       }
       await dbUpdate(requestId, { status: 'failed', error: errorText });
+      postDebug('fetch failed ' + response.status, 'error');
+      postToClient({ type: 'sw-error', requestId, error: errorText });
+      activeStreams.delete(requestId);
+      return;
+    }
+
+    if (!response.body) {
+      const errorText = 'Streaming response body is missing';
+      await dbUpdate(requestId, { status: 'failed', error: errorText });
+      postDebug('response.body missing', 'error');
       postToClient({ type: 'sw-error', requestId, error: errorText });
       activeStreams.delete(requestId);
       return;
@@ -443,6 +468,11 @@ async function handleStartStream(msg, port) {
     const decoder = new TextDecoder();
     let partial = '';
     let reading = true;
+    let readCount = 0;
+    let totalBytes = 0;
+    let totalTextChars = 0;
+    let totalReasoningChars = 0;
+    postDebug('reader ready');
 
     const CHUNK_TIMEOUT_MS = 45_000;
 
@@ -462,6 +492,12 @@ async function handleStartStream(msg, port) {
 
       while (reading) {
         const { done, value } = await readWithTimeout();
+        readCount++;
+        const byteLength = value ? value.byteLength : 0;
+        totalBytes += byteLength;
+        postDebug(
+          'read#' + readCount + ' bytes=' + byteLength + ' total=' + totalBytes + ' done=' + done
+        );
         const chunk = partial + decoder.decode(done ? undefined : value, { stream: !done });
         const proxySse = parseProxySse(chunk, done);
         partial = proxySse.partial;
@@ -470,11 +506,13 @@ async function handleStartStream(msg, port) {
           if (evt.id > lastProxyEventId) lastProxyEventId = evt.id;
 
           if (evt.eventType === 'done') {
+            postDebug('proxy done event lastEventId=' + lastProxyEventId);
             reading = false;
             break;
           }
           if (evt.eventType === 'error' || evt.eventType === 'interrupted') {
             const errorMsg = evt.meta && evt.meta.error ? evt.meta.error : 'Proxy stream error';
+            postDebug('proxy ' + evt.eventType + ' ' + errorMsg, 'error');
             throw new Error(errorMsg);
           }
 
@@ -494,15 +532,18 @@ async function handleStartStream(msg, port) {
             if (fr) finishReason = fr;
             const reasoning = extractReasoning(llmParsed.events);
             if (reasoning) {
+              totalReasoningChars += reasoning.length;
               postToClient({ type: 'sw-chunk', requestId, text: '', reasoning, generationId });
             }
             const rawText = extractText(llmParsed.events);
             if (rawText) {
               const parsed = thinkParser.process(rawText);
               if (parsed.reasoning) {
+                totalReasoningChars += parsed.reasoning.length;
                 postToClient({ type: 'sw-chunk', requestId, text: '', reasoning: parsed.reasoning, generationId });
               }
               if (parsed.content) {
+                totalTextChars += parsed.content.length;
                 postToClient({ type: 'sw-chunk', requestId, text: parsed.content, generationId });
                 bufferedText += parsed.content;
                 scheduleFlush();
@@ -510,31 +551,47 @@ async function handleStartStream(msg, port) {
             }
 
             if (llmParsed.done) {
+              postDebug(
+                'llm done marker read#' + readCount +
+                ' text=' + totalTextChars +
+                ' reasoning=' + totalReasoningChars
+              );
               reading = false;
               break;
             }
           }
         }
 
-        if (done) reading = false;
+        if (done) {
+          postDebug(
+            'reader done=true read#' + readCount +
+            ' text=' + totalTextChars +
+            ' reasoning=' + totalReasoningChars
+          );
+          reading = false;
+        }
       }
 
       // Flush any remaining partial LLM SSE
       if (llmPartial) {
+        postDebug('flush llmPartial len=' + llmPartial.length);
         const llmFlushed = parseEventSource(llmPartial, true);
         const fr = extractFinishReason(llmFlushed.events);
         if (fr) finishReason = fr;
         const reasoning = extractReasoning(llmFlushed.events);
         if (reasoning) {
+          totalReasoningChars += reasoning.length;
           postToClient({ type: 'sw-chunk', requestId, text: '', reasoning });
         }
         const rawFlushText = extractText(llmFlushed.events);
         if (rawFlushText) {
           const parsed = thinkParser.process(rawFlushText);
           if (parsed.reasoning) {
+            totalReasoningChars += parsed.reasoning.length;
             postToClient({ type: 'sw-chunk', requestId, text: '', reasoning: parsed.reasoning });
           }
           if (parsed.content) {
+            totalTextChars += parsed.content.length;
             postToClient({ type: 'sw-chunk', requestId, text: parsed.content });
             bufferedText += parsed.content;
           }
@@ -542,10 +599,16 @@ async function handleStartStream(msg, port) {
       }
       // Flush remaining think-tag buffer for proxy mode
       const proxyThinkRemaining = thinkParser.flush();
+      postDebug(
+        'think flush content=' + proxyThinkRemaining.content.length +
+        ' reasoning=' + proxyThinkRemaining.reasoning.length
+      );
       if (proxyThinkRemaining.reasoning) {
+        totalReasoningChars += proxyThinkRemaining.reasoning.length;
         postToClient({ type: 'sw-chunk', requestId, text: '', reasoning: proxyThinkRemaining.reasoning });
       }
       if (proxyThinkRemaining.content) {
+        totalTextChars += proxyThinkRemaining.content.length;
         postToClient({ type: 'sw-chunk', requestId, text: proxyThinkRemaining.content });
         bufferedText += proxyThinkRemaining.content;
       }
@@ -556,6 +619,12 @@ async function handleStartStream(msg, port) {
       while (reading) {
         const { done, value } = await readWithTimeout();
         _chunkNum++;
+        readCount++;
+        const byteLength = value ? value.byteLength : 0;
+        totalBytes += byteLength;
+        postDebug(
+          'read#' + readCount + ' bytes=' + byteLength + ' total=' + totalBytes + ' done=' + done
+        );
         const chunk = partial + decoder.decode(done ? undefined : value, { stream: !done });
         const parsed = parseEventSource(chunk, done);
         partial = parsed.partial;
@@ -574,6 +643,7 @@ async function handleStartStream(msg, port) {
         const reasoning = extractReasoning(parsed.events);
         if (reasoning) {
           _totalReasoning += reasoning.length;
+          totalReasoningChars += reasoning.length;
           postToClient({ type: 'sw-chunk', requestId, text: '', reasoning, generationId });
         }
         const rawDirectText = extractText(parsed.events);
@@ -581,10 +651,12 @@ async function handleStartStream(msg, port) {
           const thinkParsed = thinkParser.process(rawDirectText);
           if (thinkParsed.reasoning) {
             _totalReasoning += thinkParsed.reasoning.length;
+            totalReasoningChars += thinkParsed.reasoning.length;
             postToClient({ type: 'sw-chunk', requestId, text: '', reasoning: thinkParsed.reasoning, generationId });
           }
           if (thinkParsed.content) {
             _totalText += thinkParsed.content.length;
+            totalTextChars += thinkParsed.content.length;
             postToClient({ type: 'sw-chunk', requestId, text: thinkParsed.content, generationId });
             bufferedText += thinkParsed.content;
             scheduleFlush();
@@ -596,26 +668,46 @@ async function handleStartStream(msg, port) {
         }
 
         if (parsed.done || done) {
+          postDebug(
+            'direct done read#' + readCount +
+            ' parsed=' + parsed.done +
+            ' done=' + done +
+            ' text=' + totalTextChars +
+            ' reasoning=' + totalReasoningChars
+          );
           console.log('[SW] done chunk#' + _chunkNum + ' txt=' + _totalText + ' rsn=' + _totalReasoning + ' parsed.done=' + parsed.done + ' done=' + done);
           reading = false;
         }
       }
       // Flush remaining think-tag buffer for direct mode
       const directThinkRemaining = thinkParser.flush();
+      postDebug(
+        'think flush content=' + directThinkRemaining.content.length +
+        ' reasoning=' + directThinkRemaining.reasoning.length
+      );
       if (directThinkRemaining.reasoning) {
+        totalReasoningChars += directThinkRemaining.reasoning.length;
         postToClient({ type: 'sw-chunk', requestId, text: '', reasoning: directThinkRemaining.reasoning });
       }
       if (directThinkRemaining.content) {
+        totalTextChars += directThinkRemaining.content.length;
         postToClient({ type: 'sw-chunk', requestId, text: directThinkRemaining.content });
         bufferedText += directThinkRemaining.content;
       }
     }
 
+    postDebug('flush buffered start len=' + bufferedText.length);
     await flushBufferedText();
+    postDebug('flush buffered done len=' + bufferedText.length);
     // Stream completed — delete the recovery record since we'll notify the
     // client directly.  Using delete instead of dbUpdate avoids a get-put
     // race where a concurrent client delete could be undone by a later put.
     await dbDelete(requestId).catch(function() {});
+    postDebug('record deleted');
+    postDebug(
+      'posting sw-done generation=' + (generationId || '-') +
+      ' finish=' + (finishReason || '-')
+    );
     postToClient({
       type: 'sw-done',
       requestId,
@@ -623,6 +715,7 @@ async function handleStartStream(msg, port) {
       finishReason,
       ...(proxyMode ? { proxySessionId: proxyConfig.sessionId, lastProxyEventId } : {}),
     });
+    postDebug('posted sw-done', 'done');
   } catch (err) {
     // On timeout, abort the fetch so the connection is released
     if (!controller.signal.aborted) {
@@ -631,10 +724,16 @@ async function handleStartStream(msg, port) {
     const isAbort = err.name === 'AbortError';
     const isTimeout = !isAbort && err.message && err.message.includes('Chunk timeout');
     const error = isAbort ? 'Cancelled' : (err.message || String(err));
+    postDebug(
+      (isAbort ? 'abort ' : 'exception ') + error,
+      isAbort ? 'error' : 'error'
+    );
     await flushBufferedText();
+    postDebug('flush buffered after error len=' + bufferedText.length);
     // For errors/cancellation, also delete — the client gets notified via
     // sw-error/sw-cancelled and can decide how to handle it.
     await dbDelete(requestId).catch(function() {});
+    postDebug('record deleted after error');
     postToClient({
       type: isAbort ? 'sw-cancelled' : 'sw-error',
       requestId,
