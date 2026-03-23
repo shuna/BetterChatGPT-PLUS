@@ -17,7 +17,7 @@ import { createRoot } from 'react-dom/client';
 import Message from './Message';
 import { MessageInterface } from '@type/chat';
 import { ExportV3 } from '@type/export';
-import { prepareChatForExport } from '@utils/chatExport';
+import { prepareChatForExport, chatToOpenAIFormat, chatToOpenRouterFormat } from '@utils/chatExport';
 
 const getVisibleMessages = (): Array<{ message: MessageInterface; originalIndex: number }> => {
   const state = useStore.getState();
@@ -211,6 +211,48 @@ const DownloadChat = React.memo(
               >
                 <JsonIcon />
                 JSON
+              </button>
+              <button
+                className='btn btn-neutral gap-2'
+                aria-label='chatgpt'
+                onClick={async () => {
+                  const chats = useStore.getState().chats;
+                  if (chats) {
+                    const chat = chats[useStore.getState().currentChatIndex];
+                    const contentStore = useStore.getState().contentStore;
+                    const openaiData = chatToOpenAIFormat(chat, contentStore, { visibleBranchOnly });
+                    const filename = chat.title.trim() || 'download';
+                    if (useGzip) {
+                      await downloadFileGzip([openaiData], filename);
+                    } else {
+                      downloadFile([openaiData], filename);
+                    }
+                  }
+                }}
+              >
+                <JsonIcon />
+                ChatGPT
+              </button>
+              <button
+                className='btn btn-neutral gap-2'
+                aria-label='openrouter'
+                onClick={async () => {
+                  const chats = useStore.getState().chats;
+                  if (chats) {
+                    const chat = chats[useStore.getState().currentChatIndex];
+                    const contentStore = useStore.getState().contentStore;
+                    const orData = chatToOpenRouterFormat(chat, contentStore);
+                    const filename = chat.title.trim() || 'download';
+                    if (useGzip) {
+                      await downloadFileGzip(orData, filename);
+                    } else {
+                      downloadFile(orData, filename);
+                    }
+                  }
+                }}
+              >
+                <JsonIcon />
+                OpenRouter
               </button>
               </div>
             </div>

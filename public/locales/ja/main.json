@@ -16,6 +16,8 @@
   "exportFormatCompact": "コンパクト (v3)",
   "exportFormatLegacy": "レガシー互換 (v1)",
   "gzCompression": ".gz 圧縮",
+  "exportFormatOpenAI": "ChatGPT 互換",
+  "exportFormatOpenRouter": "OpenRouter / OpenAI API",
   "author": "Jing Hua作",
   "about": "概要 & スポンサー",
   "api": "API",

@@ -30,26 +30,47 @@ export interface ExportV3 extends ExportBase {
   version: 3;
 }
 
+export type OpenAIChatMessage = {
+  author: {
+    role: Role;
+  };
+  content:
+    | {
+        parts?: string[];
+      }
+    | ContentInterface;
+  metadata?: {
+    model_slug?: string;
+    [key: string]: unknown;
+  };
+};
+
 export type OpenAIChat = {
   title: string;
+  create_time?: number;
   mapping: {
     [key: string]: {
       id: string;
-      message?: {
-        author: {
-          role: Role;
-        };
-        content:
-          | {
-              parts?: string[];
-            }
-          | ContentInterface;
-      } | null;
+      message?: OpenAIChatMessage | null;
       parent: string | null;
       children: string[];
     };
   };
   current_node: string;
+};
+
+export type OpenRouterChat = {
+  title: string;
+  model?: string;
+  temperature?: number;
+  max_tokens?: number;
+  top_p?: number;
+  frequency_penalty?: number;
+  presence_penalty?: number;
+  messages: {
+    role: Role;
+    content: string;
+  }[];
 };
 
 export interface OpenAIPlaygroundJSON extends ConfigInterface {

@@ -9,8 +9,9 @@ import { resolveContent, buildExportContentStore } from '@utils/contentStore';
 
 import { ChatInterface } from '@type/chat';
 import { ExportV1, ExportV3 } from '@type/export';
+import { chatToOpenAIFormat, chatToOpenRouterFormat } from '@utils/chatExport';
 
-type ExportFormat = 'v3' | 'v1';
+type ExportFormat = 'v3' | 'v1' | 'openai' | 'openrouter';
 
 const ExportChat = () => {
   const { t } = useTranslation();
@@ -22,10 +23,14 @@ const ExportChat = () => {
     const folders = useStore.getState().folders;
     const contentStore = useStore.getState().contentStore;
 
-    let fileData: ExportV1 | ExportV3;
     const filename = getToday();
+    let fileData: unknown;
 
-    if (format === 'v1') {
+    if (format === 'openai') {
+      fileData = chats?.map((chat) => chatToOpenAIFormat(chat, contentStore)) ?? [];
+    } else if (format === 'openrouter') {
+      fileData = chats?.map((chat) => chatToOpenRouterFormat(chat, contentStore)) ?? [];
+    } else if (format === 'v1') {
       // Legacy: expand contentHash back to inline content, strip branchTree
       const v1Chats = chats?.map((chat) => {
         const expanded = { ...chat };
@@ -79,6 +84,26 @@ const ExportChat = () => {
             className='rounded'
           />
           {t('exportFormatLegacy')}
+        </label>
+        <label className='flex items-center gap-1.5 cursor-pointer'>
+          <input
+            type='radio'
+            name='exportFormat'
+            checked={format === 'openai'}
+            onChange={() => setFormat('openai')}
+            className='rounded'
+          />
+          {t('exportFormatOpenAI')}
+        </label>
+        <label className='flex items-center gap-1.5 cursor-pointer'>
+          <input
+            type='radio'
+            name='exportFormat'
+            checked={format === 'openrouter'}
+            onChange={() => setFormat('openrouter')}
+            className='rounded'
+          />
+          {t('exportFormatOpenRouter')}
         </label>
       </div>
       <div className='flex items-center justify-between mt-3'>

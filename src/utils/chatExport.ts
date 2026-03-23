@@ -1,4 +1,5 @@
-import { ChatInterface } from '@type/chat';
+import { ChatInterface, ContentInterface, isTextContent } from '@type/chat';
+import { OpenAIChat, OpenRouterChat } from '@type/export';
 import { ContentStoreData, resolveContent } from './contentStore';
 
 type PrepareChatForExportOptions = {
@@ -86,5 +87,140 @@ export const prepareChatForExport = (
       collapsedNodes,
     },
     contentStore,
+  };
+};
+
+const contentToTextParts = (content: ContentInterface[]): string[] => {
+  return content
+    .filter(isTextContent)
+    .map((c) => c.text);
+};
+
+const contentToString = (content: ContentInterface[]): string => {
+  return contentToTextParts(content).join('\n');
+};
+
+export const chatToOpenAIFormat = (
+  chat: ChatInterface,
+  contentStore: ContentStoreData,
+  options: { visibleBranchOnly?: boolean } = {}
+): OpenAIChat => {
+  const visibleBranchOnly = options.visibleBranchOnly ?? false;
+  const modelSlug = chat.config.model;
+
+  const mapping: OpenAIChat['mapping'] = {};
+
+  if (chat.branchTree) {
+    const tree = chat.branchTree;
+    const nodeIds = visibleBranchOnly
+      ? tree.activePath.filter((id) => tree.nodes[id] !== undefined)
+      : Object.keys(tree.nodes);
+    const nodeSet = new Set(nodeIds);
+
+    // Build children map
+    const childrenMap: Record<string, string[]> = {};
+    for (const id of nodeIds) {
+      childrenMap[id] = [];
+    }
+    for (const id of nodeIds) {
+      const node = tree.nodes[id];
+      if (node.parentId && nodeSet.has(node.parentId)) {
+        childrenMap[node.parentId].push(id);
+      }
+    }
+
+    for (const id of nodeIds) {
+      const node = tree.nodes[id];
+      const content = resolveContent(contentStore, node.contentHash);
+      const parts = contentToTextParts(content);
+      mapping[id] = {
+        id,
+        message: {
+          author: { role: node.role },
+          content: { parts },
+          metadata: { model_slug: modelSlug },
+        },
+        parent: node.parentId && nodeSet.has(node.parentId) ? node.parentId : null,
+        children: childrenMap[id] ?? [],
+      };
+    }
+
+    const activePath = tree.activePath.filter((id) => nodeSet.has(id));
+    const currentNode = activePath[activePath.length - 1] ?? tree.rootId;
+
+    return {
+      title: chat.title,
+      create_time: tree.nodes[tree.rootId]?.createdAt
+        ? Math.floor(tree.nodes[tree.rootId].createdAt / 1000)
+        : undefined,
+      mapping,
+      current_node: currentNode,
+    };
+  }
+
+  // Fallback: flat messages → linear mapping
+  let parentId: string | null = null;
+  const ids: string[] = [];
+  chat.messages.forEach((msg, i) => {
+    const id = `msg-${i}`;
+    ids.push(id);
+    const parts = contentToTextParts(msg.content);
+    mapping[id] = {
+      id,
+      message: {
+        author: { role: msg.role },
+        content: { parts },
+        metadata: { model_slug: modelSlug },
+      },
+      parent: parentId,
+      children: [],
+    };
+    if (parentId && mapping[parentId]) {
+      mapping[parentId].children.push(id);
+    }
+    parentId = id;
+  });
+
+  return {
+    title: chat.title,
+    mapping,
+    current_node: ids[ids.length - 1] ?? '',
+  };
+};
+
+export const chatToOpenRouterFormat = (
+  chat: ChatInterface,
+  contentStore: ContentStoreData
+): OpenRouterChat => {
+  const messages: OpenRouterChat['messages'] = [];
+
+  if (chat.branchTree) {
+    for (const id of chat.branchTree.activePath) {
+      const node = chat.branchTree.nodes[id];
+      if (!node) continue;
+      const content = resolveContent(contentStore, node.contentHash);
+      messages.push({
+        role: node.role,
+        content: contentToString(content),
+      });
+    }
+  } else {
+    for (const msg of chat.messages) {
+      messages.push({
+        role: msg.role,
+        content: contentToString(msg.content),
+      });
+    }
+  }
+
+  return {
+    title: chat.title,
+    model: chat.config.model,
+    temperature: chat.config.temperature,
+    max_tokens: chat.config.max_tokens,
+    top_p: chat.config.top_p,
+    frequency_penalty: chat.config.frequency_penalty,
+    presence_penalty: chat.config.presence_penalty,
+    messages,
   };
 };
