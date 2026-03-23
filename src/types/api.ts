@@ -17,7 +17,7 @@ export interface ReasoningDetail {
 
 export interface EventSourceDataChoices {
   delta: {
-    content?: string;
+    content?: string | Array<Record<string, unknown>> | Record<string, unknown>;
     role?: string;
     reasoning?: string;
     reasoning_content?: string;
@@ -31,7 +31,7 @@ export interface EventSourceDataChoices {
 export interface NonStreamingChoice {
   message: {
     role: string;
-    content: string;
+    content: string | Array<Record<string, unknown>> | Record<string, unknown>;
     reasoning?: string;
     reasoning_content?: string;
     reasoning_details?: ReasoningDetail[];

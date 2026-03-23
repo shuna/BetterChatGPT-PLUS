@@ -28,8 +28,13 @@ import {
   isStreamingContentHash,
   notifyStreamingUpdate,
 } from '@utils/streamingBuffer';
-import type { EventSourceDataInterface, ReasoningDetail, NonStreamingResponse } from '@type/api';
+import type { EventSourceDataInterface, NonStreamingResponse } from '@type/api';
 import { ThinkTagParser } from '@utils/thinkTagParser';
+import {
+  extractReasoningFromApiContent,
+  extractReasoningFromReasoningDetails,
+  extractTextFromApiContent,
+} from '@utils/apiContent';
 import { getEffectiveStreamEnabled } from '@utils/streamSupport';
 import { useStreamEndStatusStore, type StreamEndReason } from '@store/stream-end-status-store';
 import * as swBridge from '@utils/swBridge';
@@ -106,12 +111,12 @@ const extractReasoningFromEvent = (event: EventSourceDataInterface): string => {
   if (delta.reasoning_content) return delta.reasoning_content;
 
   // Format 3: reasoning_details array
-  if (delta.reasoning_details && Array.isArray(delta.reasoning_details)) {
-    return delta.reasoning_details
-      .filter((d: ReasoningDetail) => d.type === 'reasoning.text' && d.text)
-      .map((d: ReasoningDetail) => d.text!)
-      .join('');
-  }
+  const detailsText = extractReasoningFromReasoningDetails(delta.reasoning_details);
+  if (detailsText) return detailsText;
+
+  // Format 4: content blocks that carry thinking/reasoning items
+  const contentReasoning = extractReasoningFromApiContent(delta.content as never);
+  if (contentReasoning) return contentReasoning;
 
   return '';
 };
@@ -121,20 +126,11 @@ const extractReasoningFromMessage = (
 ): string => {
   if (message.reasoning) return message.reasoning;
   if (message.reasoning_content) return message.reasoning_content;
-  if (message.reasoning_details && Array.isArray(message.reasoning_details)) {
-    return message.reasoning_details
-      .filter((detail: ReasoningDetail) => detail.type === 'reasoning.text' && detail.text)
-      .map((detail: ReasoningDetail) => detail.text!)
-      .join('');
-  }
+  const detailsText = extractReasoningFromReasoningDetails(message.reasoning_details);
+  if (detailsText) return detailsText;
+  const contentReasoning = extractReasoningFromApiContent(message.content as never);
+  if (contentReasoning) return contentReasoning;
   return '';
-};
-
-/** Write reasoning chunk to the streaming buffer (not the Zustand store). */
-const writeReasoningChunk = (targetNodeId: string, text: string): void => {
-  if (!text || !isBufferingNode(targetNodeId)) return;
-  appendReasoningToStreamingBuffer(targetNodeId, text);
-  notifyStreamingUpdate(targetNodeId);
 };
 
 const shouldRetryWithoutSystemMessages = (
@@ -231,6 +227,84 @@ export const isChatGenerating = (chatId: string): boolean =>
 
 const getChunkBufferKey = (chatId: string, targetNodeId: string) =>
   `${chatId}::${targetNodeId}`;
+
+const ensureStreamingBufferForNode = (
+  chatId: string,
+  targetNodeId: string
+): boolean => {
+  let initialized = false;
+
+  useStore.setState((state) => {
+    const chats = state.chats;
+    if (!chats) return state;
+
+    const chatIndex = chats.findIndex((chat) => chat.id === chatId);
+    if (chatIndex < 0) return state;
+
+    const updatedChats = cloneChatAt(chats, chatIndex);
+    const updatedChat = updatedChats[chatIndex];
+    const tree = updatedChat.branchTree;
+
+    if (!tree?.nodes[targetNodeId]) {
+      return state;
+    }
+
+    let updatedContentStore = state.contentStore;
+    const node = tree.nodes[targetNodeId];
+
+    if (!isStreamingContentHash(node.contentHash)) {
+      updatedContentStore = { ...state.contentStore };
+      initializeStreamingBuffer(
+        targetNodeId,
+        resolveContent(updatedContentStore, node.contentHash),
+        chatId
+      );
+      releaseContent(updatedContentStore, node.contentHash);
+      tree.nodes[targetNodeId] = {
+        ...node,
+        contentHash: createStreamingContentHash(targetNodeId),
+      };
+      initialized = true;
+    } else if (!isBufferingNode(targetNodeId)) {
+      initializeStreamingBuffer(targetNodeId, [], chatId);
+      initialized = true;
+    }
+
+    if (!initialized) return state;
+
+    const pathIndex = tree.activePath.indexOf(targetNodeId);
+    if (pathIndex >= 0) {
+      updatedChat.messages[pathIndex] = {
+        role: tree.nodes[targetNodeId].role,
+        content: resolveContent(updatedContentStore, tree.nodes[targetNodeId].contentHash),
+      };
+    }
+
+    return {
+      ...state,
+      chats: updatedChats,
+      ...(updatedContentStore !== state.contentStore
+        ? { contentStore: updatedContentStore }
+        : {}),
+    };
+  });
+
+  return initialized || isBufferingNode(targetNodeId);
+};
+
+/** Write reasoning chunk to the streaming buffer (not the Zustand store). */
+const writeReasoningChunk = (
+  chatId: string,
+  targetNodeId: string,
+  text: string
+): void => {
+  if (!text) return;
+  if (!isBufferingNode(targetNodeId) && !ensureStreamingBufferForNode(chatId, targetNodeId)) {
+    return;
+  }
+  appendReasoningToStreamingBuffer(targetNodeId, text);
+  notifyStreamingUpdate(targetNodeId);
+};
 
 export const writeChunkToStore = (
   chatId: string,
@@ -533,13 +607,14 @@ export const executeSubmitStream = async ({
       const msg = nonStreamData.choices[0].message;
       const reasoningText = extractReasoningFromMessage(msg);
       // Parse <think> tags from content
-      const parsedContent = thinkTagParser.process(msg.content);
+      const rawMessageText = extractTextFromApiContent(msg.content as never);
+      const parsedContent = thinkTagParser.process(rawMessageText);
       const flushedContent = thinkTagParser.flush();
       const finalContent = parsedContent.content + flushedContent.content;
       const thinkReasoning = parsedContent.reasoning + flushedContent.reasoning;
-      writeChunkToStore(chatId, targetNodeId, finalContent || msg.content);
+      writeChunkToStore(chatId, targetNodeId, finalContent || rawMessageText);
       if (reasoningText || thinkReasoning) {
-        writeReasoningChunk(targetNodeId, reasoningText + thinkReasoning);
+        writeReasoningChunk(chatId, targetNodeId, reasoningText + thinkReasoning);
       }
       return;
     }
@@ -558,13 +633,13 @@ export const executeSubmitStream = async ({
       }
       // Handle reasoning from SW path (already extracted by SW)
       if (meta?.reasoning) {
-        writeReasoningChunk(targetNodeId, meta.reasoning);
+        writeReasoningChunk(chatId, targetNodeId, meta.reasoning);
       }
       if (text) {
         // Parse <think> tags from content stream
         const parsed = thinkTagParser.process(text);
         if (parsed.reasoning) {
-          writeReasoningChunk(targetNodeId, parsed.reasoning);
+          writeReasoningChunk(chatId, targetNodeId, parsed.reasoning);
         }
         if (parsed.content) {
           queueChunkToStore(chatId, targetNodeId, parsed.content);
@@ -573,7 +648,7 @@ export const executeSubmitStream = async ({
     };
 
     const onReasoningChunk = (text: string) => {
-      writeReasoningChunk(targetNodeId, text);
+      writeReasoningChunk(chatId, targetNodeId, text);
     };
 
     // --- Path 1: SW available (with optional proxy) ---
@@ -818,7 +893,9 @@ export const executeSubmitStream = async ({
                   }
                   const reasoning = extractReasoningFromEvent(current);
                   if (reasoning) reasoningString += reasoning;
-                  const content = current.choices[0]?.delta?.content ?? null;
+                  const content = extractTextFromApiContent(
+                    current.choices[0]?.delta?.content as never
+                  );
                   if (content) output += content;
                   return output;
                 },
@@ -849,7 +926,9 @@ export const executeSubmitStream = async ({
               if (!current.choices?.[0]?.delta) return output;
               const reasoning = extractReasoningFromEvent(current);
               if (reasoning) flushReasoningString += reasoning;
-              const content = current.choices[0]?.delta?.content ?? null;
+              const content = extractTextFromApiContent(
+                current.choices[0]?.delta?.content as never
+              );
               if (content) output += content;
               return output;
             },
@@ -931,7 +1010,9 @@ export const executeSubmitStream = async ({
           }
           const reasoning = extractReasoningFromEvent(current);
           if (reasoning) reasoningString += reasoning;
-          const content = current.choices[0]?.delta?.content ?? null;
+          const content = extractTextFromApiContent(
+            current.choices[0]?.delta?.content as never
+          );
           if (content) output += content;
           return output;
         }, '');
@@ -971,7 +1052,7 @@ export const executeSubmitStream = async ({
   } finally {
     // Flush any remaining <think> tag buffer before finalizing
     const remaining = thinkTagParser.flush();
-    if (remaining.reasoning) writeReasoningChunk(targetNodeId, remaining.reasoning);
+    if (remaining.reasoning) writeReasoningChunk(chatId, targetNodeId, remaining.reasoning);
     if (remaining.content) queueChunkToStore(chatId, targetNodeId, remaining.content);
     flushQueuedChunks(chatId, targetNodeId);
     finalizeStreamingNode(chatId, targetNodeId);

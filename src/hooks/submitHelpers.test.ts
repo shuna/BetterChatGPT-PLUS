@@ -3,11 +3,13 @@ import { describe, expect, it } from 'vitest';
 import { _defaultChatConfig } from '@constants/chat';
 import type { MessageInterface } from '@type/chat';
 import type { FavoriteModel } from '@type/provider';
+import { DEFAULT_PROVIDERS } from '@store/provider-config';
 import {
   buildGeneratingSession,
   buildTitlePromptMessage,
   getSubmitContextMessages,
   resolveProviderForModel,
+  sanitizeMessagesForSubmit,
 } from './submitHelpers';
 import { hasMeaningfulContent, hasMeaningfulMessageContent } from '@utils/contentValidation';
 
@@ -67,6 +69,27 @@ describe('submitHelpers', () => {
     });
   });
 
+  it('falls back to the default provider endpoint when persisted config is blank', () => {
+    const resolved = resolveProviderForModel(
+      'anthropic/claude-opus-4.6',
+      [],
+      {
+        openrouter: {
+          ...DEFAULT_PROVIDERS.openrouter,
+          endpoint: '',
+          apiKey: 'router-key',
+        },
+      },
+      { endpoint: 'fallback', key: 'fallback-key' },
+      'openrouter'
+    );
+
+    expect(resolved).toEqual({
+      endpoint: DEFAULT_PROVIDERS.openrouter.endpoint,
+      key: 'router-key',
+    });
+  });
+
   it('builds title prompt message and submit context slices', () => {
     const userMessage = textMessage('user', 'Question');
     const assistantMessage = textMessage('assistant', 'Answer');
@@ -122,5 +145,39 @@ describe('submitHelpers', () => {
         },
       ])
     ).toBe(true);
+  });
+
+  it('drops empty text and reasoning blocks before submit', () => {
+    const sanitized = sanitizeMessagesForSubmit([
+      {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: 'thinking' },
+          { type: 'text', text: '   ' },
+        ],
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: ' ask ' },
+          { type: 'reasoning', text: 'ignore' },
+        ],
+      },
+      {
+        role: 'user',
+        content: [{ type: 'image_url', image_url: { url: 'https://example.com/x.png', detail: 'low' } }],
+      },
+    ] as MessageInterface[]);
+
+    expect(sanitized).toEqual([
+      {
+        role: 'user',
+        content: [{ type: 'text', text: ' ask ' }],
+      },
+      {
+        role: 'user',
+        content: [{ type: 'image_url', image_url: { url: 'https://example.com/x.png', detail: 'low' } }],
+      },
+    ]);
   });
 });

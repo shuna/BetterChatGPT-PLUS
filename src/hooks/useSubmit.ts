@@ -12,6 +12,7 @@ import {
   insertAssistantPlaceholder,
   maybeGenerateAutoTitle,
   resolveProviderForModel,
+  sanitizeMessagesForSubmit,
   SubmitMode,
   type ResolvedProvider,
 } from './submitHelpers';
@@ -94,11 +95,13 @@ const useSubmit = () => {
     );
 
     try {
-      const contextMessages = getSubmitContextMessages(
-        updatedChats[chatIndex].messages,
-        mode,
-        messageIndex,
-        chats[chatIndex].config.model
+      const contextMessages = sanitizeMessagesForSubmit(
+        getSubmitContextMessages(
+          updatedChats[chatIndex].messages,
+          mode,
+          messageIndex,
+          chats[chatIndex].config.model
+        )
       );
 
       if (contextMessages.length === 0)

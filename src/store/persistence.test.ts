@@ -187,6 +187,17 @@ describe('persistence', () => {
     ]);
   });
 
+  it('restores default provider endpoints during rehydration', () => {
+    const state = buildStoreState();
+    state.providers.openrouter.endpoint = '';
+
+    rehydrateStoreState(state as never);
+
+    expect(state.providers.openrouter.endpoint).toBe(
+      DEFAULT_PROVIDERS.openrouter.endpoint
+    );
+  });
+
   it('normalizes malformed verification state during rehydration', () => {
     const state = buildStoreState() as ReturnType<typeof buildStoreState> & {
       verifiedStats: unknown;

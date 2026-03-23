@@ -91,7 +91,26 @@ function extractText(events) {
   for (const evt of events) {
     if (evt.choices && evt.choices[0] && evt.choices[0].delta) {
       const content = evt.choices[0].delta.content;
-      if (content) text += content;
+      if (typeof content === 'string') {
+        text += content;
+      } else if (Array.isArray(content)) {
+        for (const item of content) {
+          if (typeof item === 'string') {
+            text += item;
+          } else if (item && typeof item === 'object') {
+            const type = item.type || '';
+            if (type === 'text' || type === 'output_text') {
+              text += item.text || item.content || item.value || '';
+            } else if (typeof item.text === 'string') {
+              text += item.text;
+            } else if (typeof item.content === 'string') {
+              text += item.content;
+            }
+          }
+        }
+      } else if (content && typeof content === 'object') {
+        text += content.text || content.content || content.value || '';
+      }
     }
   }
   return text;
@@ -116,6 +135,33 @@ function extractReasoning(events) {
     } else if (delta.reasoning_details && Array.isArray(delta.reasoning_details)) {
       for (const d of delta.reasoning_details) {
         if (d.type === 'reasoning.text' && d.text) reasoning += d.text;
+        if (d.type === 'reasoning.summary' && d.summary) reasoning += d.summary;
+      }
+    } else if (Array.isArray(delta.content)) {
+      for (const item of delta.content) {
+        if (!item || typeof item !== 'object') continue;
+        const type = item.type || '';
+        if (
+          type === 'reasoning' ||
+          type === 'thinking' ||
+          type === 'reasoning.text' ||
+          type === 'reasoning.summary' ||
+          type === 'redacted_thinking'
+        ) {
+          reasoning += item.text || item.summary || item.reasoning || item.thinking || item.content || '';
+        }
+      }
+    } else if (delta.content && typeof delta.content === 'object') {
+      const item = delta.content;
+      const type = item.type || '';
+      if (
+        type === 'reasoning' ||
+        type === 'thinking' ||
+        type === 'reasoning.text' ||
+        type === 'reasoning.summary' ||
+        type === 'redacted_thinking'
+      ) {
+        reasoning += item.text || item.summary || item.reasoning || item.thinking || item.content || '';
       }
     }
   }

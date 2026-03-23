@@ -5,6 +5,7 @@ import useStore from '@store/store';
 import { showToast } from '@utils/showToast';
 import { ProviderId } from '@type/provider';
 import { PROVIDER_ORDER } from '@store/provider-config';
+import { normalizeProviderConfig } from '@store/provider-helpers';
 import CrossIcon2 from '@icon/CrossIcon2';
 import {
   SortDir,
@@ -55,8 +56,9 @@ const ProviderMenu = ({
   const [apiVersionInput, setApiVersionInput] = useState('');
 
   useEffect(() => {
-    setApiKeyInput(providers[selectedProvider]?.apiKey || '');
-    setEndpointInput(providers[selectedProvider]?.endpoint || '');
+    const provider = normalizeProviderConfig(selectedProvider, providers[selectedProvider]);
+    setApiKeyInput(provider.apiKey || '');
+    setEndpointInput(provider.endpoint);
     setApiVersionInput(apiVersion || '');
   }, [selectedProvider, providers, apiVersion]);
 
@@ -68,28 +70,51 @@ const ProviderMenu = ({
   const stateRef = useRef({ selectedProvider, apiKeyInput, endpointInput, apiVersionInput });
   stateRef.current = { selectedProvider, apiKeyInput, endpointInput, apiVersionInput };
 
-  const saveSettings = useCallback(() => {
-    const s = stateRef.current;
+  const saveSettings = useCallback((
+    stateOverride?: {
+      selectedProvider: ProviderId;
+      apiKeyInput: string;
+      endpointInput: string;
+      apiVersionInput: string;
+    },
+    options?: { notify?: boolean }
+  ) => {
+    const s = stateOverride ?? stateRef.current;
     const currentProviders = useStore.getState().providers;
-    const currentProvider = currentProviders[s.selectedProvider];
+    const currentProvider = normalizeProviderConfig(
+      s.selectedProvider,
+      currentProviders[s.selectedProvider]
+    );
     const currentApiVersion = useStore.getState().apiVersion;
+    const normalizedEndpoint = normalizeProviderConfig(s.selectedProvider, {
+      ...currentProvider,
+      endpoint: s.endpointInput,
+    }).endpoint;
     const hasConfigChanges =
       (currentProvider?.apiKey || '') !== s.apiKeyInput ||
-      (currentProvider?.endpoint || '') !== s.endpointInput ||
+      currentProvider.endpoint !== normalizedEndpoint ||
       (currentApiVersion || '') !== s.apiVersionInput;
 
-    if (!hasConfigChanges) return;
+    if (!hasConfigChanges) return false;
 
     setProviderApiKey(s.selectedProvider, s.apiKeyInput);
-    setProviderEndpoint(s.selectedProvider, s.endpointInput);
+    setProviderEndpoint(s.selectedProvider, normalizedEndpoint);
     setApiVersion(s.apiVersionInput);
 
-    showToast(`${s.selectedProvider}: ${t('provider.saved', '設定を保存しました')}`, 'success');
+    if (options?.notify ?? true) {
+      showToast(`${s.selectedProvider}: ${t('provider.saved', '設定を保存しました')}`, 'success');
+    }
+    return true;
   }, []);
+
+  const handleProviderChange = useCallback((nextProvider: ProviderId) => {
+    saveSettings(stateRef.current, { notify: false });
+    setSelectedProvider(nextProvider);
+  }, [saveSettings]);
 
   // Auto-save on unmount
   useEffect(() => {
-    return () => { saveSettings(); };
+    return () => { saveSettings(undefined, { notify: false }); };
   }, []);
 
   const currentModels = models[selectedProvider] || [];
@@ -99,7 +124,10 @@ const ProviderMenu = ({
     [currentModels, search, sortDir, sortField]
   );
 
-  const handleClose = () => setIsModalOpen(false);
+  const handleClose = () => {
+    saveSettings(undefined, { notify: false });
+    setIsModalOpen(false);
+  };
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -133,7 +161,7 @@ const ProviderMenu = ({
           <div className='md:hidden p-3 border-b dark:border-gray-600'>
             <select
               value={selectedProvider}
-              onChange={(e) => setSelectedProvider(e.target.value as ProviderId)}
+              onChange={(e) => handleProviderChange(e.target.value as ProviderId)}
               className='w-full px-3 py-2 text-sm bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
             >
               {PROVIDER_ORDER.map((providerId) => {
@@ -156,7 +184,7 @@ const ProviderMenu = ({
               providers={providers}
               favoriteModels={favoriteModels}
               selectedProvider={selectedProvider}
-              onSelectProvider={setSelectedProvider}
+              onSelectProvider={handleProviderChange}
             />
 
             <div className='flex-1 flex flex-col overflow-hidden'>

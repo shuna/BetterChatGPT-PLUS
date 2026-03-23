@@ -12,6 +12,7 @@ import { BranchClipboard, ChatInterface } from '@type/chat';
 import type { StoreState } from './store';
 import { setLocalStorageItem } from './storage/storageErrors';
 import { STORE_VERSION } from './version';
+import { normalizeProviderConfigs } from './provider-helpers';
 
 type PersistedChat = Omit<ChatInterface, 'messages'> & {
   messages?: ChatInterface['messages'];
@@ -367,6 +368,7 @@ export const createLocalStoragePartializedState = (
 };
 
 export const rehydrateStoreState = (state: StoreState) => {
+  state.providers = normalizeProviderConfigs(state.providers);
   const savedIndex = parseInt(localStorage.getItem('currentChatIndex') ?? '-1', 10);
   let repaired = false;
   if (state.chats) {

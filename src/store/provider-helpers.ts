@@ -1,4 +1,34 @@
 import { FavoriteModel, ProviderConfig, ProviderId, ProviderModel } from '@type/provider';
+import { DEFAULT_PROVIDERS } from './provider-config';
+
+export const normalizeProviderConfig = (
+  providerId: ProviderId,
+  provider?: Partial<ProviderConfig>
+): ProviderConfig => {
+  const defaults = DEFAULT_PROVIDERS[providerId];
+  const endpoint = typeof provider?.endpoint === 'string'
+    ? provider.endpoint.trim()
+    : '';
+
+  return {
+    ...defaults,
+    ...provider,
+    endpoint: endpoint || defaults.endpoint,
+  };
+};
+
+export const normalizeProviderConfigs = (
+  providers?: Partial<Record<ProviderId, ProviderConfig>>
+): Record<ProviderId, ProviderConfig> =>
+  Object.fromEntries(
+    Object.keys(DEFAULT_PROVIDERS).map((providerId) => [
+      providerId,
+      normalizeProviderConfig(
+        providerId as ProviderId,
+        providers?.[providerId as ProviderId]
+      ),
+    ])
+  ) as Record<ProviderId, ProviderConfig>;
 
 export const updateProviderConfig = (
   providers: Record<ProviderId, ProviderConfig>,
@@ -6,10 +36,10 @@ export const updateProviderConfig = (
   patch: Partial<Pick<ProviderConfig, 'apiKey' | 'endpoint'>>
 ): Record<ProviderId, ProviderConfig> => ({
   ...providers,
-  [providerId]: {
+  [providerId]: normalizeProviderConfig(providerId, {
     ...providers[providerId],
     ...patch,
-  },
+  }),
 });
 
 export const toggleFavoriteModelEntry = (

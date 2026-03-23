@@ -690,4 +690,44 @@ describe('stream end status via SW path', () => {
     const status = useStreamEndStatusStore.getState().statuses['node-assistant'];
     expect(status).toBe('completed');
   });
+
+  it('preserves reasoning that arrives before the first text chunk on SW path', async () => {
+    const sessionId = 'sess-sw-reasoning-first';
+    mockState = makeMockState(sessionId);
+
+    vi.mocked(swBridge.waitForController).mockResolvedValue(true);
+    vi.mocked(prepareStreamRequest as any).mockReturnValue({
+      endpoint: 'https://example.com/v1/chat/completions',
+      headers: {},
+      body: {},
+    });
+
+    vi.mocked(swBridge.startStream).mockImplementation(async (params) => {
+      params.onChunk('', { reasoning: 'First think' });
+      params.onChunk('Final answer');
+      params.onDone({ finishReason: 'stop' });
+      return { cancel: vi.fn() };
+    });
+
+    const abortController = createSubmitAbortController(sessionId);
+
+    await executeSubmitStream({
+      sessionId,
+      chatId: 'chat-1',
+      chatIndex: 0,
+      messageIndex: 0,
+      targetNodeId: 'node-assistant',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      config: { model: 'test', max_tokens: 100, temperature: 1, presence_penalty: 0, top_p: 1, frequency_penalty: 0, stream: true },
+      resolvedProvider: { endpoint: 'https://example.com/v1/chat/completions', key: 'secret' },
+      abortController,
+      t: (key) => key,
+    });
+
+    const nodeHash = (mockState as any).chats[0].branchTree.nodes['node-assistant'].contentHash;
+    expect((mockState as any).contentStore[nodeHash].content).toEqual([
+      { type: 'reasoning', text: 'First think' },
+      { type: 'text', text: 'Final answer' },
+    ]);
+  });
 });

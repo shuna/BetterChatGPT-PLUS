@@ -11,12 +11,16 @@ import {
 import {
   ChatInterface,
   ConfigInterface,
+  ContentInterface,
   GeneratingSession,
   MessageInterface,
   ModelOptions,
   TextContentInterface,
+  isImageContent,
+  isTextContent,
 } from '@type/chat';
 import { FavoriteModel, ProviderConfig, ProviderId } from '@type/provider';
+import { normalizeProviderConfig } from '@store/provider-helpers';
 
 type ProviderMap = Partial<Record<ProviderId, ProviderConfig>>;
 
@@ -107,18 +111,18 @@ export const resolveProviderForModel = (
 ): ResolvedProvider => {
   // If providerId is specified, resolve directly
   if (providerId) {
-    const provider = providers[providerId];
-    if (provider) {
-      return { endpoint: provider.endpoint, key: provider.apiKey };
-    }
+    const provider = normalizeProviderConfig(providerId, providers[providerId]);
+    return { endpoint: provider.endpoint, key: provider.apiKey };
   }
 
   // Fallback to favoriteModels lookup
   const favorite = favoriteModels.find((entry) => entry.modelId === modelId);
   if (!favorite) return fallback;
 
-  const provider = providers[favorite.providerId];
-  if (!provider) return fallback;
+  const provider = normalizeProviderConfig(
+    favorite.providerId,
+    providers[favorite.providerId]
+  );
 
   return {
     endpoint: provider.endpoint,
@@ -136,6 +140,25 @@ const stripSystemMessages = (
   if (!isReasoningModel(modelId)) return messages;
   return messages.filter((m) => m.role !== 'system');
 };
+
+const sanitizeMessageContent = (
+  content: ContentInterface[]
+): ContentInterface[] =>
+  content.filter((part) => {
+    if (part.type === 'reasoning') return false;
+    if (isImageContent(part)) return true;
+    return isTextContent(part) && part.text.trim().length > 0;
+  });
+
+export const sanitizeMessagesForSubmit = (
+  messages: MessageInterface[]
+): MessageInterface[] =>
+  messages
+    .map((message) => ({
+      ...message,
+      content: sanitizeMessageContent(message.content),
+    }))
+    .filter((message) => message.content.length > 0);
 
 export const getSubmitContextMessages = (
   messages: MessageInterface[],

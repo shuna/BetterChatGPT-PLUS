@@ -8,6 +8,11 @@ export type SortDir = 'asc' | 'desc';
 export type ProviderModelMap = Partial<Record<ProviderId, ProviderModel[]>>;
 export type ProviderLoadingMap = Partial<Record<ProviderId, boolean>>;
 
+export const hasLoadedProviderModels = (
+  models: ProviderModelMap,
+  providerId: ProviderId
+) => Object.prototype.hasOwnProperty.call(models, providerId);
+
 export const formatUsd = (value: number): string => {
   if (value === 0) return '$0';
   if (value < 0.01) return `$${value.toFixed(3)}`;
@@ -107,7 +112,9 @@ export const useProviderModels = (providers: Record<ProviderId, ProviderConfig>)
 
   const loadModels = useCallback(
     async (providerId: ProviderId, force = false) => {
-      if (!force && models[providerId]?.length) return;
+      if (!force && hasLoadedProviderModels(models, providerId)) {
+        return;
+      }
 
       setProviderLoading(providerId, true);
       try {

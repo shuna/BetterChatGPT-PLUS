@@ -4,6 +4,7 @@ import useStore from '@store/store';
 import { showToast } from '@utils/showToast';
 import { ProviderId } from '@type/provider';
 import { PROVIDER_ORDER } from '@store/provider-config';
+import { normalizeProviderConfig } from '@store/provider-helpers';
 import {
   SortDir,
   SortField,
@@ -94,8 +95,9 @@ const ProviderMenuInline = ({ onSettingsChanged }: { onSettingsChanged?: () => v
   const [apiVersionInput, setApiVersionInput] = useState('');
 
   useEffect(() => {
-    setApiKeyInput(providers[selectedProvider]?.apiKey || '');
-    setEndpointInput(providers[selectedProvider]?.endpoint || '');
+    const provider = normalizeProviderConfig(selectedProvider, providers[selectedProvider]);
+    setApiKeyInput(provider.apiKey || '');
+    setEndpointInput(provider.endpoint);
     setApiVersionInput(apiVersion || '');
   }, [selectedProvider, providers, apiVersion]);
 
@@ -109,26 +111,50 @@ const ProviderMenuInline = ({ onSettingsChanged }: { onSettingsChanged?: () => v
   const onSettingsChangedRef = useRef(onSettingsChanged);
   onSettingsChangedRef.current = onSettingsChanged;
 
+  const saveSettings = useCallback((
+    stateOverride?: {
+      selectedProvider: ProviderId;
+      apiKeyInput: string;
+      endpointInput: string;
+      apiVersionInput: string;
+    }
+  ) => {
+    const s = stateOverride ?? stateRef.current;
+    const currentProviders = useStore.getState().providers;
+    const currentProvider = normalizeProviderConfig(
+      s.selectedProvider,
+      currentProviders[s.selectedProvider]
+    );
+    const currentApiVersion = useStore.getState().apiVersion;
+    const normalizedEndpoint = normalizeProviderConfig(s.selectedProvider, {
+      ...currentProvider,
+      endpoint: s.endpointInput,
+    }).endpoint;
+    const hasConfigChanges =
+      (currentProvider.apiKey || '') !== s.apiKeyInput ||
+      currentProvider.endpoint !== normalizedEndpoint ||
+      (currentApiVersion || '') !== s.apiVersionInput;
+
+    if (!hasConfigChanges) return false;
+
+    setProviderApiKey(s.selectedProvider, s.apiKeyInput);
+    setProviderEndpoint(s.selectedProvider, normalizedEndpoint);
+    setApiVersion(s.apiVersionInput);
+    onSettingsChangedRef.current?.();
+    return true;
+  }, []);
+
+  const handleProviderChange = useCallback((nextProvider: ProviderId) => {
+    saveSettings(stateRef.current);
+    setSelectedProvider(nextProvider);
+  }, [saveSettings]);
+
   // Auto-save on unmount
   useEffect(() => {
     return () => {
-      const s = stateRef.current;
-      const currentProviders = useStore.getState().providers;
-      const currentProvider = currentProviders[s.selectedProvider];
-      const currentApiVersion = useStore.getState().apiVersion;
-      const hasConfigChanges =
-        (currentProvider?.apiKey || '') !== s.apiKeyInput ||
-        (currentProvider?.endpoint || '') !== s.endpointInput ||
-        (currentApiVersion || '') !== s.apiVersionInput;
-
-      if (!hasConfigChanges) return;
-
-      setProviderApiKey(s.selectedProvider, s.apiKeyInput);
-      setProviderEndpoint(s.selectedProvider, s.endpointInput);
-      setApiVersion(s.apiVersionInput);
-      onSettingsChangedRef.current?.();
+      saveSettings();
     };
-  }, []);
+  }, [saveSettings]);
 
   const currentModels = models[selectedProvider] || [];
 
@@ -143,7 +169,7 @@ const ProviderMenuInline = ({ onSettingsChanged }: { onSettingsChanged?: () => v
       <div className='md:hidden p-3 border-b dark:border-gray-600'>
         <select
           value={selectedProvider}
-          onChange={(e) => setSelectedProvider(e.target.value as ProviderId)}
+          onChange={(e) => handleProviderChange(e.target.value as ProviderId)}
           className='w-full px-3 py-2 text-sm bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
         >
           {PROVIDER_ORDER.map((providerId) => {
@@ -173,7 +199,7 @@ const ProviderMenuInline = ({ onSettingsChanged }: { onSettingsChanged?: () => v
             return (
               <button
                 key={providerId}
-                onClick={() => setSelectedProvider(providerId)}
+                onClick={() => handleProviderChange(providerId)}
                 className={`w-full text-left px-3 py-2.5 text-sm flex items-center justify-between transition-colors truncate ${
                   selectedProvider === providerId
                     ? 'bg-gray-200 dark:bg-gray-600 text-gray-900 dark:text-white font-medium'

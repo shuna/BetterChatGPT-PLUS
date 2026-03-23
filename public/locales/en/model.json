@@ -100,6 +100,8 @@
     "enterApiKey": "Enter API key for {{name}}...",
     "save": "Save",
     "refresh": "Refresh",
+    "showMore": "Show more",
+    "visibleCount": "Showing {{visible}} of {{total}} models",
     "colName": "Model",
     "colCreated": "Released",
     "colContext": "Context",

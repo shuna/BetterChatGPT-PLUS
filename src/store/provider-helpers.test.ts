@@ -4,6 +4,8 @@ import type { FavoriteModel, ProviderModel } from '@type/provider';
 import { DEFAULT_PROVIDERS } from './provider-config';
 import {
   backfillFavoritesFromProviderModels,
+  normalizeProviderConfig,
+  normalizeProviderConfigs,
   toggleFavoriteModelEntry,
   updateProviderConfig,
 } from './provider-helpers';
@@ -17,6 +19,41 @@ describe('provider-helpers', () => {
     expect(updatedProviders.openai.apiKey).toBe('secret-key');
     expect(updatedProviders.openai.endpoint).toBe(DEFAULT_PROVIDERS.openai.endpoint);
     expect(updatedProviders.openrouter).toEqual(DEFAULT_PROVIDERS.openrouter);
+  });
+
+  it('restores the default endpoint when a provider endpoint is blank', () => {
+    const updatedProviders = updateProviderConfig(DEFAULT_PROVIDERS, 'openrouter', {
+      endpoint: '   ',
+    });
+
+    expect(updatedProviders.openrouter.endpoint).toBe(
+      DEFAULT_PROVIDERS.openrouter.endpoint
+    );
+  });
+
+  it('normalizes persisted provider maps against defaults', () => {
+    const normalized = normalizeProviderConfigs({
+      openrouter: {
+        ...DEFAULT_PROVIDERS.openrouter,
+        endpoint: '',
+      },
+    });
+
+    expect(normalized.openrouter.endpoint).toBe(
+      DEFAULT_PROVIDERS.openrouter.endpoint
+    );
+    expect(normalized.openai).toEqual(DEFAULT_PROVIDERS.openai);
+  });
+
+  it('fills in missing fields when normalizing a single provider', () => {
+    expect(
+      normalizeProviderConfig('openrouter', {
+        id: 'openrouter',
+        name: 'Custom OpenRouter',
+        endpoint: '',
+        modelsRequireAuth: false,
+      }).endpoint
+    ).toBe(DEFAULT_PROVIDERS.openrouter.endpoint);
   });
 
   it('toggles favorite model entries by provider and model id', () => {

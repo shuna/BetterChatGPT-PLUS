@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import RefreshIcon from '@icon/RefreshIcon';
 import { CapabilityIconsInline } from '@components/ConfigMenu/fields';
@@ -55,6 +55,8 @@ const formatContextLength = (contextLength?: number) => {
   if (contextLength >= 1000000) return `${(contextLength / 1000000).toFixed(1)}M`;
   return `${Math.round(contextLength / 1000)}K`;
 };
+
+const MODEL_PAGE_SIZE = 100;
 
 export function ManualModelInput({
   selectedProvider,
@@ -133,12 +135,23 @@ export default function ProviderModelList({
   onToggleFavorite: (model: FavoriteModel) => void;
 }) {
   const { t } = useTranslation('model');
+  const [visibleCount, setVisibleCount] = useState(MODEL_PAGE_SIZE);
+
+  useEffect(() => {
+    setVisibleCount(MODEL_PAGE_SIZE);
+  }, [selectedProvider, search, sortDir, sortField]);
 
   const isFavorite = (modelId: string, providerId: ProviderId) =>
     favoriteModels.some(
       (favorite) =>
         favorite.modelId === modelId && favorite.providerId === providerId
     );
+
+  const visibleModels = useMemo(
+    () => filteredModels.slice(0, visibleCount),
+    [filteredModels, visibleCount]
+  );
+  const hasMoreModels = visibleModels.length < filteredModels.length;
 
   return (
     <>
@@ -220,53 +233,72 @@ export default function ProviderModelList({
             {t('provider.noModels', 'No models found')}
           </div>
         ) : (
-          filteredModels.map((model) => (
-            <label
-              key={model.id}
-              className='flex items-center gap-3 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600/50'
-            >
-              <input
-                type='checkbox'
-                checked={isFavorite(model.id, model.providerId)}
-                onChange={() =>
-                  onToggleFavorite({
-                    modelId: model.id,
-                    providerId: model.providerId,
-                    contextLength: model.contextLength,
-                    promptPrice: model.promptPrice,
-                    completionPrice: model.completionPrice,
-                    modelType: model.modelType,
-                    streamSupport: model.streamSupport,
-                    supportsReasoning: model.supportsReasoning,
-                    supportsVision: model.supportsVision,
-                    supportsAudio: model.supportsAudio,
-                  })
-                }
-                className='rounded'
-              />
-              <span className='flex-1 text-sm text-gray-900 dark:text-white truncate'>
-                <span className='block truncate'>{model.name}</span>
-              </span>
-              <span className='hidden sm:inline w-14 text-right text-xs text-gray-400 dark:text-gray-500'>
-                <CapabilityIconsInline
-                  reasoning={!!model.supportsReasoning}
-                  vision={!!model.supportsVision}
-                  audio={!!model.supportsAudio}
+          <>
+            {visibleModels.map((model) => (
+              <label
+                key={model.id}
+                className='flex items-center gap-3 px-3 py-1.5 rounded-lg cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600/50'
+              >
+                <input
+                  type='checkbox'
+                  checked={isFavorite(model.id, model.providerId)}
+                  onChange={() =>
+                    onToggleFavorite({
+                      modelId: model.id,
+                      providerId: model.providerId,
+                      contextLength: model.contextLength,
+                      promptPrice: model.promptPrice,
+                      completionPrice: model.completionPrice,
+                      modelType: model.modelType,
+                      streamSupport: model.streamSupport,
+                      supportsReasoning: model.supportsReasoning,
+                      supportsVision: model.supportsVision,
+                      supportsAudio: model.supportsAudio,
+                    })
+                  }
+                  className='rounded'
                 />
-              </span>
-              <span className='hidden sm:inline w-20 text-right text-xs text-gray-400 dark:text-gray-500'>
-                {formatCreatedDate(model.created)}
-              </span>
-              <span className='hidden sm:inline w-20 text-right text-xs text-gray-400 dark:text-gray-500'>
-                {formatContextLength(model.contextLength)}
-              </span>
-              <span className='hidden md:inline w-28 text-right text-xs text-gray-400 dark:text-gray-500'>
-                {model.promptPrice != null && model.promptPrice >= 0
-                  ? formatModelPrice(model.promptPrice, model.completionPrice)
-                  : '-'}
-              </span>
-            </label>
-          ))
+                <span className='flex-1 text-sm text-gray-900 dark:text-white truncate'>
+                  <span className='block truncate'>{model.name}</span>
+                </span>
+                <span className='hidden sm:inline w-14 text-right text-xs text-gray-400 dark:text-gray-500'>
+                  <CapabilityIconsInline
+                    reasoning={!!model.supportsReasoning}
+                    vision={!!model.supportsVision}
+                    audio={!!model.supportsAudio}
+                  />
+                </span>
+                <span className='hidden sm:inline w-20 text-right text-xs text-gray-400 dark:text-gray-500'>
+                  {formatCreatedDate(model.created)}
+                </span>
+                <span className='hidden sm:inline w-20 text-right text-xs text-gray-400 dark:text-gray-500'>
+                  {formatContextLength(model.contextLength)}
+                </span>
+                <span className='hidden md:inline w-28 text-right text-xs text-gray-400 dark:text-gray-500'>
+                  {model.promptPrice != null && model.promptPrice >= 0
+                    ? formatModelPrice(model.promptPrice, model.completionPrice)
+                    : '-'}
+                </span>
+              </label>
+            ))}
+            {hasMoreModels && (
+              <div className='flex flex-col items-center gap-3 px-3 py-4 text-sm text-gray-500 dark:text-gray-400'>
+                <span>
+                  {t('provider.visibleCount', 'Showing {{visible}} of {{total}} models', {
+                    visible: visibleModels.length,
+                    total: filteredModels.length,
+                  })}
+                </span>
+                <button
+                  type='button'
+                  className='px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-100 hover:bg-gray-200 dark:hover:bg-gray-700'
+                  onClick={() => setVisibleCount((current) => current + MODEL_PAGE_SIZE)}
+                >
+                  {t('provider.showMore', 'Show more')}
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </>
