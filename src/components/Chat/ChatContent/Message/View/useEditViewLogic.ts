@@ -138,7 +138,15 @@ export function useEditViewLogic({
     editDraftCache.delete(editSessionKey);
   }, [editSessionKey]);
 
-  const { handleSubmit, handleSubmitMidChat } = useSubmit();
+  const {
+    handleSubmit,
+    handleSubmitMidChat,
+    isUnknownContextConfirmOpen,
+    setIsUnknownContextConfirmOpen,
+    unknownContextConfirmMessage,
+    handleUnknownContextConfirm,
+    handleUnknownContextCancel,
+  } = useSubmit();
 
   const resetTextAreaHeight = () => {
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
@@ -390,5 +398,10 @@ export function useEditViewLogic({
     handleCancel,
     handlePaste,
     handleUploadButtonClick,
+    isUnknownContextConfirmOpen,
+    setIsUnknownContextConfirmOpen,
+    unknownContextConfirmMessage,
+    handleUnknownContextConfirm,
+    handleUnknownContextCancel,
   };
 }

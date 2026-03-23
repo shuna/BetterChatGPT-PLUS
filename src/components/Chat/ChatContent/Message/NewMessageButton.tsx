@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import useSubmit from '@hooks/useSubmit';
+import PopupModal from '@components/PopupModal';
 
 import PlusIcon from '@icon/PlusIcon';
 import BranchIcon from '@icon/BranchIcon';
@@ -22,7 +23,14 @@ const NewMessageButton = React.memo(
     role?: Role;
   }) => {
     const { t } = useTranslation();
-    const { handleSubmit } = useSubmit();
+    const {
+      handleSubmit,
+      isUnknownContextConfirmOpen,
+      setIsUnknownContextConfirmOpen,
+      unknownContextConfirmMessage,
+      handleUnknownContextConfirm,
+      handleUnknownContextCancel,
+    } = useSubmit();
     const setChats = useStore((state) => state.setChats);
     const currentChatIndex = useStore((state) => state.currentChatIndex);
     const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
@@ -185,6 +193,15 @@ const NewMessageButton = React.memo(
             </div>
           )}
         </div>
+        {isUnknownContextConfirmOpen && (
+          <PopupModal
+            setIsModalOpen={setIsUnknownContextConfirmOpen}
+            title={t('warning') as string}
+            message={unknownContextConfirmMessage}
+            handleConfirm={handleUnknownContextConfirm}
+            handleClose={handleUnknownContextCancel}
+          />
+        )}
       </div>
     );
   }

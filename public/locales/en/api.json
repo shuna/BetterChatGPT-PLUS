@@ -24,5 +24,8 @@
     "streamLocked": "Oops, the stream is locked right now. Please try again",
     "cancelledByUser": "Cancelled by user",
     "generationCompleted": "Generation completed"
+  },
+  "warnings": {
+    "unknownContextLengthBeforeSubmitConfirm": "The context length for {{model}} could not be resolved before sending. Continue with a conservative fallback for prompt trimming?"
   }
 }

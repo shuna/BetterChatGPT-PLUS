@@ -1,5 +1,6 @@
 import useStore from '@store/store';
 import { useTranslation } from 'react-i18next';
+import { useRef, useState } from 'react';
 import { countTokens, limitMessageTokens, loadEncoder } from '@utils/messageUtils';
 import { hasMeaningfulMessageContent } from '@utils/contentValidation';
 import { getModelContextInfo } from '@utils/modelLookup';
@@ -48,6 +49,9 @@ const useSubmit = () => {
   const setChats = useStore((state) => state.setChats);
   const applyBranchState = useStore((state) => state.applyBranchState);
   const fallbackProvider: ResolvedProvider = { endpoint: apiEndpoint, key: apiKey };
+  const [isUnknownContextConfirmOpen, setIsUnknownContextConfirmOpen] = useState(false);
+  const [unknownContextConfirmMessage, setUnknownContextConfirmMessage] = useState('');
+  const pendingSubmitRef = useRef<(() => Promise<void>) | null>(null);
 
   const runSubmit = async (mode: SubmitMode, insertIndex: number | null = null) => {
     const chats = useStore.getState().chats;
@@ -199,12 +203,62 @@ const useSubmit = () => {
     }
   };
 
+  const runSubmitWithConfirmation = async (
+    action: () => Promise<void>,
+    model: string,
+    providerId?: string
+  ) => {
+    const { isFallback } = getModelContextInfo(model, providerId as never);
+    if (!isFallback) {
+      await action();
+      return;
+    }
+
+    pendingSubmitRef.current = action;
+    setUnknownContextConfirmMessage(
+      t('warnings.unknownContextLengthBeforeSubmitConfirm', { model }) as string
+    );
+    setIsUnknownContextConfirmOpen(true);
+  };
+
+  const handleUnknownContextConfirm = async () => {
+    const pending = pendingSubmitRef.current;
+    pendingSubmitRef.current = null;
+    setIsUnknownContextConfirmOpen(false);
+    setUnknownContextConfirmMessage('');
+    if (pending) {
+      await pending();
+    }
+  };
+
+  const handleUnknownContextCancel = () => {
+    pendingSubmitRef.current = null;
+    setIsUnknownContextConfirmOpen(false);
+    setUnknownContextConfirmMessage('');
+  };
+
   const handleSubmit = async () => {
-    await runSubmit('append');
+    const chats = useStore.getState().chats;
+    const chatIndex = useStore.getState().currentChatIndex;
+    const config = chats?.[chatIndex]?.config;
+    if (!config) return;
+    await runSubmitWithConfirmation(
+      () => runSubmit('append'),
+      config.model,
+      config.providerId
+    );
   };
 
   const handleSubmitMidChat = async (insertIndex: number) => {
-    await runSubmit('midchat', insertIndex);
+    const chats = useStore.getState().chats;
+    const chatIndex = useStore.getState().currentChatIndex;
+    const config = chats?.[chatIndex]?.config;
+    if (!config) return;
+    await runSubmitWithConfirmation(
+      () => runSubmit('midchat', insertIndex),
+      config.model,
+      config.providerId
+    );
   };
 
   const handleRetry = async () => {
@@ -236,7 +290,17 @@ const useSubmit = () => {
     }
   };
 
-  return { handleSubmit, handleSubmitMidChat, handleRetry, error };
+  return {
+    handleSubmit,
+    handleSubmitMidChat,
+    handleRetry,
+    error,
+    isUnknownContextConfirmOpen,
+    setIsUnknownContextConfirmOpen,
+    unknownContextConfirmMessage,
+    handleUnknownContextConfirm,
+    handleUnknownContextCancel,
+  };
 };
 
 export default useSubmit;

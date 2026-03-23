@@ -46,7 +46,15 @@ const UnifiedMessageView = memo(
       'rounded-2xl bg-white/60 px-4 pt-2.5 pb-2 shadow-sm ring-1 ring-black/5 dark:bg-gray-900/20 dark:ring-white/10 md:px-5 md:pt-3 md:pb-2.5';
     const contentMinHeightClass = 'min-h-[5.25rem]';
     const { t } = useTranslation();
-    const { handleSubmit, handleSubmitMidChat } = useSubmit();
+    const {
+      handleSubmit,
+      handleSubmitMidChat,
+      isUnknownContextConfirmOpen,
+      setIsUnknownContextConfirmOpen,
+      unknownContextConfirmMessage,
+      handleUnknownContextConfirm,
+      handleUnknownContextCancel,
+    } = useSubmit();
     const [isDelete, setIsDelete] = useState(false);
 
     const currentChatIndex = useStore((state) => state.currentChatIndex);
@@ -197,6 +205,15 @@ const UnifiedMessageView = memo(
                 handleConfirm={editLogic.handleGenerate}
               />
             )}
+            {editLogic.isUnknownContextConfirmOpen && (
+              <PopupModal
+                setIsModalOpen={editLogic.setIsUnknownContextConfirmOpen}
+                title={t('warning') as string}
+                message={editLogic.unknownContextConfirmMessage}
+                handleConfirm={editLogic.handleUnknownContextConfirm}
+                handleClose={editLogic.handleUnknownContextCancel}
+              />
+            )}
           </div>
         ) : (
           <div className={contentSurfaceClass}>
@@ -234,6 +251,15 @@ const UnifiedMessageView = memo(
               onCopy={handleCopy}
               onDelete={handleDelete}
             />
+            {isUnknownContextConfirmOpen && (
+              <PopupModal
+                setIsModalOpen={setIsUnknownContextConfirmOpen}
+                title={t('warning') as string}
+                message={unknownContextConfirmMessage}
+                handleConfirm={handleUnknownContextConfirm}
+                handleClose={handleUnknownContextCancel}
+              />
+            )}
           </div>
         )}
       </>

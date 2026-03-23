@@ -127,6 +127,15 @@ const EditView = ({
           handleConfirm={logic.handleGenerate}
         />
       )}
+      {logic.isUnknownContextConfirmOpen && (
+        <PopupModal
+          setIsModalOpen={logic.setIsUnknownContextConfirmOpen}
+          title={t('warning') as string}
+          message={logic.unknownContextConfirmMessage}
+          handleConfirm={logic.handleUnknownContextConfirm}
+          handleClose={logic.handleUnknownContextCancel}
+        />
+      )}
     </div>
   );
 };
