@@ -322,8 +322,12 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
       }
 
       const currentText = getCurrentMessageText(chat.messages[messageIndex]);
-      const hasActiveSession = Object.values(useStore.getState().generatingSessions).some(
+      const generatingSessions = Object.values(useStore.getState().generatingSessions);
+      const hasActiveSession = generatingSessions.some(
         (session) => session.chatId === chat.id && session.messageIndex === messageIndex
+      );
+      const chatHasAnyActiveSession = generatingSessions.some(
+        (session) => session.chatId === chat.id
       );
 
       // First: apply IndexedDB buffered text (fast, local)
@@ -429,10 +433,13 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
         }
       }
 
-      // Clear any generating sessions for this chat
-      useStore.getState().removeSessionsForChat(
-        useStore.getState().chats?.[chatIndex]?.id ?? ''
-      );
+      // Clear generating sessions for this chat — but only if no other
+      // active session is still streaming to the same chat.
+      if (!chatHasAnyActiveSession) {
+        useStore.getState().removeSessionsForChat(
+          useStore.getState().chats?.[chatIndex]?.id ?? ''
+        );
+      }
 
       await deleteRequest(requestId);
     }
