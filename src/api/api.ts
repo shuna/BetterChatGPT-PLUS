@@ -5,6 +5,7 @@ import {
 } from '@type/chat';
 import { isAzureEndpoint } from '@utils/api';
 import { getModelSupportsReasoning } from '@utils/modelLookup';
+import { isOpenRouterAdaptiveReasoningModel } from '@utils/reasoning';
 
 /** Effort values only supported by OpenRouter's unified reasoning API. */
 const OPENROUTER_ONLY_EFFORTS: ReadonlySet<ReasoningEffort> = new Set([
@@ -44,6 +45,7 @@ const buildRequestBody = (
     providerId,
     reasoning_effort,
     reasoning_budget_tokens,
+    verbosity,
     ...apiConfig
   } = config;
 
@@ -63,7 +65,12 @@ const buildRequestBody = (
         // Explicit budget always takes precedence
         reasoning.max_tokens = reasoning_budget_tokens;
       } else if (reasoning_effort) {
-        if (needsMaxTokensOnly(config.model)) {
+        if (
+          isOpenRouterAdaptiveReasoningModel(config.model, providerId) &&
+          reasoning_effort !== 'none'
+        ) {
+          reasoning.enabled = true;
+        } else if (needsMaxTokensOnly(config.model)) {
           // Claude etc. only support max_tokens, not effort — convert
           const mapped = EFFORT_TO_MAX_TOKENS[reasoning_effort];
           if (mapped > 0) reasoning.max_tokens = mapped;
@@ -83,6 +90,10 @@ const buildRequestBody = (
         body.reasoning_budget_tokens = reasoning_budget_tokens;
       }
     }
+  }
+
+  if (providerId === 'openrouter' && verbosity) {
+    body.verbosity = verbosity;
   }
 
   return body;
@@ -229,4 +240,3 @@ export const prepareStreamRequest = (
 
   return { endpoint, headers, body };
 };
-

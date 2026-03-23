@@ -34,6 +34,7 @@ export interface NonStreamingChoice {
     content: string;
     reasoning?: string;
     reasoning_content?: string;
+    reasoning_details?: ReasoningDetail[];
   };
   finish_reason?: string;
   index: number;

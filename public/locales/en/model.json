@@ -36,6 +36,7 @@
   "reasoningEffort": {
     "label": "Reasoning Effort",
     "description": "Controls how much effort the model spends on internal reasoning. Higher effort produces more thorough answers but uses more tokens.",
+    "adaptiveDescription": "Claude 4.6 models on OpenRouter use adaptive thinking by default. Leave the budget at 0 to let the provider choose automatically, or set an explicit budget to override it.",
     "none": "None",
     "minimal": "Minimal",
     "low": "Low",
@@ -48,6 +49,15 @@
     "label": "Reasoning Budget (tokens)",
     "description": "Advanced: set an explicit token budget for the model's internal reasoning. Leave at 0 to use the provider's default. (Min: 1024)",
     "minWarning": "Value must be at least 1024. Values below 1024 will be ignored."
+  },
+  "verbosity": {
+    "label": "Verbosity",
+    "description": "Controls how detailed the final answer should be. This affects the response itself, not the model's internal reasoning budget.",
+    "adaptiveDescription": "Claude 4.6 models on OpenRouter support `max` verbosity. Use this to ask for a more thorough final answer while keeping adaptive thinking enabled.",
+    "low": "Low",
+    "medium": "Medium",
+    "high": "High",
+    "max": "Max"
   },
   "capabilities": {
     "reasoning": "Reasoning",

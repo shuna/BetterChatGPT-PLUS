@@ -1,4 +1,5 @@
 import { ProviderConfig, ProviderId, ProviderModel } from '@type/provider';
+import { isClaudeReasoningModel } from '@utils/reasoning';
 
 type UnknownRecord = Record<string, unknown>;
 type ProviderPricingPayload = {
@@ -107,8 +108,7 @@ export const isReasoningModel = (modelId: string): boolean => {
   return (
     REASONING_MODEL_RE.test(id) ||
     REASONING_MODEL_NAMES.some((name) => id.includes(name)) ||
-    // Claude with extended thinking (via OpenRouter)
-    (id.includes('claude') && id.includes('thinking'))
+    isClaudeReasoningModel(id)
   );
 };
 
@@ -188,4 +188,3 @@ export async function fetchProviderModels(
     return [];
   }
 }
-

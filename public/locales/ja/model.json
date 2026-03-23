@@ -32,6 +32,7 @@
   "reasoningEffort": {
     "label": "推論の強度",
     "description": "モデルが内部推論にどの程度の労力をかけるかを制御します。強度が高いほど、より徹底的な回答が得られますが、トークン消費も増えます。",
+    "adaptiveDescription": "OpenRouter 上の Claude 4.6 系モデルは adaptive thinking を既定で使用します。provider の既定に任せる場合は Budget を 0 のままにし、明示的に上書きしたいときだけ Budget を設定してください。",
     "none": "なし",
     "minimal": "最小",
     "low": "低",
@@ -44,6 +45,15 @@
     "label": "推論トークン予算",
     "description": "上級者向け: モデルの内部推論に割り当てるトークン予算を明示的に指定します。0のままにするとプロバイダーのデフォルト値が使用されます。（最小: 1024）",
     "minWarning": "値は1024以上にしてください。1024未満の値は無視されます。"
+  },
+  "verbosity": {
+    "label": "出力の詳しさ",
+    "description": "最終的な回答をどの程度詳しく出すかを制御します。内部推論の予算ではなく、出力そのものの厚みを調整します。",
+    "adaptiveDescription": "OpenRouter 上の Claude 4.6 系モデルは `max` verbosity に対応します。adaptive thinking を保ったまま、最終回答だけをより詳しくしたいときに使います。",
+    "low": "低",
+    "medium": "中",
+    "high": "高",
+    "max": "最大"
   },
   "imageDetail": {
     "label": "画像解像度",

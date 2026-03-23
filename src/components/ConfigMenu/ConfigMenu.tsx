@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
-import { ConfigInterface, ImageDetail, ReasoningEffort } from '@type/chat';
+import { ConfigInterface, ImageDetail, ReasoningEffort, Verbosity } from '@type/chat';
 import {
   getModelConfigContextInfo,
   useModelSupportsReasoning,
@@ -14,6 +14,11 @@ import { _defaultChatConfig } from '@constants/chat';
 import useStore from '@store/store';
 import { ProviderId } from '@type/provider';
 import {
+  isOpenRouterAdaptiveReasoningModel,
+  isOpenRouterClaudeVerbosityModel,
+  supportsMaxVerbosity,
+} from '@utils/reasoning';
+import {
   CapabilityBadges,
   DarkSelectField,
   FieldLabel,
@@ -24,8 +29,9 @@ import {
   SegmentedControl,
 } from './fields';
 
-const DEFAULT_REASONING_BUDGET = 8192;
+const DEFAULT_REASONING_BUDGET = 0;
 const DEFAULT_REASONING_EFFORT: ReasoningEffort = 'medium';
+const DEFAULT_VERBOSITY: Verbosity = 'medium';
 
 const ConfigMenu = ({
   setIsModalOpen,
@@ -55,10 +61,12 @@ const ConfigMenu = ({
   const [_stream, _setStream] = useState<boolean>(config.stream !== false);
   const [_reasoningEffort, _setReasoningEffort] = useState<ReasoningEffort | undefined>(config.reasoning_effort ?? DEFAULT_REASONING_EFFORT);
   const [_reasoningBudget, _setReasoningBudget] = useState<number>(config.reasoning_budget_tokens ?? DEFAULT_REASONING_BUDGET);
+  const [_verbosity, _setVerbosity] = useState<Verbosity | undefined>(config.verbosity ?? DEFAULT_VERBOSITY);
   const { t } = useTranslation('model');
   const isStreamSupported = isModelStreamSupported(_model, _providerId);
   const reasoningSupported = useModelSupportsReasoning(_model, _providerId);
   const capabilities = useModelCapabilities(_model, _providerId);
+  const verbositySupported = isOpenRouterClaudeVerbosityModel(_model, _providerId);
   const isFirstRender = useRef(true);
 
   useEffect(() => {
@@ -85,9 +93,10 @@ const ConfigMenu = ({
       providerId: _providerId,
       reasoning_effort: reasoningSupported ? _reasoningEffort : undefined,
       reasoning_budget_tokens: reasoningSupported && _reasoningBudget >= 1024 ? _reasoningBudget : undefined,
+      verbosity: verbositySupported ? _verbosity : undefined,
     }));
     setImageDetail(_imageDetail);
-  }, [_maxToken, _model, _providerId, _temperature, _presencePenalty, _topP, _frequencyPenalty, _imageDetail, _stream, _reasoningEffort, _reasoningBudget]);
+  }, [_maxToken, _model, _providerId, _temperature, _presencePenalty, _topP, _frequencyPenalty, _imageDetail, _stream, _reasoningEffort, _reasoningBudget, _verbosity]);
 
   return (
     <PopupModal
@@ -143,12 +152,21 @@ const ConfigMenu = ({
             <ReasoningEffortSelector
               _reasoningEffort={_reasoningEffort}
               _setReasoningEffort={_setReasoningEffort}
+              _model={_model}
               _providerId={_providerId}
             />
             <ReasoningBudgetInput
               _reasoningBudget={_reasoningBudget}
               _setReasoningBudget={_setReasoningBudget}
             />
+            {verbositySupported && (
+              <VerbositySelector
+                _verbosity={_verbosity}
+                _setVerbosity={_setVerbosity}
+                _model={_model}
+                _providerId={_providerId}
+              />
+            )}
           </div>
         )}
         <div className='mt-3 pt-3 border-t border-gray-200 dark:border-gray-600'>
@@ -455,15 +473,18 @@ export const ImageDetailSelector = ({
 export const ReasoningEffortSelector = ({
   _reasoningEffort,
   _setReasoningEffort,
+  _model,
   _providerId,
 }: {
   _reasoningEffort: ReasoningEffort | undefined;
   _setReasoningEffort: React.Dispatch<React.SetStateAction<ReasoningEffort | undefined>>;
+  _model: ModelOptions;
   _providerId?: ProviderId;
 }) => {
   const { t } = useTranslation('model');
 
   const isOpenRouter = _providerId === 'openrouter';
+  const usesAdaptiveReasoning = isOpenRouterAdaptiveReasoningModel(_model, _providerId);
 
   const options: { value: ReasoningEffort; label: string }[] = isOpenRouter
     ? [
@@ -489,7 +510,11 @@ export const ReasoningEffortSelector = ({
   return (
     <div className='mt-3'>
       <FieldLabelWithInfo
-        description={t('reasoningEffort.description')}
+        description={t(
+          usesAdaptiveReasoning
+            ? 'reasoningEffort.adaptiveDescription'
+            : 'reasoningEffort.description'
+        )}
         onReset={() => _setReasoningEffort(DEFAULT_REASONING_EFFORT)}
         showReset={_reasoningEffort !== DEFAULT_REASONING_EFFORT}
       >
@@ -518,12 +543,58 @@ export const ReasoningBudgetInput = ({
       label={t('reasoningBudget.label') as string}
       value={_reasoningBudget}
       onChange={_setReasoningBudget}
-      min={1024}
+      min={0}
       max={65536}
       step={1024}
       description={t('reasoningBudget.description')}
       defaultValue={DEFAULT_REASONING_BUDGET}
     />
+  );
+};
+
+export const VerbositySelector = ({
+  _verbosity,
+  _setVerbosity,
+  _model,
+  _providerId,
+}: {
+  _verbosity: Verbosity | undefined;
+  _setVerbosity: React.Dispatch<React.SetStateAction<Verbosity | undefined>>;
+  _model: ModelOptions;
+  _providerId?: ProviderId;
+}) => {
+  const { t } = useTranslation('model');
+  const allowMax = supportsMaxVerbosity(_model, _providerId);
+
+  const options: { value: Verbosity; label: string }[] = [
+    { value: 'low', label: t('verbosity.low') },
+    { value: 'medium', label: t('verbosity.medium') },
+    { value: 'high', label: t('verbosity.high') },
+    ...(allowMax ? [{ value: 'max' as const, label: t('verbosity.max') }] : []),
+  ];
+
+  const validValues = new Set(options.map((option) => option.value));
+  if (_verbosity && !validValues.has(_verbosity)) {
+    _setVerbosity(DEFAULT_VERBOSITY);
+  }
+
+  return (
+    <div className='mt-3'>
+      <FieldLabelWithInfo
+        description={t(
+          allowMax ? 'verbosity.adaptiveDescription' : 'verbosity.description'
+        )}
+        onReset={() => _setVerbosity(DEFAULT_VERBOSITY)}
+        showReset={_verbosity !== DEFAULT_VERBOSITY}
+      >
+        {t('verbosity.label')}
+      </FieldLabelWithInfo>
+      <SegmentedControl
+        options={options}
+        value={_verbosity}
+        onChange={(value) => _setVerbosity(value as Verbosity)}
+      />
+    </div>
   );
 };
 

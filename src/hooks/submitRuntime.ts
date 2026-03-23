@@ -116,6 +116,20 @@ const extractReasoningFromEvent = (event: EventSourceDataInterface): string => {
   return '';
 };
 
+const extractReasoningFromMessage = (
+  message: NonStreamingResponse['choices'][number]['message']
+): string => {
+  if (message.reasoning) return message.reasoning;
+  if (message.reasoning_content) return message.reasoning_content;
+  if (message.reasoning_details && Array.isArray(message.reasoning_details)) {
+    return message.reasoning_details
+      .filter((detail: ReasoningDetail) => detail.type === 'reasoning.text' && detail.text)
+      .map((detail: ReasoningDetail) => detail.text!)
+      .join('');
+  }
+  return '';
+};
+
 /** Write reasoning chunk to the streaming buffer (not the Zustand store). */
 const writeReasoningChunk = (targetNodeId: string, text: string): void => {
   if (!text || !isBufferingNode(targetNodeId)) return;
@@ -517,7 +531,7 @@ export const executeSubmitStream = async ({
       lastFinishReason = nonStreamData.choices[0].finish_reason ?? 'stop';
       // Extract reasoning from non-streaming response
       const msg = nonStreamData.choices[0].message;
-      const reasoningText = msg.reasoning ?? msg.reasoning_content ?? '';
+      const reasoningText = extractReasoningFromMessage(msg);
       // Parse <think> tags from content
       const parsedContent = thinkTagParser.process(msg.content);
       const flushedContent = thinkTagParser.flush();

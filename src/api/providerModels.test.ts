@@ -19,6 +19,11 @@ describe('isReasoningModel', () => {
     'qwq-32b-preview',
     'anthropic/claude-3.5-sonnet:thinking',
     'claude-3-opus-thinking',
+    'anthropic/claude-opus-4.6',
+    'anthropic/claude-sonnet-4',
+    'anthropic/claude-4.6-sonnet',
+    'anthropic/claude-opus-4.5',
+    'claude-3.7-sonnet',
   ];
 
   // Should NOT match

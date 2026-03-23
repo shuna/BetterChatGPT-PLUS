@@ -141,6 +141,7 @@ export interface LocalStorageInterfaceV10ToV11
 }
 
 export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+export type Verbosity = 'low' | 'medium' | 'high' | 'max';
 
 export interface ConfigInterface {
   model: ModelOptions;
@@ -153,6 +154,7 @@ export interface ConfigInterface {
   providerId?: ProviderId;
   reasoning_effort?: ReasoningEffort;
   reasoning_budget_tokens?: number;
+  verbosity?: Verbosity;
 }
 
 export interface ChatHistoryInterface {
