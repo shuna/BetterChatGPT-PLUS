@@ -179,6 +179,12 @@
     "next": "次へ",
     "startChatting": "チャットを始める"
   },
+  "omitOn": "送信から省略",
+  "omitOff": "送信に含める",
+  "protectOn": "保護する",
+  "protectOff": "保護を解除",
+  "globalOmitOn": "一括省略",
+  "globalOmitOff": "一括省略",
   "help": {
     "title": "ヘルプ",
     "basicOps": "基本操作",

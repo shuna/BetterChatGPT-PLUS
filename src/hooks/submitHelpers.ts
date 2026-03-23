@@ -160,13 +160,35 @@ export const sanitizeMessagesForSubmit = (
     }))
     .filter((message) => message.content.length > 0);
 
+const filterOmittedMessages = (
+  messages: MessageInterface[],
+  chatIndex: number
+): MessageInterface[] => {
+  const state = useStore.getState();
+  const chat = state.chats?.[chatIndex];
+  if (!chat) return messages;
+  const mapKey = String(chatIndex);
+  const omittedNodes = state.omittedNodeMaps[mapKey] ?? chat.omittedNodes ?? {};
+  if (Object.keys(omittedNodes).length === 0) return messages;
+
+  const activePath = chat.branchTree?.activePath;
+  return messages.filter((_, idx) => {
+    const nodeId = activePath?.[idx] ?? String(idx);
+    return !omittedNodes[nodeId];
+  });
+};
+
 export const getSubmitContextMessages = (
   messages: MessageInterface[],
   _mode: SubmitMode,
   messageIndex: number,
-  modelId?: string
+  modelId?: string,
+  chatIndex?: number
 ): MessageInterface[] => {
-  const sliced = messages.slice(0, messageIndex);
+  let sliced = messages.slice(0, messageIndex);
+  if (chatIndex !== undefined) {
+    sliced = filterOmittedMessages(sliced, chatIndex);
+  }
   return modelId ? stripSystemMessages(sliced, modelId) : sliced;
 };
 

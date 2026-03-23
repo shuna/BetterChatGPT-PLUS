@@ -15,6 +15,7 @@ import ContentActions from './ContentActions';
 import ContentAttachments from './ContentAttachments';
 import EditViewButtons from './EditViewButtons';
 import ContentBody from './ContentBody';
+import MetaActions from './MetaActions';
 import PopupModal from '@components/PopupModal';
 import { useTranslation } from 'react-i18next';
 import { useModelType } from '@utils/modelLookup';
@@ -80,6 +81,26 @@ const UnifiedMessageView = memo(
     const isCurrentChatGenerating = useStore((state) =>
       Object.values(state.generatingSessions).some((s) => s.chatId === currentChatId)
     );
+
+    const resolvedNodeIdForMeta = useStore((state) => {
+      if (!nodeId) {
+        const chat = state.chats?.[state.currentChatIndex];
+        return chat?.branchTree?.activePath?.[messageIndex] ?? String(messageIndex);
+      }
+      return nodeId;
+    });
+    const isOmitted = useStore((state) => {
+      const chatIndex = state.currentChatIndex;
+      const mapKey = String(chatIndex);
+      const maps = state.omittedNodeMaps[mapKey] ?? state.chats?.[chatIndex]?.omittedNodes ?? {};
+      return maps[resolvedNodeIdForMeta] ?? false;
+    });
+    const isProtected = useStore((state) => {
+      const chatIndex = state.currentChatIndex;
+      const mapKey = String(chatIndex);
+      const maps = state.protectedNodeMaps[mapKey] ?? state.chats?.[chatIndex]?.protectedNodes ?? {};
+      return maps[resolvedNodeIdForMeta] ?? false;
+    });
 
     // Edit logic (only used when editing, but hook must always be called)
     const editLogic = useEditViewLogic({
@@ -216,7 +237,12 @@ const UnifiedMessageView = memo(
             )}
           </div>
         ) : (
-          <div className={contentSurfaceClass}>
+          <div className={`relative ${contentSurfaceClass}`}>
+            <MetaActions
+              messageIndex={messageIndex}
+              isOmitted={isOmitted}
+              isProtected={isProtected}
+            />
             {role === 'assistant' && currentReasoning && (
               <CollapsibleReasoning
                 reasoning={currentReasoning}

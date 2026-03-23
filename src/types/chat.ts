@@ -101,6 +101,8 @@ export interface ChatInterface {
   imageDetail: ImageDetail;
   branchTree?: BranchTree;
   collapsedNodes?: Record<string, boolean>;
+  omittedNodes?: Record<string, boolean>;
+  protectedNodes?: Record<string, boolean>;
 }
 
 export interface BranchClipboard {

@@ -537,7 +537,15 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
 
   removeMessageAtIndex: (chatIndex, messageIndex) => {
     const chat = get().chats?.[chatIndex];
-    const nodeId = chat?.branchTree?.activePath?.[messageIndex];
+    if (!chat) return;
+    const resolvedNodeId = chat.branchTree?.activePath?.[messageIndex] ?? String(messageIndex);
+
+    // Block deletion of protected nodes
+    const mapKey = String(chatIndex);
+    const protectedNodes = get().protectedNodeMaps[mapKey] ?? chat.protectedNodes ?? {};
+    if (protectedNodes[resolvedNodeId]) return;
+
+    const nodeId = chat.branchTree?.activePath?.[messageIndex];
     const preserveNode = !!nodeId && Object.values(get().generatingSessions).some(
       (session) => session.chatId === chat?.id && session.targetNodeId === nodeId
     );

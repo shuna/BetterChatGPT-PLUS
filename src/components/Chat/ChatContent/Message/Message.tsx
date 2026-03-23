@@ -78,6 +78,22 @@ const Message = React.memo(
       return collapsedNodes[resolvedNodeId] ?? false;
     });
 
+    const isOmitted = useStore((state) => {
+      if (sticky || !resolvedNodeId) return false;
+      const chatIndex = state.currentChatIndex;
+      const mapKey = String(chatIndex);
+      const maps = state.omittedNodeMaps[mapKey] ?? state.chats?.[chatIndex]?.omittedNodes ?? {};
+      return maps[resolvedNodeId] ?? false;
+    });
+
+    const isProtected = useStore((state) => {
+      if (sticky || !resolvedNodeId) return false;
+      const chatIndex = state.currentChatIndex;
+      const mapKey = String(chatIndex);
+      const maps = state.protectedNodeMaps[mapKey] ?? state.chats?.[chatIndex]?.protectedNodes ?? {};
+      return maps[resolvedNodeId] ?? false;
+    });
+
     const collapsedPreview = (() => {
       const firstText = content.find(isTextContent);
       const text = firstText?.text.replace(/\s+/g, ' ').trim() ?? '';
@@ -120,7 +136,7 @@ const Message = React.memo(
       <div
         className={`w-full border-b border-black/10 dark:border-gray-900/50 text-gray-800 dark:text-gray-100 group relative ${
           backgroundStyle[messageIndex % 2]
-        }`}
+        }${isOmitted ? ' opacity-50' : ''}${isProtected ? ' ring-2 ring-inset ring-blue-400/30 dark:ring-blue-500/25' : ''}`}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         onClick={handleClick}

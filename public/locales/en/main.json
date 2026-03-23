@@ -187,6 +187,12 @@
     "next": "Next",
     "startChatting": "Start Chatting"
   },
+  "omitOn": "Omit from request",
+  "omitOff": "Include in request",
+  "protectOn": "Protect",
+  "protectOff": "Unprotect",
+  "globalOmitOn": "Omit All",
+  "globalOmitOff": "Omit All",
   "help": {
     "title": "Help",
     "basicOps": "Basic Operations",

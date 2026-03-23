@@ -14,6 +14,7 @@ import type { ProviderId } from '@type/provider';
 import { cloneChatAtIndex } from '@utils/chatShallowClone';
 import { normalizeConfigStream } from '@utils/streamSupport';
 import useIsDesktop from '@hooks/useIsDesktop';
+import OmitIcon from '@icon/OmitIcon';
 
 const ChatViewTabs = ({
   activeView,
@@ -46,6 +47,9 @@ const ChatViewTabs = ({
   const setSplitPanelSwapped = useStore((state) => state.setSplitPanelSwapped);
   const branchEditorSyncEnabled = useStore((state) => state.branchEditorSyncEnabled);
   const setBranchEditorSyncEnabled = useStore((state) => state.setBranchEditorSyncEnabled);
+  const globalOmitMode = useStore((state) => state.globalOmitMode);
+  const setGlobalOmitMode = useStore((state) => state.setGlobalOmitMode);
+  const setAllOmitted = useStore((state) => state.setAllOmitted);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState<boolean>(false);
   const [isLayoutDropdownOpen, setIsLayoutDropdownOpen] = useState<boolean>(false);
@@ -220,6 +224,28 @@ const ChatViewTabs = ({
               </svg>
               {!isCompact && tMain('modelOptions')}
             </div>
+            <button
+              className={`p-1 px-2 rounded-md flex items-center gap-1 shrink-0 whitespace-nowrap cursor-pointer transition-colors ${
+                globalOmitMode
+                  ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50'
+                  : 'bg-gray-300/20 text-gray-600 hover:bg-gray-300/50 dark:bg-gray-900/10 dark:text-gray-300 dark:hover:bg-gray-900/50'
+              }`}
+              onClick={() => {
+                const next = !globalOmitMode;
+                setGlobalOmitMode(next);
+                setAllOmitted(currentChatIndex, next);
+              }}
+              title={String(globalOmitMode
+                ? tMain('globalOmitOff', 'Bulk omit: ON (click to include all)')
+                : tMain('globalOmitOn', 'Bulk omit: OFF (click to omit all)')
+              )}
+            >
+              <OmitIcon className='w-4 h-4' />
+              {!isCompact && (globalOmitMode
+                ? tMain('globalOmitOff', 'Omit All')
+                : tMain('globalOmitOn', 'Omit All')
+              )}
+            </button>
             </div>
           )}
         </div>
