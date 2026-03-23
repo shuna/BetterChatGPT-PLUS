@@ -86,6 +86,11 @@ function parseEventSource(data, flush) {
   return { events, partial, done };
 }
 
+var REASONING_TYPES = {
+  'reasoning': true, 'thinking': true, 'reasoning.text': true,
+  'reasoning.summary': true, 'redacted_thinking': true,
+};
+
 function extractText(events) {
   let text = '';
   for (const evt of events) {
@@ -99,17 +104,18 @@ function extractText(events) {
             text += item;
           } else if (item && typeof item === 'object') {
             const type = item.type || '';
-            if (type === 'text' || type === 'output_text') {
+            // Skip reasoning/thinking blocks — handled by extractReasoning
+            if (type && REASONING_TYPES[type]) continue;
+            if (type === 'text' || type === 'output_text' || !type) {
               text += item.text || item.content || item.value || '';
-            } else if (typeof item.text === 'string') {
-              text += item.text;
-            } else if (typeof item.content === 'string') {
-              text += item.content;
             }
           }
         }
       } else if (content && typeof content === 'object') {
-        text += content.text || content.content || content.value || '';
+        const type = content.type || '';
+        if (!type || type === 'text' || type === 'output_text') {
+          text += content.text || content.content || content.value || '';
+        }
       }
     }
   }

@@ -12,14 +12,20 @@ type ContentBlock = {
 
 type ContentPayload = string | ContentBlock | Array<string | ContentBlock> | null | undefined;
 
+const REASONING_TYPES = new Set([
+  'reasoning', 'thinking', 'reasoning.text', 'reasoning.summary', 'redacted_thinking',
+]);
+
 const collectTextFromBlock = (block: string | ContentBlock): string => {
   if (typeof block === 'string') return block;
   if (!block || typeof block !== 'object') return '';
 
   const type = block.type ?? '';
-  if (type === 'text' || type === 'output_text') return block.text ?? block.content ?? block.value ?? '';
+  // Skip reasoning/thinking blocks — they are handled by collectReasoningFromBlock
+  if (type && REASONING_TYPES.has(type)) return '';
+  if (type === 'text' || type === 'output_text' || !type) return block.text ?? block.content ?? block.value ?? '';
 
-  return block.text ?? block.content ?? block.value ?? '';
+  return '';
 };
 
 const collectReasoningFromBlock = (block: string | ContentBlock): string => {

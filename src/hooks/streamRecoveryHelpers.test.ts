@@ -74,6 +74,28 @@ describe('resolveRecoveryStatus', () => {
       )
     ).toBe('streaming');
   });
+
+  it('returns "streaming" for active streams with proxySessionId when session is live', () => {
+    const now = Date.now();
+    expect(
+      resolveRecoveryStatus(
+        { ...base, status: 'streaming', updatedAt: now - 5000, proxySessionId: 'proxy-1' },
+        now,
+        true
+      )
+    ).toBe('streaming');
+  });
+
+  it('returns "streaming-with-proxy" for orphaned streams with proxySessionId', () => {
+    const now = Date.now();
+    expect(
+      resolveRecoveryStatus(
+        { ...base, status: 'streaming', updatedAt: now - 5000, proxySessionId: 'proxy-1' },
+        now,
+        false
+      )
+    ).toBe('streaming-with-proxy');
+  });
 });
 
 // ---------------------------------------------------------------------------
