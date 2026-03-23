@@ -349,7 +349,9 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
       }
 
       // Second: try proxy recovery for interrupted/failed/streaming-with-proxy streams
+      const { proxyEnabled } = useStore.getState();
       if (
+        proxyEnabled &&
         (effectiveStatus === 'interrupted' || effectiveStatus === 'failed' || effectiveStatus === 'streaming-with-proxy') &&
         record.proxySessionId
       ) {
