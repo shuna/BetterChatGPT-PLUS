@@ -456,6 +456,23 @@ export const rehydrateStoreState = (state: StoreState) => {
     );
   }
 
+  // Back-fill contextLength on favorites from cached model data
+  if (state.favoriteModels?.length && state.providerModelCache) {
+    const cache = state.providerModelCache;
+    let patched = false;
+    state.favoriteModels = state.favoriteModels.map((fav) => {
+      if (fav.contextLength) return fav;
+      const models = cache[fav.providerId];
+      const cached = models?.find((m) => m.id === fav.modelId);
+      if (cached?.contextLength) {
+        patched = true;
+        return { ...fav, contextLength: cached.contextLength };
+      }
+      return fav;
+    });
+    if (patched) repaired = true;
+  }
+
   createPartializedState(state);
   return repaired;
 };
