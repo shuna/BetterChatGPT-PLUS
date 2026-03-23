@@ -140,7 +140,7 @@ export interface LocalStorageInterfaceV10ToV11
   // branchTree is inside ChatInterface, no new top-level fields
 }
 
-export type ReasoningEffort = 'low' | 'medium' | 'high';
+export type ReasoningEffort = 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
 
 export interface ConfigInterface {
   model: ModelOptions;

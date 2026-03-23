@@ -36,9 +36,12 @@
   "reasoningEffort": {
     "label": "Reasoning Effort",
     "description": "Controls how much effort the model spends on internal reasoning. Higher effort produces more thorough answers but uses more tokens.",
+    "none": "None",
+    "minimal": "Minimal",
     "low": "Low",
     "medium": "Medium",
     "high": "High",
+    "xhigh": "Max",
     "unsupported": "This model does not support reasoning configuration."
   },
   "reasoningBudget": {

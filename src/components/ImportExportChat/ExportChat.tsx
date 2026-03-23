@@ -24,7 +24,7 @@ const ExportChat = () => {
     const contentStore = useStore.getState().contentStore;
 
     const filename = getToday();
-    let fileData: unknown;
+    let fileData: object;
 
     if (format === 'openai') {
       fileData = chats?.map((chat) => chatToOpenAIFormat(chat, contentStore)) ?? [];

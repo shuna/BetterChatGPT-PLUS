@@ -139,6 +139,7 @@ const ConfigMenu = ({
             <ReasoningEffortSelector
               _reasoningEffort={_reasoningEffort}
               _setReasoningEffort={_setReasoningEffort}
+              _providerId={_providerId}
             />
             <ReasoningBudgetInput
               _reasoningBudget={_reasoningBudget}
@@ -450,17 +451,36 @@ export const ImageDetailSelector = ({
 export const ReasoningEffortSelector = ({
   _reasoningEffort,
   _setReasoningEffort,
+  _providerId,
 }: {
   _reasoningEffort: ReasoningEffort | undefined;
   _setReasoningEffort: React.Dispatch<React.SetStateAction<ReasoningEffort | undefined>>;
+  _providerId?: ProviderId;
 }) => {
   const { t } = useTranslation('model');
 
-  const options: { value: ReasoningEffort; label: string }[] = [
-    { value: 'low', label: t('reasoningEffort.low') },
-    { value: 'medium', label: t('reasoningEffort.medium') },
-    { value: 'high', label: t('reasoningEffort.high') },
-  ];
+  const isOpenRouter = _providerId === 'openrouter';
+
+  const options: { value: ReasoningEffort; label: string }[] = isOpenRouter
+    ? [
+        { value: 'none', label: t('reasoningEffort.none') },
+        { value: 'minimal', label: t('reasoningEffort.minimal') },
+        { value: 'low', label: t('reasoningEffort.low') },
+        { value: 'medium', label: t('reasoningEffort.medium') },
+        { value: 'high', label: t('reasoningEffort.high') },
+        { value: 'xhigh', label: t('reasoningEffort.xhigh') },
+      ]
+    : [
+        { value: 'low', label: t('reasoningEffort.low') },
+        { value: 'medium', label: t('reasoningEffort.medium') },
+        { value: 'high', label: t('reasoningEffort.high') },
+      ];
+
+  // Reset to medium if current value isn't available for this provider
+  const validValues = new Set(options.map((o) => o.value));
+  if (_reasoningEffort && !validValues.has(_reasoningEffort)) {
+    _setReasoningEffort(DEFAULT_REASONING_EFFORT);
+  }
 
   return (
     <div className='mt-3'>

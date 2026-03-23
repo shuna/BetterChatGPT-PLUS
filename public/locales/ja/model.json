@@ -32,9 +32,12 @@
   "reasoningEffort": {
     "label": "推論の強度",
     "description": "モデルが内部推論にどの程度の労力をかけるかを制御します。強度が高いほど、より徹底的な回答が得られますが、トークン消費も増えます。",
+    "none": "なし",
+    "minimal": "最小",
     "low": "低",
     "medium": "中",
     "high": "高",
+    "xhigh": "最大",
     "unsupported": "このモデルは推論設定に対応していません。"
   },
   "reasoningBudget": {
