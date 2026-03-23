@@ -1,5 +1,5 @@
 import { ChatInterface, ContentInterface, isTextContent } from '@type/chat';
-import { OpenAIChat, OpenRouterChat, OpenRouterMessage } from '@type/export';
+import { OpenAIChat, OpenRouterChat, OpenRouterMessage, OpenRouterItem, OpenRouterCharacter } from '@type/export';
 import { ContentStoreData, resolveContent } from './contentStore';
 
 type PrepareChatForExportOptions = {
@@ -188,34 +188,77 @@ export const chatToOpenAIFormat = (
   };
 };
 
+let _orCounter = 0;
+const orId = (prefix: string) => `${prefix}-${Date.now()}-${(++_orCounter).toString(36)}`;
+
 export const chatToOpenRouterFormat = (
   chat: ChatInterface,
   contentStore: ContentStoreData
 ): OpenRouterChat => {
   const modelSlug = chat.config.model;
-  const characterId = `char-${modelSlug.replace(/\//g, '-')}`;
+  const characterId = orId('char');
+  const now = new Date().toISOString();
 
-  const characters: OpenRouterChat['characters'] = {
-    [characterId]: {
-      modelInfo: { slug: modelSlug },
-    },
+  const character: OpenRouterCharacter = {
+    id: characterId,
+    model: modelSlug,
+    modelInfo: { slug: modelSlug, name: modelSlug },
+    description: '',
+    includeDefaultSystemPrompt: true,
+    isStreaming: true,
+    samplingParameters: {},
+    chatMemory: 8,
+    isDisabled: false,
+    isRemoved: false,
+    createdAt: now,
+    updatedAt: now,
+    plugins: [],
   };
 
-  const messages: OpenRouterChat['messages'] = {};
+  const characters: Record<string, OpenRouterCharacter> = { [characterId]: character };
+  const messages: Record<string, OpenRouterMessage> = {};
+  const items: Record<string, OpenRouterItem> = {};
+
+  let prevMsgId: string | undefined;
 
   const addMessage = (role: string, text: string, timestamp?: number) => {
-    const msgId = `msg-${Object.keys(messages).length}`;
-    const entry: OpenRouterMessage = {
-      content: text,
-      updatedAt: timestamp
-        ? new Date(timestamp).toISOString()
-        : new Date().toISOString(),
+    const msgId = orId('msg');
+    const itemId = orId('item');
+    const ts = timestamp ? new Date(timestamp).toISOString() : now;
+    const isUser = role === 'user';
+
+    const item: OpenRouterItem = {
+      id: itemId,
+      messageId: msgId,
+      data: {
+        type: 'message',
+        role: role as 'user' | 'assistant' | 'system',
+        content: [{ type: isUser ? 'input_text' : 'output_text', text }],
+      },
     };
-    // Only assistant messages get a characterId; user messages have none
-    if (role !== 'user') {
-      entry.characterId = characterId;
+    items[itemId] = item;
+
+    const msg: OpenRouterMessage = {
+      id: msgId,
+      characterId: isUser ? 'USER' : characterId,
+      contentType: 'text',
+      context: 'main-chat',
+      createdAt: ts,
+      updatedAt: ts,
+      isRetrying: false,
+      isEdited: false,
+      isCollapsed: false,
+      type: role as 'user' | 'assistant' | 'system',
+      items: [{ id: itemId, type: 'message' }],
+    };
+    if (prevMsgId) {
+      msg.parentMessageId = prevMsgId;
     }
-    messages[msgId] = entry;
+    if (!isUser) {
+      msg.isGenerating = false;
+    }
+    messages[msgId] = msg;
+    prevMsgId = msgId;
   };
 
   if (chat.branchTree) {
@@ -231,5 +274,15 @@ export const chatToOpenRouterFormat = (
     }
   }
 
-  return { characters, messages };
+  return {
+    version: 'orpg.3.0',
+    title: chat.title,
+    characters,
+    messages,
+    items,
+    artifacts: {},
+    artifactFiles: {},
+    artifactVersions: {},
+    artifactFileContents: {},
+  };
 };
