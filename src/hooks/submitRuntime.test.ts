@@ -564,6 +564,10 @@ describe('stream end status via SW path', () => {
     favoriteModels: [],
     providerModelCache: {},
     providerCustomModels: {},
+    // Enable proxy so SW path is used (SW path is now proxy-only)
+    proxyEnabled: true,
+    proxyEndpoint: 'https://proxy.test',
+    proxyAuthToken: '',
   });
 
   it('preserves interrupted status when user cancels on SW path', async () => {
