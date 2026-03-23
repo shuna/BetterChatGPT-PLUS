@@ -222,11 +222,7 @@ const DownloadChat = React.memo(
                     const contentStore = useStore.getState().contentStore;
                     const openaiData = chatToOpenAIFormat(chat, contentStore, { visibleBranchOnly });
                     const filename = chat.title.trim() || 'download';
-                    if (useGzip) {
-                      await downloadFileGzip([openaiData], filename);
-                    } else {
-                      downloadFile([openaiData], filename);
-                    }
+                    downloadFile([openaiData], filename);
                   }
                 }}
               >
@@ -243,11 +239,7 @@ const DownloadChat = React.memo(
                     const contentStore = useStore.getState().contentStore;
                     const orData = chatToOpenRouterFormat(chat, contentStore);
                     const filename = chat.title.trim() || 'download';
-                    if (useGzip) {
-                      await downloadFileGzip(orData, filename);
-                    } else {
-                      downloadFile(orData, filename);
-                    }
+                    downloadFile(orData, filename);
                   }
                 }}
               >

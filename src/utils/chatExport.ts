@@ -1,5 +1,5 @@
 import { ChatInterface, ContentInterface, isTextContent } from '@type/chat';
-import { OpenAIChat, OpenRouterChat } from '@type/export';
+import { OpenAIChat, OpenRouterChat, OpenRouterMessage } from '@type/export';
 import { ContentStoreData, resolveContent } from './contentStore';
 
 type PrepareChatForExportOptions = {
@@ -192,35 +192,44 @@ export const chatToOpenRouterFormat = (
   chat: ChatInterface,
   contentStore: ContentStoreData
 ): OpenRouterChat => {
-  const messages: OpenRouterChat['messages'] = [];
+  const modelSlug = chat.config.model;
+  const characterId = `char-${modelSlug.replace(/\//g, '-')}`;
+
+  const characters: OpenRouterChat['characters'] = {
+    [characterId]: {
+      modelInfo: { slug: modelSlug },
+    },
+  };
+
+  const messages: OpenRouterChat['messages'] = {};
+
+  const addMessage = (role: string, text: string, timestamp?: number) => {
+    const msgId = `msg-${Object.keys(messages).length}`;
+    const entry: OpenRouterMessage = {
+      content: text,
+      updatedAt: timestamp
+        ? new Date(timestamp).toISOString()
+        : new Date().toISOString(),
+    };
+    // Only assistant messages get a characterId; user messages have none
+    if (role !== 'user') {
+      entry.characterId = characterId;
+    }
+    messages[msgId] = entry;
+  };
 
   if (chat.branchTree) {
     for (const id of chat.branchTree.activePath) {
       const node = chat.branchTree.nodes[id];
       if (!node) continue;
       const content = resolveContent(contentStore, node.contentHash);
-      messages.push({
-        role: node.role,
-        content: contentToString(content),
-      });
+      addMessage(node.role, contentToString(content), node.createdAt);
     }
   } else {
     for (const msg of chat.messages) {
-      messages.push({
-        role: msg.role,
-        content: contentToString(msg.content),
-      });
+      addMessage(msg.role, contentToString(msg.content));
     }
   }
 
-  return {
-    title: chat.title,
-    model: chat.config.model,
-    temperature: chat.config.temperature,
-    max_tokens: chat.config.max_tokens,
-    top_p: chat.config.top_p,
-    frequency_penalty: chat.config.frequency_penalty,
-    presence_penalty: chat.config.presence_penalty,
-    messages,
-  };
+  return { characters, messages };
 };

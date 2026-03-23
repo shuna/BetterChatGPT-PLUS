@@ -59,18 +59,21 @@ export type OpenAIChat = {
   current_node: string;
 };
 
+export type OpenRouterCharacter = {
+  modelInfo: {
+    slug: string;
+  };
+};
+
+export type OpenRouterMessage = {
+  characterId?: string;
+  content: string;
+  updatedAt: string;
+};
+
 export type OpenRouterChat = {
-  title: string;
-  model?: string;
-  temperature?: number;
-  max_tokens?: number;
-  top_p?: number;
-  frequency_penalty?: number;
-  presence_penalty?: number;
-  messages: {
-    role: Role;
-    content: string;
-  }[];
+  characters: Record<string, OpenRouterCharacter>;
+  messages: Record<string, OpenRouterMessage>;
 };
 
 export interface OpenAIPlaygroundJSON extends ConfigInterface {
