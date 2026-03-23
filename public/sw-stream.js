@@ -478,10 +478,21 @@ async function handleStartStream(msg, port) {
 
     function readWithTimeout() {
       let timer;
+      const nextRead = readCount + 1;
+      postDebug('waiting read#' + nextRead);
       return Promise.race([
-        reader.read().finally(() => clearTimeout(timer)),
+        reader.read().then((result) => {
+          postDebug(
+            'read#' + nextRead + ' resolved done=' + result.done +
+            ' bytes=' + (result.value ? result.value.byteLength : 0)
+          );
+          return result;
+        }).finally(() => clearTimeout(timer)),
         new Promise((_, reject) => {
-          timer = setTimeout(() => reject(new Error('Chunk timeout: no data received for 45s')), CHUNK_TIMEOUT_MS);
+          timer = setTimeout(() => {
+            postDebug('read#' + nextRead + ' timeout fired', 'error');
+            reject(new Error('Chunk timeout: no data received for 45s'));
+          }, CHUNK_TIMEOUT_MS);
         }),
       ]);
     }
@@ -769,14 +780,18 @@ self.addEventListener('message', (event) => {
     // Fall back to client.postMessage for backwards compatibility.
     const port = event.ports && event.ports[0];
     if (port) {
-      handleStartStream(msg, port);
+      event.waitUntil(handleStartStream(msg, port));
     } else {
-      const resolveClient = event.source
+      const streamTask = (event.source
         ? Promise.resolve(event.source)
-        : self.clients.matchAll({ type: 'window' }).then((all) => all[0] || null);
-      resolveClient.then((client) => {
-        if (client) handleStartStream(msg, client);
-      });
+        : self.clients.matchAll({ type: 'window' }).then((all) => all[0] || null))
+        .then((client) => {
+          if (client) {
+            return handleStartStream(msg, client);
+          }
+          return undefined;
+        });
+      event.waitUntil(streamTask);
     }
   } else if (msg.type === 'cancelStream') {
     const controller = activeStreams.get(msg.requestId);

@@ -45,10 +45,12 @@ import {
 } from '@type/chat';
 import type { ResolvedProvider } from './submitHelpers';
 import { debugReport } from '@store/debug-store';
+import { cancelActiveRecovery } from './useStreamRecovery';
 
 const abortControllers = new Map<string, AbortController>();
 const swCancellers = new Map<string, () => void>();
 const sessionChunkTargets = new Map<string, { chatId: string; targetNodeId: string }>();
+const sessionRequestIds = new Map<string, string>();
 const pendingChunkBuffers = new Map<string, string>();
 const pendingChunkTimers = new Map<string, number>();
 
@@ -180,9 +182,11 @@ export const clearSubmitSessionRuntime = (
   abortControllers.delete(sessionId);
   swCancellers.delete(sessionId);
   sessionCancelMetas.delete(sessionId);
+  sessionRequestIds.delete(sessionId);
 };
 
 export const stopSubmitSession = (sessionId: string) => {
+  const requestId = sessionRequestIds.get(sessionId);
   // Mark the target node as interrupted before aborting
   const chunkTarget =
     sessionChunkTargets.get(sessionId) ??
@@ -193,6 +197,30 @@ export const stopSubmitSession = (sessionId: string) => {
 
   abortControllers.get(sessionId)?.abort();
   swCancellers.get(sessionId)?.();
+  cancelActiveRecovery();
+  if (requestId) {
+    deleteStreamRecord(requestId).catch(() => {});
+    debugReport(`stream:${requestId}`, {
+      label: 'SW Stream',
+      status: 'done',
+      detail: `${formatDebugTime()} stopped by user`,
+    });
+    debugReport(`sw-pipeline:${requestId}`, {
+      label: 'SW Pipeline',
+      status: 'done',
+      detail: `${formatDebugTime()} stopped by user`,
+    });
+    debugReport(`recovery-record:${requestId}`, {
+      label: 'Recovery Record',
+      status: 'done',
+      detail: `${formatDebugTime()} stopped by user`,
+    });
+  }
+  debugReport(`submit:${sessionId}`, {
+    label: 'Submit Session',
+    status: 'done',
+    detail: `${formatDebugTime()} stopped by user`,
+  });
 
   // Fire provider-level cancel (best-effort, non-blocking)
   const meta = sessionCancelMetas.get(sessionId);
@@ -214,6 +242,13 @@ export const stopSubmitSession = (sessionId: string) => {
 
   clearSubmitSessionRuntime(sessionId, { discardQueued: true });
   useStore.getState().removeSession(sessionId);
+  if (Object.keys(useStore.getState().generatingSessions).length === 0) {
+    debugReport('streaming', {
+      label: 'Streaming',
+      status: 'done',
+      detail: requestId ?? sessionId,
+    });
+  }
 };
 
 export const stopSubmitSessionsForChat = (chatId: string) => {
@@ -687,6 +722,7 @@ export const executeSubmitStream = async ({
 
       await new Promise<void>((resolve, reject) => {
         let swHandle: swBridge.SwStreamHandle | undefined;
+        sessionRequestIds.set(sessionId, requestId);
 
         const cleanup = () => {
           clearInterval(checkStop);
