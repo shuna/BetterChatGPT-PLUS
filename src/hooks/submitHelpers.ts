@@ -152,13 +152,41 @@ const sanitizeMessageContent = (
 
 export const sanitizeMessagesForSubmit = (
   messages: MessageInterface[]
-): MessageInterface[] =>
-  messages
+): MessageInterface[] => {
+  const filtered = messages
     .map((message) => ({
       ...message,
       content: sanitizeMessageContent(message.content),
     }))
     .filter((message) => message.content.length > 0);
+
+  return mergeConsecutiveSameRole(filtered);
+};
+
+/**
+ * Merge consecutive messages with the same role into a single message.
+ * This prevents API errors (e.g. Anthropic requires strict user/assistant
+ * alternation) when intermediate messages are omitted.
+ */
+const mergeConsecutiveSameRole = (
+  messages: MessageInterface[]
+): MessageInterface[] => {
+  if (messages.length <= 1) return messages;
+  const merged: MessageInterface[] = [messages[0]];
+  for (let i = 1; i < messages.length; i++) {
+    const prev = merged[merged.length - 1];
+    const curr = messages[i];
+    if (curr.role === prev.role) {
+      merged[merged.length - 1] = {
+        role: prev.role,
+        content: [...prev.content, ...curr.content],
+      };
+    } else {
+      merged.push(curr);
+    }
+  }
+  return merged;
+};
 
 const filterOmittedMessages = (
   messages: MessageInterface[],
