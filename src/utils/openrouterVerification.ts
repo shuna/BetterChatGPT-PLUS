@@ -1,7 +1,7 @@
 import { DEFAULT_PROVIDERS } from '@store/provider-config';
 import type { ProviderConfig } from '@type/provider';
 
-export const OPENROUTER_VERIFICATION_INITIAL_DELAY_MS = 5000;
+export const OPENROUTER_VERIFICATION_INITIAL_DELAY_MS = 10000;
 export const OPENROUTER_VERIFICATION_MAX_DELAY_MS = 120000;
 
 export const buildVerifiedStatsKey = (chatId: string, targetNodeId: string): string =>

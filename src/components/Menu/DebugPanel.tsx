@@ -60,6 +60,7 @@ const DebugPanel = () => {
   const { t } = useTranslation();
   const showDebugPanel = useStore((state) => state.showDebugPanel);
   const entries = useDebugStore((state) => state.entries);
+  const removeEntry = useDebugStore((state) => state.remove);
 
   if (!showDebugPanel) return null;
 
@@ -87,7 +88,7 @@ const DebugPanel = () => {
               className='flex items-center gap-1.5 min-w-0 text-[11px] text-gray-700 dark:text-gray-300 leading-tight'
             >
               <StatusIndicator status={entry.status} />
-              <span className='block truncate min-w-0'>
+              <span className='block truncate min-w-0 flex-1'>
                 <span className='font-medium'>{entry.label}</span>
                 {entry.detail && (
                   <span className='text-gray-500 dark:text-gray-400'>
@@ -95,6 +96,15 @@ const DebugPanel = () => {
                   </span>
                 )}
               </span>
+              <button
+                type='button'
+                onClick={() => removeEntry(entry.id)}
+                className='flex-shrink-0 text-[10px] leading-none text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200'
+                aria-label={`Close ${entry.label}`}
+                title='Close'
+              >
+                ×
+              </button>
             </div>
           ))
         )}

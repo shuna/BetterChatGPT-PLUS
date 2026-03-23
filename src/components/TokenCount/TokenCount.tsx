@@ -266,6 +266,29 @@ const TokenCount = React.memo(() => {
     });
   }, [verifiedStats, generatingSession, t]);
 
+  const [verificationCountdownNow, setVerificationCountdownNow] = useState(
+    () => Date.now()
+  );
+
+  useEffect(() => {
+    if (
+      generatingSession ||
+      !pendingVerification ||
+      pendingVerification.status !== 'pending'
+    ) {
+      return;
+    }
+
+    setVerificationCountdownNow(Date.now());
+    const timer = window.setInterval(() => {
+      setVerificationCountdownNow(Date.now());
+    }, 1000);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, [pendingVerification, generatingSession]);
+
   const verificationStatusDisplay = useMemo(() => {
     if (generatingSession || !pendingVerification) return null;
     if (pendingVerification.status === 'fetching') {
@@ -280,11 +303,16 @@ const TokenCount = React.memo(() => {
         defaultValue: 'OpenRouter verified usage is not available yet.',
       });
     }
+    const secondsLeft = Math.max(
+      0,
+      Math.ceil((pendingVerification.nextAttemptAt - verificationCountdownNow) / 1000)
+    );
     return t('openrouterVerificationPending', {
       ns: 'main',
-      defaultValue: 'OpenRouter verified usage will be checked shortly.',
+      defaultValue: 'OpenRouter verified usage will be checked in {{seconds}}s.',
+      seconds: secondsLeft,
     });
-  }, [pendingVerification, generatingSession, t]);
+  }, [pendingVerification, generatingSession, t, verificationCountdownNow]);
 
   const handleRetryVerifiedStats = () => {
     if (!lastAssistantStatsKey) return;
