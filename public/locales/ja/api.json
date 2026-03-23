@@ -11,5 +11,8 @@
   },
   "customEndpoint": "カスタムAPIエンドポイントを使用する",
   "advancedConfig": "詳細なAPI設定は<0>こちら</0>で表示できます。",
-  "noApiKeyWarning": "APIキーが入力されていません！API設定を確認してください。"
+  "noApiKeyWarning": "APIキーが入力されていません！API設定を確認してください。",
+  "warnings": {
+    "unknownContextLengthBeforeSubmitConfirm": "{{model}} の contextLength を送信前に解決できませんでした。プロンプト圧縮には保守的なフォールバック値を使って続行しますか？"
+  }
 }
