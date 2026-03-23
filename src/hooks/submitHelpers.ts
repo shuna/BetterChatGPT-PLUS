@@ -160,32 +160,35 @@ export const sanitizeMessagesForSubmit = (
     }))
     .filter((message) => message.content.length > 0);
 
-  return mergeConsecutiveSameRole(filtered);
+  return ensureRoleAlternation(filtered);
 };
 
+const OMITTED_PLACEHOLDER = '...';
+
 /**
- * Merge consecutive messages with the same role into a single message.
- * This prevents API errors (e.g. Anthropic requires strict user/assistant
- * alternation) when intermediate messages are omitted.
+ * Insert minimal placeholder messages where consecutive same-role messages
+ * would violate the strict user/assistant alternation required by some APIs
+ * (e.g. Anthropic). Rather than merging or pair-deleting, this preserves
+ * both messages and inserts a lightweight filler with the opposite role.
  */
-const mergeConsecutiveSameRole = (
+const ensureRoleAlternation = (
   messages: MessageInterface[]
 ): MessageInterface[] => {
   if (messages.length <= 1) return messages;
-  const merged: MessageInterface[] = [messages[0]];
+  const result: MessageInterface[] = [messages[0]];
   for (let i = 1; i < messages.length; i++) {
-    const prev = merged[merged.length - 1];
+    const prev = result[result.length - 1];
     const curr = messages[i];
     if (curr.role === prev.role) {
-      merged[merged.length - 1] = {
-        role: prev.role,
-        content: [...prev.content, ...curr.content],
-      };
-    } else {
-      merged.push(curr);
+      const fillerRole = prev.role === 'user' ? 'assistant' : 'user';
+      result.push({
+        role: fillerRole,
+        content: [{ type: 'text', text: OMITTED_PLACEHOLDER } as TextContentInterface],
+      });
     }
+    result.push(curr);
   }
-  return merged;
+  return result;
 };
 
 const filterOmittedMessages = (
