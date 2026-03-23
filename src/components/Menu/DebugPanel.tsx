@@ -37,6 +37,25 @@ const StatusIndicator = ({ status }: { status: DebugStatus }) => {
   }
 };
 
+const SwToggle = () => {
+  const [disabled, setDisabled] = React.useState(
+    () => typeof localStorage !== 'undefined' && localStorage.getItem('disableSW') === '1'
+  );
+  const toggle = () => {
+    const next = !disabled;
+    setDisabled(next);
+    localStorage.setItem('disableSW', next ? '1' : '0');
+  };
+  return (
+    <button
+      onClick={toggle}
+      className='text-[10px] px-1.5 py-0.5 rounded border border-gray-400 dark:border-gray-500 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+    >
+      SW: {disabled ? 'OFF' : 'ON'}
+    </button>
+  );
+};
+
 const DebugPanel = () => {
   const { t } = useTranslation();
   const showDebugPanel = useStore((state) => state.showDebugPanel);
@@ -52,8 +71,9 @@ const DebugPanel = () => {
 
   return (
     <div className='flex-shrink-0 w-full min-w-0 overflow-hidden border-t border-gray-300 dark:border-gray-600 px-2 py-1.5'>
-      <div className='text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1'>
-        {t('debugPanel')}
+      <div className='text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1 flex items-center justify-between'>
+        <span>{t('debugPanel')}</span>
+        <SwToggle />
       </div>
       <div className='max-h-32 overflow-y-auto space-y-0.5'>
         {sorted.length === 0 ? (

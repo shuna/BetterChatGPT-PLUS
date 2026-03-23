@@ -652,7 +652,9 @@ export const executeSubmitStream = async ({
     };
 
     // --- Path 1: SW available (with optional proxy) ---
-    if (await swBridge.waitForController()) {
+    // Debug option: set localStorage.setItem('disableSW', '1') to bypass SW
+    const swDisabled = typeof localStorage !== 'undefined' && localStorage.getItem('disableSW') === '1';
+    if (!swDisabled && await swBridge.waitForController()) {
       const requestId = crypto.randomUUID();
       const prepared = prepareStreamRequest(
         resolvedProvider.endpoint,

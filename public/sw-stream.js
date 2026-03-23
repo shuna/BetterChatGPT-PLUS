@@ -551,8 +551,11 @@ async function handleStartStream(msg, port) {
       }
     } else {
       // --- Direct mode: existing LLM SSE parsing ---
+      var _chunkNum = 0, _totalText = 0, _totalReasoning = 0;
+      console.log('[SW] stream start id=' + requestId.slice(0, 8));
       while (reading) {
         const { done, value } = await readWithTimeout();
+        _chunkNum++;
         const chunk = partial + decoder.decode(done ? undefined : value, { stream: !done });
         const parsed = parseEventSource(chunk, done);
         partial = parsed.partial;
@@ -564,25 +567,36 @@ async function handleStartStream(msg, port) {
           }
         }
         const fr = extractFinishReason(parsed.events);
-        if (fr) finishReason = fr;
+        if (fr) {
+          finishReason = fr;
+          console.log('[SW] finish_reason=' + fr + ' chunk#' + _chunkNum);
+        }
         const reasoning = extractReasoning(parsed.events);
         if (reasoning) {
+          _totalReasoning += reasoning.length;
           postToClient({ type: 'sw-chunk', requestId, text: '', reasoning, generationId });
         }
         const rawDirectText = extractText(parsed.events);
         if (rawDirectText) {
           const thinkParsed = thinkParser.process(rawDirectText);
           if (thinkParsed.reasoning) {
+            _totalReasoning += thinkParsed.reasoning.length;
             postToClient({ type: 'sw-chunk', requestId, text: '', reasoning: thinkParsed.reasoning, generationId });
           }
           if (thinkParsed.content) {
+            _totalText += thinkParsed.content.length;
             postToClient({ type: 'sw-chunk', requestId, text: thinkParsed.content, generationId });
             bufferedText += thinkParsed.content;
             scheduleFlush();
           }
         }
 
+        if (_chunkNum % 50 === 0) {
+          console.log('[SW] #' + _chunkNum + ' txt=' + _totalText + ' rsn=' + _totalReasoning + ' partial=' + partial.length);
+        }
+
         if (parsed.done || done) {
+          console.log('[SW] done chunk#' + _chunkNum + ' txt=' + _totalText + ' rsn=' + _totalReasoning + ' parsed.done=' + parsed.done + ' done=' + done);
           reading = false;
         }
       }
