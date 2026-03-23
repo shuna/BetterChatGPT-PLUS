@@ -176,6 +176,7 @@ export default function ProviderModelList({
             onSort={onSort}
             className='flex-1'
           />
+          <span className='hidden sm:inline w-14 text-right' />
           <SortHeader
             field='created'
             label={t('provider.colCreated', 'Released') as string}
@@ -244,16 +245,14 @@ export default function ProviderModelList({
                 className='rounded'
               />
               <span className='flex-1 text-sm text-gray-900 dark:text-white truncate'>
-                <span className='flex items-center gap-2 min-w-0'>
-                  <span className='truncate'>{model.name}</span>
-                  <span className='shrink-0'>
-                    <CapabilityIconsInline
-                      reasoning={!!model.supportsReasoning}
-                      vision={!!model.supportsVision}
-                      audio={!!model.supportsAudio}
-                    />
-                  </span>
-                </span>
+                <span className='block truncate'>{model.name}</span>
+              </span>
+              <span className='hidden sm:inline w-14 text-right text-xs text-gray-400 dark:text-gray-500'>
+                <CapabilityIconsInline
+                  reasoning={!!model.supportsReasoning}
+                  vision={!!model.supportsVision}
+                  audio={!!model.supportsAudio}
+                />
               </span>
               <span className='hidden sm:inline w-20 text-right text-xs text-gray-400 dark:text-gray-500'>
                 {formatCreatedDate(model.created)}
