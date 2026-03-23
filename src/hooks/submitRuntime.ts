@@ -652,11 +652,7 @@ export const executeSubmitStream = async ({
     };
 
     // --- Path 1: SW available (with optional proxy) ---
-    // Only use SW path when proxy is configured — the SW provides background
-    // recovery for proxy streams.  For direct API calls the simpler Path 3
-    // (direct fetch) is more reliable and avoids SW lifecycle issues that can
-    // silently stall the stream.
-    if (proxyConfig && await swBridge.waitForController()) {
+    if (await swBridge.waitForController()) {
       const requestId = crypto.randomUUID();
       const prepared = prepareStreamRequest(
         resolvedProvider.endpoint,

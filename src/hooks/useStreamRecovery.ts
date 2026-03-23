@@ -330,7 +330,17 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
         (session) => session.chatId === chat.id
       );
 
-      // First: apply IndexedDB buffered text (fast, local)
+      // Determine if stream is stale (SW probably died)
+      // IMPORTANT: check this BEFORE applying buffered text — applying stale
+      // text to an actively-streaming message overwrites the streaming content
+      // hash and disconnects the live streaming buffer from the React tree.
+      const effectiveStatus = resolveRecoveryStatus(record, Date.now(), hasActiveSession);
+      if (effectiveStatus === 'streaming') {
+        // Still actively streaming without proxy, don't notify yet
+        continue;
+      }
+
+      // Apply IndexedDB buffered text (fast, local)
       const bestText = bufferedText;
       if (shouldApplyRecoveredText(currentText, bestText)) {
         const updatedChats = cloneChatAtIndex(chats, chatIndex);
@@ -346,13 +356,6 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
         );
         setChats(updatedChats);
         restoredThisRecord = true;
-      }
-
-      // Determine if stream is stale (SW probably died)
-      const effectiveStatus = resolveRecoveryStatus(record, Date.now(), hasActiveSession);
-      if (effectiveStatus === 'streaming') {
-        // Still actively streaming without proxy, don't notify yet
-        continue;
       }
 
       // Second: try proxy recovery for interrupted/failed/streaming-with-proxy streams
