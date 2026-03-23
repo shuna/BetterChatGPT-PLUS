@@ -99,6 +99,7 @@
     "apiKeyLabel": "API Key:",
     "enterApiKey": "Enter API key for {{name}}...",
     "save": "Save",
+    "refresh": "Refresh",
     "colName": "Model",
     "colCreated": "Released",
     "colContext": "Context",

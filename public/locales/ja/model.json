@@ -79,6 +79,7 @@
     "apiKeyLabel": "APIキー:",
     "enterApiKey": "{{name}}のAPIキーを入力...",
     "save": "保存",
+    "refresh": "更新",
     "colName": "モデル名",
     "colCreated": "発表日",
     "colContext": "コンテキスト",

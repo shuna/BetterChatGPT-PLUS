@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import RefreshIcon from '@icon/RefreshIcon';
+import { CapabilityIconsInline } from '@components/ConfigMenu/fields';
 
 import { FavoriteModel, ProviderConfig, ProviderId, ProviderModel } from '@type/provider';
 
@@ -110,6 +112,7 @@ export default function ProviderModelList({
   selectedProvider,
   filteredModels,
   providers,
+  onRefresh,
   sortField,
   sortDir,
   onSort,
@@ -122,6 +125,7 @@ export default function ProviderModelList({
   selectedProvider: ProviderId;
   filteredModels: ProviderModel[];
   providers: Record<ProviderId, ProviderConfig>;
+  onRefresh: (providerId: ProviderId) => void;
   sortField: SortField;
   sortDir: SortDir;
   onSort: (field: SortField) => void;
@@ -146,6 +150,19 @@ export default function ProviderModelList({
           onChange={(event) => onSearchChange(event.target.value)}
           className='flex-1 px-3 py-2 text-sm bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500'
         />
+        <button
+          type='button'
+          onClick={() => onRefresh(selectedProvider)}
+          disabled={!!loading[selectedProvider]}
+          className='inline-flex items-center gap-1.5 px-3 py-2 text-sm bg-gray-200 dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-800 dark:text-gray-100 hover:bg-gray-300 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed'
+          title={t('provider.refresh', 'Refresh model list') as string}
+          aria-label={t('provider.refresh', 'Refresh model list') as string}
+        >
+          <RefreshIcon className={`h-4 w-4 ${loading[selectedProvider] ? 'animate-spin' : ''}`} />
+          <span className='hidden sm:inline'>
+            {t('provider.refresh', 'Refresh model list')}
+          </span>
+        </button>
       </div>
 
       {!loading[selectedProvider] && filteredModels.length > 0 && (
@@ -227,7 +244,16 @@ export default function ProviderModelList({
                 className='rounded'
               />
               <span className='flex-1 text-sm text-gray-900 dark:text-white truncate'>
-                {model.name}
+                <span className='flex items-center gap-2 min-w-0'>
+                  <span className='truncate'>{model.name}</span>
+                  <span className='shrink-0'>
+                    <CapabilityIconsInline
+                      reasoning={!!model.supportsReasoning}
+                      vision={!!model.supportsVision}
+                      audio={!!model.supportsAudio}
+                    />
+                  </span>
+                </span>
               </span>
               <span className='hidden sm:inline w-20 text-right text-xs text-gray-400 dark:text-gray-500'>
                 {formatCreatedDate(model.created)}

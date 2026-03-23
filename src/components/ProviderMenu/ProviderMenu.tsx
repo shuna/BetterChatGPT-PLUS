@@ -193,6 +193,9 @@ const ProviderMenu = ({
                     selectedProvider={selectedProvider}
                     filteredModels={filteredModels}
                     providers={providers}
+                    onRefresh={(providerId) =>
+                      refreshModels(providerId, useStore.getState().providers[providerId])
+                    }
                     sortField={sortField}
                     sortDir={sortDir}
                     onSort={handleSort}
