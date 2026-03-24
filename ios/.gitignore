@@ -1,0 +1,13 @@
+# Swift Package Manager build artifacts
+Packages/WeaveletDomain/.build/
+Packages/WeaveletInfra/.build/
+
+# Xcode user data
+*.xcuserdata/
+.swiftpm/xcode/xcuserdata/
+
+# DerivedData
+DerivedData/
+
+# OS files
+.DS_Store

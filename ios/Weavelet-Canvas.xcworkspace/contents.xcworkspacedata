@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Workspace
+   version = "1.0">
+   <FileRef
+      location = "group:Weavelet-Canvas/Weavelet-Canvas.xcodeproj">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/WeaveletDomain">
+   </FileRef>
+   <FileRef
+      location = "group:Packages/WeaveletInfra">
+   </FileRef>
+</Workspace>
