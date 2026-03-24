@@ -147,7 +147,7 @@ describe('submitHelpers', () => {
     ).toBe(true);
   });
 
-  it('drops empty text and reasoning blocks before submit', () => {
+  it('drops empty text and reasoning blocks before submit and merges consecutive same-role messages', () => {
     const sanitized = sanitizeMessagesForSubmit([
       {
         role: 'assistant',
@@ -169,15 +169,56 @@ describe('submitHelpers', () => {
       },
     ] as MessageInterface[]);
 
+    // The two consecutive user messages should be merged
     expect(sanitized).toEqual([
       {
         role: 'user',
-        content: [{ type: 'text', text: ' ask ' }],
+        content: [
+          { type: 'text', text: ' ask ' },
+          { type: 'image_url', image_url: { url: 'https://example.com/x.png', detail: 'low' } },
+        ],
+      },
+    ]);
+  });
+
+  it('merges consecutive assistant messages', () => {
+    const sanitized = sanitizeMessagesForSubmit([
+      textMessage('user', 'Hello'),
+      textMessage('assistant', 'Hi there'),
+      textMessage('assistant', 'How can I help?'),
+    ]);
+
+    expect(sanitized).toEqual([
+      textMessage('user', 'Hello'),
+      {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Hi there' },
+          { type: 'text', text: 'How can I help?' },
+        ],
+      },
+    ]);
+  });
+
+  it('preserves tool_call / tool_result messages without merging', () => {
+    const messages: MessageInterface[] = [
+      textMessage('user', 'Search for cats'),
+      {
+        role: 'assistant',
+        content: [{ type: 'tool_call', id: 'tc1', name: 'search', arguments: '{"q":"cats"}' } as never],
       },
       {
         role: 'user',
-        content: [{ type: 'image_url', image_url: { url: 'https://example.com/x.png', detail: 'low' } }],
+        content: [{ type: 'tool_result', tool_call_id: 'tc1', content: 'Found cats' } as never],
       },
-    ]);
+      textMessage('user', 'Thanks'),
+    ];
+
+    const sanitized = sanitizeMessagesForSubmit(messages);
+
+    // tool_call assistant message should NOT be merged with adjacent messages
+    expect(sanitized).toHaveLength(4);
+    expect(sanitized[1].content[0]).toMatchObject({ type: 'tool_call', id: 'tc1' });
+    expect(sanitized[2].content[0]).toMatchObject({ type: 'tool_result', tool_call_id: 'tc1' });
   });
 });

@@ -6,6 +6,8 @@ export interface ChatSlice {
   messages: MessageInterface[];
   chats?: ChatInterface[];
   collapsedNodeMaps: Record<string, Record<string, boolean>>;
+  omittedNodeMaps: Record<string, Record<string, boolean>>;
+  protectedNodeMaps: Record<string, Record<string, boolean>>;
   currentChatIndex: number;
   generatingSessions: Record<string, GeneratingSession>;
   error: string;
@@ -31,24 +33,31 @@ export interface ChatSlice {
   removeSessionsForChat: (chatId: string) => void;
   toggleCollapseNode: (chatIndex: number, messageIndex: number) => void;
   setAllCollapsed: (chatIndex: number, collapsed: boolean) => void;
+  toggleOmitNode: (chatIndex: number, messageIndex: number) => void;
+  toggleProtectNode: (chatIndex: number, messageIndex: number) => void;
+  setAllOmitted: (chatIndex: number, omitted: boolean) => void;
 }
 
-const getCollapsedMapKey = (chatIndex: number) => String(chatIndex);
+const getMapKey = (chatIndex: number) => String(chatIndex);
 
-const getCollapsedNodesForChat = (
+type NodeMapField = 'collapsedNodes' | 'omittedNodes' | 'protectedNodes';
+
+const getNodesForChat = (
   chats: ChatInterface[] | undefined,
-  collapsedNodeMaps: Record<string, Record<string, boolean>>,
-  chatIndex: number
+  nodeMaps: Record<string, Record<string, boolean>>,
+  chatIndex: number,
+  field: NodeMapField = 'collapsedNodes'
 ) => {
-  const mapKey = getCollapsedMapKey(chatIndex);
-  return collapsedNodeMaps[mapKey] ?? chats?.[chatIndex]?.collapsedNodes ?? {};
+  const mapKey = getMapKey(chatIndex);
+  return nodeMaps[mapKey] ?? chats?.[chatIndex]?.[field] ?? {};
 };
 
-const buildCollapsedNodeMaps = (chats: ChatInterface[] | undefined) => {
+const buildNodeMaps = (chats: ChatInterface[] | undefined, field: NodeMapField) => {
   const next: Record<string, Record<string, boolean>> = {};
   chats?.forEach((chat, index) => {
-    if (chat.collapsedNodes && Object.keys(chat.collapsedNodes).length > 0) {
-      next[getCollapsedMapKey(index)] = { ...chat.collapsedNodes };
+    const nodes = chat[field];
+    if (nodes && Object.keys(nodes).length > 0) {
+      next[getMapKey(index)] = { ...nodes };
     }
   });
   return next;
@@ -66,6 +75,8 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
   return {
     messages: [],
     collapsedNodeMaps: {},
+    omittedNodeMaps: {},
+    protectedNodeMaps: {},
     currentChatIndex: -1,
     generatingSessions: {},
     error: '',
@@ -82,13 +93,22 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
     },
     setChats: (chats: ChatInterface[]) => {
       try {
-        set((prev: ChatSlice) => ({
-          ...prev,
-          chats: chats,
-          collapsedNodeMaps: hasSameChatOrder(prev.chats, chats)
-            ? prev.collapsedNodeMaps
-            : buildCollapsedNodeMaps(chats),
-        }));
+        set((prev: ChatSlice) => {
+          const sameOrder = hasSameChatOrder(prev.chats, chats);
+          return {
+            ...prev,
+            chats: chats,
+            collapsedNodeMaps: sameOrder
+              ? prev.collapsedNodeMaps
+              : buildNodeMaps(chats, 'collapsedNodes'),
+            omittedNodeMaps: sameOrder
+              ? prev.omittedNodeMaps
+              : buildNodeMaps(chats, 'omittedNodes'),
+            protectedNodeMaps: sameOrder
+              ? prev.protectedNodeMaps
+              : buildNodeMaps(chats, 'protectedNodes'),
+          };
+        });
       } catch (e: unknown) {
         notifyStorageError(e);
         throw e;
@@ -173,14 +193,14 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
       const chat = chats[chatIndex];
       if (!chat) return;
       const nodeId = chat.branchTree?.activePath?.[messageIndex] ?? String(messageIndex);
-      const prev = getCollapsedNodesForChat(chats, get().collapsedNodeMaps, chatIndex);
+      const prev = getNodesForChat(chats, get().collapsedNodeMaps, chatIndex, 'collapsedNodes');
       const next = { ...prev };
       if (next[nodeId]) {
         delete next[nodeId];
       } else {
         next[nodeId] = true;
       }
-      const mapKey = getCollapsedMapKey(chatIndex);
+      const mapKey = getMapKey(chatIndex);
       set((prev: ChatSlice) => ({
         ...prev,
         collapsedNodeMaps: {
@@ -209,12 +229,85 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
       } else {
         newCollapsed = {};
       }
-      const mapKey = getCollapsedMapKey(chatIndex);
+      const mapKey = getMapKey(chatIndex);
       set((prev: ChatSlice) => ({
         ...prev,
         collapsedNodeMaps: {
           ...prev.collapsedNodeMaps,
           [mapKey]: newCollapsed,
+        },
+      }));
+    },
+    toggleOmitNode: (chatIndex: number, messageIndex: number) => {
+      const chats = get().chats;
+      if (!chats) return;
+      const chat = chats[chatIndex];
+      if (!chat) return;
+      const nodeId = chat.branchTree?.activePath?.[messageIndex] ?? String(messageIndex);
+      const prev = getNodesForChat(chats, get().omittedNodeMaps, chatIndex, 'omittedNodes');
+      const next = { ...prev };
+      if (next[nodeId]) {
+        delete next[nodeId];
+      } else {
+        next[nodeId] = true;
+      }
+      const mapKey = getMapKey(chatIndex);
+      set((prev: ChatSlice) => ({
+        ...prev,
+        omittedNodeMaps: {
+          ...prev.omittedNodeMaps,
+          [mapKey]: next,
+        },
+      }));
+    },
+    toggleProtectNode: (chatIndex: number, messageIndex: number) => {
+      const chats = get().chats;
+      if (!chats) return;
+      const chat = chats[chatIndex];
+      if (!chat) return;
+      const nodeId = chat.branchTree?.activePath?.[messageIndex] ?? String(messageIndex);
+      const prev = getNodesForChat(chats, get().protectedNodeMaps, chatIndex, 'protectedNodes');
+      const next = { ...prev };
+      if (next[nodeId]) {
+        delete next[nodeId];
+      } else {
+        next[nodeId] = true;
+      }
+      const mapKey = getMapKey(chatIndex);
+      set((prev: ChatSlice) => ({
+        ...prev,
+        protectedNodeMaps: {
+          ...prev.protectedNodeMaps,
+          [mapKey]: next,
+        },
+      }));
+    },
+    setAllOmitted: (chatIndex: number, omitted: boolean) => {
+      const chats = get().chats;
+      if (!chats) return;
+      const chat = chats[chatIndex];
+      if (!chat) return;
+      let newOmitted: Record<string, boolean>;
+      if (omitted) {
+        newOmitted = {};
+        if (chat.branchTree?.activePath) {
+          chat.branchTree.activePath.forEach((nodeId) => {
+            newOmitted[nodeId] = true;
+          });
+        } else {
+          chat.messages.forEach((_, idx) => {
+            newOmitted[String(idx)] = true;
+          });
+        }
+      } else {
+        newOmitted = {};
+      }
+      const mapKey = getMapKey(chatIndex);
+      set((prev: ChatSlice) => ({
+        ...prev,
+        omittedNodeMaps: {
+          ...prev.omittedNodeMaps,
+          [mapKey]: newOmitted,
         },
       }));
     },

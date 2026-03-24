@@ -18,9 +18,8 @@ const streamingBuffers = new Map<string, StreamingBufferEntry>();
 const nodeToChatId = new Map<string, string>();
 
 const cloneContentItem = (content: ContentInterface): ContentInterface => {
-  if (content.type === 'text') return { ...content };
-  if (content.type === 'reasoning') return { ...content };
-  return { ...content, image_url: { ...content.image_url } };
+  if (content.type === 'image_url') return { ...content, image_url: { ...content.image_url } };
+  return { ...content } as ContentInterface;
 };
 
 const cloneContent = (content: ContentInterface[]): ContentInterface[] =>

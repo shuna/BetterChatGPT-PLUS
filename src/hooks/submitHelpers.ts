@@ -18,6 +18,8 @@ import {
   TextContentInterface,
   isImageContent,
   isTextContent,
+  isToolCallContent,
+  isToolResultContent,
 } from '@type/chat';
 import { FavoriteModel, ProviderConfig, ProviderId } from '@type/provider';
 import { normalizeProviderConfig } from '@store/provider-helpers';
@@ -147,27 +149,80 @@ const sanitizeMessageContent = (
   content.filter((part) => {
     if (part.type === 'reasoning') return false;
     if (isImageContent(part)) return true;
+    if (isToolCallContent(part) || isToolResultContent(part)) return true;
     return isTextContent(part) && part.text.trim().length > 0;
   });
+
+const hasToolContent = (message: MessageInterface): boolean =>
+  message.content.some((c) => isToolCallContent(c) || isToolResultContent(c));
+
+const ensureRoleAlternation = (
+  messages: MessageInterface[]
+): MessageInterface[] => {
+  const result: MessageInterface[] = [];
+  for (const msg of messages) {
+    if (
+      result.length > 0 &&
+      result[result.length - 1].role === msg.role &&
+      !hasToolContent(result[result.length - 1]) &&
+      !hasToolContent(msg)
+    ) {
+      // Merge consecutive same-role messages
+      const prev = result[result.length - 1];
+      result[result.length - 1] = {
+        ...prev,
+        content: [...prev.content, ...msg.content],
+      };
+    } else {
+      result.push(msg);
+    }
+  }
+  return result;
+};
+
+const filterOmittedMessages = (
+  messages: MessageInterface[],
+  chatIndex: number
+): MessageInterface[] => {
+  const state = useStore.getState();
+  const chat = state.chats?.[chatIndex];
+  const omittedNodes =
+    state.omittedNodeMaps[String(chatIndex)] ?? chat?.omittedNodes ?? {};
+  if (Object.keys(omittedNodes).length === 0) return messages;
+
+  return messages.filter((_, idx) => {
+    const nodeId = chat?.branchTree?.activePath?.[idx] ?? String(idx);
+    if (!omittedNodes[nodeId]) return true;
+    // Never omit messages containing tool_call/tool_result
+    if (hasToolContent(messages[idx])) return true;
+    return false;
+  });
+};
 
 export const sanitizeMessagesForSubmit = (
   messages: MessageInterface[]
 ): MessageInterface[] =>
-  messages
-    .map((message) => ({
-      ...message,
-      content: sanitizeMessageContent(message.content),
-    }))
-    .filter((message) => message.content.length > 0);
+  ensureRoleAlternation(
+    messages
+      .map((message) => ({
+        ...message,
+        content: sanitizeMessageContent(message.content),
+      }))
+      .filter((message) => message.content.length > 0)
+  );
 
 export const getSubmitContextMessages = (
   messages: MessageInterface[],
   _mode: SubmitMode,
   messageIndex: number,
-  modelId?: string
+  modelId?: string,
+  chatIndex?: number
 ): MessageInterface[] => {
   const sliced = messages.slice(0, messageIndex);
-  return modelId ? stripSystemMessages(sliced, modelId) : sliced;
+  const filtered = chatIndex !== undefined
+    ? filterOmittedMessages(sliced, chatIndex)
+    : sliced;
+  return modelId ? stripSystemMessages(filtered, modelId) : filtered;
 };
 
 export const applySubmitTokenUsage = async (

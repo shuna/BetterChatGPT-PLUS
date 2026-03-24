@@ -100,7 +100,8 @@ const useSubmit = () => {
           updatedChats[chatIndex].messages,
           mode,
           messageIndex,
-          chats[chatIndex].config.model
+          chats[chatIndex].config.model,
+          chatIndex
         )
       );
 

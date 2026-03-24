@@ -57,7 +57,33 @@ export function isReasoningContent(ob: ContentInterface | undefined): ob is Reas
   return ob !== undefined && ob !== null && ob.type === 'reasoning';
 }
 
-export type ContentInterface = TextContentInterface | ImageContentInterface | ReasoningContentInterface;
+export interface ToolCallContentInterface {
+  type: 'tool_call';
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+export interface ToolResultContentInterface {
+  type: 'tool_result';
+  tool_call_id: string;
+  content: string;
+}
+
+export function isToolCallContent(ob: ContentInterface | undefined): ob is ToolCallContentInterface {
+  return ob !== undefined && ob !== null && ob.type === 'tool_call';
+}
+
+export function isToolResultContent(ob: ContentInterface | undefined): ob is ToolResultContentInterface {
+  return ob !== undefined && ob !== null && ob.type === 'tool_result';
+}
+
+export type ContentInterface =
+  | TextContentInterface
+  | ImageContentInterface
+  | ReasoningContentInterface
+  | ToolCallContentInterface
+  | ToolResultContentInterface;
 
 export interface MessageInterface {
   role: Role;
@@ -101,6 +127,8 @@ export interface ChatInterface {
   imageDetail: ImageDetail;
   branchTree?: BranchTree;
   collapsedNodes?: Record<string, boolean>;
+  omittedNodes?: Record<string, boolean>;
+  protectedNodes?: Record<string, boolean>;
 }
 
 export interface BranchClipboard {

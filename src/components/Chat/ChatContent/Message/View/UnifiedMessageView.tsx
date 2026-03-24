@@ -23,6 +23,7 @@ import { useStreamingText } from '@hooks/useStreamingText';
 import { useStreamingReasoning } from '@hooks/useStreamingReasoning';
 import { isReasoningContent } from '@type/chat';
 import CollapsibleReasoning from './CollapsibleReasoning';
+import MetaActions from './MetaActions';
 
 const UnifiedMessageView = memo(
   ({
@@ -80,6 +81,28 @@ const UnifiedMessageView = memo(
     const isCurrentChatGenerating = useStore((state) =>
       Object.values(state.generatingSessions).some((s) => s.chatId === currentChatId)
     );
+
+    const resolvedNodeIdForMeta = useStore((state) => {
+      if (nodeId) return nodeId;
+      const chat = state.chats?.[state.currentChatIndex];
+      return chat?.branchTree?.activePath?.[messageIndex] ?? String(messageIndex);
+    });
+    const isOmitted = useStore((state) => {
+      const chatIndex = state.currentChatIndex;
+      const omittedNodes =
+        state.omittedNodeMaps[String(chatIndex)] ??
+        state.chats?.[chatIndex]?.omittedNodes ??
+        {};
+      return omittedNodes[resolvedNodeIdForMeta] ?? false;
+    });
+    const isProtected = useStore((state) => {
+      const chatIndex = state.currentChatIndex;
+      const protectedNodes =
+        state.protectedNodeMaps[String(chatIndex)] ??
+        state.chats?.[chatIndex]?.protectedNodes ??
+        {};
+      return protectedNodes[resolvedNodeIdForMeta] ?? false;
+    });
 
     // Edit logic (only used when editing, but hook must always be called)
     const editLogic = useEditViewLogic({
@@ -216,7 +239,12 @@ const UnifiedMessageView = memo(
             )}
           </div>
         ) : (
-          <div className={contentSurfaceClass}>
+          <div className={`${contentSurfaceClass} relative`}>
+            <MetaActions
+              messageIndex={messageIndex}
+              isOmitted={isOmitted}
+              isProtected={isProtected}
+            />
             {role === 'assistant' && currentReasoning && (
               <CollapsibleReasoning
                 reasoning={currentReasoning}

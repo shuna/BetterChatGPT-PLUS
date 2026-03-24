@@ -27,6 +27,16 @@ function isNodeBusy(nodeId?: string): boolean {
   );
 }
 
+function isNodeProtected(nodeId: string | undefined, messageIndex: number): boolean {
+  const state = useStore.getState();
+  const chatIndex = state.currentChatIndex;
+  const chat = state.chats?.[chatIndex];
+  const resolvedNodeId = nodeId ?? chat?.branchTree?.activePath?.[messageIndex] ?? String(messageIndex);
+  const protectedNodes =
+    state.protectedNodeMaps[String(chatIndex)] ?? chat?.protectedNodes ?? {};
+  return protectedNodes[resolvedNodeId] ?? false;
+}
+
 function resolveMessageIndex(nodeId: string | undefined, fallbackIndex: number): number {
   if (!nodeId) return fallbackIndex;
   const activePath =
@@ -229,6 +239,7 @@ export function useEditViewLogic({
     const hasSubmittableContent = hasMeaningfulContent(_content);
     if (sticky && !hasSubmittableContent) return;
     if (!sticky && isNodeBusy(nodeId)) return;
+    if (!sticky && isNodeProtected(nodeId, messageIndex)) return;
 
     const resolvedMessageIndex = resolveMessageIndex(nodeId, messageIndex);
 
@@ -282,6 +293,7 @@ export function useEditViewLogic({
 
   const handleGenerateNextOnly = () => {
     if (isChatBusy() || !modelValid) return;
+    if (isNodeProtected(nodeId, messageIndex)) return;
     const resolvedMessageIndex = resolveMessageIndex(nodeId, messageIndex);
     const nextIndex = resolvedMessageIndex + 1;
     const chats = useStore.getState().chats!;
@@ -302,6 +314,7 @@ export function useEditViewLogic({
     const hasSubmittableContent = hasMeaningfulContent(_content);
     if (isChatBusy() || !modelValid) return;
     if (sticky && !hasSubmittableContent) return;
+    if (!sticky && isNodeProtected(nodeId, messageIndex)) return;
 
     if (sticky) {
       if (hasSubmittableContent) {

@@ -50,6 +50,17 @@ const ChatViewTabs = ({
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState<boolean>(false);
   const [isLayoutDropdownOpen, setIsLayoutDropdownOpen] = useState<boolean>(false);
   const [isCompact, setIsCompact] = useState<boolean>(false);
+  const setAllOmitted = useStore((state) => state.setAllOmitted);
+  // Derive omit-all state from the current chat's omittedNodeMaps
+  const isAllOmitted = useStore((state) => {
+    const mapKey = String(state.currentChatIndex);
+    const omitted = state.omittedNodeMaps[mapKey] ?? state.chats?.[state.currentChatIndex]?.omittedNodes ?? {};
+    const count = Object.keys(omitted).length;
+    if (count === 0) return false;
+    const chat = state.chats?.[state.currentChatIndex];
+    const totalMessages = chat?.branchTree?.activePath?.length ?? chat?.messages?.length ?? 0;
+    return totalMessages > 0 && count >= totalMessages;
+  });
   const dropdownRef = useRef<HTMLDivElement>(null);
   const modelRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -219,6 +230,24 @@ const ChatViewTabs = ({
                 <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4' />
               </svg>
               {!isCompact && tMain('modelOptions')}
+            </div>
+            <div
+              className={`p-1 px-2 rounded-md cursor-pointer flex items-center gap-1 shrink-0 whitespace-nowrap transition-colors ${
+                isAllOmitted
+                  ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50'
+                  : 'bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 text-gray-600 dark:text-gray-300'
+              }`}
+              onClick={() => {
+                setAllOmitted(currentChatIndex, !isAllOmitted);
+              }}
+              title={String(isAllOmitted ? tMain('globalOmitOff') : tMain('globalOmitOn'))}
+            >
+              <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+                <path d='M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94' />
+                <path d='M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19' />
+                <line x1='1' y1='1' x2='23' y2='23' />
+              </svg>
+              {!isCompact && tMain(isAllOmitted ? 'globalOmitOff' : 'globalOmitOn')}
             </div>
             </div>
           )}

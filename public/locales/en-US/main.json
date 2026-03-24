@@ -44,5 +44,11 @@
   "enterToSubmit": "Enter to submit",
   "submitPlaceholder": "Type a message or click [/] for prompts...",
   "tokenCostModelNotRegistered": "cost unknown: model not registered",
-  "tokenCostNoPricingData": "cost unknown: no pricing data"
+  "tokenCostNoPricingData": "cost unknown: no pricing data",
+  "omitOn": "Omit from request",
+  "omitOff": "Include in request",
+  "protectOn": "Protect",
+  "protectOff": "Unprotect",
+  "globalOmitOn": "Omit All",
+  "globalOmitOff": "Omit All"
 }
