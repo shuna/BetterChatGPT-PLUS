@@ -9,7 +9,7 @@ struct ConversationView: View {
     @State private var showScrollToBottom = false
     @State private var showConfigMenu = false
     @State private var showProviderMenu = false
-    @State private var showFindBar = false
+    // conversation.showFindBar is now on ConversationViewModel
 
     private var conversation: ConversationViewModel { appState.conversation }
 
@@ -20,19 +20,10 @@ struct ConversationView: View {
 
             Divider()
 
-            // Token/cost bar
-            if appState.settings.displayChatSize {
-                TokenCostBar(
-                    messages: conversation.chat.messages,
-                    config: conversation.chat.config,
-                    settings: appState.settings
-                )
-            }
-
             // Find bar
-            if showFindBar {
+            if conversation.showFindBar {
                 ChatFindBar(
-                    isVisible: $showFindBar,
+                    isVisible: Bindable(conversation).showFindBar,
                     messages: conversation.chat.messages
                 ) { messageIndex in
                     withAnimation {
@@ -56,6 +47,9 @@ struct ConversationView: View {
                                     .sorted { $0.createdAt < $1.createdAt } ?? []
                                 let siblingIdx = (siblings.firstIndex(where: { $0.id == nid }) ?? 0) + 1
 
+                                // Insert message button before each message
+                                insertMessageButton(at: index)
+
                                 MessageBubbleView(
                                     message: message,
                                     index: index,
@@ -68,6 +62,11 @@ struct ConversationView: View {
                                     totalMessages: conversation.chat.messages.count
                                 )
                                 .id(index)
+                            }
+
+                            // Insert button after last message
+                            if !conversation.chat.messages.isEmpty {
+                                insertMessageButton(at: conversation.chat.messages.count)
                             }
 
                             // Streaming indicator
@@ -108,21 +107,23 @@ struct ConversationView: View {
                     .defaultScrollAnchor(.bottom)
                 }
 
-                // Scroll to bottom button
-                if showScrollToBottom {
-                    Button {
-                        withAnimation {
-                            scrollProxy?.scrollTo("bottom", anchor: .bottom)
+                // Scroll navigation buttons
+                if !conversation.chat.messages.isEmpty {
+                    VStack(spacing: 6) {
+                        scrollNavButton(icon: "chevron.up.2") {
+                            withAnimation { scrollProxy?.scrollTo(0, anchor: .top) }
                         }
-                    } label: {
-                        Image(systemName: "chevron.down")
-                            .font(.body.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 36, height: 36)
-                            .background(.regularMaterial, in: Circle())
-                            .shadow(radius: 2)
+                        scrollNavButton(icon: "chevron.up") {
+                            // Scroll up one message
+                        }
+                        scrollNavButton(icon: "chevron.down") {
+                            // Scroll down one message
+                        }
+                        scrollNavButton(icon: "chevron.down.2") {
+                            withAnimation { scrollProxy?.scrollTo("bottom", anchor: .bottom) }
+                        }
                     }
-                    .padding(.trailing, 16)
+                    .padding(.trailing, 8)
                     .padding(.bottom, 8)
                 }
             }
@@ -144,6 +145,16 @@ struct ConversationView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(Color.red.opacity(0.1))
+            }
+
+            // Footer: Token/cost bar (above input, matching Web layout)
+            if appState.settings.displayChatSize {
+                Divider()
+                TokenCostBar(
+                    messages: conversation.chat.messages,
+                    config: conversation.chat.config,
+                    settings: appState.settings
+                )
             }
 
             Divider()
@@ -246,11 +257,11 @@ struct ConversationView: View {
 
             // Search button
             Button {
-                withAnimation { showFindBar.toggle() }
+                withAnimation { conversation.showFindBar.toggle() }
             } label: {
                 Image(systemName: "magnifyingglass")
                     .font(.body)
-                    .foregroundStyle(showFindBar ? Color.accentColor : .secondary)
+                    .foregroundStyle(conversation.showFindBar ? Color.accentColor : .secondary)
             }
 
             // View mode picker + panel swap
@@ -321,6 +332,40 @@ struct ConversationView: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    private func scrollNavButton(icon: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 32, height: 32)
+                .background(.regularMaterial, in: Circle())
+                .shadow(color: .black.opacity(0.1), radius: 1)
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func insertMessageButton(at index: Int) -> some View {
+        HStack {
+            Spacer()
+            Button {
+                let msg = Message(role: .user, text: "")
+                conversation.insertMessage(at: index, message: msg)
+                conversation.syncToList(appState.chatList)
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                    .background(.quaternary, in: Circle())
+            }
+            .buttonStyle(.plain)
+            Spacer()
+        }
+        .frame(height: 24)
     }
 
     private var viewModeIcon: String {

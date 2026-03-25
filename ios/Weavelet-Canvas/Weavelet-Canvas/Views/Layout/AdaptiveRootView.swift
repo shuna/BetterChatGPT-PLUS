@@ -98,6 +98,25 @@ struct CompactLayoutView: View {
                                 .font(.headline)
                                 .lineLimit(1)
                         }
+                        ToolbarItemGroup(placement: .topBarTrailing) {
+                            Button {
+                                appState.conversation.showFindBar.toggle()
+                            } label: {
+                                Image(systemName: "magnifyingglass")
+                            }
+                            Button {
+                                appState.chatList.createNewChat(
+                                    contentStore: appState.conversation.contentStore,
+                                    defaultSystemMessage: appState.settings.defaultSystemMessage,
+                                    defaultChatConfig: appState.settings.defaultChatConfig
+                                )
+                                if let chat = appState.chatList.currentChat {
+                                    appState.conversation.setActiveChat(chat, contentStore: appState.conversation.contentStore)
+                                }
+                            } label: {
+                                Image(systemName: "plus")
+                            }
+                        }
                     }
             }
 

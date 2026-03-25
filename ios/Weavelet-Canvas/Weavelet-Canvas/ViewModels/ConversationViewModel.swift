@@ -33,6 +33,9 @@ final class ConversationViewModel {
     /// Branch clipboard for copy/paste.
     var branchClipboard: BranchClipboard?
 
+    /// Whether the find bar is shown.
+    var showFindBar: Bool = false
+
     /// Collapsed/omitted/protected node maps.
     var collapsedNodes: [String: Bool] = [:]
     var omittedNodes: [String: Bool] = [:]

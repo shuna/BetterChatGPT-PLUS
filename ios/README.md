@@ -83,6 +83,64 @@ cd ios/Packages/WeaveletDomain && swift test
 ### i18n
 - [x] String Catalog (Localizable.xcstrings) — 英語 + 日本語, 45+キー
 
+## Web版 → iOS版 UI パリティ進捗 (2026-03-25)
+
+Web版 (モバイル表示) とiOS版 (iPhone) を画面比較し、差異を一つずつ修正。
+
+### 修正済み
+
+| # | 差異 | 修正内容 | 変更ファイル |
+|---|------|---------|------------|
+| 1 | 新規チャットにデフォルトシステムメッセージが表示されない | `createNewChat` に `defaultSystemMessage` / `defaultChatConfig` 引数追加。Web版と同じデフォルト文 (`"You are a large language model assistant..."`) を設定 | `ChatListViewModel`, `AppState`, `SettingsViewModel`, `ChatListView`, `KeyboardShortcuts`, `ImportExportView` |
+| 2 | メッセージ間の「+」挿入ボタンがない | 各メッセージの前 + 最後のメッセージの後に `insertMessageButton` を追加 | `ConversationView` |
+| 3 | トークン/コストバーが非表示 | `displayChatSize` のデフォルトを `true` に変更 (Web版と統一) | `SettingsViewModel` |
+| 4 | スクロールナビゲーションボタン (⇈↑↓⇊) がない | Web版と同じ4ボタンを ScrollView 右下に追加 | `ConversationView` |
+| 5 | ヘッダーに検索・新規チャットボタンがない | `topBarTrailing` に 🔍 と + ボタンを追加 | `AdaptiveRootView` |
+| 6 | `advancedMode` デフォルトが `false` (Web版は `true`) | デフォルトを `true` に変更 → ロールセレクタ・保存ボタン・Omit All トグルが表示 | `SettingsViewModel`, `AppState` |
+| 7 | アクションバーが固定配置 (非フローティング) | Web版の `sticky bottom-2` 相当に変更: 半透明カプセル型フローティング + `GeometryReader` でスティッキー位置計算 | `MessageBubbleView` |
+| 8 | アクションバーのボタンが中央寄せでない | HStack 内に左右 `Spacer` 追加、ボタン群を中央配置 (Web版 `flex justify-center` と一致) | `MessageBubbleView` |
+| 9 | バブル内テキストの左右余白が不均等 | コンテンツ VStack に `.padding(.trailing, 8)` 追加 | `MessageBubbleView` |
+| 10 | トークンバーがヘッダー寄りでフッターにない | `TokenCostBar` をツールバー直下 → 入力バーの上 (フッター位置) に移動 | `ConversationView` |
+
+### 確認済み (既に実装されていた機能)
+
+- **ブランチスイッチャー** (`◂ 1/3 ▸` 形式) — `siblingCount > 1` で表示、Web版と同じ条件
+- **ブランチ切替** — 前後 sibling ボタンで切替動作
+- **メッセージ別トークン数** — `displayChatSize` 時にアクションバー内に `tk` 表示
+- **スラッシュコマンドパレット** — `/` 入力で候補表示、Web版と同じ動作
+
+### 残存する意図的なプラットフォーム差異
+
+| 差異 | 理由 |
+|------|------|
+| 入力方式: Web版はメッセージ直接編集、iOS版は下部入力バー | iOSネイティブUXに準拠 |
+| 左下リサイズボタン (↗↙): Web版のみ | デスクトップ専用UI、iOSでは不要 |
+| サイドバー開閉: Web版は常時表示可、iOS版はスワイプ/ボタン | iPhoneの画面幅に適応 |
+| タブバー (Chat/Branches): iOS版のみ | iOSナビゲーションパターン |
+
+### 変更ファイル一覧 (UIパリティ修正)
+
+```
+ViewModels/
+  AppState.swift              — loadSettings フォールバック修正, createNewChat 引数追加
+  ChatListViewModel.swift     — createNewChat に defaultSystemMessage/defaultChatConfig 引数
+  ConversationViewModel.swift — showFindBar プロパティ追加
+  SettingsViewModel.swift     — デフォルト値変更 (advancedMode, displayChatSize, defaultSystemMessage)
+
+Views/Chat/
+  ConversationView.swift      — +ボタン, スクロールナビ, TokenCostBar をフッターに移動
+  MessageBubbleView.swift     — フローティングアクションバー, 中央寄せ, 余白修正
+
+Views/Layout/
+  AdaptiveRootView.swift      — ヘッダーに検索+新規チャットボタン
+
+Views/Settings/
+  ImportExportView.swift      — createNewChat 引数追加
+
+Views/Layout/
+  KeyboardShortcuts.swift     — createNewChat 引数追加
+```
+
 ## 残課題 (優先度順)
 
 ### 高優先度

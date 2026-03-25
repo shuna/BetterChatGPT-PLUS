@@ -22,7 +22,7 @@ struct AppCommands: Commands {
         // File menu
         CommandGroup(replacing: .newItem) {
             Button("New Chat") {
-                appState.chatList.createNewChat(contentStore: appState.conversation.contentStore)
+                appState.chatList.createNewChat(contentStore: appState.conversation.contentStore, defaultSystemMessage: appState.settings.defaultSystemMessage, defaultChatConfig: appState.settings.defaultChatConfig)
                 if let chat = appState.chatList.currentChat {
                     appState.conversation.setActiveChat(chat, contentStore: appState.conversation.contentStore)
                 }

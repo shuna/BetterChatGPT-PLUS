@@ -19,6 +19,7 @@ struct MessageBubbleView: View {
     @State private var editText = ""
     @State private var showDeleteConfirm = false
     @State private var isHovering = false
+    @State private var bubbleFrame: CGRect = .zero
 
     private var conversation: ConversationViewModel { appState.conversation }
 
@@ -55,20 +56,54 @@ struct MessageBubbleView: View {
                     } else {
                         messageContent
                     }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
 
-            // Action bar (always visible on iOS, hover on iPad)
-            if !isEditing && !isCollapsed {
-                actionBar
-                    .padding(.leading, 40)
-                    .padding(.top, 4)
+                    // Reserve space for the floating action bar overlay
+                    if !isEditing && !isCollapsed {
+                        Color.clear.frame(height: 44)
+                    }
+                }
+                .padding(.trailing, 8)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(.vertical, 6)
         .padding(.horizontal, 4)
         .background(backgroundForRole)
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(
+                    key: BubbleFrameKey.self,
+                    value: geo.frame(in: .global)
+                )
+            }
+        )
+        .onPreferenceChange(BubbleFrameKey.self) { bubbleFrame = $0 }
+        // Floating action bar overlay — sticky to visible bottom
+        .overlay {
+            if !isEditing && !isCollapsed {
+                GeometryReader { geo in
+                    let globalFrame = geo.frame(in: .global)
+                    // Screen height minus safe areas and input bar (~140pt from bottom)
+                    let visibleBottom = UIScreen.main.bounds.height - 140
+                    let bubbleBottom = globalFrame.maxY
+                    let actionBarHeight: CGFloat = 36
+                    let naturalY = globalFrame.height - 6 - actionBarHeight / 2 // natural position: near bubble bottom
+                    // If bubble bottom is below visible area, clamp the bar up
+                    let clampedY: CGFloat = bubbleBottom > visibleBottom
+                        ? naturalY - (bubbleBottom - visibleBottom)
+                        : naturalY
+                    // Don't let it go above the top of the bubble
+                    let finalY = max(clampedY, 40)
+
+                    actionBar
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 6)
+                        .background(.ultraThinMaterial, in: Capsule())
+                        .shadow(color: .black.opacity(0.08), radius: 4, y: 2)
+                        .position(x: globalFrame.width / 2, y: finalY)
+                }
+            }
+        }
         .overlay(alignment: .leading) {
             if isProtected {
                 Rectangle()
@@ -245,21 +280,22 @@ struct MessageBubbleView: View {
     @ViewBuilder
     private var actionBar: some View {
         HStack(spacing: 0) {
-            // Branch switcher (left)
+            // Branch switcher (left, absolutely positioned in Web)
             if siblingCount > 1 {
                 branchSwitcher
-                Spacer(minLength: 8)
             }
 
-            // Token count (between switcher and buttons)
+            Spacer(minLength: 0)
+
+            // Token count
             if appState.settings.displayChatSize {
                 Text("\(estimatedTokens) tk")
                     .font(.system(size: 9, design: .monospaced))
                     .foregroundStyle(.tertiary)
-                Spacer(minLength: 4)
+                    .padding(.trailing, 4)
             }
 
-            // Action buttons (right)
+            // Action buttons (centered, matching Web's justify-center)
             HStack(spacing: 2) {
                 // Regenerate / Continue
                 if message.role == .assistant {
@@ -325,6 +361,8 @@ struct MessageBubbleView: View {
                     showDeleteConfirm = true
                 }
             }
+
+            Spacer(minLength: 0)
         }
     }
 
@@ -520,5 +558,14 @@ struct AvatarView: View {
         case .assistant: return .green
         case .system: return .orange
         }
+    }
+}
+
+// MARK: - Preference Key for Bubble Frame
+
+private struct BubbleFrameKey: PreferenceKey {
+    static var defaultValue: CGRect = .zero
+    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
+        value = nextValue()
     }
 }

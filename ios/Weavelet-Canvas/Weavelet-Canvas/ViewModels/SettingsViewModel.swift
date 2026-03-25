@@ -12,10 +12,10 @@ final class SettingsViewModel {
     // Behavior
     var enterToSubmit: Bool = true
     var autoTitle: Bool = true
-    var advancedMode: Bool = false
+    var advancedMode: Bool = true
     var inlineLatex: Bool = true
     var streamingMarkdownPolicy: StreamingMarkdownPolicy = .auto
-    var displayChatSize: Bool = false
+    var displayChatSize: Bool = true
 
     // Layout (persisted per-device)
     var menuWidth: CGFloat = 260
@@ -24,7 +24,7 @@ final class SettingsViewModel {
 
     // Default chat config
     var defaultChatConfig: ChatConfig = ChatConfig()
-    var defaultSystemMessage: String = ""
+    var defaultSystemMessage: String = "You are a large language model assistant.\nCarefully heed the user's instructions.\nRespond using Markdown."
 
     // Proxy
     var proxyEnabled: Bool = false

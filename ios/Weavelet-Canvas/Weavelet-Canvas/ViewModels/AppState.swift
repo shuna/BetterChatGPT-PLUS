@@ -35,7 +35,7 @@ final class AppState {
 
         // Ensure at least one chat
         if chatList.chats.isEmpty {
-            chatList.createNewChat(contentStore: contentStore)
+            chatList.createNewChat(contentStore: contentStore, defaultSystemMessage: settings.defaultSystemMessage, defaultChatConfig: settings.defaultChatConfig)
         }
         if let first = chatList.currentChat ?? chatList.chats.first {
             conversation.setActiveChat(first, contentStore: contentStore)
@@ -95,7 +95,7 @@ final class AppState {
         }
         settings.enterToSubmit = defaults.object(forKey: "enterToSubmit") as? Bool ?? true
         settings.autoTitle = defaults.object(forKey: "autoTitle") as? Bool ?? true
-        settings.advancedMode = defaults.object(forKey: "advancedMode") as? Bool ?? false
+        settings.advancedMode = defaults.object(forKey: "advancedMode") as? Bool ?? true
 
         if let data = defaults.data(forKey: "providers"),
            let providers = try? JSONDecoder().decode([ProviderId: ProviderConfig].self, from: data) {
@@ -113,7 +113,9 @@ final class AppState {
            let config = try? JSONDecoder().decode(ChatConfig.self, from: data) {
             settings.defaultChatConfig = config
         }
-        settings.defaultSystemMessage = defaults.string(forKey: "defaultSystemMessage") ?? ""
+        if let savedSystemMessage = defaults.string(forKey: "defaultSystemMessage") {
+            settings.defaultSystemMessage = savedSystemMessage
+        }
         settings.proxyEnabled = defaults.bool(forKey: "proxyEnabled")
         settings.proxyEndpoint = defaults.string(forKey: "proxyEndpoint") ?? ""
     }

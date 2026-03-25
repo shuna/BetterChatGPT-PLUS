@@ -125,7 +125,7 @@ struct ImportExportView: View {
                     appState.chatList.folders.removeAll()
                     appState.chatList.currentChatIndex = 0
                     // Create a fresh chat
-                    appState.chatList.createNewChat(contentStore: appState.conversation.contentStore)
+                    appState.chatList.createNewChat(contentStore: appState.conversation.contentStore, defaultSystemMessage: appState.settings.defaultSystemMessage, defaultChatConfig: appState.settings.defaultChatConfig)
                     if let first = appState.chatList.currentChat {
                         appState.conversation.setActiveChat(first, contentStore: appState.conversation.contentStore)
                     }

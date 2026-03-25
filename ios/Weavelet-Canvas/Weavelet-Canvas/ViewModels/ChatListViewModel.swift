@@ -37,10 +37,15 @@ final class ChatListViewModel {
 
     // MARK: - Chat Operations
 
-    func createNewChat(contentStore: ContentStore) {
+    func createNewChat(contentStore: ContentStore, defaultSystemMessage: String = "", defaultChatConfig: ChatConfig? = nil) {
+        var messages: [Message] = []
+        if !defaultSystemMessage.isEmpty {
+            messages.append(Message(role: .system, text: defaultSystemMessage))
+        }
         let chat = Chat(
             title: "New Chat",
-            config: ChatConfig()
+            messages: messages,
+            config: defaultChatConfig ?? ChatConfig()
         )
         chats.insert(chat, at: 0)
         currentChatIndex = 0

@@ -117,7 +117,7 @@ struct ChatListView: View {
     @ViewBuilder
     private var newChatButton: some View {
         Button {
-            chatList.createNewChat(contentStore: appState.conversation.contentStore)
+            chatList.createNewChat(contentStore: appState.conversation.contentStore, defaultSystemMessage: appState.settings.defaultSystemMessage, defaultChatConfig: appState.settings.defaultChatConfig)
             if let chat = chatList.currentChat {
                 appState.conversation.setActiveChat(chat, contentStore: appState.conversation.contentStore)
             }
