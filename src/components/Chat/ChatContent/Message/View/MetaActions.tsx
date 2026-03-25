@@ -20,7 +20,7 @@ const MetaActions = memo(
     const toggleProtectNode = useStore((state) => state.toggleProtectNode);
 
     return (
-      <div className='pointer-events-none absolute right-2 top-2 z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100'>
+      <div className='pointer-events-none flex items-center gap-1 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100'>
         <div className='flex items-center gap-0.5 rounded-full bg-white/80 px-1.5 py-0.5 shadow-sm ring-1 ring-black/5 backdrop-blur-sm dark:bg-gray-800/80 dark:ring-white/10'>
           <button
             type='button'

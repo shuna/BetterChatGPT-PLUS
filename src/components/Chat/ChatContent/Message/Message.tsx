@@ -8,6 +8,7 @@ import { ContentInterface, Role, isSplitView, isTextContent } from '@type/chat';
 import RoleSelector from './RoleSelector';
 import useIsDesktop from '@hooks/useIsDesktop';
 import useCanHover from '@hooks/useCanHover';
+import MetaActions from './View/MetaActions';
 
 const backgroundStyle = ['dark:bg-gray-800', 'bg-gray-50 dark:bg-gray-650'];
 
@@ -182,6 +183,13 @@ const Message = React.memo(
                 {advancedMode && resolvedNodeId && (
                   <RoleSelector role={role} nodeId={resolvedNodeId} messageIndex={messageIndex} />
                 )}
+                <div className='ml-auto'>
+                  <MetaActions
+                    messageIndex={messageIndex}
+                    isOmitted={isOmitted}
+                    isProtected={isProtected}
+                  />
+                </div>
               </div>
               <div className='min-w-0'>
                 {isCollapsed ? (
