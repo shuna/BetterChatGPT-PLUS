@@ -23,6 +23,7 @@ const EditViewButtons = memo(
     handleSave,
     handleBranchOnly,
     handleCancel,
+    contentChanged,
     handleUploadButtonClick,
     setIsModalOpen,
     _setContent,
@@ -47,6 +48,7 @@ const EditViewButtons = memo(
     handleSave: () => void;
     handleBranchOnly: () => void;
     handleCancel: () => void;
+    contentChanged?: boolean;
     handleUploadButtonClick: () => void;
     setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
     _setContent: React.Dispatch<React.SetStateAction<ContentInterface[]>>;
@@ -78,6 +80,7 @@ const EditViewButtons = memo(
     const isNotLast = !sticky && messageIndex < lastMessageIndex;
     const canSubmitDraft = hasMeaningfulContent(_content);
     const [attachDropDown, setAttachDropDown, attachDropDownRef] = useHideOnOutsideClick();
+    const [branchMenuOpen, setBranchMenuOpen, branchMenuRef] = useHideOnOutsideClick();
     const [generateMenuOpen, setGenerateMenuOpen, generateMenuRef] = useHideOnOutsideClick();
 
     const wrapperClass = sticky
@@ -208,72 +211,26 @@ const EditViewButtons = memo(
               </button>
             )}
 
-            {/* Non-sticky user: Generate = branch-generate, Regenerate = overwrite */}
+            {/* Sticky: simple save + generate */}
+            {sticky && (
+              <button
+                className={`btn btn-small btn-neutral ${
+                  isCurrentChatGenerating ? 'cursor-not-allowed opacity-40' : ''
+                }`}
+                onClick={handleSave}
+                aria-label={t('save') as string}
+              >
+                {t('save')}
+              </button>
+            )}
+
+            {/* Non-sticky user: Branch group (green) + Overwrite group (red) */}
             {!sticky && isUser && (
-              isNotLast ? (
-                <>
-                  {/* Main: branch and generate */}
-                  <div className='relative flex items-stretch' ref={generateMenuRef}>
-                    <button
-                      className={`btn btn-small btn-primary rounded-r-none border-r-0 ${
-                        isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
-                      }`}
-                      onClick={() => {
-                        !isCurrentChatGenerating && !noModel && handleBranchGenerate();
-                      }}
-                      disabled={isCurrentChatGenerating || noModel}
-                      title={t('generateBranchTooltip') as string}
-                    >
-                      {t('generate')}
-                    </button>
-                    <button
-                      className={`btn btn-small btn-primary rounded-l-none border-l border-white/20 !w-8 justify-center px-0 ${
-                        isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
-                      }`}
-                      onClick={() => {
-                        if (isCurrentChatGenerating || noModel) return;
-                        setGenerateMenuOpen(!generateMenuOpen);
-                      }}
-                      disabled={isCurrentChatGenerating || noModel}
-                      aria-label={t('generateBelow') as string}
-                    >
-                      <DownChevronArrow />
-                    </button>
-                    <div
-                      className={`${
-                        generateMenuOpen ? '' : 'hidden'
-                      } absolute right-0 bottom-full mb-1 z-10 w-max overflow-hidden rounded-lg border border-black/10 bg-white/95 p-1 shadow-lg backdrop-blur dark:border-white/10 dark:bg-gray-800/95`}
-                    >
-                      <button
-                        className='block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700'
-                        onClick={() => {
-                          setGenerateMenuOpen(false);
-                          !isCurrentChatGenerating && !noModel && setIsModalOpen(true);
-                        }}
-                      >
-                        {t('regenerateBelow')}
-                      </button>
-                    </div>
-                  </div>
-                  {/* Regenerate: overwrite next only */}
+              <>
+                {/* === Branch group (green, non-destructive) === */}
+                <div className='relative flex items-stretch' ref={branchMenuRef}>
                   <button
-                    className={`btn btn-small btn-neutral ${
-                      isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
-                    }`}
-                    onClick={() => {
-                      !isCurrentChatGenerating && !noModel && handleGenerateNextOnly();
-                    }}
-                    disabled={isCurrentChatGenerating || noModel}
-                    title={t('regenerateNextTooltip') as string}
-                  >
-                    {t('regenerate')}
-                  </button>
-                </>
-              ) : (
-                <>
-                  {/* Last message: Generate = branch-generate */}
-                  <button
-                    className={`btn btn-small btn-primary ${
+                    className={`btn btn-small btn-primary rounded-r-none border-r-0 ${
                       isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
                     }`}
                     onClick={() => {
@@ -284,35 +241,95 @@ const EditViewButtons = memo(
                   >
                     {t('generate')}
                   </button>
-                  {/* Regenerate: overwrite */}
                   <button
-                    className={`btn btn-small btn-neutral ${
+                    className='btn btn-small btn-primary rounded-l-none border-l border-white/20 !w-8 justify-center px-0'
+                    onClick={() => setBranchMenuOpen(!branchMenuOpen)}
+                    aria-label={t('saveAsBranch') as string}
+                  >
+                    <DownChevronArrow />
+                  </button>
+                  <div
+                    className={`${
+                      branchMenuOpen ? '' : 'hidden'
+                    } absolute left-0 top-full mt-1 z-50 w-max overflow-hidden rounded-lg border border-black/10 bg-white/95 p-1 shadow-lg backdrop-blur dark:border-white/10 dark:bg-gray-800/95`}
+                  >
+                    <button
+                      className='block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700'
+                      onClick={() => {
+                        setBranchMenuOpen(false);
+                        handleBranchOnly();
+                      }}
+                    >
+                      {t('saveAsBranch')}
+                    </button>
+                  </div>
+                </div>
+
+                {/* === Overwrite group (red, destructive) === */}
+                <div className='relative flex items-stretch' ref={generateMenuRef}>
+                  <button
+                    className={`btn btn-small btn-danger rounded-r-none border-r-0 ${
                       isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
                     }`}
                     onClick={() => {
-                      !isCurrentChatGenerating && !noModel && handleGenerate();
+                      !isCurrentChatGenerating && !noModel && (isNotLast ? handleGenerateNextOnly() : handleGenerate());
                     }}
                     disabled={isCurrentChatGenerating || noModel}
-                    title={t('regenerateTooltip') as string}
+                    title={(isNotLast ? t('regenerateNextTooltip') : t('regenerateTooltip')) as string}
                   >
                     {t('regenerate')}
                   </button>
-                </>
-              )
+                  <button
+                    className='btn btn-small btn-danger rounded-l-none border-l border-white/20 !w-8 justify-center px-0'
+                    onClick={() => setGenerateMenuOpen(!generateMenuOpen)}
+                    aria-label={t('overwriteSave') as string}
+                  >
+                    <DownChevronArrow />
+                  </button>
+                  <div
+                    className={`${
+                      generateMenuOpen ? '' : 'hidden'
+                    } absolute left-0 top-full mt-1 z-50 w-max overflow-hidden rounded-lg border border-black/10 bg-white/95 p-1 shadow-lg backdrop-blur dark:border-white/10 dark:bg-gray-800/95`}
+                  >
+                    {isNotLast && (
+                      <button
+                        className={`block w-full rounded-md px-3 py-2 text-left text-sm ${
+                          isCurrentChatGenerating || noModel
+                            ? 'cursor-not-allowed opacity-40'
+                            : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                        }`}
+                        onClick={() => {
+                          if (isCurrentChatGenerating || noModel) return;
+                          setGenerateMenuOpen(false);
+                          setIsModalOpen(true);
+                        }}
+                        disabled={isCurrentChatGenerating || noModel}
+                      >
+                        {t('regenerateBelow')}
+                      </button>
+                    )}
+                    <button
+                      className={`block w-full rounded-md px-3 py-2 text-left text-sm ${
+                        contentChanged
+                          ? 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                          : 'cursor-not-allowed opacity-40'
+                      }`}
+                      onClick={() => {
+                        if (!contentChanged) return;
+                        setGenerateMenuOpen(false);
+                        handleSave();
+                      }}
+                      disabled={!contentChanged}
+                    >
+                      {t('overwriteSave')}
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
 
-            {/* Save buttons: sticky = single Save, non-sticky = SaveAsBranch + OverwriteSave */}
-            {sticky ? (
-              <button
-                className={`btn btn-small btn-neutral ${
-                  isCurrentChatGenerating ? 'cursor-not-allowed opacity-40' : ''
-                }`}
-                onClick={handleSave}
-                aria-label={t('save') as string}
-              >
-                {t('save')}
-              </button>
-            ) : (
+            {/* Non-sticky non-user: save buttons only */}
+            {!sticky && !isUser && (
               <>
                 <button
                   className='btn btn-small btn-neutral'
@@ -322,8 +339,11 @@ const EditViewButtons = memo(
                   {t('saveAsBranch')}
                 </button>
                 <button
-                  className='btn btn-small btn-neutral'
-                  onClick={handleSave}
+                  className={`btn btn-small btn-danger ${
+                    !contentChanged ? 'cursor-not-allowed opacity-40' : ''
+                  }`}
+                  onClick={() => { contentChanged && handleSave(); }}
+                  disabled={!contentChanged}
                   aria-label={t('overwriteSave') as string}
                 >
                   {t('overwriteSave')}

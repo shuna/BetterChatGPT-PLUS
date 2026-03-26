@@ -186,6 +186,7 @@ const UnifiedMessageView = memo(
               handleSave={editLogic.handleSave}
               handleBranchOnly={editLogic.handleBranchOnly}
               handleCancel={editLogic.handleCancel}
+              contentChanged={editLogic.contentChanged}
               handleUploadButtonClick={editLogic.handleUploadButtonClick}
               setIsModalOpen={editLogic.setIsModalOpen}
               _setContent={editLogic._setContent}

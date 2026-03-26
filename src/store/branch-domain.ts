@@ -744,29 +744,8 @@ export const upsertWithAutoBranchState = (
     return finalizePreparedBranchMutationState(state);
   }
 
-  // Content changed + last node: in-place update (no descendants)
-  const isLastNode = messageIndex === tree.activePath.length - 1;
-  if (isLastNode) {
-    return upsertMessageAtIndexState(
-      ensuredChats, chatIndex, messageIndex, message, ensuredStore
-    );
-  }
-
-  // Content changed + mid-chain: create sibling, truncate activePath
-  // Old node (existingId) stays with its descendants (D→E hang off it)
-  const state = prepareBranchMutationState(ensuredChats, chatIndex, ensuredStore);
-  const { tree: mutableTree, contentStore } = state;
-  const newId = uuidv4();
-  const parentId = mutableTree.nodes[existingId].parentId;
-
-  mutableTree.nodes[newId] = {
-    id: newId,
-    parentId,
-    role: message.role,
-    contentHash: addContentDelta(contentStore, message.content, node.contentHash),
-    createdAt: Date.now(),
-  };
-
-  mutableTree.activePath = [...mutableTree.activePath.slice(0, messageIndex), newId];
-  return { ...finalizePreparedBranchMutationState(state), newId };
+  // Content changed: always in-place update (overwrite semantics)
+  return upsertMessageAtIndexState(
+    ensuredChats, chatIndex, messageIndex, message, ensuredStore
+  );
 };

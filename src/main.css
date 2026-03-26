@@ -286,6 +286,31 @@
     background-color: rgba(26, 127, 100, var(--tw-bg-opacity));
   }
 
+  .btn-danger {
+    --tw-bg-opacity: 1;
+    --tw-text-opacity: 1;
+    background-color: rgba(239, 68, 68, var(--tw-bg-opacity));
+    color: rgba(255, 255, 255, var(--tw-text-opacity));
+    border-width: 1px;
+    border-color: rgba(239, 68, 68, 0.8);
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+
+  .btn-danger:hover {
+    --tw-bg-opacity: 1;
+    background-color: rgba(220, 38, 38, var(--tw-bg-opacity));
+  }
+
+  .dark .btn-danger {
+    background-color: rgba(185, 28, 28, var(--tw-bg-opacity));
+    border-color: rgba(185, 28, 28, 0.8);
+  }
+
+  .dark .btn-danger:hover {
+    background-color: rgba(153, 27, 27, var(--tw-bg-opacity));
+  }
+
   .btn-small {
     padding: 0.25rem 0.5rem;
   }

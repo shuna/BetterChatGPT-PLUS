@@ -510,10 +510,10 @@ describe('upsertWithAutoBranchState', () => {
     expect(Object.keys(result.chats[0].branchTree!.nodes).length).toBe(nodeCountBefore);
   });
 
-  it('creates sibling and truncates activePath for mid-chain content edit', () => {
+  it('updates mid-chain node in-place without creating a branch', () => {
     const ensured = createThreeNodeChat();
     const pathBefore = ensured.chats[0].branchTree!.activePath.slice();
-    const oldNodeId = pathBefore[1]; // middle node (assistant)
+    const nodeCountBefore = Object.keys(ensured.chats[0].branchTree!.nodes).length;
 
     const result = upsertWithAutoBranchState(
       ensured.chats, 0, 1,
@@ -522,25 +522,16 @@ describe('upsertWithAutoBranchState', () => {
     );
 
     expect(result.noOp).toBeUndefined();
-    expect(result.newId).toBeDefined();
 
     const tree = result.chats[0].branchTree!;
 
-    // activePath should be truncated: [node0, newNode] (no third node)
-    expect(tree.activePath).toHaveLength(2);
-    expect(tree.activePath[0]).toBe(pathBefore[0]);
-    expect(tree.activePath[1]).toBe(result.newId);
+    // No new node created — in-place update
+    expect(Object.keys(tree.nodes).length).toBe(nodeCountBefore);
 
-    // New node is sibling of old node (same parent)
-    expect(tree.nodes[result.newId!].parentId).toBe(tree.nodes[oldNodeId].parentId);
+    // activePath unchanged
+    expect(tree.activePath).toEqual(pathBefore);
 
-    // Old node and its descendant (third) still exist in tree
-    expect(tree.nodes[oldNodeId]).toBeDefined();
-    expect(tree.nodes[pathBefore[2]]).toBeDefined();
-    expect(tree.nodes[pathBefore[2]].parentId).toBe(oldNodeId);
-
-    // Messages reflect the new truncated path
-    expect(result.chats[0].messages).toHaveLength(2);
+    // Content updated in-place
     expect(result.chats[0].messages[1].content).toEqual(textContent('edited response'));
   });
 });
