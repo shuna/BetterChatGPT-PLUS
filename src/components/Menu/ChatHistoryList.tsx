@@ -4,7 +4,6 @@ import { shallow } from 'zustand/shallow';
 
 import ChatFolder from './ChatFolder';
 import ChatHistory from './ChatHistory';
-import ChatSearch from './ChatSearch';
 import GrepResults from './GrepResults';
 
 import {
@@ -16,7 +15,13 @@ import {
   isTextContent,
 } from '@type/chat';
 
-const ChatHistoryList = () => {
+const ChatHistoryList = ({
+  filter,
+  setFilter,
+}: {
+  filter: string;
+  setFilter: React.Dispatch<React.SetStateAction<string>>;
+}) => {
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const displayChatSize = useStore((state) => state.displayChatSize);
   const setChats = useStore((state) => state.setChats);
@@ -34,7 +39,6 @@ const ChatHistoryList = () => {
     []
   );
   const isGrepMode = useStore((state) => state.isGrepMode);
-  const [filter, setFilter] = useState<string>('');
   const [selectedChats, setSelectedChats] = useState<number[]>([]);
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(
     null
@@ -252,7 +256,6 @@ const ChatHistoryList = () => {
       onDragLeave={handleDragLeave}
       onDragEnd={handleDragEnd}
     >
-      <ChatSearch filter={filter} setFilter={setFilter} />
       {isGrepMode ? (
         <GrepResults />
       ) : (

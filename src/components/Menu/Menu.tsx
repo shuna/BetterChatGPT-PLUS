@@ -1,9 +1,10 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import useStore from '@store/store';
 
 import NewChat from './NewChat';
 import NewFolder from './NewFolder';
 import ChatHistoryList from './ChatHistoryList';
+import ChatSearch from './ChatSearch';
 import MenuOptions from './MenuOptions';
 import DebugPanel from './DebugPanel';
 import VersionInfo from '@components/Footer/VersionInfo';
@@ -17,6 +18,7 @@ const Menu = () => {
   const menuWidth = useStore((state) => state.menuWidth);
   const setMenuWidth = useStore((state) => state.setMenuWidth);
 
+  const [filter, setFilter] = useState<string>('');
   const windowWidthRef = useRef<number>(window.innerWidth);
   const isResizing = useRef<boolean>(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -90,7 +92,8 @@ const Menu = () => {
                 <NewChat />
                 <NewFolder />
               </div>
-              <ChatHistoryList />
+              <ChatSearch filter={filter} setFilter={setFilter} />
+              <ChatHistoryList filter={filter} setFilter={setFilter} />
               <DebugPanel />
               <div className='mt-auto flex flex-col gap-2 pb-2'>
                 <VersionInfo />
