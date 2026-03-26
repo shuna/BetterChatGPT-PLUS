@@ -9,7 +9,7 @@ export interface NavEntry {
   activePath: string[];
   focusedNodeId?: string;
   viewContext?: ChatView;
-  source: 'init' | 'branch-switch' | 'search' | 'grep' | 'branch-editor';
+  source: 'init' | 'branch-switch' | 'search' | 'grep' | 'branch-editor' | 'view-switch';
 }
 
 export interface NavigationSlice {
@@ -17,6 +17,7 @@ export interface NavigationSlice {
   navHistoryCurrent: NavEntry | null;
   navHistoryFuture: NavEntry[];
   navEntryMap: Map<string, NavEntry>;
+  _navRestoring: boolean;
 
   pushNavigationEntry: (entry: Omit<NavEntry, 'key'>) => void;
   restoreNavigationEntry: (entry: NavEntry) => void;
@@ -45,6 +46,7 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
   navHistoryCurrent: null,
   navHistoryFuture: [],
   navEntryMap: new Map(),
+  _navRestoring: false,
 
   initNavigationEntry: () => {
     if (get().navHistoryCurrent) return;
@@ -101,32 +103,37 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
     const idx = resolveChatIndex(chats, entry.chatId);
     if (idx < 0) return false as any; // chatId not found
 
-    // Switch chat if needed
-    if (get().currentChatIndex !== idx) {
-      get().setCurrentChatIndex(idx);
-    }
-
-    // Restore activePath
-    if (entry.activePath.length > 0) {
-      const chat = chats![idx];
-      if (chat.branchTree) {
-        // Verify the path is still valid by checking first node exists
-        const firstNode = entry.activePath[0];
-        if (chat.branchTree.nodes[firstNode]) {
-          get().switchActivePathSilent(idx, entry.activePath);
-        }
-        // else: path invalid, keep current activePath
+    set({ _navRestoring: true });
+    try {
+      // Switch chat if needed
+      if (get().currentChatIndex !== idx) {
+        get().setCurrentChatIndex(idx);
       }
-    }
 
-    // Restore view context
-    if (entry.viewContext && get().chatActiveView !== entry.viewContext) {
-      get().setChatActiveView(entry.viewContext);
-    }
+      // Restore activePath
+      if (entry.activePath.length > 0) {
+        const chat = chats![idx];
+        if (chat.branchTree) {
+          // Verify the path is still valid by checking first node exists
+          const firstNode = entry.activePath[0];
+          if (chat.branchTree.nodes[firstNode]) {
+            get().switchActivePathSilent(idx, entry.activePath);
+          }
+          // else: path invalid, keep current activePath
+        }
+      }
 
-    // Restore focus node (transient)
-    if (entry.focusedNodeId) {
-      get().setBranchEditorFocusNodeId(entry.focusedNodeId);
+      // Restore view context
+      if (entry.viewContext && get().chatActiveView !== entry.viewContext) {
+        get().setChatActiveView(entry.viewContext);
+      }
+
+      // Restore focus node (transient)
+      if (entry.focusedNodeId) {
+        get().setBranchEditorFocusNodeId(entry.focusedNodeId);
+      }
+    } finally {
+      set({ _navRestoring: false });
     }
   },
 

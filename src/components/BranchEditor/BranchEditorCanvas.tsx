@@ -651,13 +651,13 @@ const BranchEditorCanvas = ({
       const target = event.target as HTMLElement;
       const isHeaderClick = !!target.closest('[data-node-header]');
 
-      // Record the destination view context (chat for header clicks, current view otherwise)
+      // Record current view context (view switch is tracked separately)
       const currentView = useStore.getState().chatActiveView;
       pushNavigationEntry({
         chatId: chat.id,
         activePath: newPath,
         focusedNodeId: node.id,
-        viewContext: isHeaderClick && !isSplitView(currentView) ? 'chat' : currentView,
+        viewContext: currentView,
         source: 'branch-editor',
       });
 

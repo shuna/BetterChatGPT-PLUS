@@ -285,6 +285,20 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   chatActiveView: 'chat' as ChatView,
   setChatActiveView: (view) => {
     if (get().chatActiveView === view) return;
+    // Push a navigation entry for view switches (skip during history restore)
+    if (!get()._navRestoring) {
+      const chats = get().chats;
+      const chatIndex = get().currentChatIndex;
+      if (chats && chatIndex >= 0 && chatIndex < chats.length) {
+        const chat = chats[chatIndex];
+        get().pushNavigationEntry({
+          chatId: chat.id,
+          activePath: chat.branchTree ? [...chat.branchTree.activePath] : [],
+          viewContext: view,
+          source: 'view-switch',
+        });
+      }
+    }
     set({ chatActiveView: view });
   },
   navigateToBranchEditor: () => {
@@ -295,7 +309,8 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
       const isDesktop = window.matchMedia('(min-width: 768px)').matches;
       if (isDesktop) return;
     }
-    set({ chatActiveView: 'branch-editor' });
+    // Use setChatActiveView so view-switch is recorded in navigation history
+    get().setChatActiveView('branch-editor');
   },
   pendingChatFocus: null,
   setPendingChatFocus: (focus) => {
