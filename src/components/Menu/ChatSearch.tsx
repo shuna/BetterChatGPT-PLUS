@@ -48,7 +48,7 @@ const ChatSearch = ({
   };
 
   return (
-    <div className='relative flex items-center gap-1 px-2 py-1'>
+    <div className='relative flex items-center gap-1 py-1'>
       <input
         type='text'
         className='m-0 h-8 flex-1 rounded border border-gray-300 bg-transparent px-3 py-1 text-base text-gray-800 transition-opacity focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-white/20 dark:text-white dark:focus:ring-gray-600'
