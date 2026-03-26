@@ -387,15 +387,17 @@ export function useEditViewLogic({
   const contentChanged = (() => {
     // Normalize: filter out empty text items for comparison
     const normalize = (c: ContentInterface[]) =>
-      c.filter((item) => !(item.type === 'text' && item.text === ''));
+      c.filter((item) => !(item.type === 'text' && (item as TextContentInterface).text === ''));
     const a = normalize(_content);
     const b = normalize(content);
     if (a.length !== b.length) return true;
     for (let i = 0; i < a.length; i++) {
-      if (a[i].type !== b[i].type) return true;
-      if (a[i].type === 'text' && b[i].type === 'text' && a[i].text !== b[i].text) return true;
-      if (a[i].type === 'image_url' && b[i].type === 'image_url' &&
-        (a[i] as ImageContentInterface).image_url.url !== (b[i] as ImageContentInterface).image_url.url) return true;
+      const ai = a[i], bi = b[i];
+      if (ai.type !== bi.type) return true;
+      if (ai.type === 'text' && bi.type === 'text' &&
+        (ai as TextContentInterface).text !== (bi as TextContentInterface).text) return true;
+      if (ai.type === 'image_url' && bi.type === 'image_url' &&
+        (ai as ImageContentInterface).image_url.url !== (bi as ImageContentInterface).image_url.url) return true;
     }
     return false;
   })();
