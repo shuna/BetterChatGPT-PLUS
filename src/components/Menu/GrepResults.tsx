@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import { GrepResult } from '@store/grep-slice';
+import { buildPathToLeaf } from '@utils/branchUtils';
 
 const MAX_VISIBLE = 5;
 
@@ -163,10 +164,26 @@ const GrepResultGroup = ({ result, query }: { result: GrepResult; query: string 
   const [expanded, setExpanded] = useState(true);
   const [showAll, setShowAll] = useState(false);
   const navigateToGrepResult = useStore((state) => state.navigateToGrepResult);
+  const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
   const currentChatIndex = useStore((state) => state.currentChatIndex);
+  const chats = useStore((state) => state.chats);
 
   const handleClick = (chatIndex: number, nodeId?: string) => {
     const isSameChat = currentChatIndex === chatIndex;
+    const chat = chats?.[chatIndex];
+    if (chat) {
+      // Build the destination path (where we're going), not the current path
+      const destPath =
+        nodeId && chat.branchTree && !nodeId.startsWith('legacy-')
+          ? buildPathToLeaf(chat.branchTree, nodeId)
+          : chat.branchTree?.activePath ?? [];
+      pushNavigationEntry({
+        chatId: chat.id,
+        activePath: destPath,
+        focusedNodeId: nodeId,
+        source: 'grep',
+      });
+    }
     navigateToGrepResult(chatIndex, nodeId);
     triggerHighlight(query, !isSameChat);
   };

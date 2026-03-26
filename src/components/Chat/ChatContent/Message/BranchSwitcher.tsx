@@ -1,6 +1,6 @@
 import React from 'react';
 import useStore from '@store/store';
-import { getSiblingsOf } from '@utils/branchUtils';
+import { buildPathToLeaf, getSiblingsOf } from '@utils/branchUtils';
 import { isSplitView } from '@type/chat';
 
 const BranchSwitcher = ({
@@ -11,12 +11,12 @@ const BranchSwitcher = ({
   nodeId: string;
 }) => {
   const switchBranchAtNode = useStore((state) => state.switchBranchAtNode);
+  const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
   const setBranchEditorFocusNodeId = useStore((state) => state.setBranchEditorFocusNodeId);
   const chatActiveView = useStore((state) => state.chatActiveView);
   const navigateToBranchEditor = useStore((state) => state.navigateToBranchEditor);
-  const branchTree = useStore(
-    (state) => state.chats?.[chatIndex]?.branchTree
-  );
+  const chat = useStore((state) => state.chats?.[chatIndex]);
+  const branchTree = chat?.branchTree;
 
   if (!branchTree) return null;
 
@@ -27,16 +27,24 @@ const BranchSwitcher = ({
 
   if (total <= 1) return null;
 
+  const handleSwitch = (targetNodeId: string) => {
+    if (!chat || !branchTree) return;
+    const newPath = buildPathToLeaf(branchTree, targetNodeId);
+    pushNavigationEntry({
+      chatId: chat.id,
+      activePath: newPath,
+      viewContext: chatActiveView,
+      source: 'branch-switch',
+    });
+    switchBranchAtNode(chatIndex, targetNodeId);
+  };
+
   const handlePrev = () => {
-    if (currentIdx > 0) {
-      switchBranchAtNode(chatIndex, siblings[currentIdx - 1].id);
-    }
+    if (currentIdx > 0) handleSwitch(siblings[currentIdx - 1].id);
   };
 
   const handleNext = () => {
-    if (currentIdx < total - 1) {
-      switchBranchAtNode(chatIndex, siblings[currentIdx + 1].id);
-    }
+    if (currentIdx < total - 1) handleSwitch(siblings[currentIdx + 1].id);
   };
 
   return (

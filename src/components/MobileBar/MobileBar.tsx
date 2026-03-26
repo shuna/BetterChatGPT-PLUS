@@ -8,9 +8,10 @@ import useAddChat from '@hooks/useAddChat';
 
 interface MobileBarProps {
   onSearchOpen?: () => void;
+  extraButtons?: React.ReactNode;
 }
 
-const MobileBar = ({ onSearchOpen }: MobileBarProps) => {
+const MobileBar = ({ onSearchOpen, extraButtons }: MobileBarProps) => {
   const setHideSideMenu = useStore((state) => state.setHideSideMenu);
   const chatTitle = useStore((state) =>
     state.chats &&
@@ -51,6 +52,7 @@ const MobileBar = ({ onSearchOpen }: MobileBarProps) => {
         <span className='sr-only'>Open sidebar</span>
         <MenuIcon />
       </button>
+      {extraButtons}
       <h1 className='flex-1 text-center text-base font-normal px-2 truncate min-w-0'>
         {chatTitle}
       </h1>

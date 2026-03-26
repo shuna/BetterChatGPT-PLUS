@@ -98,6 +98,7 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
     const result = searchResults[next];
     set({ currentResultIndex: next, currentResultNodeId: result.nodeId });
     get().setBranchEditorFocusNodeId(result.nodeId);
+    pushSearchNavEntry(get, result);
     navigateToResult(get, result);
   },
 
@@ -109,6 +110,7 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
     const result = searchResults[prev];
     set({ currentResultIndex: prev, currentResultNodeId: result.nodeId });
     get().setBranchEditorFocusNodeId(result.nodeId);
+    pushSearchNavEntry(get, result);
     navigateToResult(get, result);
   },
 
@@ -137,6 +139,27 @@ export const createSearchSlice: StoreSlice<SearchSlice> = (set, get) => ({
     }
   },
 });
+
+function pushSearchNavEntry(
+  get: () => any,
+  result: SearchResult
+) {
+  const state = get();
+  if (!state.pushNavigationEntry) return;
+  const chat = state.chats?.[result.chatIndex];
+  if (!chat) return;
+
+  const newPath = chat.branchTree
+    ? buildPathToLeaf(chat.branchTree, result.nodeId)
+    : [];
+
+  state.pushNavigationEntry({
+    chatId: chat.id,
+    activePath: newPath,
+    focusedNodeId: result.nodeId,
+    source: 'search' as const,
+  });
+}
 
 function navigateToResult(
   get: () => ReturnType<StoreSlice<SearchSlice>>,

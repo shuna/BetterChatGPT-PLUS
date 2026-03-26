@@ -7,7 +7,9 @@ import MobileBar from '../MobileBar';
 import SplitView from './SplitView';
 
 import ChatViewTabs from './ChatViewTabs';
+import NavigationButtons from './NavigationButtons';
 import useIsDesktop from '@hooks/useIsDesktop';
+import useNavigationHistory, { isPWA } from '@hooks/useNavigationHistory';
 
 const BranchEditorView = React.lazy(
   () => import('@components/BranchEditor/BranchEditorView')
@@ -21,13 +23,19 @@ const Chat = () => {
   const isDesktop = useIsDesktop();
   const desktopOffset = isDesktop && !hideSideMenu ? `${menuWidth}px` : '0';
   const [isChatFindOpen, setIsChatFindOpen] = useState(false);
+  const showPWANav = React.useMemo(() => isPWA(), []);
+
+  useNavigationHistory();
 
   // Mobile fallback: split views degrade to chat view
   const effectiveView = !isDesktop && isSplitView(activeView) ? 'chat' : activeView;
 
   return (
     <div className='flex h-full flex-1 flex-col' style={{ paddingLeft: desktopOffset }}>
-      <MobileBar onSearchOpen={() => setIsChatFindOpen(true)} />
+      <MobileBar
+        onSearchOpen={() => setIsChatFindOpen(true)}
+        extraButtons={showPWANav ? <NavigationButtons /> : undefined}
+      />
       <main className='relative h-full w-full transition-width flex flex-col overflow-hidden items-stretch flex-1'>
         <ChatViewTabs activeView={effectiveView} setActiveView={setActiveView} />
         {isSplitView(effectiveView) ? (

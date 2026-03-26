@@ -70,6 +70,44 @@ const UndoRedoControls = () => {
   );
 };
 
+const NavBackForwardControls = () => {
+  const canBack = useStore((state) => state.navHistoryPast.length > 0);
+  const canForward = useStore((state) => state.navHistoryFuture.length > 0);
+  const navBack = useStore((state) => state.navBack);
+  const navForward = useStore((state) => state.navForward);
+
+  const btnBase = 'w-[26px] h-[26px] flex items-center justify-center border-gray-300 dark:border-gray-600';
+
+  return (
+    <div className='react-flow__panel !bg-gray-200 dark:!bg-gray-700 !rounded !shadow-md' style={{ position: 'absolute', left: 0, bottom: 170 }}>
+      <button
+        className={`${btnBase} ${
+          canBack ? 'text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600' : 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
+        }`}
+        onClick={navBack}
+        disabled={!canBack}
+        title='Back'
+      >
+        <svg className='w-3 h-3' fill='none' stroke='currentColor' viewBox='0 0 24 24' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'>
+          <path d='M15 18l-6-6 6-6' />
+        </svg>
+      </button>
+      <button
+        className={`${btnBase} border-t ${
+          canForward ? 'text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600' : 'text-gray-400 dark:text-gray-500 cursor-not-allowed'
+        }`}
+        onClick={navForward}
+        disabled={!canForward}
+        title='Forward'
+      >
+        <svg className='w-3 h-3' fill='none' stroke='currentColor' viewBox='0 0 24 24' strokeWidth='2.5' strokeLinecap='round' strokeLinejoin='round'>
+          <path d='M9 18l6-6-6-6' />
+        </svg>
+      </button>
+    </div>
+  );
+};
+
 const ConversationEditMenu = ({ entries }: { entries: MultiLayoutEntry[] }) => {
   const { t } = useTranslation();
   const [open, setOpen] = React.useState(false);
@@ -297,6 +335,7 @@ const BranchEditorCanvas = ({
   const setChatActiveView = useStore((state) => state.setChatActiveView);
   const ensureBranchTree = useStore((state) => state.ensureBranchTree);
   const setPendingChatFocus = useStore((state) => state.setPendingChatFocus);
+  const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
 
   const lockPageDragBounce = useCallback(() => {
     pageDragLockCountRef.current += 1;
@@ -607,17 +646,30 @@ const BranchEditorCanvas = ({
       const chat = chats?.[nodeChatIndex];
       if (!chat?.branchTree) return;
       const newPath = buildPathToLeaf(chat.branchTree, node.id);
-      switchActivePath(nodeChatIndex, newPath);
 
       // Header click → navigate to chat, content click → open modal
       const target = event.target as HTMLElement;
-      if (target.closest('[data-node-header]')) {
+      const isHeaderClick = !!target.closest('[data-node-header]');
+
+      // Record the destination view context (chat for header clicks, current view otherwise)
+      const currentView = useStore.getState().chatActiveView;
+      pushNavigationEntry({
+        chatId: chat.id,
+        activePath: newPath,
+        focusedNodeId: node.id,
+        viewContext: isHeaderClick && !isSplitView(currentView) ? 'chat' : currentView,
+        source: 'branch-editor',
+      });
+
+      switchActivePath(nodeChatIndex, newPath);
+
+      if (isHeaderClick) {
         navigateToChat(nodeChatIndex, node.id);
       } else {
         setSelectedNodeForModal({ nodeId: node.id, chatIndex: nodeChatIndex });
       }
     },
-    [chats, primaryChatIndex, switchActivePath, navigateToChat]
+    [chats, primaryChatIndex, switchActivePath, navigateToChat, pushNavigationEntry]
   );
 
   const onNodeDoubleClick = useCallback(
@@ -826,6 +878,7 @@ const BranchEditorCanvas = ({
         proOptions={{ hideAttribution: true }}
       >
         <Background className='!bg-white dark:!bg-gray-800' />
+        <NavBackForwardControls />
         <UndoRedoControls />
         {isSearchOpen && <BranchSearchBar entries={entries} />}
         <ConversationEditMenu entries={entries} />
