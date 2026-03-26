@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import { GrepResult } from '@store/grep-slice';
 
@@ -219,6 +220,7 @@ const GrepResultGroup = ({ result, query }: { result: GrepResult; query: string 
 };
 
 const GrepResults = () => {
+  const { t } = useTranslation();
   const grepResults = useStore((state) => state.grepResults);
   const grepQuery = useStore((state) => state.grepQuery);
   const isGrepSearching = useStore((state) => state.isGrepSearching);
@@ -226,7 +228,7 @@ const GrepResults = () => {
   if (isGrepSearching) {
     return (
       <div className='px-4 py-3 text-xs text-gray-400'>
-        Searching...
+        {t('searching')}
       </div>
     );
   }
@@ -234,7 +236,7 @@ const GrepResults = () => {
   if (!grepQuery.trim()) {
     return (
       <div className='px-4 py-3 text-xs text-gray-400'>
-        Type to search across all chat content
+        {t('typeToSearchContent')}
       </div>
     );
   }
@@ -242,7 +244,7 @@ const GrepResults = () => {
   if (grepResults.length === 0) {
     return (
       <div className='px-4 py-3 text-xs text-gray-400'>
-        No results found
+        {t('noResultsFound')}
       </div>
     );
   }
@@ -252,7 +254,7 @@ const GrepResults = () => {
   return (
     <div className='flex min-h-0 flex-1 flex-col overflow-y-auto'>
       <div className='px-3 py-1 text-[10px] text-gray-400'>
-        {totalMatches} matches in {grepResults.length} chats
+        {t('matchesInChats', { matches: totalMatches, chats: grepResults.length })}
       </div>
       {grepResults.map((result) => (
         <GrepResultGroup

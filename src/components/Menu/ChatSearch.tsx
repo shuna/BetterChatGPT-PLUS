@@ -52,7 +52,7 @@ const ChatSearch = ({
       <input
         type='text'
         className='m-0 h-8 flex-1 rounded border border-gray-300 bg-transparent px-3 py-1 text-sm text-gray-800 transition-opacity focus:outline-none focus:ring-1 focus:ring-gray-300 dark:border-white/20 dark:text-white dark:focus:ring-gray-600'
-        placeholder={isGrepMode ? 'Search content...' : (t('search') as string)}
+        placeholder={isGrepMode ? (t('searchContent') as string) : (t('search') as string)}
         value={_filter}
         onChange={handleChange}
       />
@@ -63,7 +63,7 @@ const ChatSearch = ({
             : 'border-gray-300 text-gray-500 hover:text-gray-700 dark:border-white/20 dark:text-gray-400 dark:hover:text-white'
         }`}
         onClick={toggleMode}
-        title={isGrepMode ? 'Title search' : 'Content search (grep)'}
+        title={isGrepMode ? (t('titleSearch') as string) : (t('contentSearch') as string)}
       >
         {isGrepMode ? (
           <svg stroke='currentColor' fill='none' strokeWidth='2' viewBox='0 0 24 24' strokeLinecap='round' strokeLinejoin='round' className='h-4 w-4'>
