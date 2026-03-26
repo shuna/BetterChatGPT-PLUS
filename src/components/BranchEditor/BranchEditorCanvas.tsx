@@ -8,6 +8,7 @@ import ReactFlow, {
   useNodesState,
   useEdgesState,
   PanOnScrollMode,
+  OnSelectionChangeParams,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -218,6 +219,57 @@ const ConversationEditMenu = ({ entries }: { entries: MultiLayoutEntry[] }) => {
   );
 };
 
+type InteractionMode = 'dragScroll' | 'rangeSelect';
+
+const InteractionModeToggle = ({
+  mode,
+  setMode,
+}: {
+  mode: InteractionMode;
+  setMode: (m: InteractionMode) => void;
+}) => {
+  const { t } = useTranslation();
+  const btnBase = 'w-[35px] h-[35px] flex items-center justify-center';
+
+  return (
+    <div
+      className='react-flow__panel !bg-gray-200 dark:!bg-gray-700 !rounded-lg !shadow-md'
+      style={{ position: 'absolute', left: 0, top: 44 }}
+    >
+      <button
+        className={`${btnBase} rounded-t-lg ${
+          mode === 'dragScroll'
+            ? 'bg-blue-500 text-white'
+            : 'text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600'
+        }`}
+        onClick={() => setMode('dragScroll')}
+        title={t('dragScrollMode') as string}
+      >
+        {/* Hand/pan icon */}
+        <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24' strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round'>
+          <path d='M18 11V6a2 2 0 0 0-4 0v1M14 10V4a2 2 0 0 0-4 0v6M10 10V5a2 2 0 0 0-4 0v9' />
+          <path d='M18 11a2 2 0 0 1 4 0v3a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-5.8-2.4L3.4 16c-.7-.8-.4-2.1.7-2.5.7-.3 1.6 0 2.1.6L8 16' />
+        </svg>
+      </button>
+      <button
+        className={`${btnBase} border-t border-gray-300 dark:border-gray-600 rounded-b-lg ${
+          mode === 'rangeSelect'
+            ? 'bg-blue-500 text-white'
+            : 'text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600'
+        }`}
+        onClick={() => setMode('rangeSelect')}
+        title={t('rangeSelectMode') as string}
+      >
+        {/* Rectangle selection icon */}
+        <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24' strokeWidth='1.8' strokeLinecap='round' strokeLinejoin='round'>
+          <rect x='3' y='3' width='18' height='18' rx='2' strokeDasharray='4 2' />
+          <path d='M8 8h8v8H8z' />
+        </svg>
+      </button>
+    </div>
+  );
+};
+
 const nodeTypes = {
   messageNode: MessageNode,
   conversationHeader: ConversationHeaderNode,
@@ -230,6 +282,8 @@ const BranchEditorCanvas = ({
   chatIndices: number[];
   primaryChatIndex: number;
 }) => {
+  const [interactionMode, setInteractionMode] = useState<InteractionMode>('dragScroll');
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
   const pageDragLockCountRef = useRef(0);
   const touchMoveBlockerRef = useRef<((event: TouchEvent) => void) | null>(null);
   const chats = useStore((state) => state.chats);
@@ -405,6 +459,77 @@ const BranchEditorCanvas = ({
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
   }, [isSearchOpen, openSearch, closeSearch]);
+
+  // Selection change tracking
+  const onSelectionChange = useCallback(
+    ({ nodes: selNodes }: OnSelectionChangeParams) => {
+      setSelectedNodeIds(
+        selNodes
+          .filter((n) => n.type === 'messageNode')
+          .map((n) => n.id)
+      );
+    },
+    []
+  );
+
+  const deleteBranch = useStore((state) => state.deleteBranch);
+
+  // Keyboard shortcuts for copy/cut/paste on selected nodes
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!containerRef.current?.contains(document.activeElement) &&
+          document.activeElement !== containerRef.current) return;
+
+      const isMod = e.metaKey || e.ctrlKey;
+      if (!isMod) return;
+
+      if (e.key === 'c' && selectedNodeIds.length > 0) {
+        e.preventDefault();
+        // Copy: use first and last selected node IDs to define the range
+        const firstId = selectedNodeIds[0];
+        const lastId = selectedNodeIds[selectedNodeIds.length - 1];
+        // Determine which chat this node belongs to
+        const node = rfNodes.find((n) => n.id === firstId);
+        if (!node) return;
+        const ci = (node.data as MessageNodeData).chatIndex >= 0
+          ? (node.data as MessageNodeData).chatIndex
+          : primaryChatIndex;
+        useStore.getState().copyBranchSequence(ci, firstId, lastId);
+      }
+
+      if (e.key === 'x' && selectedNodeIds.length > 0) {
+        e.preventDefault();
+        const firstId = selectedNodeIds[0];
+        const lastId = selectedNodeIds[selectedNodeIds.length - 1];
+        const node = rfNodes.find((n) => n.id === firstId);
+        if (!node) return;
+        const ci = (node.data as MessageNodeData).chatIndex >= 0
+          ? (node.data as MessageNodeData).chatIndex
+          : primaryChatIndex;
+        useStore.getState().copyBranchSequence(ci, firstId, lastId);
+        deleteBranch(ci, firstId);
+      }
+
+      if (e.key === 'v') {
+        const clipboard = useStore.getState().branchClipboard;
+        if (!clipboard) return;
+        e.preventDefault();
+        // Paste after the last selected node, or the focused node
+        const targetId = selectedNodeIds.length > 0
+          ? selectedNodeIds[selectedNodeIds.length - 1]
+          : null;
+        if (!targetId) return;
+        const node = rfNodes.find((n) => n.id === targetId);
+        if (!node) return;
+        const ci = (node.data as MessageNodeData).chatIndex >= 0
+          ? (node.data as MessageNodeData).chatIndex
+          : primaryChatIndex;
+        useStore.getState().pasteBranchSequence(ci, targetId);
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [selectedNodeIds, rfNodes, primaryChatIndex, deleteBranch]);
 
   // Cross-conversation drag state
   const copyBranchSequence = useStore((state) => state.copyBranchSequence);
@@ -687,6 +812,7 @@ const BranchEditorCanvas = ({
         onNodeDragStop={onNodeDragStop}
         onMoveStart={lockPageDragBounce}
         onMoveEnd={unlockPageDragBounce}
+        onSelectionChange={onSelectionChange}
         nodeTypes={nodeTypes}
         fitView
         fitViewOptions={{ padding: 0.2 }}
@@ -694,6 +820,8 @@ const BranchEditorCanvas = ({
         maxZoom={2}
         panOnScroll
         panOnScrollMode={PanOnScrollMode.Free}
+        selectionOnDrag={interactionMode === 'rangeSelect'}
+        panOnDrag={interactionMode !== 'rangeSelect'}
         zoomActivationKeyCode="Shift"
         proOptions={{ hideAttribution: true }}
       >
@@ -701,6 +829,7 @@ const BranchEditorCanvas = ({
         <UndoRedoControls />
         {isSearchOpen && <BranchSearchBar entries={entries} />}
         <ConversationEditMenu entries={entries} />
+        <InteractionModeToggle mode={interactionMode} setMode={setInteractionMode} />
         <Controls className='!bg-gray-200 dark:!bg-gray-700 !rounded !shadow-md [&>button]:!bg-transparent [&>button]:!fill-gray-700 [&>button]:dark:!fill-gray-200 [&>button]:!border-gray-300 [&>button]:dark:!border-gray-600' />
         <MiniMap
           nodeColor={(node) => {
@@ -732,6 +861,7 @@ const BranchEditorCanvas = ({
           onDiff={handleDiff}
           onNodeDiff={handleNodeDiff}
           onNavigateToChat={navigateToChat}
+          selectedNodeIds={selectedNodeIds}
         />
       )}
 

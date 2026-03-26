@@ -19,7 +19,9 @@ const EditViewButtons = memo(
     handleRemoveImage,
     handleGenerate,
     handleGenerateNextOnly,
+    handleBranchGenerate,
     handleSave,
+    handleBranchOnly,
     handleCancel,
     handleUploadButtonClick,
     setIsModalOpen,
@@ -41,7 +43,9 @@ const EditViewButtons = memo(
     handleRemoveImage: (index: number) => void;
     handleGenerate: () => void;
     handleGenerateNextOnly: () => void;
+    handleBranchGenerate: () => void;
     handleSave: () => void;
+    handleBranchOnly: () => void;
     handleCancel: () => void;
     handleUploadButtonClick: () => void;
     setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
@@ -188,6 +192,7 @@ const EditViewButtons = memo(
           <div className='flex-1' />
 
           <div className='flex items-center gap-1 whitespace-nowrap'>
+            {/* Sticky: simple generate button */}
             {sticky && (
               <button
                 className={`btn btn-small btn-primary ${
@@ -203,11 +208,56 @@ const EditViewButtons = memo(
               </button>
             )}
 
+            {/* Non-sticky user: Generate = branch-generate, Regenerate = overwrite */}
             {!sticky && isUser && (
               isNotLast ? (
-                <div className='relative flex items-stretch' ref={generateMenuRef}>
+                <>
+                  {/* Main: branch and generate */}
+                  <div className='relative flex items-stretch' ref={generateMenuRef}>
+                    <button
+                      className={`btn btn-small btn-primary rounded-r-none border-r-0 ${
+                        isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
+                      }`}
+                      onClick={() => {
+                        !isCurrentChatGenerating && !noModel && handleBranchGenerate();
+                      }}
+                      disabled={isCurrentChatGenerating || noModel}
+                      title={t('generateBranchTooltip') as string}
+                    >
+                      {t('generate')}
+                    </button>
+                    <button
+                      className={`btn btn-small btn-primary rounded-l-none border-l border-white/20 !w-8 justify-center px-0 ${
+                        isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
+                      }`}
+                      onClick={() => {
+                        if (isCurrentChatGenerating || noModel) return;
+                        setGenerateMenuOpen(!generateMenuOpen);
+                      }}
+                      disabled={isCurrentChatGenerating || noModel}
+                      aria-label={t('generateBelow') as string}
+                    >
+                      <DownChevronArrow />
+                    </button>
+                    <div
+                      className={`${
+                        generateMenuOpen ? '' : 'hidden'
+                      } absolute right-0 bottom-full mb-1 z-10 w-max overflow-hidden rounded-lg border border-black/10 bg-white/95 p-1 shadow-lg backdrop-blur dark:border-white/10 dark:bg-gray-800/95`}
+                    >
+                      <button
+                        className='block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700'
+                        onClick={() => {
+                          setGenerateMenuOpen(false);
+                          !isCurrentChatGenerating && !noModel && setIsModalOpen(true);
+                        }}
+                      >
+                        {t('regenerateBelow')}
+                      </button>
+                    </div>
+                  </div>
+                  {/* Regenerate: overwrite next only */}
                   <button
-                    className={`btn btn-small btn-primary rounded-r-none border-r-0 ${
+                    className={`btn btn-small btn-neutral ${
                       isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
                     }`}
                     onClick={() => {
@@ -216,67 +266,70 @@ const EditViewButtons = memo(
                     disabled={isCurrentChatGenerating || noModel}
                     title={t('regenerateNextTooltip') as string}
                   >
-                    {t('generate')}
+                    {t('regenerate')}
                   </button>
+                </>
+              ) : (
+                <>
+                  {/* Last message: Generate = branch-generate */}
                   <button
-                    className={`btn btn-small btn-primary rounded-l-none border-l border-white/20 !w-8 justify-center px-0 ${
+                    className={`btn btn-small btn-primary ${
                       isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
                     }`}
                     onClick={() => {
-                      if (isCurrentChatGenerating || noModel) return;
-                      setGenerateMenuOpen(!generateMenuOpen);
+                      !isCurrentChatGenerating && !noModel && handleBranchGenerate();
                     }}
                     disabled={isCurrentChatGenerating || noModel}
-                    aria-label={t('regenerateBelow') as string}
-                    title={t('regenerateBelowTooltip') as string}
+                    title={t('generateBranchTooltip') as string}
                   >
-                    <DownChevronArrow />
+                    {t('generate')}
                   </button>
-                  <div
-                    className={`${
-                      generateMenuOpen ? '' : 'hidden'
-                    } absolute right-0 bottom-full mb-1 z-10 w-max overflow-hidden rounded-lg border border-black/10 bg-white/95 p-1 shadow-lg backdrop-blur dark:border-white/10 dark:bg-gray-800/95`}
+                  {/* Regenerate: overwrite */}
+                  <button
+                    className={`btn btn-small btn-neutral ${
+                      isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
+                    }`}
+                    onClick={() => {
+                      !isCurrentChatGenerating && !noModel && handleGenerate();
+                    }}
+                    disabled={isCurrentChatGenerating || noModel}
+                    title={t('regenerateTooltip') as string}
                   >
-                    <button
-                      className='block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700'
-                      onClick={() => {
-                        setGenerateMenuOpen(false);
-                        !isCurrentChatGenerating && !noModel && setIsModalOpen(true);
-                      }}
-                    >
-                      {t('regenerateBelow')}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  className={`btn btn-small btn-primary ${
-                    isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
-                  }`}
-                  onClick={() => {
-                    !isCurrentChatGenerating && !noModel && handleGenerate();
-                  }}
-                  disabled={isCurrentChatGenerating || noModel}
-                  title={t('generateTooltip') as string}
-                >
-                  {t('generate')}
-                </button>
+                    {t('regenerate')}
+                  </button>
+                </>
               )
             )}
 
-            <button
-              className={`btn btn-small ${
-                sticky
-                  ? `btn-neutral ${
-                      isCurrentChatGenerating ? 'cursor-not-allowed opacity-40' : ''
-                    }`
-                  : 'btn-neutral'
-              }`}
-              onClick={handleSave}
-              aria-label={t('save') as string}
-            >
-              {t('save')}
-            </button>
+            {/* Save buttons: sticky = single Save, non-sticky = SaveAsBranch + OverwriteSave */}
+            {sticky ? (
+              <button
+                className={`btn btn-small btn-neutral ${
+                  isCurrentChatGenerating ? 'cursor-not-allowed opacity-40' : ''
+                }`}
+                onClick={handleSave}
+                aria-label={t('save') as string}
+              >
+                {t('save')}
+              </button>
+            ) : (
+              <>
+                <button
+                  className='btn btn-small btn-neutral'
+                  onClick={handleBranchOnly}
+                  aria-label={t('saveAsBranch') as string}
+                >
+                  {t('saveAsBranch')}
+                </button>
+                <button
+                  className='btn btn-small btn-neutral'
+                  onClick={handleSave}
+                  aria-label={t('overwriteSave') as string}
+                >
+                  {t('overwriteSave')}
+                </button>
+              </>
+            )}
 
             {sticky || (
               <button

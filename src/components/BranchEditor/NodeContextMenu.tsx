@@ -12,6 +12,7 @@ interface NodeContextMenuProps {
   onDiff: (pathA: string[]) => void;
   onNodeDiff: (nodeIdA: string, nodeIdB: string) => void;
   onNavigateToChat: (chatIndex: number, nodeId: string) => void;
+  selectedNodeIds?: string[];
 }
 
 const NodeContextMenu = ({
@@ -23,6 +24,7 @@ const NodeContextMenu = ({
   onDiff,
   onNodeDiff,
   onNavigateToChat,
+  selectedNodeIds = [],
 }: NodeContextMenuProps) => {
   const { t } = useTranslation();
   const deleteBranch = useStore((state) => state.deleteBranch);
@@ -53,11 +55,39 @@ const NodeContextMenu = ({
     onClose();
   };
 
+  const hasSelection = selectedNodeIds.length > 1;
+
   const handleCopyFrom = () => {
     if (!tree) return;
     const path = buildPathToLeaf(tree, nodeId);
     const leafId = path[path.length - 1];
     copyBranchSequence(chatIndex, nodeId, leafId);
+    onClose();
+  };
+
+  const handleCutFrom = () => {
+    if (!tree) return;
+    const path = buildPathToLeaf(tree, nodeId);
+    const leafId = path[path.length - 1];
+    copyBranchSequence(chatIndex, nodeId, leafId);
+    deleteBranch(chatIndex, nodeId);
+    onClose();
+  };
+
+  const handleCopySelected = () => {
+    if (!tree || selectedNodeIds.length < 2) return;
+    const firstId = selectedNodeIds[0];
+    const lastId = selectedNodeIds[selectedNodeIds.length - 1];
+    copyBranchSequence(chatIndex, firstId, lastId);
+    onClose();
+  };
+
+  const handleCutSelected = () => {
+    if (!tree || selectedNodeIds.length < 2) return;
+    const firstId = selectedNodeIds[0];
+    const lastId = selectedNodeIds[selectedNodeIds.length - 1];
+    copyBranchSequence(chatIndex, firstId, lastId);
+    deleteBranch(chatIndex, firstId);
     onClose();
   };
 
@@ -164,11 +194,34 @@ const NodeContextMenu = ({
           {node?.pinned ? t('unpin') : t('pin')}
         </button>
         <hr className='my-1 border-gray-200 dark:border-gray-700' />
+        {hasSelection && (
+          <>
+            <button
+              className='w-full px-4 py-2 text-left text-sm text-inherit hover:bg-gray-100 dark:hover:bg-gray-700'
+              onClick={handleCopySelected}
+            >
+              {t('copySelectedNodes')}
+            </button>
+            <button
+              className='w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20'
+              onClick={handleCutSelected}
+            >
+              {t('cutSelectedNodes')}
+            </button>
+            <hr className='my-1 border-gray-200 dark:border-gray-700' />
+          </>
+        )}
         <button
           className='w-full px-4 py-2 text-left text-sm text-inherit hover:bg-gray-100 dark:hover:bg-gray-700'
           onClick={handleCopyFrom}
         >
           {t('copyMessages')}
+        </button>
+        <button
+          className='w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20'
+          onClick={handleCutFrom}
+        >
+          {t('cutMessages')}
         </button>
         {branchClipboard && (
           <button
