@@ -487,6 +487,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
     });
   }, [currentChatIndex]); // intentionally only on chat switch (mount)
 
+
   useEffect(() => {
     perfStart('chat-render');
   }, [currentChatIndex]);

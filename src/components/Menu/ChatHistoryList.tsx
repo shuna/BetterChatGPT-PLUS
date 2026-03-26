@@ -5,6 +5,7 @@ import { shallow } from 'zustand/shallow';
 import ChatFolder from './ChatFolder';
 import ChatHistory from './ChatHistory';
 import ChatSearch from './ChatSearch';
+import GrepResults from './GrepResults';
 
 import {
   ChatHistoryInterface,
@@ -32,6 +33,7 @@ const ChatHistoryList = () => {
   const [noChatFolders, setNoChatFolders] = useState<ChatHistoryInterface[]>(
     []
   );
+  const isGrepMode = useStore((state) => state.isGrepMode);
   const [filter, setFilter] = useState<string>('');
   const [selectedChats, setSelectedChats] = useState<number[]>([]);
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(
@@ -251,31 +253,35 @@ const ChatHistoryList = () => {
       onDragEnd={handleDragEnd}
     >
       <ChatSearch filter={filter} setFilter={setFilter} />
-      <div className='flex flex-col gap-2 text-sm text-gray-700 dark:text-gray-100'>
-        {Object.keys(chatFolders).map((folderId) => (
-          <ChatFolder
-            folderChats={chatFolders[folderId]}
-            folderId={folderId}
-            key={folderId}
-            selectedChats={selectedChats}
-            setSelectedChats={setSelectedChats}
-            lastSelectedIndex={lastSelectedIndex}
-            setLastSelectedIndex={setLastSelectedIndex}
-          />
-        ))}
-        {noChatFolders.map(({ title, index, id, chatSize }) => (
-          <ChatHistory
-            title={title}
-            chatSize={chatSize}
-            key={`${title}-${id}-${index}`}
-            chatIndex={index}
-            selectedChats={selectedChats}
-            setSelectedChats={setSelectedChats}
-            lastSelectedIndex={lastSelectedIndex}
-            setLastSelectedIndex={setLastSelectedIndex}
-          />
-        ))}
-      </div>
+      {isGrepMode ? (
+        <GrepResults />
+      ) : (
+        <div className='flex flex-col gap-2 text-sm text-gray-700 dark:text-gray-100'>
+          {Object.keys(chatFolders).map((folderId) => (
+            <ChatFolder
+              folderChats={chatFolders[folderId]}
+              folderId={folderId}
+              key={folderId}
+              selectedChats={selectedChats}
+              setSelectedChats={setSelectedChats}
+              lastSelectedIndex={lastSelectedIndex}
+              setLastSelectedIndex={setLastSelectedIndex}
+            />
+          ))}
+          {noChatFolders.map(({ title, index, id, chatSize }) => (
+            <ChatHistory
+              title={title}
+              chatSize={chatSize}
+              key={`${title}-${id}-${index}`}
+              chatIndex={index}
+              selectedChats={selectedChats}
+              setSelectedChats={setSelectedChats}
+              lastSelectedIndex={lastSelectedIndex}
+              setLastSelectedIndex={setLastSelectedIndex}
+            />
+          ))}
+        </div>
+      )}
       <div className='w-full h-10' />
     </div>
   );
