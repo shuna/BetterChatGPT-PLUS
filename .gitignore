@@ -33,3 +33,10 @@ release/
 .claude/hooks/*
 !.claude/hooks/gh-setup.sh
 worker/.wrangler/
+
+# iOS
+ios2/**/xcuserdata/
+ios2/**/build/
+ios2/**/.swiftpm/
+ios2/**/*.xcuserstate
+*.ipa
