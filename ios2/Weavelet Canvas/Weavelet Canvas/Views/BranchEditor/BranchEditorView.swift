@@ -71,7 +71,10 @@ struct BranchEditorView: View {
                 viewModel?.rebuildFromDomain()
             }
         }
-        .onChange(of: chatViewModel.messages.count) {
+        .onChange(of: chatViewModel.messages) {
+            viewModel?.rebuildFromDomain()
+        }
+        .onChange(of: chatViewModel.currentChatID) {
             viewModel?.rebuildFromDomain()
         }
         .onGeometryChange(for: CGSize.self) { proxy in

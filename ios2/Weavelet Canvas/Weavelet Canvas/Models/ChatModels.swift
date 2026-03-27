@@ -61,6 +61,9 @@ class ChatViewModel {
     private let persistence = PersistenceService()
     private let undoManager = BranchUndoManager()
 
+    /// Snapshot of contentStore at the last undo push point, for correct diff computation.
+    private var lastSnapshotContentStore: ContentStoreData = [:]
+
     // MARK: - UI State
 
     var selectedModelID: String = "claude-3.5-sonnet"
@@ -140,6 +143,7 @@ class ChatViewModel {
                     self.contentStore = state.contentStore
                     self.folders = state.folders
                     self.currentChatID = state.currentChatID
+                    self.lastSnapshotContentStore = state.contentStore
                 }
             }
 
@@ -193,19 +197,27 @@ class ChatViewModel {
 
     func duplicateChat(_ chatId: String) {
         guard let idx = chats.firstIndex(where: { $0.id == chatId }) else { return }
-        var copy = chats[idx]
+        let source = chats[idx]
         let newId = UUID().uuidString
-        copy = Chat(id: newId, title: "Copy of \(copy.title)")
-        copy.folder = chats[idx].folder
-        copy.config = chats[idx].config
-        // Duplicate branch tree with retained content
-        if let tree = chats[idx].branchTree {
-            copy.branchTree = tree
+        var copy = Chat(
+            id: newId,
+            title: "Copy of \(source.title)",
+            folder: source.folder,
+            messages: source.messages,
+            config: source.config,
+            titleSet: source.titleSet,
+            imageDetail: source.imageDetail,
+            branchTree: source.branchTree,
+            collapsedNodes: source.collapsedNodes,
+            omittedNodes: source.omittedNodes,
+            protectedNodes: source.protectedNodes
+        )
+        // Retain content store entries for duplicated tree
+        if let tree = source.branchTree {
             for (_, node) in tree.nodes {
                 ContentStore.retainContent(&contentStore, hash: node.contentHash)
             }
         }
-        copy.messages = chats[idx].messages
         chats.insert(copy, at: 0)
         currentChatID = newId
         scheduleSave()
@@ -451,7 +463,7 @@ class ChatViewModel {
             currentChatID: currentChatID!,
             currentChat: chats[chatIndex],
             currentContentStore: contentStore,
-            previousContentStore: contentStore
+            previousContentStore: lastSnapshotContentStore
         ) else { return }
 
         let (updatedChats, updatedStore) = BranchUndoManager.applySnapshot(
@@ -459,6 +471,7 @@ class ChatViewModel {
         )
         chats = updatedChats
         contentStore = updatedStore
+        lastSnapshotContentStore = contentStore
         scheduleSave()
     }
 
@@ -468,7 +481,7 @@ class ChatViewModel {
             currentChatID: currentChatID!,
             currentChat: chats[chatIndex],
             currentContentStore: contentStore,
-            previousContentStore: contentStore
+            previousContentStore: lastSnapshotContentStore
         ) else { return }
 
         let (updatedChats, updatedStore) = BranchUndoManager.applySnapshot(
@@ -476,6 +489,7 @@ class ChatViewModel {
         )
         chats = updatedChats
         contentStore = updatedStore
+        lastSnapshotContentStore = contentStore
         scheduleSave()
     }
 
@@ -540,8 +554,9 @@ class ChatViewModel {
             currentChatID: currentChatID!,
             chat: chats[chatIndex],
             contentStore: contentStore,
-            previousContentStore: contentStore
+            previousContentStore: lastSnapshotContentStore
         )
+        lastSnapshotContentStore = contentStore
     }
 
     private func stableUUID(for nodeId: String) -> UUID {

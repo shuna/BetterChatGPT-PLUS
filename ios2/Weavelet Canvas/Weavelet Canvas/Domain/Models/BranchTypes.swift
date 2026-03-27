@@ -50,19 +50,19 @@ struct BranchTree: Codable, Hashable {
 // MARK: - BranchTree Helpers
 
 extension BranchTree {
-    /// Get children of a given node, sorted by createdAt.
+    /// Get children of a given node, sorted by createdAt descending (most recent first, matching Web).
     func childrenOf(_ nodeId: String) -> [BranchNode] {
         nodes.values
             .filter { $0.parentId == nodeId }
-            .sorted { $0.createdAt < $1.createdAt }
+            .sorted { $0.createdAt > $1.createdAt }
     }
 
-    /// Get sibling nodes (same parent), sorted by createdAt.
+    /// Get sibling nodes (same parent), sorted by createdAt descending (most recent first, matching Web).
     func siblingsOf(_ nodeId: String) -> [BranchNode] {
         guard let node = nodes[nodeId] else { return [] }
         return nodes.values
             .filter { $0.parentId == node.parentId && $0.id != nodeId }
-            .sorted { $0.createdAt < $1.createdAt }
+            .sorted { $0.createdAt > $1.createdAt }
     }
 
     /// Build the path from root to a given node (inclusive).
