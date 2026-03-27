@@ -484,6 +484,17 @@ struct DefaultInspectorView<Content: View>: View {
             .navigationTitle(navigationTitles.inspector)
             .toolbar {
                 if !viewState.toolbarsHidden {
+                    // On compact (iPhone), always show X close button in leading
+                    if viewState.isCompactWidth {
+                        ToolbarItem(placement: .topBarLeading) {
+                            Button {
+                                actions.setInspectorPresented(false)
+                            } label: {
+                                Image(systemName: "xmark.circle")
+                            }
+                            .accessibilityLabel(viewState.hideInspectorAccessibilityLabel)
+                        }
+                    }
                     if let centerToolbar {
                         ToolbarItemGroup(placement: .principal) {
                             centerToolbar
@@ -494,8 +505,8 @@ struct DefaultInspectorView<Content: View>: View {
                             trailingToolbar
                         }
                     }
-                    if viewState.showsDefaultInspectorButton {
-                        ToolbarItem(placement: viewState.isCompactWidth ? .topBarLeading : .topBarTrailing) {
+                    if viewState.showsDefaultInspectorButton && !viewState.isCompactWidth {
+                        ToolbarItem(placement: .topBarTrailing) {
                             Button {
                                 actions.toggleInspector()
                             } label: {
@@ -597,7 +608,8 @@ private struct DetailPaneContainer<Content: View>: View {
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     if !viewState.toolbarsHidden {
-                        if !viewState.sidebarPresented {
+                        // On compact (iPhone), always show sidebar button (sheet doesn't obscure toolbar)
+                        if viewState.isCompactWidth || !viewState.sidebarPresented {
                             ToolbarItem(placement: .topBarLeading) {
                                 Button {
                                     actions.showSidebar()

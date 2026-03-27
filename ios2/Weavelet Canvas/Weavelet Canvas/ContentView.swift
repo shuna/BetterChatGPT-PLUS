@@ -186,6 +186,50 @@ private struct CapabilityIcons: View {
 
 private struct ModelSelectorButton: View {
     @Bindable var viewModel: ChatViewModel
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    var body: some View {
+        if horizontalSizeClass == .compact {
+            // iPhone: use Menu for compact popup
+            Menu {
+                ForEach(viewModel.availableModels) { model in
+                    Button {
+                        viewModel.selectedModelID = model.id
+                    } label: {
+                        HStack {
+                            Text(model.name)
+                            if viewModel.selectedModelID == model.id {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Text(viewModel.selectedModel?.name ?? "Model")
+                        .font(.subheadline.weight(.medium))
+                    if let model = viewModel.selectedModel {
+                        CapabilityIcons(
+                            reasoning: model.supportsReasoning,
+                            vision: model.supportsVision,
+                            audio: model.supportsAudio,
+                            size: 10
+                        )
+                    }
+                    Image(systemName: "chevron.down")
+                        .font(.caption2.weight(.semibold))
+                }
+                .foregroundStyle(.primary)
+            }
+        } else {
+            // iPad: use popover for richer UI
+            PopoverModelSelector(viewModel: viewModel)
+        }
+    }
+}
+
+private struct PopoverModelSelector: View {
+    @Bindable var viewModel: ChatViewModel
     @State private var showPicker = false
 
     var body: some View {
@@ -352,6 +396,7 @@ private struct DetailToolbarTrailing: View {
     @Bindable var threeColumnState: ThreeColumnState
     var settings: SettingsViewModel?
     @State private var showModelSettings = false
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         HStack(spacing: 8) {
@@ -363,9 +408,6 @@ private struct DetailToolbarTrailing: View {
                     Image(systemName: "slider.horizontal.3")
                 }
                 .accessibilityLabel("Model Settings")
-                .sheet(isPresented: $showModelSettings) {
-                    ModelSettingsSheet(viewModel: viewModel, settings: settings)
-                }
             }
 
             // Search (always)
@@ -376,8 +418,8 @@ private struct DetailToolbarTrailing: View {
             }
             .accessibilityLabel("Search")
 
-            // Inspector toggle
-            if !threeColumnState.inspectorPresented {
+            // Inspector toggle — always show on compact (sheets don't obscure toolbar)
+            if horizontalSizeClass == .compact || !threeColumnState.inspectorPresented {
                 Button {
                     withAnimation(.spring(duration: 0.3, bounce: 0.0)) {
                         threeColumnState.inspectorPresented = true
@@ -388,6 +430,9 @@ private struct DetailToolbarTrailing: View {
                 }
                 .accessibilityLabel("Show \(viewModel.viewMode.opposite.label)")
             }
+        }
+        .sheet(isPresented: $showModelSettings) {
+            ModelSettingsSheet(viewModel: viewModel, settings: settings)
         }
     }
 }
@@ -400,6 +445,7 @@ private struct InspectorToolbarTrailing: View {
     @Bindable var viewModel: ChatViewModel
     @Bindable var threeColumnState: ThreeColumnState
     var settings: SettingsViewModel?
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     /// The view shown in the inspector is the opposite of viewMode
     private var inspectorShowsChat: Bool { viewModel.viewMode == .branchEditor }
@@ -416,9 +462,6 @@ private struct InspectorToolbarTrailing: View {
                     Image(systemName: "slider.horizontal.3")
                 }
                 .accessibilityLabel("Model Settings")
-                .sheet(isPresented: $showModelSettings) {
-                    ModelSettingsSheet(viewModel: viewModel, settings: settings)
-                }
             }
 
             // Search (always)
@@ -434,27 +477,44 @@ private struct InspectorToolbarTrailing: View {
             }
             .accessibilityLabel("Search")
 
-            // Hide/Swap menu
-            Menu {
-                Button {
-                    withAnimation(.spring(duration: 0.3, bounce: 0.0)) {
-                        threeColumnState.inspectorPresented = false
+            // Hide/Swap menu — on iPhone, hide "Hide Inspector" (X button handles it)
+            if horizontalSizeClass == .compact {
+                // Only show Swap if needed, no hide button (X button in leading handles close)
+                Menu {
+                    Button {
+                        viewModel.viewMode = viewModel.viewMode.opposite
+                    } label: {
+                        Label("Swap Panels", systemImage: "arrow.left.arrow.right")
                     }
                 } label: {
-                    Label("Hide \(viewModel.viewMode.opposite.label)", systemImage: "sidebar.trailing")
+                    Image(systemName: "ellipsis.circle")
+                        .font(.body)
                 }
+            } else {
+                Menu {
+                    Button {
+                        withAnimation(.spring(duration: 0.3, bounce: 0.0)) {
+                            threeColumnState.inspectorPresented = false
+                        }
+                    } label: {
+                        Label("Hide \(viewModel.viewMode.opposite.label)", systemImage: "sidebar.trailing")
+                    }
 
-                Divider()
+                    Divider()
 
-                Button {
-                    viewModel.viewMode = viewModel.viewMode.opposite
+                    Button {
+                        viewModel.viewMode = viewModel.viewMode.opposite
+                    } label: {
+                        Label("Swap Panels", systemImage: "arrow.left.arrow.right")
+                    }
                 } label: {
-                    Label("Swap Panels", systemImage: "arrow.left.arrow.right")
+                    Image(systemName: "sidebar.trailing")
+                        .font(.body)
                 }
-            } label: {
-                Image(systemName: "sidebar.trailing")
-                    .font(.body)
             }
+        }
+        .sheet(isPresented: $showModelSettings) {
+            ModelSettingsSheet(viewModel: viewModel, settings: settings)
         }
     }
 }
