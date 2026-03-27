@@ -58,9 +58,13 @@ class ChatViewModel {
     var folders: FolderCollection = [:]
     var currentChatID: String?
 
-    private let persistence = PersistenceService()
+    let persistence = PersistenceService()
     private let undoManager = BranchUndoManager()
     let apiService = APIService()
+    let streamRecovery = StreamRecoveryService()
+
+    /// Reference to app-wide settings (set from app entry point).
+    var settings: SettingsViewModel?
 
     // MARK: - UI State
 
@@ -171,13 +175,105 @@ class ChatViewModel {
                     self.currentChatID = self.chats.first?.id
                 }
             }
+
+            // Recover any interrupted streams
+            await self.recoverPendingStreams()
+        }
+    }
+
+    /// Recover partial assistant responses from previous interrupted streams.
+    private func recoverPendingStreams() async {
+        // Mark stale .streaming records as .interrupted (updatedAt > 30s ago)
+        await streamRecovery.markStaleAsInterrupted()
+
+        let pending = await streamRecovery.allPending()
+        guard !pending.isEmpty else { return }
+
+        var recoveredCount = 0
+
+        for record in pending {
+            // 1. Local buffer recovery (Ticket 25)
+            var bestText = record.bufferedText
+
+            // 2. Proxy KV recovery (Ticket 26)
+            var proxyResult: ProxyRecoveryResult?
+            if let proxyConfig = settings?.resolvedProxyConfig,
+               let proxySessionId = record.proxySessionId {
+                proxyResult = try? await ProxyClient.recover(
+                    config: proxyConfig,
+                    sessionId: proxySessionId,
+                    lastEventId: record.lastProxyEventId
+                )
+                if let result = proxyResult, !result.text.isEmpty {
+                    // /api/recover returns only chunks AFTER lastEventId (delta),
+                    // so append to the local buffer to reconstruct full text.
+                    let merged = record.bufferedText + result.text
+                    if merged.count > bestText.count {
+                        bestText = merged
+                    }
+                }
+            }
+
+            // 3. Apply best text if it exceeds current content
+            var didApply = false
+            await MainActor.run {
+                guard let chatIndex = chats.firstIndex(where: { $0.id == record.chatId }) else {
+                    return
+                }
+                guard let tree = chats[chatIndex].branchTree,
+                      let msgIndex = tree.activePath.firstIndex(of: record.nodeId) else {
+                    return
+                }
+
+                let node = tree.nodes[record.nodeId]!
+                let currentText = ContentStore.resolveContentText(contentStore, hash: node.contentHash)
+
+                if bestText.count > currentText.count {
+                    let content: [ContentItem] = [.text(bestText)]
+                    let message = Message(role: .assistant, content: content)
+                    let upsertResult = BranchService.upsertMessageAtIndex(
+                        chats: chats, chatIndex: chatIndex,
+                        messageIndex: msgIndex, message: message,
+                        contentStore: contentStore
+                    )
+                    chats = upsertResult.chats
+                    contentStore = upsertResult.contentStore
+                    didApply = true
+                    recoveredCount += 1
+                }
+            }
+
+            // 4. ACK proxy if appropriate (strict conditions)
+            if let proxyConfig = settings?.resolvedProxyConfig,
+               let proxySessionId = record.proxySessionId {
+                let shouldAck = didApply
+                    || (proxyResult?.terminalEvent == "done" && !didApply)
+                if shouldAck {
+                    try? await ProxyClient.sendAck(config: proxyConfig, sessionId: proxySessionId)
+                }
+            }
+
+            // 5. Always delete after processing
+            await streamRecovery.delete(id: record.id)
+        }
+
+        if recoveredCount > 0 {
+            await MainActor.run {
+                errorMessage = "Recovered \(recoveredCount) partial response\(recoveredCount > 1 ? "s" : "")"
+                scheduleSave()
+            }
         }
     }
 
     // MARK: - Chat Management
 
-    func createNewChat(title: String = "New Chat") {
-        let chat = Chat(title: title)
+    func createNewChat(title: String = "New Chat", config: ChatConfig? = nil, systemMessage: String? = nil) {
+        var messages: [Message] = []
+        if let sys = systemMessage, !sys.isEmpty {
+            messages.append(Message(role: .system, content: [.text(sys)]))
+        }
+        let imageDetail = settings?.defaultImageDetail ?? .auto
+        let chat = Chat(title: title, messages: messages, config: config ?? .default, imageDetail: imageDetail)
         chats.insert(chat, at: 0)
         currentChatID = chat.id
         pushNavigation(chat.id)
@@ -328,12 +424,16 @@ class ChatViewModel {
 
     /// Active generation task, cancellable via stopGenerating().
     private var generationTask: Task<Void, Never>?
+    /// The active proxy session ID for the current generation (used by stopGenerating).
+    private var activeProxySessionId: String?
 
     /// Request an assistant response for the current chat.
     /// Creates an empty assistant node and streams the API response into it.
+    /// Integrates with StreamRecoveryService for crash resilience.
     private func requestAssistantResponse() {
         guard let chatIndex = currentChatIndex else { return }
         let chat = chats[chatIndex]
+        let chatId = chat.id
         let config = chat.config
         let providerId = config.providerId ?? .openai
 
@@ -347,6 +447,9 @@ class ChatViewModel {
         chats = result.chats
         contentStore = result.contentStore
 
+        // ★ Persist immediately so the node survives crashes
+        scheduleSave()
+
         // Track the new node for streaming updates
         guard let tree = chats[chatIndex].branchTree,
               let assistantNodeId = tree.activePath.last else { return }
@@ -357,7 +460,20 @@ class ChatViewModel {
             contentStore: contentStore
         )
 
+        // Create stream recovery record
+        let requestId = UUID().uuidString
+        let proxyConfig = settings?.resolvedProxyConfig
+        let proxySessionId = proxyConfig != nil ? "\(chatId):\(requestId)" : nil
+        let record = StreamRecord(
+            id: requestId, chatId: chatId, nodeId: assistantNodeId,
+            bufferedText: "", status: .streaming,
+            createdAt: Date(), updatedAt: Date(),
+            proxySessionId: proxySessionId
+        )
+        Task { await streamRecovery.save(record) }
+
         isGenerating = true
+        activeProxySessionId = proxySessionId
 
         generationTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -367,16 +483,21 @@ class ChatViewModel {
 
             guard hasKey else {
                 self.isGenerating = false
+                self.activeProxySessionId = nil
                 self.errorMessage = "No API key configured for \(providerId.rawValue). Set your key in Settings → API Keys."
+                await self.streamRecovery.updateStatus(id: requestId, .failed)
                 return
             }
 
             do {
+                var chunkSeq: UInt64 = 0
                 let finalText = try await self.apiService.streamChatCompletion(
                     messages: apiMessages,
                     config: config,
                     providerId: providerId,
-                    onChunk: { [weak self] accumulated in
+                    proxyConfig: proxyConfig,
+                    proxySessionId: proxySessionId,
+                    onChunk: { [weak self] accumulated, proxyEventId in
                         guard let self, self.isGenerating else { return }
                         // Update the assistant node content with accumulated text (streaming)
                         guard let chatIndex = self.currentChatIndex,
@@ -390,6 +511,12 @@ class ChatViewModel {
                         )
                         self.chats = streamResult.chats
                         self.contentStore = streamResult.contentStore
+
+                        // Buffer to disk for crash recovery with monotonic sequence
+                        // to prevent out-of-order writes from truncating the buffer
+                        chunkSeq += 1
+                        let seq = chunkSeq
+                        Task { await self.streamRecovery.replaceBufferedText(id: requestId, text: accumulated, seq: seq, proxyEventId: proxyEventId) }
                     }
                 )
 
@@ -410,15 +537,94 @@ class ChatViewModel {
                 self.chats = upsertResult.chats
                 self.contentStore = upsertResult.contentStore
                 self.isGenerating = false
+                self.activeProxySessionId = nil
+
+                // Mark stream as completed and clean up
+                await self.streamRecovery.updateStatus(id: requestId, .completed)
+                await self.streamRecovery.deleteCompleted()
+
+                // ACK proxy to delete KV cache (stream fully received)
+                if let proxyConfig, let proxySessionId {
+                    try? await ProxyClient.sendAck(config: proxyConfig, sessionId: proxySessionId)
+                }
+
+                // Token tracking
+                if let settings = self.settings, settings.countTotalTokens {
+                    let totalChars = apiMessages.reduce(0) { $0 + (($1["content"] as? String)?.count ?? 0) } + finalText.count
+                    settings.totalTokensUsed += max(1, totalChars / 4)
+                }
+
+                // Auto-title generation
+                self.autoGenerateTitleIfNeeded(chatIndex: chatIndex)
+
                 self.scheduleSave()
             } catch is CancellationError {
                 // User cancelled — keep whatever was accumulated
                 self.isGenerating = false
+                self.activeProxySessionId = nil
+                await self.streamRecovery.updateStatus(id: requestId, .interrupted)
                 self.scheduleSave()
             } catch {
                 self.isGenerating = false
+                self.activeProxySessionId = nil
                 self.errorMessage = error.localizedDescription
+                await self.streamRecovery.updateStatus(id: requestId, .failed)
                 self.scheduleSave()
+            }
+        }
+    }
+
+    /// Auto-generate a chat title from the first user message if autoTitle is enabled.
+    /// When `titleModel` is set, requests a short summary via the API; otherwise falls back to a local prefix.
+    private func autoGenerateTitleIfNeeded(chatIndex: Int) {
+        guard let settings, settings.autoTitle else { return }
+        guard !chats[chatIndex].titleSet else { return }
+
+        let messages = self.messages
+        guard let firstUser = messages.first(where: { $0.role == .user }) else { return }
+        let userText = firstUser.content
+        guard !userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        let titleModel = settings.titleModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        if titleModel.isEmpty {
+            // Local fallback: first 50 chars of the user message
+            let title = String(userText.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines)
+            chats[chatIndex].title = title.count < userText.count ? title + "…" : title
+            chats[chatIndex].titleSet = true
+        } else {
+            // API-based title generation using the configured model
+            let chatId = chats[chatIndex].id
+            let providerId = chats[chatIndex].config.providerId ?? .openai
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let titleConfig = ChatConfig(model: titleModel, maxTokens: 30, temperature: 0.7, presencePenalty: 0, topP: 1, frequencyPenalty: 0)
+                let prompt: [[String: Any]] = [
+                    ["role": "system", "content": "Generate a very short chat title (under 8 words) for this conversation. Reply with only the title, no quotes."],
+                    ["role": "user", "content": String(userText.prefix(500))]
+                ]
+                do {
+                    let result = try await self.apiService.streamChatCompletion(
+                        messages: prompt, config: titleConfig,
+                        providerId: providerId,
+                        proxyConfig: self.settings?.resolvedProxyConfig,
+                        proxySessionId: self.settings?.resolvedProxyConfig != nil ? "title:\(chatId)" : nil,
+                        onChunk: { _, _ in }
+                    )
+                    let generated = result.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !generated.isEmpty,
+                          let idx = self.chats.firstIndex(where: { $0.id == chatId }),
+                          !self.chats[idx].titleSet else { return }
+                    self.chats[idx].title = String(generated.prefix(60))
+                    self.chats[idx].titleSet = true
+                    self.scheduleSave()
+                } catch {
+                    // Fallback to local prefix on API failure
+                    guard let idx = self.chats.firstIndex(where: { $0.id == chatId }),
+                          !self.chats[idx].titleSet else { return }
+                    let title = String(userText.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines)
+                    self.chats[idx].title = title.count < userText.count ? title + "…" : title
+                    self.chats[idx].titleSet = true
+                }
             }
         }
     }
@@ -588,9 +794,15 @@ class ChatViewModel {
     }
 
     func stopGenerating() {
+        // Fire-and-forget proxy cancel (does not block local cancel)
+        if let proxyConfig = settings?.resolvedProxyConfig,
+           let sessionId = activeProxySessionId {
+            ProxyClient.sendCancel(config: proxyConfig, sessionId: sessionId)
+        }
         generationTask?.cancel()
         generationTask = nil
         isGenerating = false
+        activeProxySessionId = nil
     }
 
     // MARK: - Search
@@ -737,6 +949,92 @@ class ChatViewModel {
         }
     }
 
+    /// Export a single chat in the specified format with options.
+    func exportChatToShare(
+        _ chatId: String,
+        format: ExportImportService.ExportFormat,
+        visibleBranchOnly: Bool = false,
+        gzipCompress: Bool = false
+    ) {
+        guard let chat = chats.first(where: { $0.id == chatId }) else {
+            errorMessage = "Chat not found"
+            return
+        }
+        do {
+            let data: Data
+            switch format {
+            case .json:
+                data = try exportChat(chatId, visibleBranchOnly: visibleBranchOnly)
+            case .openAI:
+                data = ExportImportService.exportAsOpenAI(chat: chat, contentStore: contentStore, visibleBranchOnly: visibleBranchOnly)
+            case .openRouter:
+                data = ExportImportService.exportAsOpenRouter(chat: chat, contentStore: contentStore)
+            case .markdown:
+                data = ExportImportService.exportAsMarkdown(
+                    chat: chat, contentStore: contentStore, visibleBranchOnly: visibleBranchOnly
+                )
+            case .image:
+                // Image export uses a different path — generate markdown-based text image
+                let md = ExportImportService.exportAsMarkdown(
+                    chat: chat, contentStore: contentStore, visibleBranchOnly: visibleBranchOnly
+                )
+                if let pngData = renderTextAsPNG(String(data: md, encoding: .utf8) ?? "") {
+                    data = pngData
+                } else {
+                    errorMessage = "Image rendering failed"
+                    return
+                }
+            }
+
+            let finalData: Data
+            let ext: String
+            if gzipCompress, let compressed = ExportImportService.gzipCompress(data) {
+                finalData = compressed
+                ext = "\(format.fileExtension).gz"
+            } else {
+                finalData = data
+                ext = format.fileExtension
+            }
+
+            let safeName = chat.title.replacingOccurrences(of: "/", with: "-")
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(safeName).\(ext)")
+            try finalData.write(to: url)
+            exportedFileURL = url
+        } catch {
+            errorMessage = "Export failed: \(error.localizedDescription)"
+        }
+    }
+
+    /// Render plain text as a PNG image using UIKit.
+    private func renderTextAsPNG(_ text: String) -> Data? {
+        let maxWidth: CGFloat = 600
+        let padding: CGFloat = 24
+        let font = UIFont.systemFont(ofSize: 14)
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: UIColor.label
+        ]
+        let attrStr = NSAttributedString(string: text, attributes: attrs)
+        let drawRect = CGSize(width: maxWidth - padding * 2, height: .greatestFiniteMagnitude)
+        let boundingRect = attrStr.boundingRect(
+            with: drawRect, options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil
+        )
+        let imageSize = CGSize(
+            width: maxWidth,
+            height: ceil(boundingRect.height) + padding * 2
+        )
+        let renderer = UIGraphicsImageRenderer(size: imageSize)
+        let image = renderer.image { ctx in
+            UIColor.systemBackground.setFill()
+            ctx.fill(CGRect(origin: .zero, size: imageSize))
+            attrStr.draw(in: CGRect(
+                x: padding, y: padding,
+                width: drawRect.width, height: boundingRect.height
+            ))
+        }
+        return image.pngData()
+    }
+
     // MARK: - Persistence
 
     func scheduleSave() {
@@ -758,6 +1056,18 @@ class ChatViewModel {
             currentChatID: currentChatID
         )
         Task { await persistence.flush(state) }
+    }
+
+    /// Apply state received from cloud sync (remote was newer).
+    func applyRemoteState(_ state: AppState) {
+        chats = state.chats
+        contentStore = state.contentStore
+        folders = state.folders
+        if let chatID = state.currentChatID, chats.contains(where: { $0.id == chatID }) {
+            currentChatID = chatID
+        } else {
+            currentChatID = nil
+        }
     }
 
     // MARK: - Private Helpers

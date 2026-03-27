@@ -8,6 +8,19 @@
 import SwiftUI
 import Observation
 
+// MARK: - Split Panel Environment
+
+private struct SplitPanelSwappedKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var splitPanelSwapped: Bool {
+        get { self[SplitPanelSwappedKey.self] }
+        set { self[SplitPanelSwappedKey.self] = newValue }
+    }
+}
+
 
 struct ThreeColumnButtonIcons {
     var showSidebarCompact: String = "list.bullet"
@@ -55,6 +68,8 @@ final class ThreeColumnState {
     /// Whether the user has explicitly dragged the divider
     var inspectorWidthUserSet: Bool = UserDefaults.standard.bool(forKey: "inspectorWidthUserSet")
     var showsDefaultInspectorButton: Bool = true
+    /// Default inspector width ratio (0–1 of total width), set from settings.
+    var defaultRatio: Double = 0.5
     static let inspectorMinWidth: CGFloat = 240
     static let inspectorMaxWidth: CGFloat = 600
 
@@ -171,6 +186,7 @@ struct ThreeColumnActions {
 struct ThreePaneView<Sidebar: View, Detail: View, Inspector: View>: View {
     @State private var state: ThreeColumnState
     @Environment(\.isCompactWidth) private var isCompact
+    @Environment(\.splitPanelSwapped) private var splitPanelSwapped
     private let icons: ThreeColumnButtonIcons
     private let labels: ThreeColumnButtonLabels
     private let appliesDefaultChrome: Bool
@@ -270,6 +286,17 @@ struct ThreePaneView<Sidebar: View, Detail: View, Inspector: View>: View {
                     }
             } else {
                 HStack(spacing: 0) {
+                    if splitPanelSwapped && state.inspectorPresented {
+                        inspector(viewState, actions)
+                            .frame(width: state.inspectorWidth)
+                            .transition(.move(edge: .leading))
+
+                        InspectorDragHandle(
+                            inspectorWidth: $state.inspectorWidth,
+                            onDragEnd: { state.saveInspectorWidth() }
+                        )
+                    }
+
                     NavigationSplitView(columnVisibility: $state.splitViewVisibility) {
                         sidebarView(viewState: viewState, actions: actions)
                     } detail: {
@@ -277,7 +304,7 @@ struct ThreePaneView<Sidebar: View, Detail: View, Inspector: View>: View {
                     }
                     .layoutPriority(1)
 
-                    if state.inspectorPresented {
+                    if !splitPanelSwapped && state.inspectorPresented {
                         InspectorDragHandle(
                             inspectorWidth: $state.inspectorWidth,
                             onDragEnd: { state.saveInspectorWidth() }
@@ -292,10 +319,10 @@ struct ThreePaneView<Sidebar: View, Detail: View, Inspector: View>: View {
                 .onGeometryChange(for: CGFloat.self) { proxy in
                     proxy.size.width
                 } action: { totalWidth in
-                    // Set initial inspector width to half the screen if not user-set
+                    // Set initial inspector width from settings ratio if not user-set
                     if !state.inspectorWidthUserSet && totalWidth > 0 {
-                        let half = totalWidth / 2
-                        let clamped = min(max(half, ThreeColumnState.inspectorMinWidth), ThreeColumnState.inspectorMaxWidth)
+                        let target = totalWidth * state.defaultRatio
+                        let clamped = min(max(target, ThreeColumnState.inspectorMinWidth), ThreeColumnState.inspectorMaxWidth)
                         state.inspectorWidth = clamped
                     }
                 }

@@ -13,6 +13,9 @@ struct MessageBubble: View {
     @Binding var editText: String
     var searchQuery: String = ""
     var isCurrentSearchMatch: Bool = false
+    var markdownMode: Bool = false
+    var inlineLatex: Bool = false
+    var streamingMarkdownPolicy: StreamingMarkdownPolicy = .auto
 
     @State private var showDeleteConfirmation = false
 
@@ -155,23 +158,51 @@ struct MessageBubble: View {
 
     // MARK: - Unified Content (always TextEditor, disabled when not editing)
 
+    /// Whether to render markdown for this message right now.
+    private var shouldRenderMarkdown: Bool {
+        guard markdownMode else { return false }
+        if isEditing { return false }
+        if message.isGenerating {
+            switch streamingMarkdownPolicy {
+            case .always: return true
+            case .never: return false
+            case .auto: return false // render only after completion
+            }
+        }
+        return true
+    }
+
     @ViewBuilder
     private var unifiedContentView: some View {
         if message.isGenerating && message.content.isEmpty {
             typingIndicator
-        } else {
-            TextEditor(text: isEditing ? $editText : .constant(message.content))
+        } else if isEditing {
+            TextEditor(text: $editText)
                 .font(.subheadline)
-                .disabled(!isEditing)
                 .scrollContentBackground(.hidden)
                 .scrollDisabled(true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
-                .tint(isEditing ? .accentColor : .clear)
-            .onChange(of: isEditing) { _, editing in
-                if editing { editText = message.content }
-            }
+                .tint(.accentColor)
+                .onChange(of: isEditing) { _, editing in
+                    if editing { editText = message.content }
+                }
+        } else if shouldRenderMarkdown {
+            Text(markdownAttributed(message.content))
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
+        } else {
+            Text(message.content)
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .textSelection(.enabled)
         }
+    }
+
+    /// Parse markdown content into AttributedString, falling back to plain text.
+    private func markdownAttributed(_ text: String) -> AttributedString {
+        (try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))) ?? AttributedString(text)
     }
 
     // MARK: - Edit Action Buttons

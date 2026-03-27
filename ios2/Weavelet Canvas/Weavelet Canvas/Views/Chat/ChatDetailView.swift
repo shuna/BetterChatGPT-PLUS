@@ -61,6 +61,8 @@ struct ChatDetailView: View {
                 ChatInputBar(
                     text: $viewModel.draftText,
                     isGenerating: viewModel.isGenerating,
+                    enterToSubmit: viewModel.settings?.enterToSubmit ?? true,
+                    prompts: viewModel.settings?.allPrompts ?? [],
                     onSend: { viewModel.sendMessage() },
                     onStop: { viewModel.stopGenerating() }
                 )
@@ -129,7 +131,10 @@ struct ChatDetailView: View {
                                 isEditing: isEditing,
                                 editText: $viewModel.editText,
                                 searchQuery: viewModel.isSearching ? viewModel.searchQuery : "",
-                                isCurrentSearchMatch: isCurrentSearchMatch(message)
+                                isCurrentSearchMatch: isCurrentSearchMatch(message),
+                                markdownMode: viewModel.settings?.markdownMode ?? false,
+                                inlineLatex: viewModel.settings?.inlineLatex ?? false,
+                                streamingMarkdownPolicy: viewModel.settings?.streamingMarkdownPolicy ?? .auto
                             )
                             .id(message.id)
                         } footer: {
