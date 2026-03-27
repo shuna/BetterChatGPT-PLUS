@@ -443,19 +443,55 @@ class ChatViewModel {
     }
 
     /// Auto-generate a chat title from the first user message if autoTitle is enabled.
+    /// When `titleModel` is set, requests a short summary via the API; otherwise falls back to a local prefix.
     private func autoGenerateTitleIfNeeded(chatIndex: Int) {
         guard let settings, settings.autoTitle else { return }
         guard !chats[chatIndex].titleSet else { return }
 
-        // Use first user message text as title basis
         let messages = self.messages
         guard let firstUser = messages.first(where: { $0.role == .user }) else { return }
-        let text = firstUser.content
-        let title = String(text.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !title.isEmpty else { return }
+        let userText = firstUser.content
+        guard !userText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 
-        chats[chatIndex].title = title.count < text.count ? title + "…" : title
-        chats[chatIndex].titleSet = true
+        let titleModel = settings.titleModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        if titleModel.isEmpty {
+            // Local fallback: first 50 chars of the user message
+            let title = String(userText.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines)
+            chats[chatIndex].title = title.count < userText.count ? title + "…" : title
+            chats[chatIndex].titleSet = true
+        } else {
+            // API-based title generation using the configured model
+            let chatId = chats[chatIndex].id
+            let providerId = chats[chatIndex].config.providerId ?? .openai
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let titleConfig = ChatConfig(model: titleModel, maxTokens: 30, temperature: 0.7, presencePenalty: 0, topP: 1, frequencyPenalty: 0)
+                let prompt: [[String: Any]] = [
+                    ["role": "system", "content": "Generate a very short chat title (under 8 words) for this conversation. Reply with only the title, no quotes."],
+                    ["role": "user", "content": String(userText.prefix(500))]
+                ]
+                do {
+                    let result = try await self.apiService.streamChatCompletion(
+                        messages: prompt, config: titleConfig,
+                        providerId: providerId, onChunk: { _ in }
+                    )
+                    let generated = result.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !generated.isEmpty,
+                          let idx = self.chats.firstIndex(where: { $0.id == chatId }),
+                          !self.chats[idx].titleSet else { return }
+                    self.chats[idx].title = String(generated.prefix(60))
+                    self.chats[idx].titleSet = true
+                    self.scheduleSave()
+                } catch {
+                    // Fallback to local prefix on API failure
+                    guard let idx = self.chats.firstIndex(where: { $0.id == chatId }),
+                          !self.chats[idx].titleSet else { return }
+                    let title = String(userText.prefix(50)).trimmingCharacters(in: .whitespacesAndNewlines)
+                    self.chats[idx].title = title.count < userText.count ? title + "…" : title
+                    self.chats[idx].titleSet = true
+                }
+            }
+        }
     }
 
     func deleteMessage(_ id: UUID) {
