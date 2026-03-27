@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Bindable var settings: SettingsViewModel
+    var cloudSyncService: CloudSyncService?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -126,6 +127,45 @@ struct SettingsView: View {
                             Text("\(settings.prompts.count) custom")
                                 .foregroundStyle(.secondary)
                         }
+                    }
+                }
+
+                // MARK: - Cloud Sync
+                if let cloudSyncService {
+                    Section("Cloud Sync") {
+                        NavigationLink {
+                            CloudSyncSettingsView(settings: settings, cloudSyncService: cloudSyncService)
+                        } label: {
+                            HStack {
+                                Text("Cloud Sync")
+                                Spacer()
+                                switch cloudSyncService.syncStatus {
+                                case .unauthenticated:
+                                    Text("Off")
+                                        .foregroundStyle(.secondary)
+                                case .syncing:
+                                    Text("Syncing…")
+                                        .foregroundStyle(.blue)
+                                case .synced:
+                                    Text("Synced")
+                                        .foregroundStyle(.green)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // MARK: - Proxy
+                Section("Proxy") {
+                    Toggle("Enable proxy", isOn: $settings.proxyEnabled)
+                    if settings.proxyEnabled {
+                        TextField("Proxy endpoint", text: $settings.proxyEndpoint)
+                            .keyboardType(.URL)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
+                        SecureField("Auth token (optional)", text: $settings.proxyAuthToken)
+                            .autocorrectionDisabled()
+                            .textInputAutocapitalization(.never)
                     }
                 }
 

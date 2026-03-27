@@ -58,7 +58,7 @@ class ChatViewModel {
     var folders: FolderCollection = [:]
     var currentChatID: String?
 
-    private let persistence = PersistenceService()
+    let persistence = PersistenceService()
     private let undoManager = BranchUndoManager()
     let apiService = APIService()
     let streamRecovery = StreamRecoveryService()
@@ -192,29 +192,44 @@ class ChatViewModel {
         var recoveredCount = 0
 
         for record in pending {
+            // 1. Local buffer recovery (Ticket 25)
+            var bestText = record.bufferedText
+
+            // 2. Proxy KV recovery (Ticket 26)
+            var proxyResult: ProxyRecoveryResult?
+            if let proxyConfig = settings?.resolvedProxyConfig,
+               let proxySessionId = record.proxySessionId {
+                proxyResult = try? await ProxyClient.recover(
+                    config: proxyConfig,
+                    sessionId: proxySessionId,
+                    lastEventId: record.lastProxyEventId
+                )
+                if let result = proxyResult, !result.text.isEmpty {
+                    // /api/recover returns only chunks AFTER lastEventId (delta),
+                    // so append to the local buffer to reconstruct full text.
+                    let merged = record.bufferedText + result.text
+                    if merged.count > bestText.count {
+                        bestText = merged
+                    }
+                }
+            }
+
+            // 3. Apply best text if it exceeds current content
+            var didApply = false
             await MainActor.run {
-                // Find the chat
                 guard let chatIndex = chats.firstIndex(where: { $0.id == record.chatId }) else {
-                    // Chat not found — discard
-                    Task { await streamRecovery.delete(id: record.id) }
                     return
                 }
-
-                // Find the node in the branch tree
                 guard let tree = chats[chatIndex].branchTree,
                       let msgIndex = tree.activePath.firstIndex(of: record.nodeId) else {
-                    // Node not found — discard
-                    Task { await streamRecovery.delete(id: record.id) }
                     return
                 }
 
-                // Check if buffered text is longer than current content
                 let node = tree.nodes[record.nodeId]!
                 let currentText = ContentStore.resolveContentText(contentStore, hash: node.contentHash)
 
-                if record.bufferedText.count > currentText.count {
-                    // Apply recovered buffer
-                    let content: [ContentItem] = [.text(record.bufferedText)]
+                if bestText.count > currentText.count {
+                    let content: [ContentItem] = [.text(bestText)]
                     let message = Message(role: .assistant, content: content)
                     let upsertResult = BranchService.upsertMessageAtIndex(
                         chats: chats, chatIndex: chatIndex,
@@ -223,11 +238,22 @@ class ChatViewModel {
                     )
                     chats = upsertResult.chats
                     contentStore = upsertResult.contentStore
+                    didApply = true
                     recoveredCount += 1
                 }
             }
 
-            // Always delete after processing
+            // 4. ACK proxy if appropriate (strict conditions)
+            if let proxyConfig = settings?.resolvedProxyConfig,
+               let proxySessionId = record.proxySessionId {
+                let shouldAck = didApply
+                    || (proxyResult?.terminalEvent == "done" && !didApply)
+                if shouldAck {
+                    try? await ProxyClient.sendAck(config: proxyConfig, sessionId: proxySessionId)
+                }
+            }
+
+            // 5. Always delete after processing
             await streamRecovery.delete(id: record.id)
         }
 
@@ -398,6 +424,8 @@ class ChatViewModel {
 
     /// Active generation task, cancellable via stopGenerating().
     private var generationTask: Task<Void, Never>?
+    /// The active proxy session ID for the current generation (used by stopGenerating).
+    private var activeProxySessionId: String?
 
     /// Request an assistant response for the current chat.
     /// Creates an empty assistant node and streams the API response into it.
@@ -434,14 +462,18 @@ class ChatViewModel {
 
         // Create stream recovery record
         let requestId = UUID().uuidString
+        let proxyConfig = settings?.resolvedProxyConfig
+        let proxySessionId = proxyConfig != nil ? "\(chatId):\(requestId)" : nil
         let record = StreamRecord(
             id: requestId, chatId: chatId, nodeId: assistantNodeId,
             bufferedText: "", status: .streaming,
-            createdAt: Date(), updatedAt: Date()
+            createdAt: Date(), updatedAt: Date(),
+            proxySessionId: proxySessionId
         )
         Task { await streamRecovery.save(record) }
 
         isGenerating = true
+        activeProxySessionId = proxySessionId
 
         generationTask = Task { @MainActor [weak self] in
             guard let self else { return }
@@ -451,6 +483,7 @@ class ChatViewModel {
 
             guard hasKey else {
                 self.isGenerating = false
+                self.activeProxySessionId = nil
                 self.errorMessage = "No API key configured for \(providerId.rawValue). Set your key in Settings → API Keys."
                 await self.streamRecovery.updateStatus(id: requestId, .failed)
                 return
@@ -462,7 +495,9 @@ class ChatViewModel {
                     messages: apiMessages,
                     config: config,
                     providerId: providerId,
-                    onChunk: { [weak self] accumulated in
+                    proxyConfig: proxyConfig,
+                    proxySessionId: proxySessionId,
+                    onChunk: { [weak self] accumulated, proxyEventId in
                         guard let self, self.isGenerating else { return }
                         // Update the assistant node content with accumulated text (streaming)
                         guard let chatIndex = self.currentChatIndex,
@@ -481,7 +516,7 @@ class ChatViewModel {
                         // to prevent out-of-order writes from truncating the buffer
                         chunkSeq += 1
                         let seq = chunkSeq
-                        Task { await self.streamRecovery.replaceBufferedText(id: requestId, text: accumulated, seq: seq) }
+                        Task { await self.streamRecovery.replaceBufferedText(id: requestId, text: accumulated, seq: seq, proxyEventId: proxyEventId) }
                     }
                 )
 
@@ -502,10 +537,16 @@ class ChatViewModel {
                 self.chats = upsertResult.chats
                 self.contentStore = upsertResult.contentStore
                 self.isGenerating = false
+                self.activeProxySessionId = nil
 
                 // Mark stream as completed and clean up
                 await self.streamRecovery.updateStatus(id: requestId, .completed)
                 await self.streamRecovery.deleteCompleted()
+
+                // ACK proxy to delete KV cache (stream fully received)
+                if let proxyConfig, let proxySessionId {
+                    try? await ProxyClient.sendAck(config: proxyConfig, sessionId: proxySessionId)
+                }
 
                 // Token tracking
                 if let settings = self.settings, settings.countTotalTokens {
@@ -520,10 +561,12 @@ class ChatViewModel {
             } catch is CancellationError {
                 // User cancelled — keep whatever was accumulated
                 self.isGenerating = false
+                self.activeProxySessionId = nil
                 await self.streamRecovery.updateStatus(id: requestId, .interrupted)
                 self.scheduleSave()
             } catch {
                 self.isGenerating = false
+                self.activeProxySessionId = nil
                 self.errorMessage = error.localizedDescription
                 await self.streamRecovery.updateStatus(id: requestId, .failed)
                 self.scheduleSave()
@@ -562,7 +605,10 @@ class ChatViewModel {
                 do {
                     let result = try await self.apiService.streamChatCompletion(
                         messages: prompt, config: titleConfig,
-                        providerId: providerId, onChunk: { _ in }
+                        providerId: providerId,
+                        proxyConfig: self.settings?.resolvedProxyConfig,
+                        proxySessionId: self.settings?.resolvedProxyConfig != nil ? "title:\(chatId)" : nil,
+                        onChunk: { _, _ in }
                     )
                     let generated = result.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !generated.isEmpty,
@@ -748,9 +794,15 @@ class ChatViewModel {
     }
 
     func stopGenerating() {
+        // Fire-and-forget proxy cancel (does not block local cancel)
+        if let proxyConfig = settings?.resolvedProxyConfig,
+           let sessionId = activeProxySessionId {
+            ProxyClient.sendCancel(config: proxyConfig, sessionId: sessionId)
+        }
         generationTask?.cancel()
         generationTask = nil
         isGenerating = false
+        activeProxySessionId = nil
     }
 
     // MARK: - Search
@@ -1004,6 +1056,18 @@ class ChatViewModel {
             currentChatID: currentChatID
         )
         Task { await persistence.flush(state) }
+    }
+
+    /// Apply state received from cloud sync (remote was newer).
+    func applyRemoteState(_ state: AppState) {
+        chats = state.chats
+        contentStore = state.contentStore
+        folders = state.folders
+        if let chatID = state.currentChatID, chats.contains(where: { $0.id == chatID }) {
+            currentChatID = chatID
+        } else {
+            currentChatID = nil
+        }
     }
 
     // MARK: - Private Helpers

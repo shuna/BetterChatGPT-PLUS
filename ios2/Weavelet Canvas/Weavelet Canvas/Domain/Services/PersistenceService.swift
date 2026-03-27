@@ -40,6 +40,9 @@ actor PersistenceService {
     private let debounceInterval: Duration = .milliseconds(500)
     private let logger = Logger(subsystem: "org.sstcr.WeaveletCanvas", category: "Persistence")
 
+    /// Called after a successful save. Used by CloudSyncService to schedule uploads.
+    var onSaveComplete: (@Sendable (AppState) -> Void)?
+
     init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         self.baseURL = appSupport.appendingPathComponent("WeaveletCanvas", isDirectory: true)
@@ -113,6 +116,7 @@ actor PersistenceService {
             try FileManager.default.moveItem(at: tmpURL, to: stateFileURL)
 
             logger.debug("Saved state: \(data.count) bytes")
+            onSaveComplete?(state)
         } catch {
             logger.error("Failed to save state: \(error.localizedDescription)")
         }

@@ -36,7 +36,7 @@ actor StreamRecoveryService {
 
     /// Replace the buffered text with the full accumulated value (not append).
     /// `seq` is a monotonically increasing sequence number; out-of-order calls are ignored.
-    func replaceBufferedText(id: String, text: String, seq: UInt64 = 0) {
+    func replaceBufferedText(id: String, text: String, seq: UInt64 = 0, proxyEventId: Int? = nil) {
         ensureLoaded()
         guard records[id] != nil else { return }
         // Reject out-of-order writes: only apply if seq >= lastSeq
@@ -47,6 +47,11 @@ actor StreamRecoveryService {
         }
         records[id]!.bufferedText = text
         records[id]!.updatedAt = Date()
+        // Monotonic update for proxy event ID: only advance forward
+        if let newId = proxyEventId {
+            let existing = records[id]!.lastProxyEventId ?? 0
+            records[id]!.lastProxyEventId = max(existing, newId)
+        }
         schedulePersist()
     }
 

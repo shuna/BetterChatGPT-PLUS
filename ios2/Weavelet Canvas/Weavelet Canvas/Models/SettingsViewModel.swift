@@ -223,6 +223,78 @@ final class SettingsViewModel {
         customModels[provider.rawValue] ?? []
     }
 
+    // MARK: - Proxy (Epic 7, Ticket 26)
+
+    /// Whether the proxy worker is enabled.
+    var proxyEnabled: Bool {
+        didSet { save("proxyEnabled", proxyEnabled) }
+    }
+
+    /// Proxy worker endpoint URL (normalized on set).
+    var proxyEndpoint: String {
+        didSet {
+            let normalized = proxyEndpoint
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: "/+$", with: "", options: .regularExpression)
+            if normalized != proxyEndpoint {
+                proxyEndpoint = normalized
+                return  // didSet will re-fire with normalized value
+            }
+            save("proxyEndpoint", proxyEndpoint)
+        }
+    }
+
+    /// Proxy auth token (stored in Keychain, not UserDefaults).
+    var proxyAuthToken: String {
+        didSet {
+            if proxyAuthToken.isEmpty {
+                KeychainHelper.delete(key: "proxyAuthToken")
+            } else {
+                KeychainHelper.save(key: "proxyAuthToken", value: proxyAuthToken)
+            }
+        }
+    }
+
+    /// Resolved proxy configuration, or nil if proxy is disabled/unconfigured.
+    var resolvedProxyConfig: ProxyConfig? {
+        guard proxyEnabled else { return nil }
+        let ep = proxyEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !ep.isEmpty else { return nil }
+        return ProxyConfig(
+            endpoint: ep,
+            authToken: proxyAuthToken.isEmpty ? nil : proxyAuthToken
+        )
+    }
+
+    // MARK: - Cloud Sync (Epic 7, Ticket 27)
+
+    /// Whether cloud sync is enabled.
+    var cloudSyncEnabled: Bool {
+        didSet { save("cloudSyncEnabled", cloudSyncEnabled) }
+    }
+
+    /// Active cloud sync provider type.
+    var cloudSyncProviderType: CloudSyncProviderType {
+        didSet { save("cloudSyncProviderType", cloudSyncProviderType.rawValue) }
+    }
+
+    /// Timestamp of the last successful sync (persisted).
+    var lastSyncTimestamp: Date? {
+        didSet {
+            if let ts = lastSyncTimestamp {
+                save("lastSyncTimestamp", ts.timeIntervalSince1970)
+            } else {
+                defaults.removeObject(forKey: "lastSyncTimestamp")
+            }
+        }
+    }
+
+    /// The updatedAt value from the last uploaded SyncSnapshot (Unix ms).
+    /// Used as the comparison key when pulling remote state.
+    var lastLocalUpdatedAt: Int64 {
+        didSet { save("lastLocalUpdatedAt", lastLocalUpdatedAt) }
+    }
+
     // MARK: - Prompt Library (Epic 6, Ticket 23)
 
     /// User-created prompts (persisted as JSON in UserDefaults).
@@ -302,6 +374,19 @@ final class SettingsViewModel {
 
         // Epic 6
         self.prompts = Self.loadPrompts()
+
+        // Epic 7 - Cloud Sync
+        self.cloudSyncEnabled = UserDefaults.standard.bool(forKey: "cloudSyncEnabled")
+        let providerRaw = UserDefaults.standard.string(forKey: "cloudSyncProviderType") ?? ""
+        self.cloudSyncProviderType = CloudSyncProviderType(rawValue: providerRaw) ?? .icloud
+        let tsVal = UserDefaults.standard.double(forKey: "lastSyncTimestamp")
+        self.lastSyncTimestamp = tsVal > 0 ? Date(timeIntervalSince1970: tsVal) : nil
+        self.lastLocalUpdatedAt = Int64(UserDefaults.standard.integer(forKey: "lastLocalUpdatedAt"))
+
+        // Epic 7 - Proxy
+        self.proxyEnabled = UserDefaults.standard.bool(forKey: "proxyEnabled")
+        self.proxyEndpoint = UserDefaults.standard.string(forKey: "proxyEndpoint") ?? ""
+        self.proxyAuthToken = KeychainHelper.load(key: "proxyAuthToken") ?? ""
     }
 
     // MARK: - Persistence Helpers

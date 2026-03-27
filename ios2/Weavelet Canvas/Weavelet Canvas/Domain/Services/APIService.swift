@@ -89,11 +89,17 @@ actor APIService {
     /// Send a chat completion request with streaming.
     /// Calls `onChunk` for each text delta on the main actor.
     /// Returns the full accumulated response text.
+    ///
+    /// When `proxyConfig` is provided, the request is routed through the Weavelet
+    /// Stream Proxy worker. The `onChunk` callback receives `proxyEventId` (non-nil
+    /// only for proxy-routed streams).
     func streamChatCompletion(
         messages: [[String: Any]],
         config: ChatConfig,
         providerId: ProviderId,
-        onChunk: @MainActor @Sendable (String) -> Void
+        proxyConfig: ProxyConfig? = nil,
+        proxySessionId: String? = nil,
+        onChunk: @MainActor @Sendable (_ accumulated: String, _ proxyEventId: Int?) -> Void
     ) async throws -> String {
         let provider = providerConfigs[providerId]
             ?? Self.defaultProviders[providerId]
@@ -103,9 +109,7 @@ actor APIService {
             throw APIError.noAPIKey(provider: provider.name)
         }
 
-        let url = URL(string: provider.endpoint)!
-
-        // Build request body
+        // Build request body (shared between direct and proxy paths)
         var body: [String: Any] = [
             "model": config.model,
             "messages": messages,
@@ -116,6 +120,26 @@ actor APIService {
         if config.topP != 1.0 { body["top_p"] = config.topP }
         if config.presencePenalty != 0 { body["presence_penalty"] = config.presencePenalty }
         if config.frequencyPenalty != 0 { body["frequency_penalty"] = config.frequencyPenalty }
+
+        let bodyData = try JSONSerialization.data(withJSONObject: body)
+
+        logger.info("API request: \(config.model) via \(provider.name)\(proxyConfig != nil ? " (proxy)" : "")")
+
+        // MARK: Proxy path
+        if let proxyConfig, let proxySessionId {
+            return try await streamViaProxy(
+                proxyConfig: proxyConfig,
+                proxySessionId: proxySessionId,
+                provider: provider,
+                providerId: providerId,
+                apiKey: apiKey,
+                bodyData: bodyData,
+                onChunk: onChunk
+            )
+        }
+
+        // MARK: Direct path (existing)
+        let url = URL(string: provider.endpoint)!
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -128,9 +152,7 @@ actor APIService {
             request.setValue("Weavelet Canvas iOS", forHTTPHeaderField: "X-Title")
         }
 
-        request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-        logger.info("API request: \(config.model) via \(provider.name)")
+        request.httpBody = bodyData
 
         // Stream via URLSession bytes
         let (asyncBytes, response) = try await URLSession.shared.bytes(for: request)
@@ -140,7 +162,6 @@ actor APIService {
         }
 
         guard (200..<300).contains(httpResponse.statusCode) else {
-            // Try to read error body
             var errorBody = ""
             for try await line in asyncBytes.lines {
                 errorBody += line
@@ -153,13 +174,9 @@ actor APIService {
         }
 
         // Parse SSE stream with real per-chunk timeout (45s).
-        // We race each line read against a sleep so a fully-stalled server
-        // is detected even when asyncBytes.lines never yields.
         var accumulated = ""
         let chunkTimeout: Duration = .seconds(45)
 
-        // Bridge asyncBytes.lines into an AsyncStream so we can consume
-        // it from inside a throwing task group without Sendable issues.
         let lineStream = AsyncStream<String> { cont in
             let task = Task {
                 do {
@@ -178,7 +195,6 @@ actor APIService {
         while true {
             try Task.checkCancellation()
 
-            // Race: next line vs timeout
             let line: String? = try await withThrowingTaskGroup(of: String?.self) { group in
                 group.addTask {
                     await lineIterator.next()
@@ -187,33 +203,131 @@ actor APIService {
                     try await Task.sleep(for: chunkTimeout)
                     throw APIError.chunkTimeout
                 }
-                // First to finish wins; cancel the other
                 let result = try await group.next()!
                 group.cancelAll()
                 return result
             }
 
-            guard let line else { break } // stream ended
+            guard let line else { break }
 
-            // SSE format: "data: {json}" or "data: [DONE]"
             if line.hasPrefix("data: ") {
                 let data = String(line.dropFirst(6))
                 if data == "[DONE]" { break }
 
                 if let chunk = parseSSEChunk(data) {
                     accumulated += chunk
-                    await onChunk(accumulated)
+                    await onChunk(accumulated, nil)
                 }
             } else if !line.isEmpty {
-                // Handle non-standard streaming (some providers send raw JSON lines)
                 if let chunk = parseSSEChunk(line) {
                     accumulated += chunk
-                    await onChunk(accumulated)
+                    await onChunk(accumulated, nil)
                 }
             }
         }
 
         logger.info("API response complete: \(accumulated.count) chars")
+        return accumulated
+    }
+
+    // MARK: - Proxy Streaming
+
+    /// Stream via Weavelet Stream Proxy, parsing proxy SSE events incrementally.
+    private func streamViaProxy(
+        proxyConfig: ProxyConfig,
+        proxySessionId: String,
+        provider: ProviderConfig,
+        providerId: ProviderId,
+        apiKey: String,
+        bodyData: Data,
+        onChunk: @MainActor @Sendable (_ accumulated: String, _ proxyEventId: Int?) -> Void
+    ) async throws -> String {
+        var targetHeaders: [String: String] = [
+            "Content-Type": "application/json",
+            "Authorization": "Bearer \(apiKey)"
+        ]
+        if providerId == .openrouter {
+            targetHeaders["X-Title"] = "Weavelet Canvas iOS"
+        }
+
+        let (asyncBytes, _) = try await ProxyClient.streamViaProxy(
+            config: proxyConfig,
+            sessionId: proxySessionId,
+            targetEndpoint: provider.endpoint,
+            targetHeaders: targetHeaders,
+            body: bodyData
+        )
+
+        var accumulated = ""
+        var parser = ProxySseParser()
+        let chunkTimeout: Duration = .seconds(45)
+
+        // Bridge bytes into lines via AsyncStream
+        let lineStream = AsyncStream<String> { cont in
+            let task = Task {
+                do {
+                    for try await line in asyncBytes.lines {
+                        cont.yield(line)
+                    }
+                    cont.finish()
+                } catch {
+                    cont.finish()
+                }
+            }
+            cont.onTermination = { _ in task.cancel() }
+        }
+
+        // Proxy SSE comes as raw bytes; we read lines and reconstruct blocks.
+        // Feed each line + "\n" back to the incremental parser.
+        var lineIterator = lineStream.makeAsyncIterator()
+
+        while true {
+            try Task.checkCancellation()
+
+            let line: String? = try await withThrowingTaskGroup(of: String?.self) { group in
+                group.addTask {
+                    await lineIterator.next()
+                }
+                group.addTask {
+                    try await Task.sleep(for: chunkTimeout)
+                    throw APIError.chunkTimeout
+                }
+                let result = try await group.next()!
+                group.cancelAll()
+                return result
+            }
+
+            guard let line else { break }
+
+            // Reconstruct SSE blocks: empty line = block separator ("\n\n")
+            let events = parser.feed(line + "\n" + (line.isEmpty ? "\n" : ""))
+
+            for event in events {
+                if let rawText = event.rawText {
+                    accumulated += rawText
+                    await onChunk(accumulated, event.id)
+                } else if event.eventType == "done" {
+                    // Stream complete
+                    logger.info("Proxy stream done: \(accumulated.count) chars")
+                    return accumulated
+                } else if event.eventType == "error" {
+                    let errorMsg = (event.meta?["error"] as? String) ?? "Proxy stream error"
+                    throw APIError.httpError(status: 0, body: errorMsg)
+                }
+                // "interrupted" / "waiting" — continue reading
+            }
+        }
+
+        // Stream ended without done event — flush parser
+        let remaining = parser.flush()
+        for event in remaining {
+            if let rawText = event.rawText {
+                accumulated += rawText
+                await onChunk(accumulated, event.id)
+            }
+        }
+
+        logger.info("Proxy stream complete: \(accumulated.count) chars")
         return accumulated
     }
 

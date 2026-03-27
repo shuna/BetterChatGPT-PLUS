@@ -25,4 +25,28 @@ struct StreamRecord: Codable, Identifiable {
     var createdAt: Date
     /// When the buffered text was last updated (used for stale detection).
     var updatedAt: Date
+
+    // MARK: - Proxy (Epic 7, Ticket 26)
+
+    /// Proxy session ID for KV recovery (nil if not using proxy).
+    var proxySessionId: String?
+    /// Last proxy event ID received (for recovery resume point).
+    var lastProxyEventId: Int?
+
+    init(
+        id: String, chatId: String, nodeId: String,
+        bufferedText: String, status: StreamStatus,
+        createdAt: Date, updatedAt: Date,
+        proxySessionId: String? = nil, lastProxyEventId: Int? = nil
+    ) {
+        self.id = id
+        self.chatId = chatId
+        self.nodeId = nodeId
+        self.bufferedText = bufferedText
+        self.status = status
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.proxySessionId = proxySessionId
+        self.lastProxyEventId = lastProxyEventId
+    }
 }
