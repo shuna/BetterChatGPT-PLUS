@@ -386,21 +386,29 @@ private struct InspectorToolbarTrailing: View {
     /// The view shown in the inspector is the opposite of viewMode
     private var inspectorShowsChat: Bool { viewModel.viewMode == .branchEditor }
 
+    @State private var showModelSettings = false
+
     var body: some View {
         HStack(spacing: 8) {
             // Model settings (only when inspector shows chat)
             if inspectorShowsChat {
                 Button {
-                    // TODO: open model settings
+                    showModelSettings = true
                 } label: {
                     Image(systemName: "slider.horizontal.3")
                 }
                 .accessibilityLabel("Model Settings")
+                .sheet(isPresented: $showModelSettings) {
+                    ModelSettingsSheet(viewModel: viewModel)
+                }
             }
 
             // Search (always)
             Button {
-                // TODO: inspector search
+                if inspectorShowsChat {
+                    viewModel.isSearching.toggle()
+                }
+                // Branch editor search is handled by its own toolbar
             } label: {
                 Image(systemName: "magnifyingglass")
             }
@@ -467,6 +475,8 @@ private struct InspectorContentView: View {
 private struct ModelSettingsSheet: View {
     @Bindable var viewModel: ChatViewModel
     @Environment(\.dismiss) private var dismiss
+    @State private var apiKeyInputs: [ProviderId: String] = [:]
+    @State private var showingKeyFor: ProviderId?
 
     private var configBinding: Binding<ChatConfig> {
         Binding(
@@ -488,14 +498,56 @@ private struct ModelSettingsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section("Provider") {
+                    Picker("Provider", selection: Binding(
+                        get: { configBinding.wrappedValue.providerId ?? .openai },
+                        set: { configBinding.wrappedValue.providerId = $0 }
+                    )) {
+                        ForEach(ProviderId.allCases, id: \.self) { provider in
+                            Text(provider.rawValue.capitalized).tag(provider)
+                        }
+                    }
+                }
+
                 Section("Model") {
-                    Picker("Model", selection: Binding(
+                    TextField("Model ID", text: Binding(
                         get: { viewModel.selectedModelID },
                         set: { viewModel.selectedModelID = $0 }
-                    )) {
-                        ForEach(viewModel.availableModels) { model in
-                            Text(model.name).tag(model.id)
+                    ))
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                }
+
+                Section("API Key") {
+                    let provider = configBinding.wrappedValue.providerId ?? .openai
+                    HStack {
+                        if showingKeyFor == provider {
+                            TextField("API Key", text: apiKeyBinding(for: provider))
+                                .autocorrectionDisabled()
+                                .textInputAutocapitalization(.never)
+                                .font(.system(.body, design: .monospaced))
+                        } else {
+                            let hasKey = !(apiKeyInputs[provider]?.isEmpty ?? true)
+                            Text(hasKey ? "••••••••" : "Not set")
+                                .foregroundStyle(hasKey ? .primary : .secondary)
+                            Spacer()
+                            Button(hasKey ? "Edit" : "Set") {
+                                showingKeyFor = provider
+                            }
                         }
+                    }
+
+                    if showingKeyFor == provider {
+                        Button("Save Key") {
+                            let key = apiKeyInputs[provider] ?? ""
+                            if !key.isEmpty {
+                                Task {
+                                    await viewModel.apiService.setAPIKey(key, for: provider)
+                                }
+                            }
+                            showingKeyFor = nil
+                        }
+                        .disabled(apiKeyInputs[provider]?.isEmpty ?? true)
                     }
                 }
 
@@ -557,7 +609,22 @@ private struct ModelSettingsSheet: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .task {
+                // Load existing keys on appear
+                for provider in ProviderId.allCases {
+                    if let key = await viewModel.apiService.getAPIKey(for: provider) {
+                        apiKeyInputs[provider] = key
+                    }
+                }
+            }
         }
+    }
+
+    private func apiKeyBinding(for provider: ProviderId) -> Binding<String> {
+        Binding(
+            get: { apiKeyInputs[provider] ?? "" },
+            set: { apiKeyInputs[provider] = $0 }
+        )
     }
 }
 

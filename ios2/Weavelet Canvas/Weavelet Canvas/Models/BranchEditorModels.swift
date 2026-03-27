@@ -65,9 +65,11 @@ class BranchEditorViewModel {
     var zoom: CGFloat = 1.0
     var offset: CGSize = .zero
     var isSearching: Bool = false
-    var searchQuery: String = ""
+    var searchQuery: String = "" { didSet { performSearch() } }
     var searchCurrentMatch: Int = 0
     var searchTotalMatches: Int = 0
+    /// Node IDs that match the current search query, in order.
+    private(set) var searchMatchNodeIDs: [String] = []
 
     // Detail modal
     var detailNode: UIBranchNode? = nil
@@ -257,11 +259,54 @@ class BranchEditorViewModel {
     func searchNext() {
         guard searchTotalMatches > 0 else { return }
         searchCurrentMatch = (searchCurrentMatch % searchTotalMatches) + 1
+        scrollToCurrentMatch()
     }
 
     func searchPrevious() {
         guard searchTotalMatches > 0 else { return }
         searchCurrentMatch = searchCurrentMatch <= 1 ? searchTotalMatches : searchCurrentMatch - 1
+        scrollToCurrentMatch()
+    }
+
+    func performSearch() {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !query.isEmpty else {
+            searchMatchNodeIDs = []
+            searchTotalMatches = 0
+            searchCurrentMatch = 0
+            return
+        }
+
+        // Search across all nodes' content
+        searchMatchNodeIDs = nodes.compactMap { node in
+            node.content.lowercased().contains(query) || (node.label?.lowercased().contains(query) == true)
+                ? node.id : nil
+        }
+        searchTotalMatches = searchMatchNodeIDs.count
+        searchCurrentMatch = searchTotalMatches > 0 ? 1 : 0
+        scrollToCurrentMatch()
+    }
+
+    /// Whether a node is the current search match.
+    func isCurrentSearchMatch(_ nodeId: String) -> Bool {
+        guard searchCurrentMatch > 0, searchCurrentMatch <= searchMatchNodeIDs.count else { return false }
+        return searchMatchNodeIDs[searchCurrentMatch - 1] == nodeId
+    }
+
+    /// Whether a node matches the search query (any match).
+    func isSearchMatch(_ nodeId: String) -> Bool {
+        searchMatchNodeIDs.contains(nodeId)
+    }
+
+    private func scrollToCurrentMatch() {
+        guard searchCurrentMatch > 0, searchCurrentMatch <= searchMatchNodeIDs.count else { return }
+        let targetId = searchMatchNodeIDs[searchCurrentMatch - 1]
+        guard let node = nodes.first(where: { $0.id == targetId }) else { return }
+        // Center the viewport on the matched node
+        offset = CGSize(
+            width: -node.position.x * zoom + 200,
+            height: -node.position.y * zoom + 200
+        )
     }
 }
 

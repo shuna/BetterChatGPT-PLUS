@@ -608,7 +608,18 @@ class ChatViewModel {
             msg.content.lowercased().contains(query) ? idx : nil
         }
         searchTotalMatches = searchMatchIndices.count
-        searchCurrentMatch = searchTotalMatches > 0 ? 1 : 0
+        // Preserve current match position if still valid
+        if searchCurrentMatch > searchTotalMatches {
+            searchCurrentMatch = searchTotalMatches > 0 ? searchTotalMatches : 0
+        } else if searchCurrentMatch == 0 && searchTotalMatches > 0 {
+            searchCurrentMatch = 1
+        }
+    }
+
+    /// Call after any mutation that changes messages to keep search results in sync.
+    private func refreshSearchIfActive() {
+        guard isSearching, !searchQuery.isEmpty else { return }
+        performSearch()
     }
 
     func searchNext() {
@@ -727,6 +738,7 @@ class ChatViewModel {
     // MARK: - Persistence
 
     func scheduleSave() {
+        refreshSearchIfActive()
         let state = AppState(
             chats: chats,
             contentStore: contentStore,
