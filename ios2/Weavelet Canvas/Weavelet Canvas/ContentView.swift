@@ -407,8 +407,10 @@ private struct InspectorToolbarTrailing: View {
             Button {
                 if inspectorShowsChat {
                     viewModel.isSearching.toggle()
+                } else {
+                    // Toggle branch editor search when branch canvas is in inspector
+                    viewModel.branchEditorSearchRequested.toggle()
                 }
-                // Branch editor search is handled by its own toolbar
             } label: {
                 Image(systemName: "magnifyingglass")
             }

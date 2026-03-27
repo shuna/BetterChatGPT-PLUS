@@ -119,6 +119,11 @@ class BranchEditorViewModel {
 
         buildEdges()
         layoutNodes()
+
+        // Re-run search if active to keep results in sync with updated nodes
+        if isSearching, !searchQuery.isEmpty {
+            performSearch()
+        }
     }
 
     func buildEdges() {

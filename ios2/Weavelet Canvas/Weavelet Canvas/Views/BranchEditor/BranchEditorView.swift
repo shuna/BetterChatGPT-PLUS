@@ -77,6 +77,9 @@ struct BranchEditorView: View {
         .onChange(of: chatViewModel.currentChatID) {
             viewModel?.rebuildFromDomain()
         }
+        .onChange(of: chatViewModel.branchEditorSearchRequested) {
+            viewModel?.isSearching.toggle()
+        }
         .onGeometryChange(for: CGSize.self) { proxy in
             proxy.size
         } action: { newSize in
@@ -131,6 +134,8 @@ struct BranchEditorView: View {
                 BranchNodeView(
                     node: node,
                     isSelected: viewModel.selectedNodeIDs.contains(node.id),
+                    isSearchMatch: viewModel.isSearchMatch(node.id),
+                    isCurrentSearchMatch: viewModel.isCurrentSearchMatch(node.id),
                     zoom: viewModel.zoom,
                     onTap: { viewModel.selectNode(node.id) },
                     onDoubleTap: { viewModel.detailNode = node },
@@ -270,6 +275,8 @@ struct BranchEditorView: View {
 private struct BranchNodeView: View {
     let node: UIBranchNode
     let isSelected: Bool
+    var isSearchMatch: Bool = false
+    var isCurrentSearchMatch: Bool = false
     let zoom: CGFloat
     let onTap: () -> Void
     let onDoubleTap: () -> Void
@@ -335,8 +342,12 @@ private struct BranchNodeView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(
-                    isSelected ? Color.accentColor : (node.isActive ? roleColor.opacity(0.3) : Color(.separator).opacity(0.2)),
-                    lineWidth: isSelected ? 2.5 : 1
+                    isCurrentSearchMatch ? Color.yellow :
+                    isSearchMatch ? Color.orange.opacity(0.7) :
+                    isSelected ? Color.accentColor :
+                    node.isActive ? roleColor.opacity(0.3) :
+                    Color(.separator).opacity(0.2),
+                    lineWidth: isCurrentSearchMatch ? 3 : isSearchMatch ? 2 : isSelected ? 2.5 : 1
                 )
         }
         .opacity(node.isActive ? 1 : 0.55)

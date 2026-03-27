@@ -91,6 +91,8 @@ class ChatViewModel {
     var canGoForward: Bool { navigationIndex < navigationHistory.count - 1 }
     var draftText: String = ""
     var viewMode: DetailViewMode = .chat
+    /// Toggle to signal branch editor search from outside (inspector toolbar).
+    var branchEditorSearchRequested: Bool = false
     var errorMessage: String? = nil
     var editingMessageID: UUID? = nil
     var editText: String = ""
