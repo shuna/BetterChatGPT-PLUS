@@ -11,6 +11,8 @@ struct MessageBubble: View {
     let onToggleCollapse: () -> Void
     @Binding var isEditing: Bool
     @Binding var editText: String
+    var searchQuery: String = ""
+    var isCurrentSearchMatch: Bool = false
 
     @State private var showDeleteConfirmation = false
 
@@ -42,6 +44,17 @@ struct MessageBubble: View {
                 Rectangle()
                     .fill(Color.blue)
                     .frame(width: 3)
+            }
+        }
+        .overlay {
+            if isCurrentSearchMatch {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.accentColor, lineWidth: 2)
+                    .padding(2)
+            } else if !searchQuery.isEmpty && message.content.localizedCaseInsensitiveContains(searchQuery) {
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.accentColor.opacity(0.4), lineWidth: 1)
+                    .padding(2)
             }
         }
         .confirmationDialog("Delete this message?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {

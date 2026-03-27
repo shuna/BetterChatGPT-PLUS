@@ -5,13 +5,14 @@
 
 import SwiftUI
 import Observation
+import UniformTypeIdentifiers
 
 // MARK: - Shared State
 
 @Observable
 final class SidebarState {
     var editMode: EditMode = .inactive
-    var selectedChatIDs: Set<UUID> = []
+    var selectedChatIDs: Set<String> = []
 
     var isEditing: Bool { editMode.isEditing }
 
@@ -25,17 +26,13 @@ final class SidebarState {
             }
         }
     }
-
-    func deleteSelected(perform: (Set<UUID>) -> Void) {
-        perform(selectedChatIDs)
-        selectedChatIDs.removeAll()
-    }
 }
 
 // MARK: - Sidebar Root
 
 struct SidebarView: View {
     @Bindable var state: SidebarState
+    var chatViewModel: ChatViewModel
     @State private var searchText = ""
     @State private var menuOptionsExpanded = true
 
@@ -43,12 +40,16 @@ struct SidebarView: View {
         VStack(spacing: 0) {
             ChatListSection(
                 state: state,
+                chatViewModel: chatViewModel,
                 searchText: $searchText
             )
 
             Divider()
 
-            MenuOptionsSection(isExpanded: $menuOptionsExpanded)
+            MenuOptionsSection(
+                isExpanded: $menuOptionsExpanded,
+                chatViewModel: chatViewModel
+            )
         }
         .navigationTitle("")
     }
@@ -58,76 +59,80 @@ struct SidebarView: View {
 
 private struct ChatListSection: View {
     @Bindable var state: SidebarState
+    var chatViewModel: ChatViewModel
     @Binding var searchText: String
 
-    // Placeholder data
-    @State private var folders: [SidebarFolder] = [
-        SidebarFolder(
-            name: "Work Projects",
-            color: .blue,
-            chats: [
-                SidebarChat(title: "API Design Discussion"),
-                SidebarChat(title: "Database Schema Review"),
-            ]
-        ),
-        SidebarFolder(
-            name: "Personal",
-            color: .green,
-            chats: [
-                SidebarChat(title: "Travel Planning"),
-            ]
-        ),
-    ]
+    private var folderEntries: [(id: String, folder: Folder)] {
+        chatViewModel.folders
+            .sorted { ($0.value.order ?? 0) < ($1.value.order ?? 0) }
+            .map { (id: $0.key, folder: $0.value) }
+    }
 
-    @State private var chats: [SidebarChat] = [
-        SidebarChat(title: "Quick brainstorm"),
-        SidebarChat(title: "Code review notes"),
-        SidebarChat(title: "Meeting summary"),
-    ]
+    /// Chats not in any folder
+    private var unfolderedChats: [Chat] {
+        let folderIDs = Set(chatViewModel.folders.keys)
+        return chatViewModel.chats.filter { chat in
+            chat.folder == nil || !folderIDs.contains(chat.folder!)
+        }
+    }
 
-    @State private var activeChatID: UUID?
+    private var filteredUnfolderedChats: [Chat] {
+        if searchText.isEmpty { return unfolderedChats }
+        return unfolderedChats.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
+    }
+
+    private func chatsInFolder(_ folderID: String) -> [Chat] {
+        let chats = chatViewModel.chats.filter { $0.folder == folderID }
+        if searchText.isEmpty { return chats }
+        return chats.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
+    }
 
     var body: some View {
         List(selection: state.isEditing ? $state.selectedChatIDs : nil) {
-            ForEach(folders) { folder in
+            ForEach(folderEntries, id: \.id) { entry in
                 FolderRow(
-                    folder: folder,
-                    activeChatID: $activeChatID,
-                    allFolders: folders,
-                    onDeleteChat: { chatID in
-                        deleteChat(id: chatID, fromFolder: folder.id)
-                    },
+                    folderID: entry.id,
+                    folder: entry.folder,
+                    chats: chatsInFolder(entry.id),
+                    activeChatID: chatViewModel.currentChatID,
+                    allFolders: folderEntries,
+                    onSelectChat: { chatViewModel.selectChat($0) },
+                    onDeleteChat: { chatViewModel.deleteChat($0) },
                     onRenameChat: { chatID, newTitle in
-                        renameChat(id: chatID, newTitle: newTitle, inFolder: folder.id)
+                        chatViewModel.renameChat(chatID, title: newTitle)
                     },
                     onMoveChat: { chatID, targetFolderID in
-                        moveChat(id: chatID, from: folder.id, to: targetFolderID)
+                        chatViewModel.moveChatToFolder(chatID, folderID: targetFolderID)
                     },
                     onDuplicateChat: { chatID in
-                        duplicateChat(id: chatID, inFolder: folder.id)
+                        chatViewModel.duplicateChat(chatID)
+                    },
+                    onExportChat: { chatID in
+                        chatViewModel.exportChatToShare(chatID)
                     },
                     onRenameFolder: { newName in
-                        renameFolder(id: folder.id, newName: newName)
+                        chatViewModel.renameFolder(entry.id, name: newName)
                     },
                     onDeleteFolder: {
-                        deleteFolder(id: folder.id)
+                        chatViewModel.deleteFolder(entry.id)
                     },
                     onChangeFolderColor: { color in
-                        changeFolderColor(id: folder.id, color: color)
+                        chatViewModel.changeFolderColor(entry.id, color: color)
                     }
                 )
             }
 
-            ForEach(filteredChats) { chat in
+            ForEach(filteredUnfolderedChats) { chat in
                 ChatRow(
                     chat: chat,
-                    isActive: chat.id == activeChatID,
-                    folders: folders,
-                    onSelect: { activeChatID = chat.id },
-                    onDelete: { deleteChat(id: chat.id) },
-                    onRename: { newTitle in renameChat(id: chat.id, newTitle: newTitle) },
-                    onDuplicate: { duplicateChat(id: chat.id) },
-                    onMove: { folderID in moveChat(id: chat.id, to: folderID) }
+                    isActive: chat.id == chatViewModel.currentChatID,
+                    folders: folderEntries,
+                    onSelect: { chatViewModel.selectChat(chat.id) },
+                    onDelete: { chatViewModel.deleteChat(chat.id) },
+                    onRename: { newTitle in chatViewModel.renameChat(chat.id, title: newTitle) },
+                    onDuplicate: { chatViewModel.duplicateChat(chat.id) },
+                    onMove: { folderID in chatViewModel.moveChatToFolder(chat.id, folderID: folderID) },
+                    onExport: { chatViewModel.exportChatToShare(chat.id) }
                 )
             }
         }
@@ -135,124 +140,26 @@ private struct ChatListSection: View {
         .searchable(text: $searchText, prompt: "Search chats")
         .environment(\.editMode, $state.editMode)
     }
-
-    private var filteredChats: [SidebarChat] {
-        if searchText.isEmpty { return chats }
-        return chats.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
-    }
-
-    // MARK: Chat operations
-
-    private func deleteChat(id: UUID, fromFolder folderID: UUID? = nil) {
-        if let folderID {
-            if let fi = folders.firstIndex(where: { $0.id == folderID }) {
-                folders[fi].chats.removeAll { $0.id == id }
-            }
-        } else {
-            chats.removeAll { $0.id == id }
-        }
-        if activeChatID == id { activeChatID = nil }
-    }
-
-    private func renameChat(id: UUID, newTitle: String, inFolder folderID: UUID? = nil) {
-        if let folderID {
-            if let fi = folders.firstIndex(where: { $0.id == folderID }),
-               let ci = folders[fi].chats.firstIndex(where: { $0.id == id }) {
-                folders[fi].chats[ci].title = newTitle
-            }
-        } else {
-            if let ci = chats.firstIndex(where: { $0.id == id }) {
-                chats[ci].title = newTitle
-            }
-        }
-    }
-
-    private func duplicateChat(id: UUID, inFolder folderID: UUID? = nil) {
-        if let folderID {
-            if let fi = folders.firstIndex(where: { $0.id == folderID }),
-               let chat = folders[fi].chats.first(where: { $0.id == id }) {
-                let copy = SidebarChat(title: "Copy of \(chat.title)")
-                folders[fi].chats.append(copy)
-            }
-        } else {
-            if let chat = chats.first(where: { $0.id == id }) {
-                let copy = SidebarChat(title: "Copy of \(chat.title)")
-                chats.insert(copy, at: 0)
-            }
-        }
-    }
-
-    private func moveChat(id: UUID, from sourceFolderID: UUID? = nil, to targetFolderID: UUID?) {
-        var movedChat: SidebarChat?
-        if let sourceFolderID {
-            if let fi = folders.firstIndex(where: { $0.id == sourceFolderID }),
-               let ci = folders[fi].chats.firstIndex(where: { $0.id == id }) {
-                movedChat = folders[fi].chats.remove(at: ci)
-            }
-        } else {
-            if let ci = chats.firstIndex(where: { $0.id == id }) {
-                movedChat = chats.remove(at: ci)
-            }
-        }
-
-        // Also search all folders if source wasn't specified
-        if movedChat == nil {
-            for fi in folders.indices {
-                if let ci = folders[fi].chats.firstIndex(where: { $0.id == id }) {
-                    movedChat = folders[fi].chats.remove(at: ci)
-                    break
-                }
-            }
-        }
-
-        guard let chat = movedChat else { return }
-
-        if let targetFolderID {
-            if let fi = folders.firstIndex(where: { $0.id == targetFolderID }) {
-                folders[fi].chats.append(chat)
-            }
-        } else {
-            chats.insert(chat, at: 0)
-        }
-    }
-
-    // MARK: Folder operations
-
-    private func renameFolder(id: UUID, newName: String) {
-        if let fi = folders.firstIndex(where: { $0.id == id }) {
-            folders[fi].name = newName
-        }
-    }
-
-    private func deleteFolder(id: UUID) {
-        if let fi = folders.firstIndex(where: { $0.id == id }) {
-            let orphanedChats = folders[fi].chats
-            chats.insert(contentsOf: orphanedChats, at: 0)
-            folders.remove(at: fi)
-        }
-    }
-
-    private func changeFolderColor(id: UUID, color: Color?) {
-        if let fi = folders.firstIndex(where: { $0.id == id }) {
-            folders[fi].color = color ?? .secondary
-        }
-    }
 }
 
 // MARK: - Folder Row
 
 private struct FolderRow: View {
-    let folder: SidebarFolder
-    @Binding var activeChatID: UUID?
-    let allFolders: [SidebarFolder]
+    let folderID: String
+    let folder: Folder
+    let chats: [Chat]
+    let activeChatID: String?
+    let allFolders: [(id: String, folder: Folder)]
 
-    let onDeleteChat: (UUID) -> Void
-    let onRenameChat: (UUID, String) -> Void
-    let onMoveChat: (UUID, UUID?) -> Void
-    let onDuplicateChat: (UUID) -> Void
+    let onSelectChat: (String) -> Void
+    let onDeleteChat: (String) -> Void
+    let onRenameChat: (String, String) -> Void
+    let onMoveChat: (String, String?) -> Void
+    let onDuplicateChat: (String) -> Void
+    let onExportChat: (String) -> Void
     let onRenameFolder: (String) -> Void
     let onDeleteFolder: () -> Void
-    let onChangeFolderColor: (Color?) -> Void
+    let onChangeFolderColor: (String?) -> Void
 
     @Environment(\.editMode) private var editMode
     @State private var isExpanded = true
@@ -260,70 +167,76 @@ private struct FolderRow: View {
     @State private var editedName = ""
     @State private var showDeleteConfirmation = false
 
+    private var folderColor: Color {
+        if let c = folder.color {
+            return FolderColor(rawValue: c)?.color ?? .secondary
+        }
+        return .secondary
+    }
+
     var body: some View {
         DisclosureGroup(isExpanded: $isExpanded) {
-            ForEach(folder.chats) { chat in
+            ForEach(chats) { chat in
                 ChatRow(
                     chat: chat,
                     isActive: chat.id == activeChatID,
                     folders: allFolders,
-                    onSelect: { activeChatID = chat.id },
+                    onSelect: { onSelectChat(chat.id) },
                     onDelete: { onDeleteChat(chat.id) },
                     onRename: { newTitle in onRenameChat(chat.id, newTitle) },
                     onDuplicate: { onDuplicateChat(chat.id) },
-                    onMove: { targetFolderID in onMoveChat(chat.id, targetFolderID) }
+                    onMove: { targetFolderID in onMoveChat(chat.id, targetFolderID) },
+                    onExport: { onExportChat(chat.id) }
                 )
             }
         } label: {
             Label {
                 if isRenaming {
                     TextField("Folder name", text: $editedName)
-                        .onSubmit {
-                            commitRename()
-                        }
+                        .onSubmit { commitRename() }
                 } else {
                     Text(folder.name)
                         .lineLimit(1)
                 }
             } icon: {
                 Image(systemName: "folder.fill")
-                    .foregroundStyle(folder.color)
+                    .foregroundStyle(folderColor)
             }
             .contextMenu {
                 if editMode?.wrappedValue.isEditing != true {
-                Button {
-                    editedName = folder.name
-                    isRenaming = true
-                } label: {
-                    Label("Rename", systemImage: "pencil")
-                }
-
-                Menu {
-                    ForEach(FolderColor.allCases) { fc in
-                        Button {
-                            onChangeFolderColor(fc.color)
-                        } label: {
-                            Label(fc.name, systemImage: "circle.fill")
-                        }
-                    }
-                    Divider()
                     Button {
-                        onChangeFolderColor(nil)
+                        editedName = folder.name
+                        isRenaming = true
                     } label: {
-                        Label("Default", systemImage: "arrow.counterclockwise")
+                        Label("Rename", systemImage: "pencil")
                     }
-                } label: {
-                    Label("Color", systemImage: "paintpalette")
-                }
 
-                Divider()
+                    Menu {
+                        ForEach(FolderColor.allCases) { fc in
+                            Button {
+                                onChangeFolderColor(fc.rawValue)
+                            } label: {
+                                Label(fc.name, systemImage: "circle.fill")
+                            }
+                        }
+                        Divider()
+                        Button {
+                            onChangeFolderColor(nil)
+                        } label: {
+                            Label("Default", systemImage: "arrow.counterclockwise")
+                        }
+                    } label: {
+                        Label("Color", systemImage: "paintpalette")
+                    }
 
-                Button(role: .destructive) {
-                    showDeleteConfirmation = true
-                } label: {
-                    Label("Delete Folder", systemImage: "trash")
+                    Divider()
+
+                    Button(role: .destructive) {
+                        showDeleteConfirmation = true
+                    } label: {
+                        Label("Delete Folder", systemImage: "trash")
+                    }
                 }
-                } // end if !isEditing
             }
         }
         .confirmationDialog(
@@ -351,15 +264,16 @@ private struct FolderRow: View {
 // MARK: - Chat Row
 
 private struct ChatRow: View {
-    let chat: SidebarChat
+    let chat: Chat
     let isActive: Bool
-    let folders: [SidebarFolder]
+    let folders: [(id: String, folder: Folder)]
 
     let onSelect: () -> Void
     let onDelete: () -> Void
     let onRename: (String) -> Void
     let onDuplicate: () -> Void
-    let onMove: (UUID?) -> Void
+    let onMove: (String?) -> Void
+    let onExport: () -> Void
 
     @Environment(\.editMode) private var editMode
     @State private var isRenaming = false
@@ -372,9 +286,7 @@ private struct ChatRow: View {
         Label {
             if isRenaming {
                 TextField("Chat title", text: $editedTitle)
-                    .onSubmit {
-                        commitRename()
-                    }
+                    .onSubmit { commitRename() }
             } else {
                 Text(chat.title)
                     .lineLimit(1)
@@ -411,11 +323,11 @@ private struct ChatRow: View {
 
                     Divider()
 
-                    ForEach(folders) { folder in
+                    ForEach(folders, id: \.id) { entry in
                         Button {
-                            onMove(folder.id)
+                            onMove(entry.id)
                         } label: {
-                            Label(folder.name, systemImage: "folder")
+                            Label(entry.folder.name, systemImage: "folder")
                         }
                     }
                 } label: {
@@ -423,7 +335,7 @@ private struct ChatRow: View {
                 }
 
                 Button {
-                    // export
+                    onExport()
                 } label: {
                     Label("Export", systemImage: "square.and.arrow.up")
                 }
@@ -480,6 +392,10 @@ private struct ChatRow: View {
 
 private struct MenuOptionsSection: View {
     @Binding var isExpanded: Bool
+    var chatViewModel: ChatViewModel
+    @State private var showImporter = false
+    @State private var showExportAll = false
+    @State private var importError: String?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -506,14 +422,14 @@ private struct MenuOptionsSection: View {
                         action: {}
                     )
                     MenuOptionButton(
-                        title: "Import / Export",
-                        icon: "square.and.arrow.up.on.square",
-                        action: {}
+                        title: "Import",
+                        icon: "square.and.arrow.down",
+                        action: { showImporter = true }
                     )
                     MenuOptionButton(
-                        title: "Sync",
-                        icon: "arrow.triangle.2.circlepath",
-                        action: {}
+                        title: "Export All",
+                        icon: "square.and.arrow.up",
+                        action: { exportAll() }
                     )
                     MenuOptionButton(
                         title: "Help",
@@ -530,6 +446,51 @@ private struct MenuOptionsSection: View {
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
                 .padding(.bottom, 4)
+        }
+        .fileImporter(
+            isPresented: $showImporter,
+            allowedContentTypes: [.json],
+            allowsMultipleSelection: false
+        ) { result in
+            handleImport(result)
+        }
+        .alert("Import Error", isPresented: Binding(
+            get: { importError != nil },
+            set: { if !$0 { importError = nil } }
+        )) {
+            Button("OK") { importError = nil }
+        } message: {
+            Text(importError ?? "")
+        }
+    }
+
+    private func handleImport(_ result: Result<[URL], Error>) {
+        do {
+            let urls = try result.get()
+            guard let url = urls.first else { return }
+
+            guard url.startAccessingSecurityScopedResource() else {
+                importError = "Unable to access the selected file."
+                return
+            }
+            defer { url.stopAccessingSecurityScopedResource() }
+
+            let data = try Data(contentsOf: url)
+            try chatViewModel.importData(from: data)
+        } catch {
+            importError = error.localizedDescription
+        }
+    }
+
+    private func exportAll() {
+        do {
+            let data = try chatViewModel.exportData()
+            let url = FileManager.default.temporaryDirectory
+                .appendingPathComponent("weavelet-canvas-export.json")
+            try data.write(to: url)
+            chatViewModel.exportedFileURL = url
+        } catch {
+            chatViewModel.errorMessage = "Export failed: \(error.localizedDescription)"
         }
     }
 }
@@ -554,19 +515,7 @@ private struct MenuOptionButton: View {
     }
 }
 
-// MARK: - Models (Placeholder)
-
-struct SidebarChat: Identifiable {
-    let id = UUID()
-    var title: String
-}
-
-struct SidebarFolder: Identifiable {
-    let id = UUID()
-    var name: String
-    var color: Color
-    var chats: [SidebarChat]
-}
+// MARK: - Folder Colors
 
 enum FolderColor: String, CaseIterable, Identifiable {
     case red, orange, yellow, green, blue, purple, pink
@@ -590,7 +539,7 @@ enum FolderColor: String, CaseIterable, Identifiable {
 
 #Preview {
     NavigationStack {
-        SidebarView(state: SidebarState())
+        SidebarView(state: SidebarState(), chatViewModel: ChatViewModel())
             .navigationTitle("Chats")
     }
 }

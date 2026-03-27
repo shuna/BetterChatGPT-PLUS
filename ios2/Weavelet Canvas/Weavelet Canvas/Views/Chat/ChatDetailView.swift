@@ -12,7 +12,7 @@ struct ChatDetailView: View {
             if forceChat || viewModel.viewMode == .chat {
                 chatContentView
             } else {
-                BranchEditorView()
+                BranchEditorView(chatViewModel: viewModel)
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
@@ -24,49 +24,46 @@ struct ChatDetailView: View {
     }
 
     private var chatContentView: some View {
-        GeometryReader { geo in
-            ZStack {
-                messageList
+        ZStack {
+            messageList
 
-                if !keyboardVisible {
-                    floatingControls
-                }
+            if !keyboardVisible {
+                floatingControls
             }
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if viewModel.isSearching {
-                    ChatFindBar(
-                        query: $viewModel.searchQuery,
-                        currentMatch: viewModel.searchCurrentMatch,
-                        totalMatches: viewModel.searchTotalMatches,
-                        onPrevious: { viewModel.searchPrevious() },
-                        onNext: { viewModel.searchNext() },
-                        onClose: {
-                            viewModel.isSearching = false
-                            viewModel.searchQuery = ""
-                        }
-                    )
-                }
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                VStack(spacing: 0) {
-                    // Error toast (above input bar)
-                    if let error = viewModel.errorMessage {
-                        ErrorToast(
-                            message: error,
-                            onRetry: { viewModel.retryLastMessage() },
-                            onDismiss: { withAnimation { viewModel.errorMessage = nil } }
-                        )
-                        .padding(.bottom, 6)
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if viewModel.isSearching {
+                ChatFindBar(
+                    query: $viewModel.searchQuery,
+                    currentMatch: viewModel.searchCurrentMatch,
+                    totalMatches: viewModel.searchTotalMatches,
+                    onPrevious: { viewModel.searchPrevious() },
+                    onNext: { viewModel.searchNext() },
+                    onClose: {
+                        viewModel.isSearching = false
+                        viewModel.searchQuery = ""
                     }
-
-                    ChatInputBar(
-                        text: $viewModel.draftText,
-                        isGenerating: viewModel.isGenerating,
-                        onSend: { viewModel.sendMessage() },
-                        onStop: { viewModel.stopGenerating() }
+                )
+            }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                // Error toast (above input bar)
+                if let error = viewModel.errorMessage {
+                    ErrorToast(
+                        message: error,
+                        onRetry: { viewModel.retryLastMessage() },
+                        onDismiss: { withAnimation { viewModel.errorMessage = nil } }
                     )
+                    .padding(.bottom, 6)
                 }
-                .padding(.bottom, keyboardVisible ? 0 : -max(geo.safeAreaInsets.bottom - 6, 0))
+
+                ChatInputBar(
+                    text: $viewModel.draftText,
+                    isGenerating: viewModel.isGenerating,
+                    onSend: { viewModel.sendMessage() },
+                    onStop: { viewModel.stopGenerating() }
+                )
             }
         }
     }
@@ -130,7 +127,9 @@ struct ChatDetailView: View {
                                 onChangeRole: { viewModel.changeRole(message.id, to: $0) },
                                 onToggleCollapse: { viewModel.toggleCollapse(message.id) },
                                 isEditing: isEditing,
-                                editText: $viewModel.editText
+                                editText: $viewModel.editText,
+                                searchQuery: viewModel.isSearching ? viewModel.searchQuery : "",
+                                isCurrentSearchMatch: isCurrentSearchMatch(message)
                             )
                             .id(message.id)
                         } footer: {
@@ -181,6 +180,33 @@ struct ChatDetailView: View {
                 }
             }
             .onAppear { scrollProxy = proxy }
+            .onChange(of: viewModel.searchCurrentMatch) {
+                scrollToCurrentSearchMatch()
+            }
+        }
+    }
+
+    /// Whether the given message is the currently focused search match.
+    private func isCurrentSearchMatch(_ message: ChatMessage) -> Bool {
+        guard viewModel.isSearching,
+              viewModel.searchCurrentMatch > 0,
+              viewModel.searchCurrentMatch <= viewModel.searchMatchIndices.count else {
+            return false
+        }
+        let matchIndex = viewModel.searchMatchIndices[viewModel.searchCurrentMatch - 1]
+        guard matchIndex < viewModel.messages.count else { return false }
+        return viewModel.messages[matchIndex].id == message.id
+    }
+
+    /// Scroll to the currently focused search match.
+    private func scrollToCurrentSearchMatch() {
+        guard viewModel.searchCurrentMatch > 0,
+              viewModel.searchCurrentMatch <= viewModel.searchMatchIndices.count else { return }
+        let matchIndex = viewModel.searchMatchIndices[viewModel.searchCurrentMatch - 1]
+        guard matchIndex < viewModel.messages.count else { return }
+        let msgId = viewModel.messages[matchIndex].id
+        withAnimation(.easeOut(duration: 0.3)) {
+            scrollProxy?.scrollTo(msgId, anchor: .center)
         }
     }
 }

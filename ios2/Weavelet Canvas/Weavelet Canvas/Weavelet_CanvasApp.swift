@@ -9,9 +9,17 @@ import SwiftUI
 
 @main
 struct Weavelet_CanvasApp: App {
+    @State private var chatViewModel = ChatViewModel()
+    @Environment(\.scenePhase) private var scenePhase
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(chatViewModel: chatViewModel)
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .background {
+                chatViewModel.flush()
+            }
         }
     }
 }

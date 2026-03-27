@@ -48,10 +48,21 @@ final class ThreeColumnState {
     var splitViewVisibility: NavigationSplitViewVisibility = .detailOnly
     var sidebarSheetPresented: Bool = false
     var toolbarsHidden: Bool = false
-    var inspectorWidth: CGFloat = 320
+    var inspectorWidth: CGFloat = {
+        // Restore saved width, or use 0 as sentinel for "use half screen"
+        UserDefaults.standard.double(forKey: "inspectorWidth")
+    }()
+    /// Whether the user has explicitly dragged the divider
+    var inspectorWidthUserSet: Bool = UserDefaults.standard.bool(forKey: "inspectorWidthUserSet")
     var showsDefaultInspectorButton: Bool = true
     static let inspectorMinWidth: CGFloat = 240
     static let inspectorMaxWidth: CGFloat = 600
+
+    func saveInspectorWidth() {
+        UserDefaults.standard.set(inspectorWidth, forKey: "inspectorWidth")
+        UserDefaults.standard.set(true, forKey: "inspectorWidthUserSet")
+        inspectorWidthUserSet = true
+    }
 
     var sidebarPresented: Bool {
         get { splitViewVisibility != .detailOnly }
@@ -267,7 +278,10 @@ struct ThreePaneView<Sidebar: View, Detail: View, Inspector: View>: View {
                     .layoutPriority(1)
 
                     if state.inspectorPresented {
-                        InspectorDragHandle(inspectorWidth: $state.inspectorWidth)
+                        InspectorDragHandle(
+                            inspectorWidth: $state.inspectorWidth,
+                            onDragEnd: { state.saveInspectorWidth() }
+                        )
 
                         inspector(viewState, actions)
                             .frame(width: state.inspectorWidth)
@@ -275,6 +289,16 @@ struct ThreePaneView<Sidebar: View, Detail: View, Inspector: View>: View {
                     }
                 }
                 .animation(.spring(duration: 0.3, bounce: 0.0), value: state.inspectorPresented)
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.width
+                } action: { totalWidth in
+                    // Set initial inspector width to half the screen if not user-set
+                    if !state.inspectorWidthUserSet && totalWidth > 0 {
+                        let half = totalWidth / 2
+                        let clamped = min(max(half, ThreeColumnState.inspectorMinWidth), ThreeColumnState.inspectorMaxWidth)
+                        state.inspectorWidth = clamped
+                    }
+                }
             }
         }
     }
@@ -351,6 +375,7 @@ struct DefaultDetailView: View {
 
 private struct InspectorDragHandle: View {
     @Binding var inspectorWidth: CGFloat
+    var onDragEnd: (() -> Void)? = nil
     @State private var dragStartWidth: CGFloat = 0
     @GestureState private var isDragging = false
 
@@ -395,7 +420,10 @@ private struct InspectorDragHandle: View {
                         inspectorWidth = min(max(newWidth, ThreeColumnState.inspectorMinWidth), ThreeColumnState.inspectorMaxWidth)
                     }
                 }
-                .onEnded { _ in dragStartWidth = 0 }
+                .onEnded { _ in
+                    dragStartWidth = 0
+                    onDragEnd?()
+                }
         )
         .hoverEffect(.highlight)
     }
