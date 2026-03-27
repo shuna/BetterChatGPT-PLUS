@@ -176,8 +176,12 @@ class ChatViewModel {
 
     // MARK: - Chat Management
 
-    func createNewChat(title: String = "New Chat") {
-        let chat = Chat(title: title)
+    func createNewChat(title: String = "New Chat", config: ChatConfig? = nil, systemMessage: String? = nil) {
+        var messages: [Message] = []
+        if let sys = systemMessage, !sys.isEmpty {
+            messages.append(Message(role: .system, content: [.text(sys)]))
+        }
+        let chat = Chat(title: title, messages: messages, config: config ?? .default)
         chats.insert(chat, at: 0)
         currentChatID = chat.id
         pushNavigation(chat.id)
@@ -735,6 +739,92 @@ class ChatViewModel {
         } catch {
             errorMessage = "Export failed: \(error.localizedDescription)"
         }
+    }
+
+    /// Export a single chat in the specified format with options.
+    func exportChatToShare(
+        _ chatId: String,
+        format: ExportImportService.ExportFormat,
+        visibleBranchOnly: Bool = false,
+        gzipCompress: Bool = false
+    ) {
+        guard let chat = chats.first(where: { $0.id == chatId }) else {
+            errorMessage = "Chat not found"
+            return
+        }
+        do {
+            let data: Data
+            switch format {
+            case .json:
+                data = try exportChat(chatId, visibleBranchOnly: visibleBranchOnly)
+            case .openAI:
+                data = ExportImportService.exportAsOpenAI(chat: chat, contentStore: contentStore)
+            case .openRouter:
+                data = ExportImportService.exportAsOpenRouter(chat: chat, contentStore: contentStore)
+            case .markdown:
+                data = ExportImportService.exportAsMarkdown(
+                    chat: chat, contentStore: contentStore, visibleBranchOnly: visibleBranchOnly
+                )
+            case .image:
+                // Image export uses a different path — generate markdown-based text image
+                let md = ExportImportService.exportAsMarkdown(
+                    chat: chat, contentStore: contentStore, visibleBranchOnly: visibleBranchOnly
+                )
+                if let pngData = renderTextAsPNG(String(data: md, encoding: .utf8) ?? "") {
+                    data = pngData
+                } else {
+                    errorMessage = "Image rendering failed"
+                    return
+                }
+            }
+
+            let finalData: Data
+            let ext: String
+            if gzipCompress, let compressed = ExportImportService.gzipCompress(data) {
+                finalData = compressed
+                ext = "\(format.fileExtension).gz"
+            } else {
+                finalData = data
+                ext = format.fileExtension
+            }
+
+            let safeName = chat.title.replacingOccurrences(of: "/", with: "-")
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(safeName).\(ext)")
+            try finalData.write(to: url)
+            exportedFileURL = url
+        } catch {
+            errorMessage = "Export failed: \(error.localizedDescription)"
+        }
+    }
+
+    /// Render plain text as a PNG image using UIKit.
+    private func renderTextAsPNG(_ text: String) -> Data? {
+        let maxWidth: CGFloat = 600
+        let padding: CGFloat = 24
+        let font = UIFont.systemFont(ofSize: 14)
+        let attrs: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: UIColor.label
+        ]
+        let attrStr = NSAttributedString(string: text, attributes: attrs)
+        let drawRect = CGSize(width: maxWidth - padding * 2, height: .greatestFiniteMagnitude)
+        let boundingRect = attrStr.boundingRect(
+            with: drawRect, options: [.usesLineFragmentOrigin, .usesFontLeading], context: nil
+        )
+        let imageSize = CGSize(
+            width: maxWidth,
+            height: ceil(boundingRect.height) + padding * 2
+        )
+        let renderer = UIGraphicsImageRenderer(size: imageSize)
+        let image = renderer.image { ctx in
+            UIColor.systemBackground.setFill()
+            ctx.fill(CGRect(origin: .zero, size: imageSize))
+            attrStr.draw(in: CGRect(
+                x: padding, y: padding,
+                width: drawRect.width, height: boundingRect.height
+            ))
+        }
+        return image.pngData()
     }
 
     // MARK: - Persistence

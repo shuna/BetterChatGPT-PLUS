@@ -33,26 +33,40 @@ final class SidebarState {
 struct SidebarView: View {
     @Bindable var state: SidebarState
     var chatViewModel: ChatViewModel
+    var settings: SettingsViewModel?
     @State private var searchText = ""
     @State private var menuOptionsExpanded = true
+    @State private var exportChatId: String?
 
     var body: some View {
         VStack(spacing: 0) {
             ChatListSection(
                 state: state,
                 chatViewModel: chatViewModel,
-                searchText: $searchText
+                searchText: $searchText,
+                exportChatId: $exportChatId
             )
 
             Divider()
 
             MenuOptionsSection(
                 isExpanded: $menuOptionsExpanded,
-                chatViewModel: chatViewModel
+                chatViewModel: chatViewModel,
+                settings: settings
             )
         }
         .navigationTitle("")
+        .sheet(item: Binding(
+            get: { exportChatId.map { IdentifiableChatId(id: $0) } },
+            set: { exportChatId = $0?.id }
+        )) { item in
+            ExportSheet(chatId: item.id, chatViewModel: chatViewModel)
+        }
     }
+}
+
+private struct IdentifiableChatId: Identifiable {
+    let id: String
 }
 
 // MARK: - Chat List
@@ -61,6 +75,7 @@ private struct ChatListSection: View {
     @Bindable var state: SidebarState
     var chatViewModel: ChatViewModel
     @Binding var searchText: String
+    @Binding var exportChatId: String?
 
     private var folderEntries: [(id: String, folder: Folder)] {
         chatViewModel.folders
@@ -108,7 +123,7 @@ private struct ChatListSection: View {
                         chatViewModel.duplicateChat(chatID)
                     },
                     onExportChat: { chatID in
-                        chatViewModel.exportChatToShare(chatID)
+                        exportChatId = chatID
                     },
                     onRenameFolder: { newName in
                         chatViewModel.renameFolder(entry.id, name: newName)
@@ -132,7 +147,7 @@ private struct ChatListSection: View {
                     onRename: { newTitle in chatViewModel.renameChat(chat.id, title: newTitle) },
                     onDuplicate: { chatViewModel.duplicateChat(chat.id) },
                     onMove: { folderID in chatViewModel.moveChatToFolder(chat.id, folderID: folderID) },
-                    onExport: { chatViewModel.exportChatToShare(chat.id) }
+                    onExport: { exportChatId = chat.id }
                 )
             }
         }
@@ -393,8 +408,10 @@ private struct ChatRow: View {
 private struct MenuOptionsSection: View {
     @Binding var isExpanded: Bool
     var chatViewModel: ChatViewModel
+    var settings: SettingsViewModel?
     @State private var showImporter = false
     @State private var showExportAll = false
+    @State private var showSettings = false
     @State private var importError: String?
 
     var body: some View {
@@ -419,7 +436,7 @@ private struct MenuOptionsSection: View {
                     MenuOptionButton(
                         title: "Settings",
                         icon: "gearshape",
-                        action: {}
+                        action: { showSettings = true }
                     )
                     MenuOptionButton(
                         title: "Import",
@@ -461,6 +478,11 @@ private struct MenuOptionsSection: View {
             Button("OK") { importError = nil }
         } message: {
             Text(importError ?? "")
+        }
+        .sheet(isPresented: $showSettings) {
+            if let settings {
+                SettingsView(settings: settings)
+            }
         }
     }
 

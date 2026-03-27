@@ -372,6 +372,250 @@ enum ExportImportService {
         }
     }
 
+    // MARK: - Export Formats
+
+    /// Supported export format types.
+    enum ExportFormat: String, CaseIterable, Identifiable {
+        case json       // V3 JSON
+        case openAI     // ChatGPT-compatible
+        case openRouter // OpenRouter-compatible
+        case markdown   // Markdown text
+        case image      // PNG image
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .json: "JSON (V3)"
+            case .openAI: "ChatGPT"
+            case .openRouter: "OpenRouter"
+            case .markdown: "Markdown"
+            case .image: "Image (PNG)"
+            }
+        }
+
+        var fileExtension: String {
+            switch self {
+            case .json: "json"
+            case .openAI: "json"
+            case .openRouter: "json"
+            case .markdown: "md"
+            case .image: "png"
+            }
+        }
+    }
+
+    // MARK: - OpenAI Export
+
+    /// Export a chat in OpenAI/ChatGPT conversation format.
+    static func exportAsOpenAI(
+        chat: Chat,
+        contentStore: ContentStoreData
+    ) -> Data {
+        let tree = chat.branchTree
+        var mapping: [[String: Any]] = []
+
+        // Build mapping from active path messages
+        let messages: [Message]
+        if let tree {
+            messages = BranchService.materializeActivePath(tree: tree, contentStore: contentStore)
+        } else {
+            messages = chat.messages
+        }
+
+        let rootId = UUID().uuidString
+        var prevId = rootId
+        var nodeEntries: [String: Any] = [:]
+        var childrenMap: [String: [String]] = [rootId: []]
+
+        for (i, msg) in messages.enumerated() {
+            guard msg.role != .system else { continue }
+            let nodeId = UUID().uuidString
+            childrenMap[prevId, default: []].append(nodeId)
+            childrenMap[nodeId] = []
+
+            let parts = msg.content.compactMap(\.textValue)
+
+            nodeEntries[nodeId] = [
+                "id": nodeId,
+                "message": [
+                    "author": ["role": msg.role.rawValue],
+                    "content": ["parts": parts]
+                ] as [String: Any],
+                "parent": prevId,
+                "children": [] as [String]  // filled after
+            ]
+            prevId = nodeId
+        }
+
+        // Root node (no message)
+        nodeEntries[rootId] = [
+            "id": rootId,
+            "parent": NSNull(),
+            "children": childrenMap[rootId] ?? []
+        ]
+
+        // Fill children for each node
+        for (id, children) in childrenMap {
+            if var entry = nodeEntries[id] as? [String: Any] {
+                entry["children"] = children
+                nodeEntries[id] = entry
+            }
+        }
+
+        let openAIChat: [String: Any] = [
+            "title": chat.title,
+            "mapping": nodeEntries,
+            "current_node": prevId
+        ]
+
+        let array = [openAIChat]
+        let data = (try? JSONSerialization.data(withJSONObject: array, options: [.prettyPrinted, .sortedKeys])) ?? Data()
+        return data
+    }
+
+    // MARK: - OpenRouter Export
+
+    /// Export a chat in OpenRouter format.
+    static func exportAsOpenRouter(
+        chat: Chat,
+        contentStore: ContentStoreData
+    ) -> Data {
+        let messages: [Message]
+        if let tree = chat.branchTree {
+            messages = BranchService.materializeActivePath(tree: tree, contentStore: contentStore)
+        } else {
+            messages = chat.messages
+        }
+
+        let now = ISO8601DateFormatter().string(from: Date())
+        let charId = UUID().uuidString
+
+        let character: [String: Any] = [
+            "id": charId,
+            "model": chat.config.model,
+            "modelInfo": ["slug": chat.config.model, "name": chat.config.model],
+            "description": "",
+            "includeDefaultSystemPrompt": false,
+            "isStreaming": true,
+            "samplingParameters": [
+                "temperature": chat.config.temperature,
+                "max_tokens": chat.config.maxTokens,
+                "top_p": chat.config.topP
+            ] as [String: Any],
+            "chatMemory": 0,
+            "isDisabled": false,
+            "isRemoved": false,
+            "createdAt": now,
+            "updatedAt": now,
+            "plugins": [] as [Any]
+        ]
+
+        var orMessages: [String: Any] = [:]
+        var orItems: [String: Any] = [:]
+        let baseTime = Date().timeIntervalSince1970
+
+        for (i, msg) in messages.enumerated() {
+            let msgId = "\(Int(baseTime))-\(i)"
+            let text = msg.content.compactMap(\.textValue).joined()
+
+            orMessages[msgId] = [
+                "id": msgId,
+                "role": msg.role.rawValue,
+                "content": text,
+                "characterId": msg.role == .assistant ? charId as Any : NSNull() as Any
+            ]
+
+            orItems[msgId] = [
+                "id": msgId,
+                "type": "message",
+                "messageId": msgId,
+                "order": i
+            ]
+        }
+
+        let orChat: [String: Any] = [
+            "version": "orpg.3.0",
+            "title": chat.title,
+            "characters": [charId: character],
+            "messages": orMessages,
+            "items": orItems,
+            "artifacts": [:] as [String: Any],
+            "artifactFiles": [:] as [String: Any],
+            "artifactVersions": [:] as [String: Any],
+            "artifactFileContents": [:] as [String: Any]
+        ]
+
+        let data = (try? JSONSerialization.data(withJSONObject: orChat, options: [.prettyPrinted, .sortedKeys])) ?? Data()
+        return data
+    }
+
+    // MARK: - Markdown Export
+
+    /// Export a chat as Markdown text.
+    static func exportAsMarkdown(
+        chat: Chat,
+        contentStore: ContentStoreData,
+        visibleBranchOnly: Bool = true
+    ) -> Data {
+        let messages: [Message]
+        if let tree = chat.branchTree {
+            if visibleBranchOnly {
+                messages = BranchService.materializeActivePath(tree: tree, contentStore: contentStore)
+            } else {
+                // All nodes in tree order (active path)
+                messages = BranchService.materializeActivePath(tree: tree, contentStore: contentStore)
+            }
+        } else {
+            messages = chat.messages
+        }
+
+        var md = "# \(chat.title)\n\n"
+
+        for msg in messages {
+            md += "### **\(msg.role.rawValue)**:\n\n"
+            md += contentToMarkdown(msg.content)
+            md += "\n---\n\n"
+        }
+
+        return md.data(using: .utf8) ?? Data()
+    }
+
+    /// Convert content items to Markdown string.
+    private static func contentToMarkdown(_ content: [ContentItem]) -> String {
+        var result = ""
+        for item in content {
+            switch item {
+            case .text(let text):
+                // Auto-close unclosed code blocks
+                let backtickCount = text.components(separatedBy: "```").count - 1
+                result += text
+                if backtickCount % 2 != 0 {
+                    result += "\n```"
+                }
+                result += "\n"
+            case .imageURL(let url, _):
+                result += "![image](\(url))\n"
+            case .reasoning(let text):
+                result += "> *\(text)*\n"
+            case .toolCall(_, let name, let arguments):
+                result += "**Tool call**: `\(name)`\n```json\n\(arguments)\n```\n"
+            case .toolResult(_, let content):
+                result += "**Tool result**:\n\(content)\n"
+            }
+        }
+        return result
+    }
+
+    // MARK: - Gzip Compression
+
+    /// Compress data using gzip.
+    static func gzipCompress(_ data: Data) -> Data? {
+        guard !data.isEmpty else { return nil }
+        // Use Foundation's built-in compression
+        return try? (data as NSData).compressed(using: .zlib) as Data
+    }
+
     // MARK: - Errors
 
     enum ImportError: Error, LocalizedError {

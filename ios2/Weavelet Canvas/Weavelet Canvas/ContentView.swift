@@ -15,12 +15,13 @@ struct ContentView: View {
     }()
     @State private var sidebarState = SidebarState()
     var chatViewModel: ChatViewModel
+    var settings: SettingsViewModel
 
     var body: some View {
         ThreePaneView(
             state: threeColumnState,
             Sidebar: {
-                SidebarView(state: sidebarState, chatViewModel: chatViewModel)
+                SidebarView(state: sidebarState, chatViewModel: chatViewModel, settings: settings)
             },
             Detail: {
                 ChatDetailView(viewModel: chatViewModel)
@@ -29,7 +30,7 @@ struct ContentView: View {
                 EmptyView()
             },
             sidebarToolbarTrailing: { [sidebarState, chatViewModel] _, _ in
-                SidebarToolbarTrailing(state: sidebarState, chatViewModel: chatViewModel)
+                SidebarToolbarTrailing(state: sidebarState, chatViewModel: chatViewModel, settings: settings)
             },
             detailToolbarLeading: { [chatViewModel] _, _ in
                 DetailToolbarLeading(viewModel: chatViewModel)
@@ -38,7 +39,7 @@ struct ContentView: View {
                 DetailCenterToolbar(viewModel: chatViewModel)
             },
             detailToolbarTrailing: { [chatViewModel, threeColumnState] _, _ in
-                DetailToolbarTrailing(viewModel: chatViewModel, threeColumnState: threeColumnState)
+                DetailToolbarTrailing(viewModel: chatViewModel, threeColumnState: threeColumnState, settings: settings)
             },
             detailToolbarBottomLeading: { _, _ in
                 EmptyView()
@@ -53,7 +54,7 @@ struct ContentView: View {
                 InspectorCenterToolbar(viewModel: chatViewModel)
             },
             inspectorToolbarTrailing: { [chatViewModel, threeColumnState] _, _ in
-                InspectorToolbarTrailing(viewModel: chatViewModel, threeColumnState: threeColumnState)
+                InspectorToolbarTrailing(viewModel: chatViewModel, threeColumnState: threeColumnState, settings: settings)
             },
             inspectorContent: { [chatViewModel] in
                 InspectorContentView(viewModel: chatViewModel)
@@ -91,6 +92,7 @@ private struct ShareSheet: UIViewControllerRepresentable {
 private struct SidebarToolbarTrailing: View {
     @Bindable var state: SidebarState
     var chatViewModel: ChatViewModel
+    var settings: SettingsViewModel
 
     var body: some View {
         HStack(spacing: 12) {
@@ -121,7 +123,10 @@ private struct SidebarToolbarTrailing: View {
                 .accessibilityLabel("New Folder")
 
                 Button {
-                    chatViewModel.createNewChat()
+                    chatViewModel.createNewChat(
+                        config: settings.defaultChatConfig,
+                        systemMessage: settings.defaultSystemMessage
+                    )
                 } label: {
                     Image(systemName: "square.and.pencil")
                 }
@@ -334,6 +339,7 @@ private struct DetailCenterToolbar: View {
 private struct DetailToolbarTrailing: View {
     @Bindable var viewModel: ChatViewModel
     @Bindable var threeColumnState: ThreeColumnState
+    var settings: SettingsViewModel?
     @State private var showModelSettings = false
 
     var body: some View {
@@ -347,7 +353,7 @@ private struct DetailToolbarTrailing: View {
                 }
                 .accessibilityLabel("Model Settings")
                 .sheet(isPresented: $showModelSettings) {
-                    ModelSettingsSheet(viewModel: viewModel)
+                    ModelSettingsSheet(viewModel: viewModel, settings: settings)
                 }
             }
 
@@ -382,6 +388,7 @@ private struct DetailToolbarTrailing: View {
 private struct InspectorToolbarTrailing: View {
     @Bindable var viewModel: ChatViewModel
     @Bindable var threeColumnState: ThreeColumnState
+    var settings: SettingsViewModel?
 
     /// The view shown in the inspector is the opposite of viewMode
     private var inspectorShowsChat: Bool { viewModel.viewMode == .branchEditor }
@@ -399,7 +406,7 @@ private struct InspectorToolbarTrailing: View {
                 }
                 .accessibilityLabel("Model Settings")
                 .sheet(isPresented: $showModelSettings) {
-                    ModelSettingsSheet(viewModel: viewModel)
+                    ModelSettingsSheet(viewModel: viewModel, settings: settings)
                 }
             }
 
@@ -476,9 +483,11 @@ private struct InspectorContentView: View {
 
 private struct ModelSettingsSheet: View {
     @Bindable var viewModel: ChatViewModel
+    var settings: SettingsViewModel?
     @Environment(\.dismiss) private var dismiss
     @State private var apiKeyInputs: [ProviderId: String] = [:]
     @State private var showingKeyFor: ProviderId?
+    @State private var newCustomModelId: String = ""
 
     private var configBinding: Binding<ChatConfig> {
         Binding(
@@ -512,12 +521,29 @@ private struct ModelSettingsSheet: View {
                 }
 
                 Section("Model") {
-                    TextField("Model ID", text: Binding(
-                        get: { viewModel.selectedModelID },
-                        set: { viewModel.selectedModelID = $0 }
-                    ))
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
+                    HStack {
+                        TextField("Model ID", text: Binding(
+                            get: { viewModel.selectedModelID },
+                            set: { viewModel.selectedModelID = $0 }
+                        ))
+                        .autocorrectionDisabled()
+                        .textInputAutocapitalization(.never)
+
+                        if let settings {
+                            Button {
+                                settings.toggleFavorite(viewModel.selectedModelID)
+                            } label: {
+                                Image(systemName: settings.isFavorite(viewModel.selectedModelID) ? "star.fill" : "star")
+                                    .foregroundStyle(settings.isFavorite(viewModel.selectedModelID) ? .yellow : .secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+
+                if let settings {
+                    favoriteModelsSection(settings: settings)
+                    customModelsSection(settings: settings, provider: configBinding.wrappedValue.providerId ?? .openai)
                 }
 
                 Section("API Key") {
@@ -622,6 +648,68 @@ private struct ModelSettingsSheet: View {
         }
     }
 
+    @ViewBuilder
+    private func favoriteModelsSection(settings: SettingsViewModel) -> some View {
+        let ids = settings.favoriteModelIDs
+        if !ids.isEmpty {
+            Section("Favorites") {
+                ForEach(ids.indices, id: \.self) { i in
+                    modelRow(modelId: ids[i], settings: settings)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func customModelsSection(settings: SettingsViewModel, provider: ProviderId) -> some View {
+        let ids = settings.customModelsFor(provider)
+        Section("Custom Models (\(provider.rawValue.capitalized))") {
+            ForEach(ids.indices, id: \.self) { i in
+                modelRow(modelId: ids[i], settings: settings, removeAction: {
+                    settings.removeCustomModel(ids[i], for: provider)
+                })
+            }
+            HStack {
+                TextField("Add custom model ID", text: $newCustomModelId)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                Button {
+                    guard !newCustomModelId.isEmpty else { return }
+                    settings.addCustomModel(newCustomModelId, for: provider)
+                    newCustomModelId = ""
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                }
+                .disabled(newCustomModelId.isEmpty)
+            }
+        }
+    }
+
+    private func modelRow(modelId: String, settings: SettingsViewModel, removeAction: (() -> Void)? = nil) -> some View {
+        Button {
+            viewModel.selectedModelID = modelId
+        } label: {
+            HStack {
+                Text(modelId).foregroundStyle(.primary)
+                Spacer()
+                if viewModel.selectedModelID == modelId {
+                    Image(systemName: "checkmark").foregroundStyle(Color.accentColor)
+                }
+            }
+        }
+        .swipeActions {
+            Button(role: .destructive) {
+                if let removeAction {
+                    removeAction()
+                } else {
+                    settings.toggleFavorite(modelId)
+                }
+            } label: {
+                Label("Remove", systemImage: removeAction != nil ? "trash" : "star.slash")
+            }
+        }
+    }
+
     private func apiKeyBinding(for provider: ProviderId) -> Binding<String> {
         Binding(
             get: { apiKeyInputs[provider] ?? "" },
@@ -630,10 +718,12 @@ private struct ModelSettingsSheet: View {
     }
 }
 
+// MARK: - Favorite Models Section
+
 #Preview("iPhone") {
-    ContentView(chatViewModel: ChatViewModel())
+    ContentView(chatViewModel: ChatViewModel(), settings: SettingsViewModel())
 }
 
 #Preview("iPad") {
-    ContentView(chatViewModel: ChatViewModel())
+    ContentView(chatViewModel: ChatViewModel(), settings: SettingsViewModel())
 }
