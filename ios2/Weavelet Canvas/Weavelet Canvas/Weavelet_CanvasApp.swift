@@ -16,12 +16,14 @@ struct Weavelet_CanvasApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(chatViewModel: chatViewModel, settings: settings)
-                .preferredColorScheme(settings.themeMode.colorScheme)
-                .onAppear {
-                    chatViewModel.settings = settings
-                    setupCloudSync()
-                }
+            HomeIndicatorAutoHiddenView {
+                ContentView(chatViewModel: chatViewModel, settings: settings)
+                    .preferredColorScheme(settings.themeMode.colorScheme)
+                    .onAppear {
+                        chatViewModel.settings = settings
+                        setupCloudSync()
+                    }
+            }
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background {

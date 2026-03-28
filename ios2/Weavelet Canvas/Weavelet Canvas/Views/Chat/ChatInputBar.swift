@@ -8,12 +8,12 @@ struct ChatInputBar: View {
     let onSend: () -> Void
     let onStop: () -> Void
 
-    @FocusState private var isFocused: Bool
+    @State private var isFocused = false
     @State private var showPromptPopup = false
+    @State private var editorHeight: CGFloat = 38
 
     var body: some View {
         VStack(spacing: 0) {
-            // Command prompt popup (appears above input bar)
             if showPromptPopup {
                 CommandPromptPopup(
                     prompts: prompts,
@@ -30,16 +30,14 @@ struct ChatInputBar: View {
             }
 
             HStack(alignment: .center, spacing: 10) {
-                // Attachment button
                 Button {
-                    // placeholder: open attachment picker
                 } label: {
                     Image(systemName: "plus.circle.fill")
                         .font(.system(size: 26))
                         .foregroundStyle(.secondary)
                 }
+                .frame(height: editorHeight)
 
-                // Prompt library "/" button
                 if !prompts.isEmpty {
                     Button {
                         withAnimation(.easeInOut(duration: 0.2)) {
@@ -55,21 +53,25 @@ struct ChatInputBar: View {
                                 in: RoundedRectangle(cornerRadius: 6)
                             )
                     }
+                    .frame(height: editorHeight)
                 }
 
-                // Text field - always 5 lines tall
-                TextField("Message", text: $text, axis: .vertical)
-                    .lineLimit(5...10)
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
-                    .focused($isFocused)
-                    .onSubmit {
-                        if enterToSubmit && canSend { onSend() }
+                AutoSizingTextEditor(
+                    text: $text,
+                    calculatedHeight: $editorHeight,
+                    isFocused: $isFocused,
+                    placeholder: "Message",
+                    enterToSubmit: enterToSubmit,
+                    minVisibleLines: 1,
+                    maxVisibleLines: 3,
+                    onSubmit: {
+                        if canSend { onSend() }
                     }
+                )
+                .frame(height: editorHeight)
+                .padding(.horizontal, 4)
+                .background(Color(.secondarySystemFill), in: RoundedRectangle(cornerRadius: 16))
 
-                // Send / Stop button
                 if isGenerating {
                     Button {
                         onStop()
@@ -79,6 +81,7 @@ struct ChatInputBar: View {
                             .foregroundStyle(.red)
                             .symbolEffect(.pulse, options: .repeating)
                     }
+                    .frame(height: editorHeight)
                 } else {
                     Button {
                         onSend()
@@ -88,16 +91,19 @@ struct ChatInputBar: View {
                             .foregroundStyle(canSend ? Color.accentColor : Color(.tertiaryLabel))
                     }
                     .disabled(!canSend)
+                    .frame(height: editorHeight)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.top, 6)
             .padding(.bottom, 6)
         }
-        .background {
-            Rectangle().fill(.regularMaterial)
-                .ignoresSafeArea(.container, edges: .bottom)
+        .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 22))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22)
+                .strokeBorder(Color.white.opacity(0.08))
         }
+        .shadow(color: .black.opacity(0.16), radius: 10, y: 2)
     }
 
     private var canSend: Bool {

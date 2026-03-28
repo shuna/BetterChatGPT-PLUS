@@ -29,6 +29,7 @@ struct ChatDetailView: View {
 
             if !keyboardVisible {
                 floatingControls
+                    .padding(.bottom, 12)
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
@@ -48,7 +49,6 @@ struct ChatDetailView: View {
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             VStack(spacing: 0) {
-                // Error toast (above input bar)
                 if let error = viewModel.errorMessage {
                     ErrorToast(
                         message: error,
@@ -66,6 +66,9 @@ struct ChatDetailView: View {
                     onSend: { viewModel.sendMessage() },
                     onStop: { viewModel.stopGenerating() }
                 )
+                .padding(.horizontal, 12)
+                .padding(.top, 6)
+                .padding(.bottom, 8)
             }
         }
     }

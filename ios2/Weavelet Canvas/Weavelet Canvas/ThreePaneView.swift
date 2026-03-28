@@ -21,6 +21,14 @@ extension EnvironmentValues {
     }
 }
 
+private func optionalToolbarView<V: View>(_ view: V) -> AnyView? {
+    AnyView(view)
+}
+
+private func optionalToolbarView(_ view: EmptyView) -> AnyView? {
+    nil
+}
+
 
 struct ThreeColumnButtonIcons {
     var showSidebarCompact: String = "list.bullet"
@@ -195,9 +203,6 @@ struct ThreePaneView<Sidebar: View, Detail: View, Inspector: View>: View {
     private let detailToolbarLeading: (ThreeColumnViewState, ThreeColumnActions) -> AnyView?
     private let detailToolbarCenter: (ThreeColumnViewState, ThreeColumnActions) -> AnyView?
     private let detailToolbarTrailing: (ThreeColumnViewState, ThreeColumnActions) -> AnyView?
-    private let detailToolbarBottomLeading: (ThreeColumnViewState, ThreeColumnActions) -> AnyView?
-    private let detailToolbarBottomTrailing: (ThreeColumnViewState, ThreeColumnActions) -> AnyView?
-    private let detailToolbarBottomStatus: (ThreeColumnViewState, ThreeColumnActions) -> AnyView?
     private let sidebar: (ThreeColumnViewState, ThreeColumnActions) -> Sidebar
     private let detail: (ThreeColumnViewState, ThreeColumnActions) -> Detail
     private let inspector: (ThreeColumnViewState, ThreeColumnActions) -> Inspector
@@ -212,9 +217,6 @@ struct ThreePaneView<Sidebar: View, Detail: View, Inspector: View>: View {
         detailToolbarLeading: @escaping (ThreeColumnViewState, ThreeColumnActions) -> AnyView? = { _, _ in nil },
         detailToolbarCenter: @escaping (ThreeColumnViewState, ThreeColumnActions) -> AnyView? = { _, _ in nil },
         detailToolbarTrailing: @escaping (ThreeColumnViewState, ThreeColumnActions) -> AnyView? = { _, _ in nil },
-        detailToolbarBottomLeading: @escaping (ThreeColumnViewState, ThreeColumnActions) -> AnyView? = { _, _ in nil },
-        detailToolbarBottomTrailing: @escaping (ThreeColumnViewState, ThreeColumnActions) -> AnyView? = { _, _ in nil },
-        detailToolbarBottomStatus: @escaping (ThreeColumnViewState, ThreeColumnActions) -> AnyView? = { _, _ in nil },
         @ViewBuilder sidebar: @escaping (ThreeColumnViewState, ThreeColumnActions) -> Sidebar,
         @ViewBuilder detail: @escaping (ThreeColumnViewState, ThreeColumnActions) -> Detail,
         @ViewBuilder inspector: @escaping (ThreeColumnViewState, ThreeColumnActions) -> Inspector
@@ -228,46 +230,9 @@ struct ThreePaneView<Sidebar: View, Detail: View, Inspector: View>: View {
         self.detailToolbarLeading = detailToolbarLeading
         self.detailToolbarCenter = detailToolbarCenter
         self.detailToolbarTrailing = detailToolbarTrailing
-        self.detailToolbarBottomLeading = detailToolbarBottomLeading
-        self.detailToolbarBottomTrailing = detailToolbarBottomTrailing
-        self.detailToolbarBottomStatus = detailToolbarBottomStatus
         self.sidebar = sidebar
         self.detail = detail
         self.inspector = inspector
-    }
-
-    init(
-        state: ThreeColumnState = ThreeColumnState(),
-        icons: ThreeColumnButtonIcons = .init(),
-        labels: ThreeColumnButtonLabels = .init(),
-        appliesDefaultChrome: Bool = false,
-        sidebarToolbarCenter: @escaping (ThreeColumnViewState, ThreeColumnActions) -> AnyView? = { _, _ in nil },
-        sidebarToolbarTrailing: @escaping (ThreeColumnViewState, ThreeColumnActions) -> AnyView? = { _, _ in nil },
-        detailToolbarLeading: @escaping (ThreeColumnViewState, ThreeColumnActions) -> AnyView? = { _, _ in nil },
-        detailToolbarCenter: @escaping (ThreeColumnViewState, ThreeColumnActions) -> AnyView? = { _, _ in nil },
-        detailToolbarTrailing: @escaping (ThreeColumnViewState, ThreeColumnActions) -> AnyView? = { _, _ in nil },
-        detailToolbarBottom: @escaping (ThreeColumnViewState, ThreeColumnActions) -> AnyView?,
-        @ViewBuilder sidebar: @escaping (ThreeColumnViewState, ThreeColumnActions) -> Sidebar,
-        @ViewBuilder detail: @escaping (ThreeColumnViewState, ThreeColumnActions) -> Detail,
-        @ViewBuilder inspector: @escaping (ThreeColumnViewState, ThreeColumnActions) -> Inspector
-    ) {
-        self.init(
-            state: state,
-            icons: icons,
-            labels: labels,
-            appliesDefaultChrome: appliesDefaultChrome,
-            sidebarToolbarCenter: sidebarToolbarCenter,
-            sidebarToolbarTrailing: sidebarToolbarTrailing,
-            detailToolbarLeading: detailToolbarLeading,
-            detailToolbarCenter: detailToolbarCenter,
-            detailToolbarTrailing: detailToolbarTrailing,
-            detailToolbarBottomLeading: detailToolbarBottom,
-            detailToolbarBottomTrailing: { _, _ in nil },
-            detailToolbarBottomStatus: { _, _ in nil },
-            sidebar: sidebar,
-            detail: detail,
-            inspector: inspector
-        )
     }
 
     var body: some View {
@@ -354,10 +319,7 @@ struct ThreePaneView<Sidebar: View, Detail: View, Inspector: View>: View {
                 actions: actions,
                 leadingToolbar: detailToolbarLeading(viewState, actions),
                 centerToolbar: detailToolbarCenter(viewState, actions),
-                trailingToolbar: detailToolbarTrailing(viewState, actions),
-                bottomLeadingToolbar: detailToolbarBottomLeading(viewState, actions),
-                bottomTrailingToolbar: detailToolbarBottomTrailing(viewState, actions),
-                bottomStatusToolbar: detailToolbarBottomStatus(viewState, actions)
+                trailingToolbar: detailToolbarTrailing(viewState, actions)
             ) {
                 detail(viewState, actions)
             }
@@ -388,10 +350,7 @@ struct DefaultDetailView: View {
             actions: actions,
             leadingToolbar: nil,
             centerToolbar: nil,
-            trailingToolbar: nil,
-            bottomLeadingToolbar: nil,
-            bottomTrailingToolbar: nil,
-            bottomStatusToolbar: nil
+            trailingToolbar: nil
         ) {
             EmptyView()
         }
@@ -525,7 +484,6 @@ struct DefaultInspectorView<Content: View>: View {
                 }
             }
             .toolbar(viewState.toolbarsHidden ? .hidden : .visible, for: .navigationBar)
-            .toolbar(viewState.toolbarsHidden ? .hidden : .visible, for: .bottomBar)
         }
     }
 }
@@ -583,7 +541,6 @@ private struct SidebarPaneContainer<Content: View>: View {
                     }
                 }
                 .toolbar(viewState.toolbarsHidden ? .hidden : .visible, for: .navigationBar)
-                .toolbar(viewState.toolbarsHidden ? .hidden : .visible, for: .bottomBar)
                 .toolbar(removing: .sidebarToggle)
         }
     }
@@ -595,9 +552,6 @@ private struct DetailPaneContainer<Content: View>: View {
     let leadingToolbar: AnyView?
     let centerToolbar: AnyView?
     let trailingToolbar: AnyView?
-    let bottomLeadingToolbar: AnyView?
-    let bottomTrailingToolbar: AnyView?
-    let bottomStatusToolbar: AnyView?
     @ViewBuilder let content: Content
     @Environment(\.threeColumnNavigationTitles) private var navigationTitles
 
@@ -634,34 +588,9 @@ private struct DetailPaneContainer<Content: View>: View {
                                 trailingToolbar
                             }
                         }
-                        if bottomLeadingToolbar != nil || bottomTrailingToolbar != nil {
-                            ToolbarItemGroup(placement: .bottomBar) {
-                                if let bottomLeadingToolbar, bottomTrailingToolbar == nil {
-                                    bottomLeadingToolbar
-                                    Spacer(minLength: 0)
-                                } else if let bottomTrailingToolbar, bottomLeadingToolbar == nil {
-                                    Spacer(minLength: 0)
-                                    bottomTrailingToolbar
-                                } else {
-                                    if let bottomLeadingToolbar {
-                                        bottomLeadingToolbar
-                                    }
-                                    Spacer(minLength: 0)
-                                    if let bottomTrailingToolbar {
-                                        bottomTrailingToolbar
-                                    }
-                                }
-                            }
-                        }
-                        if let bottomStatusToolbar {
-                            ToolbarItem(placement: .status) {
-                                bottomStatusToolbar
-                            }
-                        }
                     }
                 }
                 .toolbar(viewState.toolbarsHidden ? .hidden : .visible, for: .navigationBar)
-                .toolbar(viewState.toolbarsHidden ? .hidden : .visible, for: .bottomBar)
                 .toolbar(removing: .sidebarToggle)
         }
     }
@@ -714,9 +643,6 @@ extension ThreePaneView where Inspector == DefaultInspectorView<EmptyView> {
         DetailToolbarLeading: View,
         DetailToolbarCenter: View,
         DetailToolbarTrailing: View,
-        DetailToolbarBottomLeading: View,
-        DetailToolbarBottomTrailing: View,
-        DetailToolbarBottomStatus: View,
         InspectorToolbarCenter: View,
         InspectorToolbarTrailing: View
     >(
@@ -730,9 +656,6 @@ extension ThreePaneView where Inspector == DefaultInspectorView<EmptyView> {
         @ViewBuilder detailToolbarLeading: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarLeading,
         @ViewBuilder detailToolbarCenter: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarCenter,
         @ViewBuilder detailToolbarTrailing: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarTrailing,
-        @ViewBuilder detailToolbarBottomLeading: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarBottomLeading,
-        @ViewBuilder detailToolbarBottomTrailing: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarBottomTrailing,
-        @ViewBuilder detailToolbarBottomStatus: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarBottomStatus,
         @ViewBuilder inspectorToolbarCenter: @escaping (ThreeColumnViewState, ThreeColumnActions) -> InspectorToolbarCenter,
         @ViewBuilder inspectorToolbarTrailing: @escaping (ThreeColumnViewState, ThreeColumnActions) -> InspectorToolbarTrailing
     ) {
@@ -742,28 +665,19 @@ extension ThreePaneView where Inspector == DefaultInspectorView<EmptyView> {
             labels: labels,
             appliesDefaultChrome: true,
             sidebarToolbarCenter: { viewState, actions in
-                AnyView(sidebarToolbarCenter(viewState, actions))
+                optionalToolbarView(sidebarToolbarCenter(viewState, actions))
             },
             sidebarToolbarTrailing: { viewState, actions in
-                AnyView(sidebarToolbarTrailing(viewState, actions))
+                optionalToolbarView(sidebarToolbarTrailing(viewState, actions))
             },
             detailToolbarLeading: { viewState, actions in
-                AnyView(detailToolbarLeading(viewState, actions))
+                optionalToolbarView(detailToolbarLeading(viewState, actions))
             },
             detailToolbarCenter: { viewState, actions in
-                AnyView(detailToolbarCenter(viewState, actions))
+                optionalToolbarView(detailToolbarCenter(viewState, actions))
             },
             detailToolbarTrailing: { viewState, actions in
-                AnyView(detailToolbarTrailing(viewState, actions))
-            },
-            detailToolbarBottomLeading: { viewState, actions in
-                AnyView(detailToolbarBottomLeading(viewState, actions))
-            },
-            detailToolbarBottomTrailing: { viewState, actions in
-                AnyView(detailToolbarBottomTrailing(viewState, actions))
-            },
-            detailToolbarBottomStatus: { viewState, actions in
-                AnyView(detailToolbarBottomStatus(viewState, actions))
+                optionalToolbarView(detailToolbarTrailing(viewState, actions))
             }
         ) { _, _ in
             Sidebar()
@@ -773,8 +687,8 @@ extension ThreePaneView where Inspector == DefaultInspectorView<EmptyView> {
             DefaultInspectorView(
                 viewState: viewState,
                 actions: actions,
-                centerToolbar: AnyView(inspectorToolbarCenter(viewState, actions)),
-                trailingToolbar: AnyView(inspectorToolbarTrailing(viewState, actions))
+                centerToolbar: optionalToolbarView(inspectorToolbarCenter(viewState, actions)),
+                trailingToolbar: optionalToolbarView(inspectorToolbarTrailing(viewState, actions))
             )
         }
     }
@@ -788,9 +702,6 @@ extension ThreePaneView {
         DetailToolbarLeading: View,
         DetailToolbarCenter: View,
         DetailToolbarTrailing: View,
-        DetailToolbarBottomLeading: View,
-        DetailToolbarBottomTrailing: View,
-        DetailToolbarBottomStatus: View,
         InspectorToolbarCenter: View,
         InspectorToolbarTrailing: View,
         InspectorContent: View
@@ -805,9 +716,6 @@ extension ThreePaneView {
         @ViewBuilder detailToolbarLeading: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarLeading,
         @ViewBuilder detailToolbarCenter: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarCenter,
         @ViewBuilder detailToolbarTrailing: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarTrailing,
-        @ViewBuilder detailToolbarBottomLeading: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarBottomLeading,
-        @ViewBuilder detailToolbarBottomTrailing: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarBottomTrailing,
-        @ViewBuilder detailToolbarBottomStatus: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarBottomStatus,
         @ViewBuilder inspectorToolbarCenter: @escaping (ThreeColumnViewState, ThreeColumnActions) -> InspectorToolbarCenter,
         @ViewBuilder inspectorToolbarTrailing: @escaping (ThreeColumnViewState, ThreeColumnActions) -> InspectorToolbarTrailing,
         @ViewBuilder inspectorContent: @escaping () -> InspectorContent
@@ -818,28 +726,19 @@ extension ThreePaneView {
             labels: labels,
             appliesDefaultChrome: true,
             sidebarToolbarCenter: { viewState, actions in
-                AnyView(sidebarToolbarCenter(viewState, actions))
+                optionalToolbarView(sidebarToolbarCenter(viewState, actions))
             },
             sidebarToolbarTrailing: { viewState, actions in
-                AnyView(sidebarToolbarTrailing(viewState, actions))
+                optionalToolbarView(sidebarToolbarTrailing(viewState, actions))
             },
             detailToolbarLeading: { viewState, actions in
-                AnyView(detailToolbarLeading(viewState, actions))
+                optionalToolbarView(detailToolbarLeading(viewState, actions))
             },
             detailToolbarCenter: { viewState, actions in
-                AnyView(detailToolbarCenter(viewState, actions))
+                optionalToolbarView(detailToolbarCenter(viewState, actions))
             },
             detailToolbarTrailing: { viewState, actions in
-                AnyView(detailToolbarTrailing(viewState, actions))
-            },
-            detailToolbarBottomLeading: { viewState, actions in
-                AnyView(detailToolbarBottomLeading(viewState, actions))
-            },
-            detailToolbarBottomTrailing: { viewState, actions in
-                AnyView(detailToolbarBottomTrailing(viewState, actions))
-            },
-            detailToolbarBottomStatus: { viewState, actions in
-                AnyView(detailToolbarBottomStatus(viewState, actions))
+                optionalToolbarView(detailToolbarTrailing(viewState, actions))
             }
         ) { _, _ in
             Sidebar()
@@ -849,8 +748,8 @@ extension ThreePaneView {
             DefaultInspectorView(
                 viewState: viewState,
                 actions: actions,
-                centerToolbar: AnyView(inspectorToolbarCenter(viewState, actions)),
-                trailingToolbar: AnyView(inspectorToolbarTrailing(viewState, actions))
+                centerToolbar: optionalToolbarView(inspectorToolbarCenter(viewState, actions)),
+                trailingToolbar: optionalToolbarView(inspectorToolbarTrailing(viewState, actions))
             ) {
                 inspectorContent()
             }
@@ -859,116 +758,6 @@ extension ThreePaneView {
 }
 
 extension ThreePaneView where Inspector == DefaultInspectorView<EmptyView> {
-    init<
-        SidebarToolbarCenter: View,
-        SidebarToolbarTrailing: View,
-        DetailToolbarLeading: View,
-        DetailToolbarCenter: View,
-        DetailToolbarTrailing: View,
-        DetailToolbarBottomLeading: View,
-        DetailToolbarBottomTrailing: View,
-        InspectorToolbarCenter: View,
-        InspectorToolbarTrailing: View
-    >(
-        state: ThreeColumnState = ThreeColumnState(),
-        icons: ThreeColumnButtonIcons = .init(),
-        labels: ThreeColumnButtonLabels = .init(),
-        @ViewBuilder Sidebar: @escaping () -> Sidebar,
-        @ViewBuilder Detail: @escaping () -> Detail,
-        @ViewBuilder sidebarToolbarCenter: @escaping (ThreeColumnViewState, ThreeColumnActions) -> SidebarToolbarCenter,
-        @ViewBuilder sidebarToolbarTrailing: @escaping (ThreeColumnViewState, ThreeColumnActions) -> SidebarToolbarTrailing,
-        @ViewBuilder detailToolbarLeading: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarLeading,
-        @ViewBuilder detailToolbarCenter: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarCenter,
-        @ViewBuilder detailToolbarTrailing: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarTrailing,
-        @ViewBuilder detailToolbarBottomLeading: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarBottomLeading,
-        @ViewBuilder detailToolbarBottomTrailing: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarBottomTrailing,
-        @ViewBuilder inspectorToolbarCenter: @escaping (ThreeColumnViewState, ThreeColumnActions) -> InspectorToolbarCenter,
-        @ViewBuilder inspectorToolbarTrailing: @escaping (ThreeColumnViewState, ThreeColumnActions) -> InspectorToolbarTrailing
-    ) {
-        self.init(
-            state: state,
-            icons: icons,
-            labels: labels,
-            appliesDefaultChrome: true,
-            sidebarToolbarCenter: { viewState, actions in
-                AnyView(sidebarToolbarCenter(viewState, actions))
-            },
-            sidebarToolbarTrailing: { viewState, actions in
-                AnyView(sidebarToolbarTrailing(viewState, actions))
-            },
-            detailToolbarLeading: { viewState, actions in
-                AnyView(detailToolbarLeading(viewState, actions))
-            },
-            detailToolbarCenter: { viewState, actions in
-                AnyView(detailToolbarCenter(viewState, actions))
-            },
-            detailToolbarTrailing: { viewState, actions in
-                AnyView(detailToolbarTrailing(viewState, actions))
-            },
-            detailToolbarBottomLeading: { viewState, actions in
-                AnyView(detailToolbarBottomLeading(viewState, actions))
-            },
-            detailToolbarBottomTrailing: { viewState, actions in
-                AnyView(detailToolbarBottomTrailing(viewState, actions))
-            }
-        ) { _, _ in
-            Sidebar()
-        } detail: { _, _ in
-            Detail()
-        } inspector: { viewState, actions in
-            DefaultInspectorView(
-                viewState: viewState,
-                actions: actions,
-                centerToolbar: AnyView(inspectorToolbarCenter(viewState, actions)),
-                trailingToolbar: AnyView(inspectorToolbarTrailing(viewState, actions))
-            )
-        }
-    }
-
-    init<
-        SidebarToolbarCenter: View,
-        SidebarToolbarTrailing: View,
-        DetailToolbarLeading: View,
-        DetailToolbarCenter: View,
-        DetailToolbarTrailing: View,
-        DetailToolbarBottom: View,
-        InspectorToolbarCenter: View,
-        InspectorToolbarTrailing: View
-    >(
-        state: ThreeColumnState = ThreeColumnState(),
-        icons: ThreeColumnButtonIcons = .init(),
-        labels: ThreeColumnButtonLabels = .init(),
-        @ViewBuilder Sidebar: @escaping () -> Sidebar,
-        @ViewBuilder Detail: @escaping () -> Detail,
-        @ViewBuilder sidebarToolbarCenter: @escaping (ThreeColumnViewState, ThreeColumnActions) -> SidebarToolbarCenter,
-        @ViewBuilder sidebarToolbarTrailing: @escaping (ThreeColumnViewState, ThreeColumnActions) -> SidebarToolbarTrailing,
-        @ViewBuilder detailToolbarLeading: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarLeading,
-        @ViewBuilder detailToolbarCenter: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarCenter,
-        @ViewBuilder detailToolbarTrailing: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarTrailing,
-        @ViewBuilder detailToolbarBottom: @escaping (ThreeColumnViewState, ThreeColumnActions) -> DetailToolbarBottom,
-        @ViewBuilder inspectorToolbarCenter: @escaping (ThreeColumnViewState, ThreeColumnActions) -> InspectorToolbarCenter,
-        @ViewBuilder inspectorToolbarTrailing: @escaping (ThreeColumnViewState, ThreeColumnActions) -> InspectorToolbarTrailing
-    ) {
-        self.init(
-            state: state,
-            icons: icons,
-            labels: labels,
-            Sidebar: Sidebar,
-            Detail: Detail,
-            sidebarToolbarCenter: sidebarToolbarCenter,
-            sidebarToolbarTrailing: sidebarToolbarTrailing,
-            detailToolbarLeading: detailToolbarLeading,
-            detailToolbarCenter: detailToolbarCenter,
-            detailToolbarTrailing: detailToolbarTrailing,
-            detailToolbarBottomLeading: detailToolbarBottom,
-            detailToolbarBottomTrailing: { _, _ in
-                EmptyView()
-            },
-            inspectorToolbarCenter: inspectorToolbarCenter,
-            inspectorToolbarTrailing: inspectorToolbarTrailing
-        )
-    }
-
     init<SidebarToolbarCenter: View, SidebarToolbarTrailing: View>(
         state: ThreeColumnState = ThreeColumnState(),
         icons: ThreeColumnButtonIcons = .init(),
@@ -984,10 +773,10 @@ extension ThreePaneView where Inspector == DefaultInspectorView<EmptyView> {
             labels: labels,
             appliesDefaultChrome: true,
             sidebarToolbarCenter: { viewState, actions in
-                AnyView(sidebarToolbarCenter(viewState, actions))
+                optionalToolbarView(sidebarToolbarCenter(viewState, actions))
             },
             sidebarToolbarTrailing: { viewState, actions in
-                AnyView(sidebarToolbarTrailing(viewState, actions))
+                optionalToolbarView(sidebarToolbarTrailing(viewState, actions))
             }
         ) { _, _ in
             Sidebar()

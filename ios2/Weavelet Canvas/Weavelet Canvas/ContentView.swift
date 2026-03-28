@@ -41,15 +41,6 @@ struct ContentView: View {
             detailToolbarTrailing: { [chatViewModel, threeColumnState] _, _ in
                 DetailToolbarTrailing(viewModel: chatViewModel, threeColumnState: threeColumnState, settings: settings)
             },
-            detailToolbarBottomLeading: { _, _ in
-                EmptyView()
-            },
-            detailToolbarBottomTrailing: { _, _ in
-                EmptyView()
-            },
-            detailToolbarBottomStatus: { _, _ in
-                EmptyView()
-            },
             inspectorToolbarCenter: { [chatViewModel] _, _ in
                 InspectorCenterToolbar(viewModel: chatViewModel)
             },
