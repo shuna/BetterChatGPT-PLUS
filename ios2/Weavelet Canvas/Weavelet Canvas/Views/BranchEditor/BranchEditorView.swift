@@ -64,7 +64,7 @@ struct BranchEditorView: View {
                 ProgressView()
             }
         }
-        .background(Color(.systemGroupedBackground))
+        .background(AppColors.canvasBackground)
         .onAppear {
             if viewModel == nil {
                 viewModel = BranchEditorViewModel(chatViewModel: chatViewModel)
@@ -295,9 +295,9 @@ private struct BranchNodeView: View {
 
     private var roleColor: Color {
         switch node.role {
-        case .user: .blue
-        case .assistant: .green
-        case .system: .purple
+        case .user: AppColors.nodeRoleUser
+        case .assistant: AppColors.nodeRoleAssistant
+        case .system: AppColors.nodeRoleSystem
         }
     }
 
@@ -345,7 +345,7 @@ private struct BranchNodeView: View {
         .clipped()
         .background {
             RoundedRectangle(cornerRadius: 10)
-                .fill(node.isActive ? Color(.systemBackground) : Color(.secondarySystemBackground))
+                .fill(node.isActive ? AppColors.nodeActiveBackground : AppColors.nodeInactiveBackground)
                 .shadow(color: .black.opacity(0.08), radius: 3, y: 2)
         }
         .overlay {
@@ -471,9 +471,9 @@ private struct MessageDetailSheet: View {
 
     private var roleColor: Color {
         switch node.role {
-        case .user: .blue
-        case .assistant: .green
-        case .system: .purple
+        case .user: AppColors.nodeRoleUser
+        case .assistant: AppColors.nodeRoleAssistant
+        case .system: AppColors.nodeRoleSystem
         }
     }
 

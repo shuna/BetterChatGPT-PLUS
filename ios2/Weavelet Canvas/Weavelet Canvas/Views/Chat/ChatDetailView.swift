@@ -35,6 +35,7 @@ struct ChatDetailView: View {
 
     private var chatContentView: some View {
         ZStack {
+            AppColors.background.ignoresSafeArea()
             messageList
 
             if !keyboardVisible {
@@ -394,12 +395,15 @@ struct ChatDetailView: View {
 
 struct ChatEmptyState: View {
     var body: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 48))
-                .foregroundStyle(.quaternary)
-            Text("Select or start a conversation")
-                .foregroundStyle(.secondary)
+        ZStack {
+            AppColors.background.ignoresSafeArea()
+            VStack(spacing: 12) {
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.quaternary)
+                Text("Select or start a conversation")
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 }

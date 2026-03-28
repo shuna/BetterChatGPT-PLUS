@@ -1030,7 +1030,7 @@ class ChatViewModel {
         )
         let renderer = UIGraphicsImageRenderer(size: imageSize)
         let image = renderer.image { ctx in
-            UIColor.systemBackground.setFill()
+            UIColor(AppColors.background).setFill()
             ctx.fill(CGRect(origin: .zero, size: imageSize))
             attrStr.draw(in: CGRect(
                 x: padding, y: padding,

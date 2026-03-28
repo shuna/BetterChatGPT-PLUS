@@ -70,7 +70,7 @@ struct ChatInputBar: View {
                 )
                 .frame(height: editorHeight)
                 .padding(.horizontal, 4)
-                .background(Color(.secondarySystemFill), in: RoundedRectangle(cornerRadius: 16))
+                .background(AppColors.inputBackground.opacity(0.5), in: RoundedRectangle(cornerRadius: 16))
 
                 if isGenerating {
                     Button {

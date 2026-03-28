@@ -27,7 +27,7 @@ struct CommandPromptPopup: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(Color(.secondarySystemBackground))
+            .background(AppColors.inputBackground.opacity(0.5))
 
             Divider()
 

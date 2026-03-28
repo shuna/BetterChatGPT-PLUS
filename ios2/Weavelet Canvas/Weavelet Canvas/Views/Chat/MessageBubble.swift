@@ -38,7 +38,7 @@ struct MessageBubble: View {
             .padding(.top, 6)
             .padding(.bottom, showCardFooter ? 0 : 6)
         }
-        .background(Color(.systemBackground))
+        .background(AppColors.background)
         .opacity(message.isOmitted ? 0.5 : 1.0)
         .overlay(alignment: .leading) {
             if message.isProtected {
@@ -209,9 +209,9 @@ struct MessageBubble: View {
 
     private var cardBackground: Color {
         switch message.role {
-        case .user: Color(.secondarySystemBackground).opacity(0.7)
-        case .assistant: Color(.secondarySystemBackground)
-        case .system: Color(.tertiarySystemBackground)
+        case .user: AppColors.messageSurfaceUser
+        case .assistant: AppColors.messageSurfaceAssistant
+        case .system: AppColors.messageSurfaceSystem
         }
     }
 
@@ -314,9 +314,9 @@ struct MessageBubble: View {
 
     private var avatarColor: Color {
         switch message.role {
-        case .user: Color(red: 0.22, green: 0.45, blue: 0.85)      // Refined blue
-        case .assistant: Color(red: 0.06, green: 0.64, blue: 0.50)  // Teal/green (web)
-        case .system: Color(red: 0.49, green: 0.64, blue: 0.89)    // Soft blue
+        case .user: AppColors.avatarUser
+        case .assistant: AppColors.avatarAssistant
+        case .system: AppColors.avatarSystem
         }
     }
 }
