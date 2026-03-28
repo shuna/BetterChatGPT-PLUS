@@ -18,6 +18,7 @@ struct MessageBubble: View {
     var streamingMarkdownPolicy: StreamingMarkdownPolicy = .auto
 
     @State private var showDeleteConfirmation = false
+    @FocusState private var isEditFieldFocused: Bool
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -184,8 +185,22 @@ struct MessageBubble: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
                 .tint(.accentColor)
+                .focused($isEditFieldFocused)
+                .onAppear {
+                    editText = message.content
+                    DispatchQueue.main.async {
+                        isEditFieldFocused = true
+                    }
+                }
                 .onChange(of: isEditing) { _, editing in
-                    if editing { editText = message.content }
+                    if editing {
+                        editText = message.content
+                        DispatchQueue.main.async {
+                            isEditFieldFocused = true
+                        }
+                    } else {
+                        isEditFieldFocused = false
+                    }
                 }
         } else if shouldRenderMarkdown {
             Text(markdownAttributed(message.content))

@@ -1,9 +1,14 @@
 import SwiftUI
 
 struct ChatDetailView: View {
+    private let keyboardClearance: CGFloat = 24
+
     @Bindable var viewModel: ChatViewModel
     var forceChat: Bool = false
     @State private var keyboardVisible = false
+    @State private var keyboardHeight: CGFloat = 0
+    @State private var composerReservedHeight: CGFloat = 104
+    @State private var editBarReservedHeight: CGFloat = 44
     @State private var currentMessageIndex = 0
     @State private var scrollProxy: ScrollViewProxy?
     @State private var selectedMessageID: UUID?
@@ -16,11 +21,12 @@ struct ChatDetailView: View {
                 BranchEditorView(chatViewModel: viewModel)
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-            keyboardVisible = true
+        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
+            handleKeyboardWillShow(notification)
         }
         .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
             keyboardVisible = false
+            keyboardHeight = 0
         }
     }
 
@@ -70,6 +76,14 @@ struct ChatDetailView: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 6)
                 .padding(.bottom, 8)
+                .onGeometryChange(for: CGFloat.self) { proxy in
+                    proxy.size.height
+                } action: { newHeight in
+                    let roundedHeight = ceil(newHeight)
+                    if abs(composerReservedHeight - roundedHeight) > 1 {
+                        composerReservedHeight = roundedHeight
+                    }
+                }
             }
         }
     }
@@ -165,6 +179,14 @@ struct ChatDetailView: View {
                                         onCancel: { isEditing.wrappedValue = false },
                                         hasChanges: viewModel.editText != message.content
                                     )
+                                    .onGeometryChange(for: CGFloat.self) { proxy in
+                                        proxy.size.height
+                                    } action: { newHeight in
+                                        let roundedHeight = ceil(newHeight) + 8
+                                        if abs(editBarReservedHeight - roundedHeight) > 1 {
+                                            editBarReservedHeight = roundedHeight
+                                        }
+                                    }
                                 } else if isSelected {
                                     MessageActionBar(
                                         message: message,
@@ -185,6 +207,9 @@ struct ChatDetailView: View {
                         }
                     }
                 }
+
+                Color.clear
+                    .frame(height: messageListBottomSpacerHeight)
             }
             .scrollDismissesKeyboard(.immediately)
             .onTapGesture {
@@ -204,7 +229,29 @@ struct ChatDetailView: View {
             .onChange(of: viewModel.searchCurrentMatch) {
                 scrollToCurrentSearchMatch()
             }
+            .onChange(of: viewModel.editingMessageID) { _, editingMessageID in
+                if editingMessageID == nil {
+                    editBarReservedHeight = 44
+                    return
+                }
+                DispatchQueue.main.async {
+                    scrollToEditingMessage(anchor: UnitPoint(x: 0.5, y: 0.92))
+                }
+            }
         }
+    }
+
+    private var messageListBottomSpacerHeight: CGFloat {
+        if viewModel.editingMessageID != nil {
+            return max(
+                composerReservedHeight + editBarReservedHeight,
+                keyboardHeight + composerReservedHeight + editBarReservedHeight + keyboardClearance
+            )
+        }
+        if keyboardVisible {
+            return composerReservedHeight
+        }
+        return 0
     }
 
     /// Whether the given message is the currently focused search match.
@@ -228,6 +275,39 @@ struct ChatDetailView: View {
         let msgId = viewModel.messages[matchIndex].id
         withAnimation(.easeOut(duration: 0.3)) {
             scrollProxy?.scrollTo(msgId, anchor: .center)
+        }
+    }
+
+    private func handleKeyboardWillShow(_ notification: Notification) {
+        keyboardVisible = true
+        keyboardHeight = keyboardOverlapHeight(from: notification)
+
+        guard viewModel.editingMessageID != nil else { return }
+        DispatchQueue.main.async {
+            scrollToEditingMessage(anchor: UnitPoint(x: 0.5, y: 0.92))
+        }
+    }
+
+    private func keyboardOverlapHeight(from notification: Notification) -> CGFloat {
+        guard
+            let frame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect,
+            let windowScene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .first,
+            let window = windowScene.windows.first(where: \.isKeyWindow)
+        else {
+            return 0
+        }
+
+        let frameInWindow = window.convert(frame, from: nil)
+        let overlap = max(0, window.bounds.maxY - frameInWindow.minY)
+        return max(0, overlap - window.safeAreaInsets.bottom)
+    }
+
+    private func scrollToEditingMessage(anchor: UnitPoint) {
+        guard let editingMessageID = viewModel.editingMessageID else { return }
+        withAnimation(.easeOut(duration: 0.18)) {
+            scrollProxy?.scrollTo(editingMessageID, anchor: anchor)
         }
     }
 }
