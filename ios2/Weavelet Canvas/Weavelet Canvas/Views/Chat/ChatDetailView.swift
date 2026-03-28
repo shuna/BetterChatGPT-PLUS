@@ -180,8 +180,8 @@ struct ChatDetailView: View {
                             if !message.isGenerating && !message.isCollapsed {
                                 let isSelected = selectedMessageID == message.id
                                 let idx = viewModel.messages.firstIndex(where: { $0.id == message.id })
-                                if isEditing.wrappedValue {
-                                    cardFooter(message: message) {
+                                cardFooter(message: message) {
+                                    ZStack {
                                         MessageEditBar(
                                             message: message,
                                             onSaveAndGenerate: {
@@ -196,10 +196,9 @@ struct ChatDetailView: View {
                                             onCancel: { isEditing.wrappedValue = false },
                                             hasChanges: viewModel.editText != message.content
                                         )
-                                    }
-                                    .id("editbar-\(message.id)")
-                                } else {
-                                    cardFooter(message: message) {
+                                        .opacity(isEditing.wrappedValue ? 1 : 0)
+                                        .allowsHitTesting(isEditing.wrappedValue)
+
                                         MessageActionBar(
                                             message: message,
                                             onCopy: { viewModel.copyMessage(message) },
@@ -211,8 +210,8 @@ struct ChatDetailView: View {
                                             isFirst: idx == viewModel.messages.startIndex,
                                             isLast: idx == viewModel.messages.index(before: viewModel.messages.endIndex)
                                         )
-                                        .opacity(isSelected ? 1 : 0)
-                                        .allowsHitTesting(isSelected)
+                                        .opacity(!isEditing.wrappedValue && isSelected ? 1 : 0)
+                                        .allowsHitTesting(!isEditing.wrappedValue && isSelected)
                                     }
                                 }
                             }
@@ -344,8 +343,8 @@ struct ChatDetailView: View {
     // Card-styled footer that visually continues the message card
     private func cardFooter<Content: View>(message: ChatMessage, @ViewBuilder content: () -> Content) -> some View {
         let bg: Color = switch message.role {
-        case .user: Color(.secondarySystemBackground).opacity(0.7)
-        case .assistant: Color(.secondarySystemBackground)
+        case .user: AppColors.messageSurfaceUser
+        case .assistant: AppColors.messageSurfaceAssistant
         case .system: Color(.tertiarySystemBackground)
         }
         let collapseColor: Color = switch message.role {
