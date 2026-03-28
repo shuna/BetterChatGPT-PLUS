@@ -55,6 +55,10 @@ struct ProviderMenuView: View {
                 case .custom:
                     customModelsView
                 }
+
+                // Footer: provider settings
+                Divider()
+                providerSettingsBar
             }
             .navigationTitle("AI Providers")
             .navigationBarTitleDisplayMode(.inline)
@@ -178,9 +182,6 @@ struct ProviderMenuView: View {
                     ForEach(filteredModels) { model in
                         modelRow(model)
                     }
-
-                    // Provider settings at bottom
-                    providerSettingsSection
                 }
                 .listStyle(.insetGrouped)
             }
@@ -219,8 +220,6 @@ struct ProviderMenuView: View {
             Section("Add Custom Model") {
                 addCustomModelRow
             }
-
-            providerSettingsSection
         }
         .listStyle(.insetGrouped)
     }
@@ -283,13 +282,14 @@ struct ProviderMenuView: View {
         }
     }
 
-    // MARK: - Provider Settings Section
+    // MARK: - Provider Settings Bar (fixed below toggle)
 
-    private var providerSettingsSection: some View {
-        Section("Provider Settings") {
+    private var providerSettingsBar: some View {
+        VStack(spacing: 6) {
             HStack {
                 Text("Endpoint")
-                Spacer()
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 TextField("Endpoint URL", text: $endpointInput)
                     .multilineTextAlignment(.trailing)
                     .autocorrectionDisabled()
@@ -300,6 +300,8 @@ struct ProviderMenuView: View {
 
             HStack {
                 Text("API Key")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Spacer()
                 if showingKeyField {
                     SecureField("API Key", text: $apiKeyInput)
@@ -307,6 +309,15 @@ struct ProviderMenuView: View {
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .font(.system(.caption, design: .monospaced))
+                    Button("Save") {
+                        if !apiKeyInput.isEmpty {
+                            Task {
+                                await apiService.setAPIKey(apiKeyInput, for: selectedProvider)
+                            }
+                        }
+                        showingKeyField = false
+                    }
+                    .font(.caption)
                 } else {
                     Text(apiKeyInput.isEmpty ? "Not set" : "••••••••")
                         .foregroundStyle(.secondary)
@@ -317,18 +328,10 @@ struct ProviderMenuView: View {
                     .font(.caption)
                 }
             }
-
-            if showingKeyField {
-                Button("Save Key") {
-                    if !apiKeyInput.isEmpty {
-                        Task {
-                            await apiService.setAPIKey(apiKeyInput, for: selectedProvider)
-                        }
-                    }
-                    showingKeyField = false
-                }
-            }
         }
+        .padding(.horizontal)
+        .padding(.vertical, 6)
+        .background(Color(.secondarySystemBackground))
     }
 
     // MARK: - Helpers
