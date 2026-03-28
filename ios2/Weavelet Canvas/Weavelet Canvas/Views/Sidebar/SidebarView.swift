@@ -79,7 +79,7 @@ private struct ChatListSection: View {
 
     private var folderEntries: [(id: String, folder: Folder)] {
         chatViewModel.folders
-            .sorted { ($0.value.order ?? 0) < ($1.value.order ?? 0) }
+            .sorted { $0.value.order < $1.value.order }
             .map { (id: $0.key, folder: $0.value) }
     }
 

@@ -37,7 +37,7 @@ enum ImageDetail: String, Codable, Hashable, CaseIterable {
 /// Matches Web ContentInterface union type.
 /// Internal representation uses Swift enums with associated values;
 /// JSON compatibility is handled via custom Codable conformance.
-enum ContentItem: Codable, Hashable {
+nonisolated enum ContentItem: Codable, Hashable {
     case text(String)
     case imageURL(url: String, detail: ImageDetail)
     case reasoning(String)

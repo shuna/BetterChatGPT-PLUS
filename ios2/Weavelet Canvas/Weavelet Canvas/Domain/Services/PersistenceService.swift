@@ -3,7 +3,7 @@ import os
 
 // MARK: - AppState (persisted)
 
-struct AppState: Codable {
+nonisolated struct AppState: Codable {
     var chats: [Chat]
     var contentStore: ContentStoreData
     var folders: FolderCollection
@@ -41,7 +41,11 @@ actor PersistenceService {
     private let logger = Logger(subsystem: "org.sstcr.WeaveletCanvas", category: "Persistence")
 
     /// Called after a successful save. Used by CloudSyncService to schedule uploads.
-    var onSaveComplete: (@Sendable (AppState) -> Void)?
+    private(set) var onSaveComplete: (@Sendable (AppState) -> Void)?
+
+    func setOnSaveComplete(_ callback: @escaping @Sendable (AppState) -> Void) {
+        onSaveComplete = callback
+    }
 
     init() {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!

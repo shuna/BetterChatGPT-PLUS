@@ -89,8 +89,8 @@ struct SettingsView: View {
                             .frame(width: 40)
                     }
                     Picker("Reasoning effort", selection: Binding(
-                        get: { settings.defaultReasoningEffort ?? .none },
-                        set: { settings.defaultReasoningEffort = $0 == .none ? nil : $0 }
+                        get: { settings.defaultReasoningEffort ?? ReasoningEffort.none },
+                        set: { settings.defaultReasoningEffort = $0 == ReasoningEffort.none ? nil : $0 }
                     )) {
                         ForEach(ReasoningEffort.allCases, id: \.self) { effort in
                             Text(effort.rawValue.capitalized).tag(effort)

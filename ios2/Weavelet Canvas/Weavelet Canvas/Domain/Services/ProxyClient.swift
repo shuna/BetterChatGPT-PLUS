@@ -4,7 +4,7 @@ import os
 // MARK: - Proxy SSE Event
 
 /// A single parsed event from the proxy SSE stream.
-struct ProxySseEvent {
+nonisolated struct ProxySseEvent {
     /// Sequential event ID from the proxy.
     let id: Int?
     /// Event type: nil for data events, "done"/"error"/"interrupted" for control.
@@ -30,7 +30,7 @@ struct ProxySseEvent {
 ///
 /// Events are separated by double newlines. This parser buffers incomplete
 /// blocks across `feed()` calls and only emits fully received events.
-struct ProxySseParser {
+nonisolated struct ProxySseParser: Sendable {
     private var buffer: String = ""
 
     /// Feed a chunk of raw SSE text. Returns all complete events parsed.

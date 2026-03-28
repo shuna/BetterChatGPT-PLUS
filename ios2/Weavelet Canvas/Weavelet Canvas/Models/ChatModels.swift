@@ -346,7 +346,7 @@ class ChatViewModel {
         guard let idx = chats.firstIndex(where: { $0.id == chatId }) else { return }
         let source = chats[idx]
         let newId = UUID().uuidString
-        var copy = Chat(
+        let copy = Chat(
             id: newId,
             title: "Copy of \(source.title)",
             folder: source.folder,
@@ -507,7 +507,7 @@ class ChatViewModel {
                         // Update the assistant node content with accumulated text (streaming)
                         guard let chatIndex = self.currentChatIndex,
                               let tree = self.chats[chatIndex].branchTree,
-                              let msgIndex = tree.activePath.firstIndex(of: assistantNodeId) else { return }
+                              tree.activePath.contains(assistantNodeId) else { return }
 
                         // Transient update for streaming (no persist until done)
                         let streamResult = BranchService.updateLastNodeContent(
@@ -763,7 +763,7 @@ class ChatViewModel {
               let nodeId = nodeIdForUUID(id),
               let tree = chats[chatIndex].branchTree,
               let node = tree.nodes[nodeId],
-              let parentId = node.parentId else { return }
+              node.parentId != nil else { return }
 
         pushUndo()
 
@@ -786,7 +786,7 @@ class ChatViewModel {
         guard let chatIndex = currentChatIndex,
               let nodeId = nodeIdForUUID(id),
               let tree = chats[chatIndex].branchTree,
-              let msgIndex = tree.activePath.firstIndex(of: nodeId) else { return }
+              tree.activePath.contains(nodeId) else { return }
 
         pushUndo()
 

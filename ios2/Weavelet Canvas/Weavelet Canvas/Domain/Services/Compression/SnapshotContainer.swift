@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - Codec
 
-enum SnapshotCodec: UInt8 {
+nonisolated enum SnapshotCodec: UInt8 {
     case zstd = 0x01
     case zlib = 0x02  // reserved
     case lz4  = 0x03  // reserved
@@ -10,7 +10,7 @@ enum SnapshotCodec: UInt8 {
 
 // MARK: - Errors
 
-enum SnapshotContainerError: Error, LocalizedError {
+nonisolated enum SnapshotContainerError: Error, LocalizedError {
     case dataTooShort
     case invalidMagic
     case unknownVersion(UInt16)
@@ -41,7 +41,7 @@ enum SnapshotContainerError: Error, LocalizedError {
 
 // MARK: - Container
 
-enum SnapshotContainer {
+nonisolated enum SnapshotContainer {
 
     // Header layout (20 bytes)
     // [0..3]   magic           "WVLT" (0x57564C54)

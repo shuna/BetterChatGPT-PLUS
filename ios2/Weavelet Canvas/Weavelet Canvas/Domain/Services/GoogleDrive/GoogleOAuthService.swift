@@ -15,7 +15,7 @@ struct GoogleTokens {
 
 /// Google OAuth2 PKCE flow using ASWebAuthenticationSession.
 /// Scope: drive.appdata (hidden app-specific folder).
-enum GoogleOAuthService {
+nonisolated enum GoogleOAuthService {
 
     private static let logger = Logger(subsystem: "org.sstcr.WeaveletCanvas", category: "GoogleOAuth")
 

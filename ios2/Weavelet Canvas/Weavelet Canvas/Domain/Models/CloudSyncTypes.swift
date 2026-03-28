@@ -38,7 +38,7 @@ struct CloudSyncMetrics {
 /// Cloud sync payload. Contains only data that should be synced across devices.
 /// Excludes: API keys, tokens, proxy settings, UI preferences, debug flags,
 /// stream recovery records, sync metadata, and token counters.
-struct SyncSnapshot: Codable {
+nonisolated struct SyncSnapshot: Codable {
     var chats: [Chat]
     var contentStore: ContentStoreData
     var folders: FolderCollection

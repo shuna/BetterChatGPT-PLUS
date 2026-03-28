@@ -18,7 +18,7 @@ enum ZstdError: Error, LocalizedError {
     }
 }
 
-enum ZstdCompressor {
+nonisolated enum ZstdCompressor {
 
     /// Compress data using zstd.
     /// - Parameters:

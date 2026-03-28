@@ -431,7 +431,7 @@ enum ExportImportService {
         var nodeEntries: [String: Any] = [:]
         var childrenMap: [String: [String]] = [rootId: []]
 
-        for (i, msg) in messages.enumerated() {
+        for (_, msg) in messages.enumerated() {
             guard msg.role != .system else { continue }
             let nodeId = UUID().uuidString
             childrenMap[prevId, default: []].append(nodeId)

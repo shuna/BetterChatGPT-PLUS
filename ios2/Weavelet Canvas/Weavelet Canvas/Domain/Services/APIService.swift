@@ -477,7 +477,7 @@ actor APIService {
     // MARK: - Message Building
 
     /// Build the messages array for the API call from a chat's active path.
-    static func buildMessagesForAPI(
+    nonisolated static func buildMessagesForAPI(
         chat: Chat,
         contentStore: ContentStoreData
     ) -> [[String: Any]] {
@@ -538,7 +538,7 @@ enum APIError: LocalizedError {
 
 // MARK: - Keychain Helper
 
-enum KeychainHelper {
+nonisolated enum KeychainHelper {
     static func save(key: String, value: String) {
         let data = Data(value.utf8)
         let query: [String: Any] = [

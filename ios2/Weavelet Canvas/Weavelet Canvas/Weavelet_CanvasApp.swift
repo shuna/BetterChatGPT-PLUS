@@ -62,8 +62,8 @@ struct Weavelet_CanvasApp: App {
 
         // Wire PersistenceService save callback to cloud sync
         Task {
-            await chatViewModel.persistence.onSaveComplete = { [cloudSyncService] state in
-                cloudSyncService.scheduleUpload(state)
+            await chatViewModel.persistence.setOnSaveComplete { [cloudSyncService] state in
+                Task { @MainActor in cloudSyncService.scheduleUpload(state) }
             }
         }
 

@@ -161,7 +161,7 @@ actor GoogleDriveSyncProvider: CloudSyncProvider {
 
     /// Execute a request with token refresh on 401. Rejects non-2xx responses.
     private func authenticatedDataRequest(_ request: URLRequest) async throws -> (Data, URLResponse) {
-        var tokens = GoogleOAuthService.loadTokens()
+        let tokens = GoogleOAuthService.loadTokens()
         guard var currentTokens = tokens else {
             throw GoogleDriveError.notAuthenticated
         }

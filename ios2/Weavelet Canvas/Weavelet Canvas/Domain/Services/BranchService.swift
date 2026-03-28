@@ -511,7 +511,7 @@ enum BranchService {
     }
 
     private static func cloneChat(_ chats: [Chat], at index: Int) -> [Chat] {
-        var result = chats
+        let result = chats
         // Swift structs are value types, so this is already a copy
         return result
     }
@@ -522,7 +522,7 @@ enum BranchService {
         contentStore: ContentStoreData
     ) -> PreparedState {
         let ensured = ensureBranchTree(chats: chats, chatIndex: chatIndex, contentStore: contentStore)
-        var updatedChats = ensured.chats
+        let updatedChats = ensured.chats
         let chat = updatedChats[chatIndex]
         return PreparedState(
             chats: updatedChats,

@@ -3,7 +3,7 @@ import os
 
 /// Guards against destructive or oversized cloud sync uploads.
 /// Mirrors Web version's guards.ts with iOS-specific limits.
-enum CloudSyncGuards {
+nonisolated enum CloudSyncGuards {
 
     /// Maximum JSON size before compression (2MB).
     static let maxJsonBytes = 2_000_000

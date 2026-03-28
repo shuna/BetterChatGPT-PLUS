@@ -13,7 +13,7 @@ typealias ContentStoreData = [String: ContentEntry]
 
 // MARK: - ContentStore (pure functions, matching Web's contentStore.ts)
 
-enum ContentStore {
+nonisolated enum ContentStore {
 
     // MARK: - FNV-1a Hash (Web-compatible)
 

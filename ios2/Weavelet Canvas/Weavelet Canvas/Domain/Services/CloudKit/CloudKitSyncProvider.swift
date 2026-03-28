@@ -17,8 +17,8 @@ actor CloudKitSyncProvider: CloudSyncProvider {
     private let recordID: CKRecord.ID
     private let logger = Logger(subsystem: "org.sstcr.WeaveletCanvas", category: "CloudKit")
 
-    static let recordType = "WeaveletSnapshot"
-    static let recordName = "weavelet-ios-snapshot"
+    nonisolated static let recordType = "WeaveletSnapshot"
+    nonisolated static let recordName = "weavelet-ios-snapshot"
 
     // Cached recordChangeTag for optimistic locking
     private var cachedRecordChangeTag: String? {

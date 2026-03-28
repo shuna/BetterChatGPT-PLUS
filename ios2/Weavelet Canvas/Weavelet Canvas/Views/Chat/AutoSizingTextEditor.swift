@@ -54,7 +54,7 @@ struct AutoSizingTextEditor: UIViewRepresentable {
     private func recalculateHeight(for textView: UITextView) {
         let minHeight = height(forVisibleLines: minVisibleLines, textView: textView)
         let maxHeight = height(forVisibleLines: maxVisibleLines, textView: textView)
-        let fittingSize = CGSize(width: textView.bounds.width > 0 ? textView.bounds.width : UIScreen.main.bounds.width, height: .greatestFiniteMagnitude)
+        let fittingSize = CGSize(width: textView.bounds.width > 0 ? textView.bounds.width : (textView.window?.windowScene?.screen.bounds.width ?? 375), height: .greatestFiniteMagnitude)
         let measuredHeight = textView.sizeThatFits(fittingSize).height
         let clampedHeight = min(max(measuredHeight, minHeight), maxHeight)
         let shouldScroll = measuredHeight > maxHeight + 0.5
