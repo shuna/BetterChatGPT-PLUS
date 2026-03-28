@@ -147,7 +147,8 @@ struct ChatDetailView: View {
                                 }
                             }
                         } footer: {
-                            if !message.isGenerating && !message.isCollapsed && selectedMessageID == message.id {
+                            if !message.isGenerating && !message.isCollapsed {
+                                let isSelected = selectedMessageID == message.id
                                 let idx = viewModel.messages.firstIndex(where: { $0.id == message.id })
                                 if isEditing.wrappedValue {
                                     MessageEditBar(
@@ -164,7 +165,7 @@ struct ChatDetailView: View {
                                         onCancel: { isEditing.wrappedValue = false },
                                         hasChanges: viewModel.editText != message.content
                                     )
-                                } else {
+                                } else if isSelected {
                                     MessageActionBar(
                                         message: message,
                                         onCopy: { viewModel.copyMessage(message) },
@@ -176,6 +177,9 @@ struct ChatDetailView: View {
                                         isFirst: idx == viewModel.messages.startIndex,
                                         isLast: idx == viewModel.messages.index(before: viewModel.messages.endIndex)
                                     )
+                                } else {
+                                    // Reserve space so bubbles don't shift
+                                    Color.clear.frame(height: 44)
                                 }
                             }
                         }
