@@ -6,6 +6,7 @@ struct ChatDetailView: View {
     @State private var keyboardVisible = false
     @State private var currentMessageIndex = 0
     @State private var scrollProxy: ScrollViewProxy?
+    @State private var selectedMessageID: UUID?
 
     var body: some View {
         Group {
@@ -140,8 +141,13 @@ struct ChatDetailView: View {
                                 streamingMarkdownPolicy: viewModel.settings?.streamingMarkdownPolicy ?? .auto
                             )
                             .id(message.id)
+                            .onTapGesture {
+                                withAnimation(.easeOut(duration: 0.2)) {
+                                    selectedMessageID = selectedMessageID == message.id ? nil : message.id
+                                }
+                            }
                         } footer: {
-                            if !message.isGenerating && !message.isCollapsed {
+                            if !message.isGenerating && !message.isCollapsed && selectedMessageID == message.id {
                                 let idx = viewModel.messages.firstIndex(where: { $0.id == message.id })
                                 if isEditing.wrappedValue {
                                     MessageEditBar(
@@ -179,6 +185,9 @@ struct ChatDetailView: View {
             .scrollDismissesKeyboard(.immediately)
             .onTapGesture {
                 UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                withAnimation(.easeOut(duration: 0.2)) {
+                    selectedMessageID = nil
+                }
             }
             .onChange(of: viewModel.messages.count) {
                 if let lastID = viewModel.messages.last?.id {
