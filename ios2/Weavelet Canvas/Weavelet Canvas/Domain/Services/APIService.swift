@@ -84,6 +84,72 @@ actor APIService {
         return stored
     }
 
+    // MARK: - Fetch Provider Models
+
+    /// Fetch the list of models available from a provider's models endpoint.
+    /// Returns an empty array if the provider has no modelsEndpoint configured.
+    func fetchModels(for providerId: ProviderId) async throws -> [ProviderModel] {
+        let provider = providerConfigs[providerId]
+            ?? Self.defaultProviders[providerId]
+            ?? Self.defaultProviders[.openai]!
+
+        guard let modelsEndpoint = provider.modelsEndpoint,
+              let url = URL(string: modelsEndpoint) else {
+            return []
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+
+        if provider.modelsRequireAuth {
+            guard let apiKey = getAPIKey(for: providerId), !apiKey.isEmpty else {
+                throw APIError.noAPIKey(provider: provider.name)
+            }
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            throw APIError.httpError(status: statusCode, body: "Failed to fetch models")
+        }
+
+        struct ModelsResponse: Decodable {
+            let data: [ModelEntry]
+        }
+        struct ModelEntry: Decodable {
+            let id: String
+            let name: String?
+            let created: Int?
+            let context_length: Int?
+            let pricing: Pricing?
+            let top_provider: TopProvider?
+
+            struct Pricing: Decodable {
+                let prompt: String?
+                let completion: String?
+            }
+            struct TopProvider: Decodable {
+                let context_length: Int?
+            }
+        }
+
+        let decoded = try JSONDecoder().decode(ModelsResponse.self, from: data)
+        return decoded.data.map { entry in
+            ProviderModel(
+                id: entry.id,
+                name: entry.name ?? entry.id,
+                providerId: providerId,
+                contextLength: entry.context_length ?? entry.top_provider?.context_length,
+                promptPrice: entry.pricing?.prompt.flatMap { Double($0) },
+                completionPrice: entry.pricing?.completion.flatMap { Double($0) },
+                created: entry.created
+            )
+        }
+    }
+
     // MARK: - Chat Completion (Streaming)
 
     /// Send a chat completion request with streaming.

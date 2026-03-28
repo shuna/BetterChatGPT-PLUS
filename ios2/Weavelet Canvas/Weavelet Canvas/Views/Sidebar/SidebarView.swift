@@ -481,7 +481,7 @@ private struct MenuOptionsSection: View {
         }
         .sheet(isPresented: $showSettings) {
             if let settings {
-                SettingsView(settings: settings)
+                SettingsView(settings: settings, apiService: chatViewModel.apiService)
             }
         }
     }

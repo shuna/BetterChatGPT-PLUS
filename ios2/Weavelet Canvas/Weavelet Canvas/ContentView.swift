@@ -36,13 +36,13 @@ struct ContentView: View {
                 DetailToolbarLeading(viewModel: chatViewModel)
             },
             detailToolbarCenter: { [chatViewModel] _, _ in
-                DetailCenterToolbar(viewModel: chatViewModel)
+                DetailCenterToolbar(viewModel: chatViewModel, settings: settings)
             },
             detailToolbarTrailing: { [chatViewModel, threeColumnState] _, _ in
                 DetailToolbarTrailing(viewModel: chatViewModel, threeColumnState: threeColumnState, settings: settings)
             },
             inspectorToolbarCenter: { [chatViewModel] _, _ in
-                InspectorCenterToolbar(viewModel: chatViewModel)
+                InspectorCenterToolbar(viewModel: chatViewModel, settings: settings)
             },
             inspectorToolbarTrailing: { [chatViewModel, threeColumnState] _, _ in
                 InspectorToolbarTrailing(viewModel: chatViewModel, threeColumnState: threeColumnState, settings: settings)
@@ -146,7 +146,7 @@ private struct SidebarToolbarTrailing: View {
 
 // MARK: - Capability Icons
 
-private struct CapabilityIcons: View {
+struct CapabilityIcons: View {
     let reasoning: Bool
     let vision: Bool
     let audio: Bool
@@ -177,7 +177,9 @@ private struct CapabilityIcons: View {
 
 private struct ModelSelectorButton: View {
     @Bindable var viewModel: ChatViewModel
+    var settings: SettingsViewModel?
     @State private var showPicker = false
+    @State private var showProviderMenu = false
 
     var body: some View {
         Button {
@@ -200,8 +202,13 @@ private struct ModelSelectorButton: View {
             .foregroundStyle(.primary)
         }
         .popover(isPresented: $showPicker, arrowEdge: .top) {
-            ModelPickerList(viewModel: viewModel, showPicker: $showPicker)
+            ModelPickerList(viewModel: viewModel, showPicker: $showPicker, showProviderMenu: $showProviderMenu)
                 .presentationCompactAdaptation(.popover)
+        }
+        .sheet(isPresented: $showProviderMenu) {
+            if let settings {
+                ProviderMenuView(apiService: viewModel.apiService, settings: settings)
+            }
         }
     }
 }
@@ -209,6 +216,7 @@ private struct ModelSelectorButton: View {
 private struct ModelPickerList: View {
     var viewModel: ChatViewModel
     @Binding var showPicker: Bool
+    @Binding var showProviderMenu: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -231,6 +239,7 @@ private struct ModelPickerList: View {
 
             Button {
                 showPicker = false
+                showProviderMenu = true
             } label: {
                 HStack {
                     Image(systemName: "square.grid.2x2")
@@ -325,11 +334,12 @@ private struct DetailToolbarLeading: View {
 
 private struct DetailCenterToolbar: View {
     @Bindable var viewModel: ChatViewModel
+    var settings: SettingsViewModel?
 
     var body: some View {
         switch viewModel.viewMode {
         case .chat:
-            ModelSelectorButton(viewModel: viewModel)
+            ModelSelectorButton(viewModel: viewModel, settings: settings)
         case .branchEditor:
             Text("Branch Editor")
                 .font(.headline)
@@ -469,6 +479,7 @@ private struct InspectorToolbarTrailing: View {
 
 private struct InspectorCenterToolbar: View {
     @Bindable var viewModel: ChatViewModel
+    var settings: SettingsViewModel?
 
     var body: some View {
         switch viewModel.viewMode {
@@ -476,7 +487,7 @@ private struct InspectorCenterToolbar: View {
             Text("Branch Editor")
                 .font(.headline)
         case .branchEditor:
-            ModelSelectorButton(viewModel: viewModel)
+            ModelSelectorButton(viewModel: viewModel, settings: settings)
         }
     }
 }

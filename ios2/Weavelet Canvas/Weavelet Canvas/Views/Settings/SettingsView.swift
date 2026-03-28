@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @Bindable var settings: SettingsViewModel
+    var apiService: APIService?
     var cloudSyncService: CloudSyncService?
     @Environment(\.dismiss) private var dismiss
 
@@ -114,6 +115,22 @@ struct SettingsView: View {
                             .frame(width: 40)
                     }
                     Toggle("Swap panels", isOn: $settings.splitPanelSwapped)
+                }
+
+                // MARK: - AI Providers
+                if let apiService {
+                    Section("AI Providers") {
+                        NavigationLink {
+                            ProviderMenuView(apiService: apiService, settings: settings)
+                        } label: {
+                            HStack {
+                                Text("AI Providers")
+                                Spacer()
+                                Text("\(ProviderId.allCases.count) providers")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
                 }
 
                 // MARK: - Prompt Library
