@@ -19,6 +19,7 @@ struct MessageBubble: View {
     var streamingMarkdownPolicy: StreamingMarkdownPolicy = .auto
 
     @State private var showDeleteConfirmation = false
+    @State private var contentCardHeight: CGFloat?
     @FocusState private var isEditFieldFocused: Bool
 
     var body: some View {
@@ -30,8 +31,16 @@ struct MessageBubble: View {
                 // Header: avatar + role selector + meta buttons
                 messageHeader
 
-                // Content card
+                // Content card — fix height during editing to prevent layout jitter
                 contentCard
+                    .frame(height: isEditing ? contentCardHeight : nil)
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.size.height
+                    } action: { height in
+                        if !isEditing {
+                            contentCardHeight = height
+                        }
+                    }
                     .padding(.top, 4)
             }
             .padding(.trailing, 16)
@@ -247,6 +256,11 @@ struct MessageBubble: View {
     private var unifiedContentView: some View {
         if message.isGenerating && message.content.isEmpty {
             typingIndicator
+        } else if shouldRenderMarkdown && !isEditing {
+            Text(markdownAttributed(message.content))
+                .font(.subheadline)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .textSelection(.enabled)
         } else if isEditing {
             TextField("", text: $editText, axis: .vertical)
                 .font(.subheadline)
@@ -270,11 +284,6 @@ struct MessageBubble: View {
                         isEditFieldFocused = false
                     }
                 }
-        } else if shouldRenderMarkdown {
-            Text(markdownAttributed(message.content))
-                .font(.subheadline)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .textSelection(.enabled)
         } else {
             Text(message.content)
                 .font(.subheadline)

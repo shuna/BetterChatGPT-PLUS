@@ -23,6 +23,24 @@ struct Weavelet_CanvasApp: App {
                         chatViewModel.settings = settings
                         setupCloudSync()
                     }
+                    .task {
+                        // Patch the outer hosting view's systemBackgroundColor to match app background
+                        try? await Task.sleep(for: .milliseconds(100))
+                        await MainActor.run {
+                            guard let windowScene = UIApplication.shared.connectedScenes
+                                .compactMap({ $0 as? UIWindowScene }).first,
+                                  let window = windowScene.windows.first else { return }
+                            let appBg = UIColor(named: "AppBackground")
+                            func findAndPatch(_ view: UIView) {
+                                if view.backgroundColor == .systemBackground {
+                                    view.backgroundColor = appBg
+                                    return
+                                }
+                                for sub in view.subviews { findAndPatch(sub) }
+                            }
+                            findAndPatch(window)
+                        }
+                    }
             }
         }
         .onChange(of: scenePhase) { _, newPhase in

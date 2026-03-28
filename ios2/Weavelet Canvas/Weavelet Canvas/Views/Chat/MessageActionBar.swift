@@ -40,7 +40,6 @@ struct MessageActionBar: View {
         .glassEffect(.regular.interactive())
         .clipShape(Capsule())
         .frame(height: 44)
-        .frame(maxWidth: .infinity)
         .confirmationDialog("Delete this message?", isPresented: $showDeleteConfirmation, titleVisibility: .visible) {
             Button("Delete", role: .destructive) { onDelete() }
         }

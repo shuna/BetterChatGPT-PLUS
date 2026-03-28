@@ -4,6 +4,7 @@ final class HomeIndicatorHostingController<Content: View>: UIHostingController<C
     override var prefersHomeIndicatorAutoHidden: Bool { true }
 
     override var preferredScreenEdgesDeferringSystemGestures: UIRectEdge { .bottom }
+
 }
 
 struct HomeIndicatorAutoHiddenView<Content: View>: UIViewControllerRepresentable {
