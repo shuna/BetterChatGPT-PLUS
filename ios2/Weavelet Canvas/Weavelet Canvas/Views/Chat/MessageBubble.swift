@@ -1,5 +1,73 @@
 import SwiftUI
 
+// MARK: - ReadableTextEditor
+
+/// A TextEditor wrapper that supports read-only mode via UITextView.isEditable,
+/// preserving text selection while preventing input when not editing.
+struct ReadableTextEditor: View {
+    @Binding var text: AttributedString
+    var isEditable: Bool
+
+    var body: some View {
+        TextEditor(text: $text)
+            .onIntrospectTextView { textView in
+                textView.isEditable = isEditable
+            }
+    }
+}
+
+private extension View {
+    /// Applies a closure to the underlying UITextView of a TextEditor.
+    func onIntrospectTextView(_ configure: @escaping (UITextView) -> Void) -> some View {
+        background(TextViewIntrospector(configure: configure))
+    }
+}
+
+private struct TextViewIntrospector: UIViewRepresentable {
+    let configure: (UITextView) -> Void
+
+    func makeUIView(context: Context) -> UIView {
+        let view = UIView(frame: .zero)
+        view.isHidden = true
+        view.isUserInteractionEnabled = false
+        return view
+    }
+
+    func updateUIView(_ uiView: UIView, context: Context) {
+        DispatchQueue.main.async {
+            guard let textView = uiView.findSiblingTextView() else { return }
+            configure(textView)
+        }
+    }
+}
+
+private extension UIView {
+    func findSiblingTextView() -> UITextView? {
+        // Walk up to the common ancestor and search for UITextView
+        var current: UIView? = superview
+        while let parent = current {
+            if let textView = parent.findDescendant(ofType: UITextView.self, excluding: self) {
+                return textView
+            }
+            current = parent.superview
+        }
+        return nil
+    }
+
+    func findDescendant<T: UIView>(ofType type: T.Type, excluding: UIView) -> T? {
+        for child in subviews {
+            if child === excluding { continue }
+            if let match = child as? T { return match }
+            if let match = child.findDescendant(ofType: type, excluding: excluding) {
+                return match
+            }
+        }
+        return nil
+    }
+}
+
+// MARK: - MessageBubble
+
 struct MessageBubble: View {
     let message: ChatMessage
     let onCopy: () -> Void
@@ -19,7 +87,8 @@ struct MessageBubble: View {
     var streamingMarkdownPolicy: StreamingMarkdownPolicy = .auto
 
     @State private var showDeleteConfirmation = false
-    @State private var contentCardHeight: CGFloat?
+    @State private var displayText: AttributedString = AttributedString()
+    @State private var editAttributedText: AttributedString = AttributedString()
     @FocusState private var isEditFieldFocused: Bool
 
     var body: some View {
@@ -31,16 +100,7 @@ struct MessageBubble: View {
                 // Header: avatar + role selector + meta buttons
                 messageHeader
 
-                // Content card — fix height during editing to prevent layout jitter
                 contentCard
-                    .frame(height: isEditing ? contentCardHeight : nil)
-                    .onGeometryChange(for: CGFloat.self) { proxy in
-                        proxy.size.height
-                    } action: { height in
-                        if !isEditing {
-                            contentCardHeight = height
-                        }
-                    }
                     .padding(.top, 4)
             }
             .padding(.trailing, 16)
@@ -256,40 +316,36 @@ struct MessageBubble: View {
     private var unifiedContentView: some View {
         if message.isGenerating && message.content.isEmpty {
             typingIndicator
-        } else if shouldRenderMarkdown && !isEditing {
-            Text(markdownAttributed(message.content))
-                .font(.subheadline)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .textSelection(.enabled)
-        } else if isEditing {
-            TextField("", text: $editText, axis: .vertical)
-                .font(.subheadline)
-                .textFieldStyle(.plain)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .tint(.accentColor)
-                .focused($isEditFieldFocused)
-                .onAppear {
-                    editText = message.content
-                    DispatchQueue.main.async {
-                        isEditFieldFocused = true
-                    }
-                }
-                .onChange(of: isEditing) { _, editing in
-                    if editing {
-                        editText = message.content
-                        DispatchQueue.main.async {
-                            isEditFieldFocused = true
-                        }
-                    } else {
-                        isEditFieldFocused = false
-                    }
-                }
         } else {
-            Text(message.content)
-                .font(.subheadline)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
-                .textSelection(.enabled)
+            ReadableTextEditor(
+                text: isEditing ? $editAttributedText : $displayText,
+                isEditable: isEditing
+            )
+            .font(.subheadline)
+            .scrollContentBackground(.hidden)
+            .scrollDisabled(true)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .tint(.accentColor)
+            .focused($isEditFieldFocused)
+            .onAppear { updateDisplayText() }
+            .onChange(of: message.content) { _, _ in updateDisplayText() }
+            .onChange(of: markdownMode) { _, _ in updateDisplayText() }
+            .onChange(of: isEditing) { _, editing in
+                if editing {
+                    editAttributedText = AttributedString(message.content)
+                    DispatchQueue.main.async { isEditFieldFocused = true }
+                } else {
+                    editText = String(editAttributedText.characters)
+                    isEditFieldFocused = false
+                }
+            }
         }
+    }
+
+    private func updateDisplayText() {
+        displayText = shouldRenderMarkdown
+            ? markdownAttributed(message.content)
+            : AttributedString(message.content)
     }
 
     private func markdownAttributed(_ text: String) -> AttributedString {
