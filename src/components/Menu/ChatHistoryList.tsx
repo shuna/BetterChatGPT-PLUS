@@ -5,6 +5,7 @@ import { shallow } from 'zustand/shallow';
 import ChatFolder from './ChatFolder';
 import ChatHistory from './ChatHistory';
 import GrepResults from './GrepResults';
+import SidebarSearchHistory from './SidebarSearchHistory';
 
 import {
   ChatHistoryInterface,
@@ -18,9 +19,13 @@ import {
 const ChatHistoryList = ({
   filter,
   setFilter,
+  searchFocused,
+  onHistorySelect,
 }: {
   filter: string;
   setFilter: React.Dispatch<React.SetStateAction<string>>;
+  searchFocused?: boolean;
+  onHistorySelect?: (query: string) => void;
 }) => {
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const displayChatSize = useStore((state) => state.displayChatSize);
@@ -39,6 +44,8 @@ const ChatHistoryList = ({
     []
   );
   const isGrepMode = useStore((state) => state.isGrepMode);
+  const sidebarSearchHistory = useStore((state) => state.sidebarSearchHistory);
+  const grepQuery = useStore((state) => state.grepQuery);
   const [selectedChats, setSelectedChats] = useState<number[]>([]);
   const [lastSelectedIndex, setLastSelectedIndex] = useState<number | null>(
     null
@@ -256,7 +263,10 @@ const ChatHistoryList = ({
       onDragLeave={handleDragLeave}
       onDragEnd={handleDragEnd}
     >
-      {isGrepMode ? (
+      {/* Show search history when focused with empty query */}
+      {searchFocused && !filter && !grepQuery && sidebarSearchHistory.length > 0 ? (
+        <SidebarSearchHistory onSelect={(q) => onHistorySelect?.(q)} />
+      ) : isGrepMode ? (
         <GrepResults />
       ) : (
         <div className='flex flex-col gap-2 text-sm text-gray-700 dark:text-gray-100'>

@@ -15,11 +15,17 @@ export interface GrepSlice {
   grepResults: GrepResult[];
   isGrepMode: boolean;
   isGrepSearching: boolean;
+  sidebarSearchHistory: string[];
+  chatFindHistory: string[];
 
   setGrepQuery: (q: string) => void;
   executeGrep: () => void;
   setGrepMode: (on: boolean) => void;
   navigateToGrepResult: (chatIndex: number, nodeId?: string) => void;
+  saveSidebarSearchHistory: (query?: string) => void;
+  clearSidebarSearchHistory: () => void;
+  saveChatFindHistory: (query: string) => void;
+  clearChatFindHistory: () => void;
 }
 
 /**
@@ -68,6 +74,8 @@ export const createGrepSlice: StoreSlice<GrepSlice> = (set, get) => ({
   grepResults: [],
   isGrepMode: false,
   isGrepSearching: false,
+  sidebarSearchHistory: [],
+  chatFindHistory: [],
 
   setGrepQuery: (q) => {
     set({ grepQuery: q });
@@ -125,6 +133,34 @@ export const createGrepSlice: StoreSlice<GrepSlice> = (set, get) => ({
     } else {
       set({ isGrepMode: true });
     }
+  },
+
+  saveSidebarSearchHistory: (query) => {
+    const normalized = (query ?? get().grepQuery).trim();
+    if (!normalized) return;
+    const nextHistory = [
+      normalized,
+      ...get().sidebarSearchHistory.filter((entry) => entry !== normalized),
+    ].slice(0, 20);
+    set({ sidebarSearchHistory: nextHistory });
+  },
+
+  clearSidebarSearchHistory: () => {
+    set({ sidebarSearchHistory: [] });
+  },
+
+  saveChatFindHistory: (query) => {
+    const normalized = query.trim();
+    if (!normalized) return;
+    const nextHistory = [
+      normalized,
+      ...get().chatFindHistory.filter((entry) => entry !== normalized),
+    ].slice(0, 20);
+    set({ chatFindHistory: nextHistory });
+  },
+
+  clearChatFindHistory: () => {
+    set({ chatFindHistory: [] });
   },
 
   navigateToGrepResult: (chatIndex, nodeId) => {

@@ -19,6 +19,8 @@ const Menu = () => {
   const setMenuWidth = useStore((state) => state.setMenuWidth);
 
   const [filter, setFilter] = useState<string>('');
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [externalQuery, setExternalQuery] = useState<string | null>(null);
   const windowWidthRef = useRef<number>(window.innerWidth);
   const isResizing = useRef<boolean>(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -92,8 +94,12 @@ const Menu = () => {
                 <NewChat />
                 <NewFolder />
               </div>
-              <ChatSearch filter={filter} setFilter={setFilter} />
-              <ChatHistoryList filter={filter} setFilter={setFilter} />
+              <ChatSearch filter={filter} setFilter={setFilter} onSearchFocusChange={setSearchFocused} externalQuery={externalQuery} />
+              <ChatHistoryList filter={filter} setFilter={setFilter} searchFocused={searchFocused} onHistorySelect={(q) => {
+                setExternalQuery(q);
+                // Reset to allow re-selection of the same query
+                setTimeout(() => setExternalQuery(null), 0);
+              }} />
               <DebugPanel />
               <div className='mt-auto flex flex-col gap-2 pb-2'>
                 <VersionInfo />
