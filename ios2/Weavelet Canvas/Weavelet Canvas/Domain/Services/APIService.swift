@@ -138,16 +138,51 @@ actor APIService {
 
         let decoded = try JSONDecoder().decode(ModelsResponse.self, from: data)
         return decoded.data.map { entry in
-            ProviderModel(
-                id: entry.id,
-                name: entry.name ?? entry.id,
+            let id = entry.id
+            return ProviderModel(
+                id: id,
+                name: entry.name ?? id,
                 providerId: providerId,
                 contextLength: entry.context_length ?? entry.top_provider?.context_length,
                 promptPrice: entry.pricing?.prompt.flatMap { Double($0) },
                 completionPrice: entry.pricing?.completion.flatMap { Double($0) },
-                created: entry.created
+                created: entry.created,
+                supportsReasoning: Self.isReasoningModel(id),
+                supportsVision: Self.isVisionModel(id),
+                supportsAudio: Self.isAudioModel(id)
             )
         }
+    }
+
+    // MARK: - Capability Detection
+
+    private static let reasoningModelRE = try! NSRegularExpression(
+        pattern: #"(?:^|[-/])o[134](?:$|[-/])"#
+    )
+    private static let reasoningModelNames = ["deepseek-r1", "deepseek-reasoner", "qwq"]
+
+    static func isReasoningModel(_ modelId: String) -> Bool {
+        let id = modelId.lowercased()
+        let range = NSRange(id.startIndex..., in: id)
+        if reasoningModelRE.firstMatch(in: id, range: range) != nil { return true }
+        if reasoningModelNames.contains(where: { id.contains($0) }) { return true }
+        if id.contains("claude") && id.contains("thinking") { return true }
+        return false
+    }
+
+    static func isVisionModel(_ modelId: String) -> Bool {
+        let id = modelId.lowercased()
+        if id.range(of: #"gpt-4[o\-]"#, options: .regularExpression) != nil
+            && !id.contains("audio-preview") { return true }
+        if id.contains("claude-3") { return true }
+        if id.contains("gemini") { return true }
+        if id.contains("vision") { return true }
+        return false
+    }
+
+    static func isAudioModel(_ modelId: String) -> Bool {
+        let id = modelId.lowercased()
+        return id.contains("audio") || id.contains("realtime")
     }
 
     // MARK: - Chat Completion (Streaming)
