@@ -185,41 +185,107 @@ final class SettingsViewModel {
 
     // MARK: - Model Management (Epic 3)
 
-    /// Favorite model IDs, ordered.
-    var favoriteModelIDs: [String] {
-        didSet { saveStringArray("favoriteModelIDs", favoriteModelIDs) }
+    /// Favorite model IDs, ordered. Each entry includes provider for unambiguous resolution.
+    var favoriteModelIDs: [FavoriteModel] {
+        didSet { saveFavorites() }
     }
 
-    /// Custom models per provider: [providerId.rawValue: [modelId]]
-    var customModels: [String: [String]] {
-        didSet { saveDict("customModels", customModels) }
+    private func saveFavorites() {
+        guard let data = try? JSONEncoder().encode(favoriteModelIDs) else { return }
+        defaults.set(data, forKey: "favoriteModelsData")
     }
 
-    func toggleFavorite(_ modelId: String) {
-        if let idx = favoriteModelIDs.firstIndex(of: modelId) {
+    private static func loadFavorites() -> [FavoriteModel] {
+        // New format
+        if let data = UserDefaults.standard.data(forKey: "favoriteModelsData"),
+           let favs = try? JSONDecoder().decode([FavoriteModel].self, from: data) {
+            return favs
+        }
+        // Migrate from old [String] format
+        if let old = UserDefaults.standard.stringArray(forKey: "favoriteModelIDs") {
+            let migrated = old.map { FavoriteModel(modelId: $0, providerId: .openrouter) }
+            if let data = try? JSONEncoder().encode(migrated) {
+                UserDefaults.standard.set(data, forKey: "favoriteModelsData")
+            }
+            UserDefaults.standard.removeObject(forKey: "favoriteModelIDs")
+            return migrated
+        }
+        return []
+    }
+
+    /// Custom models per provider: [providerId.rawValue: [ProviderModel]]
+    var customModels: [String: [ProviderModel]] {
+        didSet { saveCustomModels() }
+    }
+
+    func toggleFavorite(_ modelId: String, providerId: ProviderId) {
+        if let idx = favoriteModelIDs.firstIndex(where: { $0.modelId == modelId && $0.providerId == providerId }) {
             favoriteModelIDs.remove(at: idx)
         } else {
-            favoriteModelIDs.append(modelId)
+            favoriteModelIDs.append(FavoriteModel(modelId: modelId, providerId: providerId))
         }
     }
 
-    func isFavorite(_ modelId: String) -> Bool {
-        favoriteModelIDs.contains(modelId)
+    func isFavorite(_ modelId: String, providerId: ProviderId) -> Bool {
+        favoriteModelIDs.contains(where: { $0.modelId == modelId && $0.providerId == providerId })
     }
 
-    func addCustomModel(_ modelId: String, for provider: ProviderId) {
+    func addCustomModel(_ model: ProviderModel, for provider: ProviderId) {
         var models = customModels[provider.rawValue] ?? []
-        guard !models.contains(modelId) else { return }
-        models.append(modelId)
+        if let idx = models.firstIndex(where: { $0.id == model.id }) {
+            models[idx] = model // replace existing
+        } else {
+            models.append(model)
+        }
         customModels[provider.rawValue] = models
     }
 
     func removeCustomModel(_ modelId: String, for provider: ProviderId) {
-        customModels[provider.rawValue]?.removeAll { $0 == modelId }
+        customModels[provider.rawValue]?.removeAll { $0.id == modelId }
     }
 
-    func customModelsFor(_ provider: ProviderId) -> [String] {
+    func customModelsFor(_ provider: ProviderId) -> [ProviderModel] {
         customModels[provider.rawValue] ?? []
+    }
+
+    /// Find a custom model by ID across all providers (searches ProviderId.allCases order).
+    func findCustomModel(_ modelId: String) -> ProviderModel? {
+        for provider in ProviderId.allCases {
+            if let model = customModels[provider.rawValue]?.first(where: { $0.id == modelId }) {
+                return model
+            }
+        }
+        return nil
+    }
+
+    private func saveCustomModels() {
+        guard let data = try? JSONEncoder().encode(customModels) else { return }
+        defaults.set(data, forKey: "customModelsData")
+    }
+
+    private static func loadCustomModels() -> [String: [ProviderModel]] {
+        // Try new format first
+        if let data = UserDefaults.standard.data(forKey: "customModelsData"),
+           let models = try? JSONDecoder().decode([String: [ProviderModel]].self, from: data) {
+            return models
+        }
+        // Migrate from old format [String: [String]]
+        if let old = UserDefaults.standard.dictionary(forKey: "customModels") as? [String: [String]] {
+            var migrated: [String: [ProviderModel]] = [:]
+            for (providerKey, ids) in old {
+                let providerId = ProviderId(rawValue: providerKey) ?? .openai
+                migrated[providerKey] = ids.map { id in
+                    ProviderModel(id: id, name: id, providerId: providerId, contextLength: 4096)
+                }
+            }
+            // Save migrated and remove old key
+            if let data = try? JSONEncoder().encode(migrated) {
+                UserDefaults.standard.set(data, forKey: "customModelsData")
+            }
+            UserDefaults.standard.removeObject(forKey: "customModels")
+            return migrated
+        }
+        return [:]
     }
 
     // MARK: - Proxy (Epic 7, Ticket 26)
@@ -357,8 +423,8 @@ final class SettingsViewModel {
         self.autoTitle = Self.boolWithDefault("autoTitle", default: true)
         self.titleModel = UserDefaults.standard.string(forKey: "titleModel") ?? ""
         self.defaultImageDetail = ImageDetail(rawValue: UserDefaults.standard.string(forKey: "defaultImageDetail") ?? "") ?? .auto
-        self.favoriteModelIDs = UserDefaults.standard.stringArray(forKey: "favoriteModelIDs") ?? []
-        self.customModels = (UserDefaults.standard.dictionary(forKey: "customModels") as? [String: [String]]) ?? [:]
+        self.favoriteModelIDs = Self.loadFavorites()
+        self.customModels = Self.loadCustomModels()
 
         // Epic 5
         self.defaultModel = UserDefaults.standard.string(forKey: "defaultModel") ?? ""
@@ -398,9 +464,6 @@ final class SettingsViewModel {
         defaults.set(value, forKey: key)
     }
 
-    private func saveDict(_ key: String, _ value: [String: [String]]) {
-        defaults.set(value, forKey: key)
-    }
 
     private static func boolWithDefault(_ key: String, default defaultValue: Bool) -> Bool {
         if UserDefaults.standard.object(forKey: key) == nil {

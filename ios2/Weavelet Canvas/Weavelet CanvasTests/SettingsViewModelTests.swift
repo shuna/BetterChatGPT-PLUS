@@ -223,6 +223,34 @@ struct SettingsViewModelTests {
         #expect(chatVM2.chats.first!.messages.isEmpty)
     }
 
+    @Test("createNewChat infers OpenRouter provider for Claude models")
+    func createNewChatInfersOpenRouterProvider() {
+        let chatVM = ChatViewModel()
+        let config = ChatConfig(
+            model: "anthropic/claude-sonnet-4",
+            maxTokens: 8000,
+            temperature: 1.0,
+            presencePenalty: 0,
+            topP: 1.0,
+            frequencyPenalty: 0
+        )
+
+        chatVM.createNewChat(config: config)
+
+        #expect(chatVM.chats.first?.config.providerId == .openrouter)
+    }
+
+    @Test("setSelectedModel stores explicit provider")
+    func setSelectedModelStoresProvider() {
+        let chatVM = ChatViewModel()
+        chatVM.createNewChat()
+
+        chatVM.setSelectedModel("anthropic/claude-sonnet-4", providerId: .openrouter)
+
+        #expect(chatVM.chats.first?.config.model == "anthropic/claude-sonnet-4")
+        #expect(chatVM.chats.first?.config.providerId == .openrouter)
+    }
+
     // MARK: - Epic 6: Prompt Library
 
     @Test("Prompt library defaults to empty")

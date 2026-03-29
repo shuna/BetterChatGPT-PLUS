@@ -74,6 +74,7 @@ struct ContentView: View {
         }
         .onAppear {
             threeColumnState.defaultRatio = settings.splitPanelRatio
+            chatViewModel.loadFetchedModels()
         }
     }
 }
@@ -218,25 +219,33 @@ private struct ModelPickerList: View {
     var showModelSettingsEntry: Bool = false
     @Binding var showModelSettings: Bool
 
-    private var favoriteIDs: [String] {
+    private var favorites: [FavoriteModel] {
         viewModel.settings?.favoriteModelIDs ?? []
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            ForEach(Array(favoriteIDs.enumerated()), id: \.element) { index, modelId in
+            ForEach(Array(favorites.enumerated()), id: \.element) { index, fav in
+                let model = viewModel.resolveModel(fav.modelId, providerId: fav.providerId)
                 Button {
-                    viewModel.selectedModelID = modelId
+                    viewModel.setSelectedModel(fav.modelId, providerId: fav.providerId)
                     showPicker = false
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "checkmark")
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(viewModel.selectedModelID == modelId ? Color.primary : .clear)
+                            .foregroundStyle(viewModel.selectedModelID == fav.modelId && viewModel.selectedProviderId == fav.providerId ? Color.primary : .clear)
                             .frame(width: 16)
-                        Text(modelId)
+                        Text(model?.name ?? fav.modelId)
                             .foregroundStyle(.primary)
                         Spacer()
+                        if let model {
+                            CapabilityIcons(
+                                reasoning: model.supportsReasoning ?? false,
+                                vision: model.supportsVision ?? false,
+                                audio: model.supportsAudio ?? false
+                            )
+                        }
                     }
                     .font(.subheadline)
                     .padding(.horizontal, 16)
@@ -245,12 +254,12 @@ private struct ModelPickerList: View {
                 }
                 .buttonStyle(.plain)
 
-                if index < favoriteIDs.count - 1 {
+                if index < favorites.count - 1 {
                     Divider().padding(.leading, 42)
                 }
             }
 
-            if !favoriteIDs.isEmpty {
+            if !favorites.isEmpty {
                 Divider()
             }
 
@@ -560,36 +569,31 @@ private struct ModelSettingsSheet: View {
         )
     }
 
-    /// All fetched models that are in the favorites list
+    /// All favorite models resolved via Browse-first, custom-fallback.
     private var favoriteModels: [ProviderModel] {
         guard let settings else { return [] }
-        let favIDs = Set(settings.favoriteModelIDs)
-        return allModels.values.flatMap { $0 }
-            .filter { favIDs.contains($0.id) }
-            .sorted { a, b in
-                let aIdx = settings.favoriteModelIDs.firstIndex(of: a.id) ?? Int.max
-                let bIdx = settings.favoriteModelIDs.firstIndex(of: b.id) ?? Int.max
-                return aIdx < bIdx
-            }
+        return settings.favoriteModelIDs.compactMap { fav in
+            viewModel.resolveModel(fav.modelId, providerId: fav.providerId)
+        }
     }
 
-    /// Favorite IDs that weren't found in any provider's model list
-    private var unmatchedFavoriteIDs: [String] {
+    /// Favorite entries that couldn't be resolved from either fetched or custom models.
+    private var unmatchedFavoriteIDs: [FavoriteModel] {
         guard let settings else { return [] }
-        let fetchedIDs = Set(allModels.values.flatMap { $0 }.map(\.id))
-        return settings.favoriteModelIDs.filter { !fetchedIDs.contains($0) }
+        return settings.favoriteModelIDs.filter { viewModel.resolveModel($0.modelId, providerId: $0.providerId) == nil }
     }
 
-    /// Whether the currently selected model supports reasoning
+    /// Whether the currently selected model supports reasoning.
+    /// Browse (fetched) data takes priority over custom model metadata.
     private var reasoningSupported: Bool {
         let modelId = viewModel.selectedModelID
-        // Check from fetched model metadata
-        if let model = allModels.values.flatMap({ $0 }).first(where: { $0.id == modelId }),
-           model.supportsReasoning == true {
-            return true
+        let providerId = configBinding.wrappedValue.providerId
+        // Check resolved model (Browse priority, custom fallback)
+        if let model = viewModel.resolveModel(modelId, providerId: providerId) {
+            return model.supportsReasoning == true
         }
         // Heuristic detection for models not in metadata (e.g. Opus)
-        return Self.isReasoningModel(modelId, providerId: configBinding.wrappedValue.providerId)
+        return Self.isReasoningModel(modelId, providerId: providerId)
     }
 
     private var isOpenRouter: Bool {
@@ -631,14 +635,14 @@ private struct ModelSettingsSheet: View {
                             .foregroundStyle(.secondary)
                             .font(.subheadline)
                     } else {
-                        ForEach(favoriteModels) { model in
+                        ForEach(favoriteModels, id: \.self) { model in
                             Button {
-                                viewModel.selectedModelID = model.id
+                                viewModel.setSelectedModel(model.id, providerId: model.providerId)
                             } label: {
                                 HStack(spacing: 10) {
                                     Image(systemName: "checkmark")
                                         .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(viewModel.selectedModelID == model.id ? Color.accentColor : .clear)
+                                        .foregroundStyle(viewModel.selectedModelID == model.id && viewModel.selectedProviderId == model.providerId ? Color.accentColor : .clear)
                                         .frame(width: 16)
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(model.name)
@@ -659,23 +663,23 @@ private struct ModelSettingsSheet: View {
                             }
                             .swipeActions {
                                 Button(role: .destructive) {
-                                    settings?.toggleFavorite(model.id)
+                                    settings?.toggleFavorite(model.id, providerId: model.providerId)
                                 } label: {
                                     Label("Unfavorite", systemImage: "star.slash")
                                 }
                             }
                         }
 
-                        ForEach(unmatchedFavoriteIDs, id: \.self) { modelId in
+                        ForEach(unmatchedFavoriteIDs, id: \.self) { fav in
                             Button {
-                                viewModel.selectedModelID = modelId
+                                viewModel.setSelectedModel(fav.modelId, providerId: fav.providerId)
                             } label: {
                                 HStack(spacing: 10) {
                                     Image(systemName: "checkmark")
                                         .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(viewModel.selectedModelID == modelId ? Color.accentColor : .clear)
+                                        .foregroundStyle(viewModel.selectedModelID == fav.modelId && viewModel.selectedProviderId == fav.providerId ? Color.accentColor : .clear)
                                         .frame(width: 16)
-                                    Text(modelId)
+                                    Text(fav.modelId)
                                         .font(.subheadline)
                                         .foregroundStyle(.primary)
                                     Spacer()
@@ -683,7 +687,7 @@ private struct ModelSettingsSheet: View {
                             }
                             .swipeActions {
                                 Button(role: .destructive) {
-                                    settings?.toggleFavorite(modelId)
+                                    settings?.toggleFavorite(fav.modelId, providerId: fav.providerId)
                                 } label: {
                                     Label("Unfavorite", systemImage: "star.slash")
                                 }
@@ -840,6 +844,12 @@ private struct ModelSettingsSheet: View {
 
     private func loadAllFavoriteModels() async {
         loading = true
+        // Reuse cached data if available, otherwise fetch fresh
+        if !viewModel.fetchedModels.isEmpty {
+            allModels = viewModel.fetchedModels
+            loading = false
+            return
+        }
         var result: [ProviderId: [ProviderModel]] = [:]
         await withTaskGroup(of: (ProviderId, [ProviderModel]).self) { group in
             for provider in ProviderId.allCases {
@@ -854,6 +864,7 @@ private struct ModelSettingsSheet: View {
         }
         await MainActor.run {
             allModels = result
+            viewModel.fetchedModels = result
             loading = false
         }
     }

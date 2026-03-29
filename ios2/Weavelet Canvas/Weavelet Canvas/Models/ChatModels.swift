@@ -61,7 +61,55 @@ class ChatViewModel {
     /// Reference to app-wide settings (set from app entry point).
     var settings: SettingsViewModel?
 
+    /// Cached fetched models from all providers.
+    var fetchedModels: [ProviderId: [ProviderModel]] = [:]
+
+    /// Resolve a model ID to a ProviderModel.
+    /// When providerId is given, resolution stays scoped to that provider (fetched then custom).
+    /// Only falls through to broad search when no providerId is given.
+    func resolveModel(_ modelId: String, providerId: ProviderId? = nil) -> ProviderModel? {
+        if let providerId {
+            // Scoped: fetched for this provider, then custom for this provider
+            if let model = fetchedModels[providerId]?.first(where: { $0.id == modelId }) {
+                return model
+            }
+            return settings?.customModelsFor(providerId).first(where: { $0.id == modelId })
+        }
+        // Unscoped: broad search across all fetched, then all custom
+        if let model = fetchedModels.values.flatMap({ $0 }).first(where: { $0.id == modelId }) {
+            return model
+        }
+        return settings?.findCustomModel(modelId)
+    }
+
+    /// Fetch models from all providers and populate fetchedModels cache.
+    func loadFetchedModels() {
+        Task {
+            var result: [ProviderId: [ProviderModel]] = [:]
+            await withTaskGroup(of: (ProviderId, [ProviderModel]).self) { group in
+                for provider in ProviderId.allCases {
+                    group.addTask { [apiService] in
+                        let models = (try? await apiService.fetchModels(for: provider)) ?? []
+                        return (provider, models)
+                    }
+                }
+                for await (provider, models) in group {
+                    result[provider] = models
+                }
+            }
+            await MainActor.run {
+                self.fetchedModels = result
+            }
+        }
+    }
+
     // MARK: - UI State
+
+    /// The provider ID of the currently selected chat's config.
+    var selectedProviderId: ProviderId? {
+        guard let idx = currentChatIndex else { return nil }
+        return chats[idx].config.providerId
+    }
 
     /// Per-chat model selection — reads/writes Chat.config.model
     var selectedModelID: String {
@@ -72,15 +120,21 @@ class ChatViewModel {
         set {
             guard let idx = currentChatIndex else { return }
             chats[idx].config.model = newValue
+            if chats[idx].config.providerId == nil {
+                chats[idx].config.providerId = inferredProviderId(for: newValue)
+            }
             scheduleSave()
         }
     }
     /// Models shown in the dropdown — derived from favorite IDs
     var availableModels: [AIModel] {
         guard let settings else { return [] }
-        return settings.favoriteModelIDs.map { id in
-            AIModel(id: id, name: id, provider: "",
-                    supportsVision: false, supportsReasoning: false, supportsAudio: false)
+        return settings.favoriteModelIDs.map { fav in
+            let resolved = resolveModel(fav.modelId, providerId: fav.providerId)
+            return AIModel(id: fav.modelId, name: resolved?.name ?? fav.modelId, provider: fav.providerId.rawValue,
+                    supportsVision: resolved?.supportsVision ?? false,
+                    supportsReasoning: resolved?.supportsReasoning ?? false,
+                    supportsAudio: resolved?.supportsAudio ?? false)
         }
     }
     var isGenerating: Bool = false
@@ -153,6 +207,13 @@ class ChatViewModel {
 
     var selectedModel: AIModel? {
         availableModels.first { $0.id == selectedModelID }
+    }
+
+    func setSelectedModel(_ modelId: String, providerId: ProviderId? = nil) {
+        guard let idx = currentChatIndex else { return }
+        chats[idx].config.model = modelId
+        chats[idx].config.providerId = providerId ?? inferredProviderId(for: modelId)
+        scheduleSave()
     }
 
     // MARK: - Init
@@ -278,11 +339,31 @@ class ChatViewModel {
             messages.append(Message(role: .system, content: [.text(sys)]))
         }
         let imageDetail = settings?.defaultImageDetail ?? .auto
-        let chat = Chat(title: title, messages: messages, config: config ?? .default, imageDetail: imageDetail)
+        var chatConfig = config ?? .default
+        if chatConfig.providerId == nil {
+            chatConfig.providerId = inferredProviderId(for: chatConfig.model)
+        }
+        let chat = Chat(title: title, messages: messages, config: chatConfig, imageDetail: imageDetail)
         chats.insert(chat, at: 0)
         currentChatID = chat.id
         pushNavigation(chat.id)
         scheduleSave()
+    }
+
+    private func inferredProviderId(for modelId: String) -> ProviderId? {
+        let trimmed = modelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        // Browse (fetched) data takes priority
+        if let model = resolveModel(trimmed) {
+            return model.providerId
+        }
+
+        let lowercased = trimmed.lowercased()
+        if lowercased.contains("/") { return .openrouter }
+        if lowercased.contains("claude") { return .openrouter }
+
+        return nil
     }
 
     func selectChat(_ chatId: String) {
@@ -440,7 +521,7 @@ class ChatViewModel {
         let chat = chats[chatIndex]
         let chatId = chat.id
         let config = chat.config
-        let providerId = config.providerId ?? .openai
+        let providerId = config.providerId ?? inferredProviderId(for: config.model) ?? .openai
 
         // Add empty assistant node
         let emptyContent: [ContentItem] = [.text("")]
@@ -599,7 +680,9 @@ class ChatViewModel {
         } else {
             // API-based title generation using the configured model
             let chatId = chats[chatIndex].id
-            let providerId = chats[chatIndex].config.providerId ?? .openai
+            let providerId = chats[chatIndex].config.providerId
+                ?? inferredProviderId(for: chats[chatIndex].config.model)
+                ?? .openai
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 let titleConfig = ChatConfig(model: titleModel, maxTokens: 30, temperature: 0.7, presencePenalty: 0, topP: 1, frequencyPenalty: 0)

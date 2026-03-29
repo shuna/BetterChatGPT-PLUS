@@ -196,39 +196,40 @@ struct ProviderMenuView: View {
             .padding(.top, 12)
             .padding(.bottom, 10)
 
-            // Filter chips
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    filterChip("dollarsign.circle", label: "Free", isOn: $filterFree)
-                    filterChip("brain", label: "Reasoning", isOn: $filterReasoning)
-                    filterChip("photo", label: "Vision", isOn: $filterVision)
-                    filterChip("mic", label: "Audio", isOn: $filterAudio)
-                }
-
-                HStack(spacing: 6) {
-                    if !availableProviderNames.isEmpty {
-                        filterDropdown(
-                            icon: "building.2",
-                            label: "Provider",
-                            selection: filterProviderName,
-                            options: availableProviderNames
-                        ) { name in
-                            filterProviderName = filterProviderName == name ? "" : name
-                        } clear: {
-                            filterProviderName = ""
-                        }
+            // Filter chips (wraps when narrow)
+            ViewThatFits(in: .horizontal) {
+                filterChipsContent
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 6) {
+                        filterChip("dollarsign.circle", label: "Free", isOn: $filterFree)
+                        filterChip("brain", label: "Reasoning", isOn: $filterReasoning)
+                        filterChip("photo", label: "Vision", isOn: $filterVision)
+                        filterChip("mic", label: "Audio", isOn: $filterAudio)
                     }
-
-                    if !availableSeriesNames.isEmpty {
-                        filterDropdown(
-                            icon: "cpu",
-                            label: "Series",
-                            selection: filterSeriesName,
-                            options: availableSeriesNames
-                        ) { name in
-                            filterSeriesName = filterSeriesName == name ? "" : name
-                        } clear: {
-                            filterSeriesName = ""
+                    HStack(spacing: 6) {
+                        if !availableProviderNames.isEmpty {
+                            filterDropdown(
+                                icon: "building.2",
+                                label: "Provider",
+                                selection: filterProviderName,
+                                options: availableProviderNames
+                            ) { name in
+                                filterProviderName = filterProviderName == name ? "" : name
+                            } clear: {
+                                filterProviderName = ""
+                            }
+                        }
+                        if !availableSeriesNames.isEmpty {
+                            filterDropdown(
+                                icon: "cpu",
+                                label: "Series",
+                                selection: filterSeriesName,
+                                options: availableSeriesNames
+                            ) { name in
+                                filterSeriesName = filterSeriesName == name ? "" : name
+                            } clear: {
+                                filterSeriesName = ""
+                            }
                         }
                     }
                 }
@@ -384,6 +385,41 @@ struct ProviderMenuView: View {
         }
     }
 
+    private var filterChipsContent: some View {
+        HStack(spacing: 6) {
+            filterChip("dollarsign.circle", label: "Free", isOn: $filterFree)
+            filterChip("brain", label: "Reasoning", isOn: $filterReasoning)
+            filterChip("photo", label: "Vision", isOn: $filterVision)
+            filterChip("mic", label: "Audio", isOn: $filterAudio)
+
+            if !availableProviderNames.isEmpty {
+                filterDropdown(
+                    icon: "building.2",
+                    label: "Provider",
+                    selection: filterProviderName,
+                    options: availableProviderNames
+                ) { name in
+                    filterProviderName = filterProviderName == name ? "" : name
+                } clear: {
+                    filterProviderName = ""
+                }
+            }
+
+            if !availableSeriesNames.isEmpty {
+                filterDropdown(
+                    icon: "cpu",
+                    label: "Series",
+                    selection: filterSeriesName,
+                    options: availableSeriesNames
+                ) { name in
+                    filterSeriesName = filterSeriesName == name ? "" : name
+                } clear: {
+                    filterSeriesName = ""
+                }
+            }
+        }
+    }
+
     private func filterChip(_ icon: String, label: String, isOn: Binding<Bool>) -> some View {
         Button {
             isOn.wrappedValue.toggle()
@@ -410,33 +446,25 @@ struct ProviderMenuView: View {
     private var customModelsView: some View {
         List {
             Section {
-                let customIds = settings.customModelsFor(selectedProvider)
-                if customIds.isEmpty {
+                let customModels = settings.customModelsFor(selectedProvider)
+                if customModels.isEmpty {
                     Text("No custom models for \(selectedProvider.rawValue.capitalized)")
                         .foregroundStyle(.secondary)
                 } else {
-                    ForEach(customIds, id: \.self) { modelId in
-                        HStack {
-                            Text(modelId)
-                            Spacer()
-                            if settings.isFavorite(modelId) {
-                                Image(systemName: "star.fill")
-                                    .foregroundStyle(.yellow)
-                                    .font(.caption)
+                    ForEach(customModels) { model in
+                        modelRow(model)
+                            .swipeActions {
+                                Button(role: .destructive) {
+                                    settings.removeCustomModel(model.id, for: selectedProvider)
+                                } label: {
+                                    Label("Remove", systemImage: "trash")
+                                }
                             }
-                        }
-                        .swipeActions {
-                            Button(role: .destructive) {
-                                settings.removeCustomModel(modelId, for: selectedProvider)
-                            } label: {
-                                Label("Remove", systemImage: "trash")
-                            }
-                        }
                     }
                     .onDelete { indexSet in
-                        let customIds = settings.customModelsFor(selectedProvider)
+                        let customModels = settings.customModelsFor(selectedProvider)
                         for index in indexSet {
-                            settings.removeCustomModel(customIds[index], for: selectedProvider)
+                            settings.removeCustomModel(customModels[index].id, for: selectedProvider)
                         }
                     }
                 }
@@ -457,29 +485,132 @@ struct ProviderMenuView: View {
             }
 
             Section("Add Custom Model") {
-                addCustomModelRow
+                addCustomModelSection
             }
         }
         .listStyle(.insetGrouped)
         .environment(\.editMode, .constant(isEditingCustomModels ? .active : .inactive))
     }
 
-    @State private var newCustomModelId = ""
+    // MARK: - Add Custom Model Form
 
-    private var addCustomModelRow: some View {
-        HStack {
-            TextField("Model ID", text: $newCustomModelId)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-            Button {
-                guard !newCustomModelId.isEmpty else { return }
-                settings.addCustomModel(newCustomModelId, for: selectedProvider)
-                newCustomModelId = ""
-            } label: {
-                Image(systemName: "plus.circle.fill")
+    @State private var newCustomModelId = ""
+    @State private var newCustomModelName = ""
+    @State private var newCustomContextLength = "4096"
+    @State private var newCustomPromptPrice = ""
+    @State private var newCustomCompletionPrice = ""
+    @State private var newCustomReasoning = false
+    @State private var newCustomVision = false
+    @State private var newCustomAudio = false
+    @State private var capabilitiesManuallyEdited = false
+
+    private var addCustomModelSection: some View {
+        Group {
+            HStack {
+                TextField("Model ID", text: $newCustomModelId)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .onChange(of: newCustomModelId) {
+                        guard !capabilitiesManuallyEdited else { return }
+                        let id = newCustomModelId.trimmingCharacters(in: .whitespacesAndNewlines)
+                        newCustomReasoning = APIService.isReasoningModel(id)
+                        newCustomVision = APIService.isVisionModel(id)
+                        newCustomAudio = APIService.isAudioModel(id)
+                    }
+                Button {
+                    addCustomModel()
+                } label: {
+                    Image(systemName: "plus.circle.fill")
+                }
+                .disabled(newCustomModelId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
-            .disabled(newCustomModelId.isEmpty)
+            TextField("Display Name", text: $newCustomModelName)
+                .autocorrectionDisabled()
+            HStack {
+                Text("Context")
+                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                Spacer()
+                TextField("4096", text: $newCustomContextLength)
+                    .keyboardType(.numberPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 80)
+                Text("tokens")
+                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+            }
+            HStack {
+                Text("$/1K in")
+                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                Spacer()
+                TextField("0", text: $newCustomPromptPrice)
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 100)
+            }
+            HStack {
+                Text("$/1K out")
+                    .foregroundStyle(.secondary)
+                    .font(.subheadline)
+                Spacer()
+                TextField("0", text: $newCustomCompletionPrice)
+                    .keyboardType(.decimalPad)
+                    .multilineTextAlignment(.trailing)
+                    .frame(width: 100)
+            }
+            HStack(spacing: 16) {
+                capabilityToggle("brain", label: "Reasoning", isOn: $newCustomReasoning)
+                capabilityToggle("photo", label: "Vision", isOn: $newCustomVision)
+                capabilityToggle("mic", label: "Audio", isOn: $newCustomAudio)
+            }
         }
+    }
+
+    private func capabilityToggle(_ icon: String, label: String, isOn: Binding<Bool>) -> some View {
+        Button {
+            isOn.wrappedValue.toggle()
+            capabilitiesManuallyEdited = true
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.caption)
+                Text(label)
+                    .font(.caption)
+            }
+            .foregroundStyle(isOn.wrappedValue ? Color.accentColor : .secondary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func addCustomModel() {
+        let id = newCustomModelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !id.isEmpty else { return }
+        let name = newCustomModelName.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let model = ProviderModel(
+            id: id,
+            name: name.isEmpty ? id : name,
+            providerId: selectedProvider,
+            contextLength: Int(newCustomContextLength) ?? 4096,
+            promptPrice: Double(newCustomPromptPrice) ?? 0,
+            completionPrice: Double(newCustomCompletionPrice) ?? 0,
+            supportsReasoning: newCustomReasoning,
+            supportsVision: newCustomVision,
+            supportsAudio: newCustomAudio
+        )
+        settings.addCustomModel(model, for: selectedProvider)
+
+        // Reset form
+        newCustomModelId = ""
+        newCustomModelName = ""
+        newCustomContextLength = "4096"
+        newCustomPromptPrice = ""
+        newCustomCompletionPrice = ""
+        newCustomReasoning = false
+        newCustomVision = false
+        newCustomAudio = false
+        capabilitiesManuallyEdited = false
     }
 
     // MARK: - Model Row
@@ -512,10 +643,10 @@ struct ProviderMenuView: View {
             )
             // Favorite toggle
             Button {
-                settings.toggleFavorite(model.id)
+                settings.toggleFavorite(model.id, providerId: model.providerId)
             } label: {
-                Image(systemName: settings.isFavorite(model.id) ? "star.fill" : "star")
-                    .foregroundStyle(settings.isFavorite(model.id) ? .yellow : .secondary)
+                Image(systemName: settings.isFavorite(model.id, providerId: model.providerId) ? "star.fill" : "star")
+                    .foregroundStyle(settings.isFavorite(model.id, providerId: model.providerId) ? .yellow : .secondary)
                     .font(.subheadline)
             }
             .buttonStyle(.plain)
