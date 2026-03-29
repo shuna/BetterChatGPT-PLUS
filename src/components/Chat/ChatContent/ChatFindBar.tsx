@@ -74,9 +74,11 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
   const saveChatFindHistory = useStore((s) => s.saveChatFindHistory);
   const clearChatFindHistory = useStore((s) => s.clearChatFindHistory);
   const currentChatIndex = useStore((s) => s.currentChatIndex);
+  const currentChatId = useStore((s) => s.chats?.[s.currentChatIndex]?.id ?? '');
   const branchTree = useStore((s) => s.chats?.[s.currentChatIndex]?.branchTree);
   const contentStore = useStore((s) => s.contentStore);
   const switchActivePathSilent = useStore((s) => s.switchActivePathSilent);
+  const pushNavigationEntry = useStore((s) => s.pushNavigationEntry);
 
   const hasQuery = query.trim().length > 0;
 
@@ -241,8 +243,16 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
   const navigateToNodeResult = useCallback(
     (result: SearchResult, q: string) => {
       if (!branchTree) return;
+      const newPath = buildPathToLeaf(branchTree, result.nodeId);
+
+      pushNavigationEntry({
+        chatId: currentChatId,
+        activePath: newPath,
+        focusedNodeId: result.nodeId,
+        source: 'search',
+      });
+
       if (!result.isOnActivePath) {
-        const newPath = buildPathToLeaf(branchTree, result.nodeId);
         switchActivePathSilent(currentChatIndex, newPath);
       }
       // After path switch, highlight in DOM with a short delay for re-render
@@ -250,7 +260,7 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
         applyDomHighlightAndScroll(q);
       }, 200);
     },
-    [branchTree, currentChatIndex, switchActivePathSilent]
+    [branchTree, currentChatIndex, currentChatId, switchActivePathSilent, pushNavigationEntry]
   );
 
   /** Apply DOM highlights and scroll to the first match after a path switch. */
