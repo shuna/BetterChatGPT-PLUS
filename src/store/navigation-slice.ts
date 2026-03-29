@@ -9,7 +9,7 @@ export interface NavEntry {
   activePath: string[];
   focusedNodeId?: string;
   viewContext?: ChatView;
-  source: 'init' | 'branch-switch' | 'search' | 'grep' | 'branch-editor';
+  source: 'init' | 'branch-switch' | 'search' | 'grep' | 'branch-editor' | 'scroll' | 'chat-switch' | 'chat-click';
 }
 
 export interface NavigationSlice {
@@ -18,6 +18,7 @@ export interface NavigationSlice {
   navHistoryFuture: NavEntry[];
   navEntryMap: Map<string, NavEntry>;
 
+  isRestoringNavigation: boolean;
   pushNavigationEntry: (entry: Omit<NavEntry, 'key'>) => void;
   restoreNavigationEntry: (entry: NavEntry) => void;
   navBack: () => void;
@@ -45,6 +46,7 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
   navHistoryCurrent: null,
   navHistoryFuture: [],
   navEntryMap: new Map(),
+  isRestoringNavigation: false,
 
   initNavigationEntry: () => {
     if (get().navHistoryCurrent) return;
@@ -97,9 +99,14 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
   },
 
   restoreNavigationEntry: (entry) => {
+    set({ isRestoringNavigation: true });
+
     const chats = get().chats;
     const idx = resolveChatIndex(chats, entry.chatId);
-    if (idx < 0) return false as any; // chatId not found
+    if (idx < 0) {
+      set({ isRestoringNavigation: false });
+      return false as any; // chatId not found
+    }
 
     // Switch chat if needed
     if (get().currentChatIndex !== idx) {
@@ -128,6 +135,9 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
     if (entry.focusedNodeId) {
       get().setBranchEditorFocusNodeId(entry.focusedNodeId);
     }
+
+    // Clear flag after a delay to allow scroll events from restore to settle
+    setTimeout(() => set({ isRestoringNavigation: false }), 500);
   },
 
   navBack: () => {

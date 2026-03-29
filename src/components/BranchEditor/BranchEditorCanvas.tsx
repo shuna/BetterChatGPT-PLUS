@@ -675,9 +675,20 @@ const BranchEditorCanvas = ({
   const onNodeDoubleClick = useCallback(
     (_: React.MouseEvent, node: Node<MessageNodeData>) => {
       const nodeChatIndex = node.data.chatIndex >= 0 ? node.data.chatIndex : primaryChatIndex;
+      const chat = chats?.[nodeChatIndex];
+      if (chat?.branchTree) {
+        const newPath = buildPathToLeaf(chat.branchTree, node.id);
+        pushNavigationEntry({
+          chatId: chat.id,
+          activePath: newPath,
+          focusedNodeId: node.id,
+          viewContext: 'chat',
+          source: 'branch-editor',
+        });
+      }
       navigateToChat(nodeChatIndex, node.id);
     },
-    [primaryChatIndex, navigateToChat]
+    [chats, primaryChatIndex, navigateToChat, pushNavigationEntry]
   );
 
   const onNodeContextMenu = useCallback(

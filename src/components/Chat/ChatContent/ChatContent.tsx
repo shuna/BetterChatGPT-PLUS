@@ -24,6 +24,7 @@ const EMPTY_MESSAGES: never[] = [];
 const SCROLL_ALIGN_TOLERANCE = 0.5;
 const BOTTOM_THRESHOLD = 150;
 const KEYBOARD_VIEWPORT_DELTA_THRESHOLD = 50;
+const SCROLL_NAV_DEBOUNCE_MS = 300;
 type ScrollBehaviorMode = 'auto' | 'smooth';
 const MESSAGE_EDIT_TEXTAREA_SELECTOR = 'textarea[data-message-editing="true"]';
 const MESSAGE_ITEM_SELECTOR = '[data-item-index]';
@@ -139,6 +140,8 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
   const isCurrentChatGenerating = useStore((state) =>
     Object.values(state.generatingSessions).some((s) => s.chatId === currentChatId)
   );
+  const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
+  const chatActiveView = useStore((state) => state.chatActiveView);
 
   const model = useStore((state) =>
     state.chats &&
@@ -264,6 +267,10 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
   const atBottomRef = useRef(true);
   const pendingEditStateSyncRef = useRef<number | null>(null);
 
+  // Scroll-based navigation history tracking
+  const prevTopBubbleNodeIdRef = useRef<string | null>(null);
+  const scrollNavDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Build visible items list from messages (not messagesLimited) to stay
   // in sync with activePath. messagesLimited is only used for token warnings.
   const items = useMemo(() => {
@@ -340,6 +347,8 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
       });
     }
     prevChatIdRef.current = currentChatId;
+    // Reset scroll nav tracking on chat switch
+    prevTopBubbleNodeIdRef.current = null;
   }, [currentChatId, saveChatScrollAnchor]);
 
   useEffect(() => {
@@ -376,14 +385,45 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
       anchorRef.current.wasAtBottom = isBottom;
 
       updateBubbleNavigationState();
+
+      // Scroll-based navigation history: detect top bubble change
+      const topItemIndex = anchorRef.current.firstVisibleItemIndex;
+      const topNodeId = activePath[items[topItemIndex]?.originalIndex] ?? null;
+      if (topNodeId && topNodeId !== prevTopBubbleNodeIdRef.current) {
+        if (scrollNavDebounceRef.current) clearTimeout(scrollNavDebounceRef.current);
+        scrollNavDebounceRef.current = setTimeout(() => {
+          scrollNavDebounceRef.current = null;
+          const state = useStore.getState();
+          if (state.isRestoringNavigation) return;
+          if (Object.values(state.generatingSessions).some((s: any) => s.chatId === currentChatId)) return;
+          if (prevTopBubbleNodeIdRef.current === null) {
+            // First detection after mount / chat switch — just record, don't push
+            prevTopBubbleNodeIdRef.current = topNodeId;
+            return;
+          }
+          prevTopBubbleNodeIdRef.current = topNodeId;
+          const chat = state.chats?.[state.currentChatIndex];
+          if (!chat?.branchTree) return;
+          pushNavigationEntry({
+            chatId: chat.id,
+            activePath: [...chat.branchTree.activePath],
+            focusedNodeId: topNodeId,
+            viewContext: state.chatActiveView,
+            source: 'scroll',
+          });
+        }, SCROLL_NAV_DEBOUNCE_MS);
+      }
     };
 
     // Sync initial state before any scroll event fires
     onScroll();
 
     scroller.addEventListener('scroll', onScroll, { passive: true });
-    return () => scroller.removeEventListener('scroll', onScroll);
-  }, [scrollerElement, updateBubbleNavigationState]);
+    return () => {
+      scroller.removeEventListener('scroll', onScroll);
+      if (scrollNavDebounceRef.current) clearTimeout(scrollNavDebounceRef.current);
+    };
+  }, [scrollerElement, updateBubbleNavigationState, activePath, items, currentChatId, pushNavigationEntry]);
 
   // --- Streaming auto-follow via ResizeObserver ---
   // Track atBottom via ref so the observer can read it without being a dependency.

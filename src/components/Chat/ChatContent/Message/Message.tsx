@@ -58,6 +58,7 @@ const Message = React.memo(
     const setBranchEditorFocusNodeId = useStore((state) => state.setBranchEditorFocusNodeId);
     const chatActiveView = useStore((state) => state.chatActiveView);
     const branchEditorSyncEnabled = useStore((state) => state.branchEditorSyncEnabled);
+    const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
     const isDesktop = useIsDesktop();
     const canHover = useCanHover();
     const isDesktopMenuExpanded = isDesktop && !hideSideMenu;
@@ -126,9 +127,20 @@ const Message = React.memo(
 
     const handleClick = useCallback(() => {
       if (!sticky && resolvedNodeId && isSplitView(chatActiveView) && branchEditorSyncEnabled) {
+        const state = useStore.getState();
+        const chat = state.chats?.[state.currentChatIndex];
+        if (chat?.branchTree) {
+          pushNavigationEntry({
+            chatId: chat.id,
+            activePath: [...chat.branchTree.activePath],
+            focusedNodeId: resolvedNodeId,
+            viewContext: chatActiveView,
+            source: 'chat-click',
+          });
+        }
         setBranchEditorFocusNodeId(resolvedNodeId);
       }
-    }, [sticky, resolvedNodeId, chatActiveView, branchEditorSyncEnabled, setBranchEditorFocusNodeId]);
+    }, [sticky, resolvedNodeId, chatActiveView, branchEditorSyncEnabled, setBranchEditorFocusNodeId, pushNavigationEntry]);
 
     const maxWidthClass = isDesktopMenuExpanded
       ? 'md:max-w-3xl lg:max-w-3xl xl:max-w-4xl'

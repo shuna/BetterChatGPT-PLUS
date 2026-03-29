@@ -48,6 +48,7 @@ const ChatHistory = React.memo(
   }) => {
     const initialiseNewChat = useInitialiseNewChat();
     const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
+    const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
     const setChats = useStore((state) => state.setChats);
     const active = useStore((state) => state.currentChatIndex === chatIndex);
 
@@ -204,7 +205,19 @@ const ChatHistory = React.memo(
           active ? ChatHistoryClass.active : ChatHistoryClass.normal
         } cursor-pointer opacity-100 ${selectedChats.includes(chatIndex) ? 'bg-blue-500' : ''}`}
         onClick={() => {
-          if (!active) setCurrentChatIndex(chatIndex);
+          if (!active) {
+            const state = useStore.getState();
+            const destChat = state.chats?.[chatIndex];
+            if (destChat) {
+              pushNavigationEntry({
+                chatId: destChat.id,
+                activePath: destChat.branchTree?.activePath ? [...destChat.branchTree.activePath] : [],
+                viewContext: state.chatActiveView,
+                source: 'chat-switch',
+              });
+            }
+            setCurrentChatIndex(chatIndex);
+          }
         }}
         draggable={!isEdit}
         onDragStart={handleDragStart}

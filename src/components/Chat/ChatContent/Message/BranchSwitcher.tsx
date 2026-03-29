@@ -71,6 +71,16 @@ const BranchSwitcher = ({
       <button
         className='tabular-nums hover:text-blue-500 dark:hover:text-blue-400 cursor-pointer'
         onClick={() => {
+          if (chat) {
+            const currentPath = chat.branchTree?.activePath ?? [];
+            pushNavigationEntry({
+              chatId: chat.id,
+              activePath: [...currentPath],
+              focusedNodeId: nodeId,
+              viewContext: isSplitView(chatActiveView) ? chatActiveView : 'branch-editor',
+              source: 'branch-editor',
+            });
+          }
           setBranchEditorFocusNodeId(nodeId);
           if (!isSplitView(chatActiveView)) {
             navigateToBranchEditor();
