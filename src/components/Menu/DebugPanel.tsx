@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import { useDebugStore, DebugStatus } from '@store/debug-store';
+import { cancelAndPurgeRecovery } from '@hooks/useStreamRecovery';
 
 const Spinner = () => (
   <svg
@@ -98,7 +99,19 @@ const DebugPanel = () => {
               </span>
               <button
                 type='button'
-                onClick={() => removeEntry(entry.id)}
+                onClick={() => {
+                  // If this is a recovery-related entry, cancel active recovery
+                  // and purge IndexedDB records so it won't re-trigger.
+                  // silent=true prevents debugReport from re-creating the entry.
+                  if (
+                    entry.id === 'recovery-hook' ||
+                    entry.id.startsWith('recovery-') ||
+                    entry.id.startsWith('recovery-record:')
+                  ) {
+                    cancelAndPurgeRecovery(true);
+                  }
+                  removeEntry(entry.id);
+                }}
                 className='flex-shrink-0 text-[10px] leading-none text-gray-400 hover:text-gray-700 dark:text-gray-500 dark:hover:text-gray-200'
                 aria-label={`Close ${entry.label}`}
                 title='Close'

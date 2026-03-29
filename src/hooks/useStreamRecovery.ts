@@ -39,17 +39,44 @@ let activeRecoveryAbort: AbortController | null = null;
 let recoveryCancelledManually = false;
 
 /** Cancel any in-flight proxy recovery. Called externally for manual stop. */
-export function cancelActiveRecovery() {
+export function cancelActiveRecovery(silent = false) {
   if (activeRecoveryAbort) {
     recoveryCancelledManually = true;
     activeRecoveryAbort.abort();
     activeRecoveryAbort = null;
   }
-  debugReport('recovery-hook', {
-    label: 'Recovery Hook',
-    status: 'done',
-    detail: `${formatDebugTime()} cancelled`,
-  });
+  if (!silent) {
+    debugReport('recovery-hook', {
+      label: 'Recovery Hook',
+      status: 'done',
+      detail: `${formatDebugTime()} cancelled`,
+    });
+  }
+}
+
+/**
+ * Cancel active recovery AND purge all pending IndexedDB records so recovery
+ * will not re-trigger on next startup or visibility change.
+ * When silent=true, no debugReport is emitted (used by debug panel to avoid
+ * re-creating the entry that was just removed).
+ */
+export async function cancelAndPurgeRecovery(silent = false) {
+  cancelActiveRecovery(silent);
+  try {
+    const records = await getAllPending();
+    for (const r of records) {
+      await deleteRequest(r.requestId);
+    }
+  } catch {
+    // best-effort cleanup
+  }
+  if (!silent) {
+    debugReport('recovery-hook', {
+      label: 'Recovery Hook',
+      status: 'done',
+      detail: `${formatDebugTime()} purged all pending records`,
+    });
+  }
 }
 
 export default function useStreamRecovery() {
@@ -284,11 +311,16 @@ export async function recoverPending(opts?: { manual?: boolean }) {
   try {
     await recoverPendingInner(manual, debugId);
   } finally {
-    debugReport('recovery-hook', {
-      label: 'Recovery Hook',
-      status: 'done',
-      detail: `${formatDebugTime()} recover finished`,
-    });
+    // If recovery was cancelled manually (e.g. debug panel ×), the caller
+    // already removed the entry — don't re-create it with a debugReport.
+    if (!recoveryCancelledManually) {
+      debugReport('recovery-hook', {
+        label: 'Recovery Hook',
+        status: 'done',
+        detail: `${formatDebugTime()} recover finished`,
+      });
+    }
+    recoveryCancelledManually = false;
     recoveryInProgress = false;
   }
 }
@@ -299,6 +331,14 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
   if (!hydrated) {
     debugReport(debugId, { status: 'error', detail: 'Store hydration timeout' });
     showToast('リカバリ前のストア初期化がタイムアウトしました', 'error');
+    return;
+  }
+
+  // Skip recovery entirely when proxy is disabled
+  const { proxyEnabled } = useStore.getState();
+  if (!proxyEnabled) {
+    debugReport(debugId, { status: 'done', detail: 'Proxy disabled — recovery skipped' });
+    if (manual) showToast('プロキシが無効のためリカバリは実行されません', 'info');
     return;
   }
 
@@ -389,6 +429,12 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
         continue;
       }
 
+      if (abort.signal.aborted) {
+        cancelled = recoveryCancelledManually;
+        timedOut = !cancelled;
+        break;
+      }
+
       // Apply IndexedDB buffered text (fast, local)
       const bestText = bufferedText;
       if (shouldApplyRecoveredText(currentText, bestText)) {
@@ -427,6 +473,9 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
             ),
             abort.signal
           );
+          // Re-check abort after async proxy call — if cancelled mid-flight,
+          // discard partial results instead of applying them.
+          if (abort.signal.aborted) break;
           if (proxyText) {
             debugReport(debugId, { detail: `Proxy recovered ${proxyText.length} chars` });
             debugReport(`recovery-record:${requestId}`, {
@@ -512,7 +561,8 @@ async function recoverPendingInner(manual: boolean, debugId: string) {
     if (activeRecoveryAbort === abort) {
       activeRecoveryAbort = null;
     }
-    recoveryCancelledManually = false;
+    // Note: recoveryCancelledManually is intentionally NOT reset here.
+    // It is read by recoverPending()'s finally block and reset there.
   }
 
   debugReport(debugId, {
