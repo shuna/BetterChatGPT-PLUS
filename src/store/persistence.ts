@@ -63,6 +63,7 @@ export type PersistedStoreState = Omit<
   | 'showDebugPanel'
   | 'searchHistory'
   | 'sidebarSearchHistory'
+  | 'chatFindHistory'
   | 'verifiedStats'
   | 'pendingVerifications'
   >,
@@ -96,6 +97,7 @@ const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'showDebugPanel',
   'searchHistory',
   'sidebarSearchHistory',
+  'chatFindHistory',
   'verifiedStats',
   'pendingVerifications',
 ];
@@ -115,6 +117,7 @@ const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
   'showDebugPanel',
   'searchHistory',
   'sidebarSearchHistory',
+  'chatFindHistory',
   'verifiedStats',
   'pendingVerifications',
 ];
@@ -258,6 +261,7 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     showDebugPanel: state.showDebugPanel,
     searchHistory: state.searchHistory,
     sidebarSearchHistory: state.sidebarSearchHistory,
+    chatFindHistory: state.chatFindHistory,
     verifiedStats: state.verifiedStats,
     pendingVerifications: state.pendingVerifications,
   };
@@ -307,6 +311,7 @@ function buildLocalStoragePartializedState(
     showDebugPanel: state.showDebugPanel,
     searchHistory: state.searchHistory,
     sidebarSearchHistory: state.sidebarSearchHistory,
+    chatFindHistory: state.chatFindHistory,
     verifiedStats: state.verifiedStats,
     pendingVerifications: state.pendingVerifications,
   };

@@ -16,6 +16,7 @@ export interface GrepSlice {
   isGrepMode: boolean;
   isGrepSearching: boolean;
   sidebarSearchHistory: string[];
+  chatFindHistory: string[];
 
   setGrepQuery: (q: string) => void;
   executeGrep: () => void;
@@ -23,6 +24,8 @@ export interface GrepSlice {
   navigateToGrepResult: (chatIndex: number, nodeId?: string) => void;
   saveSidebarSearchHistory: (query?: string) => void;
   clearSidebarSearchHistory: () => void;
+  saveChatFindHistory: (query: string) => void;
+  clearChatFindHistory: () => void;
 }
 
 /**
@@ -72,6 +75,7 @@ export const createGrepSlice: StoreSlice<GrepSlice> = (set, get) => ({
   isGrepMode: false,
   isGrepSearching: false,
   sidebarSearchHistory: [],
+  chatFindHistory: [],
 
   setGrepQuery: (q) => {
     set({ grepQuery: q });
@@ -143,6 +147,20 @@ export const createGrepSlice: StoreSlice<GrepSlice> = (set, get) => ({
 
   clearSidebarSearchHistory: () => {
     set({ sidebarSearchHistory: [] });
+  },
+
+  saveChatFindHistory: (query) => {
+    const normalized = query.trim();
+    if (!normalized) return;
+    const nextHistory = [
+      normalized,
+      ...get().chatFindHistory.filter((entry) => entry !== normalized),
+    ].slice(0, 20);
+    set({ chatFindHistory: nextHistory });
+  },
+
+  clearChatFindHistory: () => {
+    set({ chatFindHistory: [] });
   },
 
   navigateToGrepResult: (chatIndex, nodeId) => {
