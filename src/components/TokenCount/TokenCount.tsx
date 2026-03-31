@@ -54,11 +54,10 @@ const TokenCount = React.memo(() => {
     (state) => (state.chats?.[state.currentChatIndex]?.messages ?? []),
     shallow
   );
-  // Subscribe to omitted node changes so we recount when omissions change
-  const omittedNodeVersion = useStore((state) => {
+  // Subscribe to the actual omitted node map so any change triggers a recount
+  const omittedNodes = useStore((state) => {
     const mapKey = String(state.currentChatIndex);
-    const nodes = state.omittedNodeMaps[mapKey] ?? state.chats?.[state.currentChatIndex]?.omittedNodes;
-    return nodes ? Object.keys(nodes).length : 0;
+    return state.omittedNodeMaps[mapKey] ?? state.chats?.[state.currentChatIndex]?.omittedNodes ?? null;
   });
 
   const { model, providerId } = useStore((state) =>
@@ -111,7 +110,7 @@ const TokenCount = React.memo(() => {
       lastAssistantStatsKey: null,
     };
   });
-  const latestInputRef = useRef({ messages, generatingSession, model, currentChatIndex });
+  const latestInputRef = useRef({ messages, generatingSession, model, currentChatIndex, omittedNodes });
   const currentCountsRef = useRef<TokenCounts>({
     promptTokenCount,
     completionTokenCount,
@@ -346,7 +345,7 @@ const TokenCount = React.memo(() => {
     });
   };
 
-  latestInputRef.current = { messages, generatingSession, model, currentChatIndex };
+  latestInputRef.current = { messages, generatingSession, model, currentChatIndex, omittedNodes };
 
   useEffect(() => {
     currentCountsRef.current = {
@@ -411,12 +410,17 @@ const TokenCount = React.memo(() => {
     throttledCountRef.current?.cancel();
     promptCacheRef.current = null;
     void countCurrentSnapshot(requestVersionRef.current);
-  }, [messages, generatingSession, model, encoderReady, omittedNodeVersion]);
+  }, [messages, generatingSession, model, encoderReady, omittedNodes]);
 
   useEffect(() => {
     if (generatingSession) return;
     promptCacheRef.current = null;
   }, [generatingSession?.sessionId, model]);
+
+  // Invalidate prompt cache when omission state changes mid-stream
+  useEffect(() => {
+    promptCacheRef.current = null;
+  }, [omittedNodes]);
 
   return (
     <div>

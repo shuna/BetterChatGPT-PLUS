@@ -22,6 +22,8 @@ const useLiveTotalTokenUsed = (): TotalTokenUsed => {
   const totalTokenUsed = useStore((state) => state.totalTokenUsed);
   const chats = useStore((state) => state.chats);
   const generatingSessions = useStore((state) => state.generatingSessions);
+  // Subscribe to omission map changes so live counts update when user toggles omission mid-stream
+  const omittedNodeMaps = useStore((state) => state.omittedNodeMaps);
   const [liveTokenUsed, setLiveTokenUsed] = useState<TotalTokenUsed>({});
   const latestInputRef = useRef({ chats, generatingSessions });
   const requestVersionRef = useRef(0);
@@ -125,6 +127,11 @@ const useLiveTotalTokenUsed = (): TotalTokenUsed => {
 
   latestInputRef.current = { chats, generatingSessions };
 
+  // Invalidate prompt cache when omission state changes mid-stream
+  useEffect(() => {
+    promptCacheRef.current.clear();
+  }, [omittedNodeMaps]);
+
   useEffect(() => {
     mountedRef.current = true;
     throttledCalculationRef.current = throttle(
@@ -163,7 +170,7 @@ const useLiveTotalTokenUsed = (): TotalTokenUsed => {
     }
 
     throttledCalculationRef.current?.();
-  }, [chats, generatingSessions, encoderReady]);
+  }, [chats, generatingSessions, encoderReady, omittedNodeMaps]);
 
   return useMemo(
     () => mergeTotalTokenUsed(totalTokenUsed, liveTokenUsed),
