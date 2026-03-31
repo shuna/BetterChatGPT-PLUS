@@ -110,6 +110,9 @@ const buildStoreState = () => {
     },
     contentStore,
     currentChatIndex: -1,
+    collapsedNodeMaps: {},
+    omittedNodeMaps: {},
+    protectedNodeMaps: {},
   };
 };
 
@@ -342,6 +345,27 @@ describe('persistence', () => {
     expect(state.chats[0].messages).toEqual([
       { role: 'assistant', content: [{ type: 'text', text: 'world' }] },
     ]);
+  });
+
+  it('persists runtime node maps (collapsed, omitted, protected) into chat objects', () => {
+    const state = buildStoreState();
+    // Simulate runtime toggle: user collapsed node-1 and protected node-2 in chat 0
+    state.collapsedNodeMaps = { '0': { 'node-1': true } };
+    state.omittedNodeMaps = { '0': { 'node-2': true } };
+    state.protectedNodeMaps = { '1': { '0': true } };
+
+    const partialized = createPartializedState(state as never);
+
+    // Chat 0: runtime maps should override the (empty) ChatInterface fields
+    expect(partialized.chats?.[0].collapsedNodes).toEqual({ 'node-1': true });
+    expect(partialized.chats?.[0].omittedNodes).toEqual({ 'node-2': true });
+    // Chat 0 has no protectedNodeMaps entry → should keep original (undefined)
+    expect(partialized.chats?.[0].protectedNodes).toBeUndefined();
+
+    // Chat 1: protectedNodeMaps has an entry
+    expect(partialized.chats?.[1].protectedNodes).toEqual({ '0': true });
+    expect(partialized.chats?.[1].collapsedNodes).toBeUndefined();
+    expect(partialized.chats?.[1].omittedNodes).toBeUndefined();
   });
 
   it('persists and restores splitPanelRatio and splitPanelSwapped', () => {

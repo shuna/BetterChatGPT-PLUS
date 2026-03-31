@@ -62,6 +62,13 @@ const ContentView = memo(
     const isCurrentChatGenerating = useStore((state) =>
       Object.values(state.generatingSessions).some((s) => s.chatId === currentChatId)
     );
+    const isProtected = useStore((state) => {
+      const mapKey = String(state.currentChatIndex);
+      const chat = state.chats?.[state.currentChatIndex];
+      const resolvedNodeId = nodeId ?? chat?.branchTree?.activePath?.[messageIndex] ?? String(messageIndex);
+      const protectedNodes = state.protectedNodeMaps[mapKey] ?? chat?.protectedNodes ?? {};
+      return protectedNodes[resolvedNodeId] ?? false;
+    });
     const resolveCurrentMessageIndex = () => {
       if (!nodeId) return messageIndex;
       const activePath =
@@ -132,6 +139,7 @@ const ContentView = memo(
           messageIndex={messageIndex}
           lastMessageIndex={lastMessageIndex}
           isDelete={isDelete}
+          isProtected={isProtected}
           isGeneratingMessage={isGeneratingMessage}
           isCurrentChatGenerating={isCurrentChatGenerating}
           setIsEdit={setIsEdit}

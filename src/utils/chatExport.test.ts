@@ -35,6 +35,14 @@ describe('prepareChatForExport', () => {
         root: true,
         hidden: true,
       },
+      omittedNodes: {
+        shown: true,
+        hidden: true,
+      },
+      protectedNodes: {
+        root: true,
+        hidden: true,
+      },
       branchTree: {
         rootId: 'root',
         activePath: ['root', 'shown'],
@@ -86,6 +94,8 @@ describe('prepareChatForExport', () => {
       { role: 'assistant', content: [{ type: 'text', text: 'visible reply' }] },
     ]);
     expect(prepared.chat.collapsedNodes).toEqual({ root: true });
+    expect(prepared.chat.omittedNodes).toEqual({ shown: true });
+    expect(prepared.chat.protectedNodes).toEqual({ root: true });
     expect(prepared.contentStore).toEqual({
       'hash-root': {
         content: [{ type: 'text', text: 'hello' }],

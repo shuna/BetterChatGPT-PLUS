@@ -19,6 +19,7 @@ const EditViewButtons = memo(
     handleRemoveImage,
     handleGenerate,
     handleGenerateNextOnly,
+    generateBelowDisabled,
     handleBranchGenerate,
     handleSave,
     handleBranchOnly,
@@ -44,6 +45,7 @@ const EditViewButtons = memo(
     handleRemoveImage: (index: number) => void;
     handleGenerate: () => void;
     handleGenerateNextOnly: () => void;
+    generateBelowDisabled?: boolean;
     handleBranchGenerate: () => void;
     handleSave: () => void;
     handleBranchOnly: () => void;
@@ -294,16 +296,16 @@ const EditViewButtons = memo(
                     {isNotLast && (
                       <button
                         className={`block w-full rounded-md px-3 py-2 text-left text-sm ${
-                          isCurrentChatGenerating || noModel
+                          isCurrentChatGenerating || noModel || generateBelowDisabled
                             ? 'cursor-not-allowed opacity-40'
                             : 'hover:bg-gray-100 dark:hover:bg-gray-700'
                         }`}
                         onClick={() => {
-                          if (isCurrentChatGenerating || noModel) return;
+                          if (isCurrentChatGenerating || noModel || generateBelowDisabled) return;
                           setGenerateMenuOpen(false);
                           setIsModalOpen(true);
                         }}
-                        disabled={isCurrentChatGenerating || noModel}
+                        disabled={isCurrentChatGenerating || noModel || generateBelowDisabled}
                       >
                         {t('regenerateBelow')}
                       </button>

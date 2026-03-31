@@ -142,10 +142,26 @@ export function setIndexedDbMigrationComplete(v: boolean): void {
   previousLocalResult = null;
 }
 
+const getMapKey = (chatIndex: number) => String(chatIndex);
+
 const buildPersistedChats = (state: StoreState): PersistedChat[] | undefined =>
-  state.chats?.map(({ messages, ...rest }) =>
-    rest.branchTree ? rest : { ...rest, messages }
-  );
+  state.chats?.map(({ messages, ...rest }, index) => {
+    const mapKey = getMapKey(index);
+    // Sync runtime node maps back into the chat object for persistence.
+    // The toggle functions only update the runtime maps (collapsedNodeMaps,
+    // omittedNodeMaps, protectedNodeMaps) without writing back to the
+    // ChatInterface fields, so we merge them here before saving.
+    const collapsedNodes = state.collapsedNodeMaps?.[mapKey] ?? rest.collapsedNodes;
+    const omittedNodes = state.omittedNodeMaps?.[mapKey] ?? rest.omittedNodes;
+    const protectedNodes = state.protectedNodeMaps?.[mapKey] ?? rest.protectedNodes;
+    const merged = {
+      ...rest,
+      collapsedNodes,
+      omittedNodes,
+      protectedNodes,
+    };
+    return merged.branchTree ? merged : { ...merged, messages };
+  });
 
 function sanitizeBranchTreeReferences(chat: ChatInterface): boolean {
   if (!chat.branchTree) return false;

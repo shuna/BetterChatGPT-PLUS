@@ -10,6 +10,8 @@ import {
 import { defaultModel } from '@constants/chat';
 import { isKnownModel } from '@utils/modelLookup';
 import { hasMeaningfulContent } from '@utils/contentValidation';
+import { showToast } from '@utils/showToast';
+import i18next from 'i18next';
 
 function isChatBusy(): boolean {
   const state = useStore.getState();
@@ -35,6 +37,22 @@ function isNodeProtected(nodeId: string | undefined, messageIndex: number): bool
   const protectedNodes =
     state.protectedNodeMaps[String(chatIndex)] ?? chat?.protectedNodes ?? {};
   return protectedNodes[resolvedNodeId] ?? false;
+}
+
+function hasProtectedFollowingNodes(messageIndex: number): boolean {
+  const state = useStore.getState();
+  const chatIndex = state.currentChatIndex;
+  const chat = state.chats?.[chatIndex];
+  if (!chat) return false;
+  const protectedNodes =
+    state.protectedNodeMaps[String(chatIndex)] ?? chat.protectedNodes ?? {};
+  if (!protectedNodes || Object.keys(protectedNodes).length === 0) return false;
+  const totalMessages = chat.messages.length;
+  for (let i = messageIndex + 1; i < totalMessages; i++) {
+    const nid = chat.branchTree?.activePath?.[i] ?? String(i);
+    if (protectedNodes[nid]) return true;
+  }
+  return false;
 }
 
 function resolveMessageIndex(nodeId: string | undefined, fallbackIndex: number): number {
@@ -239,7 +257,10 @@ export function useEditViewLogic({
     const hasSubmittableContent = hasMeaningfulContent(_content);
     if (sticky && !hasSubmittableContent) return;
     if (!sticky && isNodeBusy(nodeId)) return;
-    if (!sticky && isNodeProtected(nodeId, messageIndex)) return;
+    if (!sticky && isNodeProtected(nodeId, messageIndex)) {
+      showToast(i18next.t('protectedCannotEdit', { ns: 'main' }), 'warning');
+      return;
+    }
 
     const resolvedMessageIndex = resolveMessageIndex(nodeId, messageIndex);
 
@@ -293,11 +314,22 @@ export function useEditViewLogic({
 
   const handleGenerateNextOnly = () => {
     if (isChatBusy() || !modelValid) return;
-    if (isNodeProtected(nodeId, messageIndex)) return;
+    if (isNodeProtected(nodeId, messageIndex)) {
+      showToast(i18next.t('protectedCannotEdit', { ns: 'main' }), 'warning');
+      return;
+    }
     const resolvedMessageIndex = resolveMessageIndex(nodeId, messageIndex);
     const nextIndex = resolvedMessageIndex + 1;
     const chats = useStore.getState().chats!;
     const removeCount = nextIndex < chats[currentChatIndex].messages.length ? 1 : 0;
+    // Only block if the immediately next node is protected
+    if (removeCount > 0) {
+      const nextNodeId = chats[currentChatIndex].branchTree?.activePath?.[nextIndex] ?? String(nextIndex);
+      if (isNodeProtected(nextNodeId, nextIndex)) {
+        showToast(i18next.t('protectedCannotDelete', { ns: 'main' }), 'warning');
+        return;
+      }
+    }
     replaceMessageAndPruneFollowing(
       currentChatIndex,
       resolvedMessageIndex,
@@ -314,7 +346,10 @@ export function useEditViewLogic({
     const hasSubmittableContent = hasMeaningfulContent(_content);
     if (isChatBusy() || !modelValid) return;
     if (sticky && !hasSubmittableContent) return;
-    if (!sticky && isNodeProtected(nodeId, messageIndex)) return;
+    if (!sticky && isNodeProtected(nodeId, messageIndex)) {
+      showToast(i18next.t('protectedCannotEdit', { ns: 'main' }), 'warning');
+      return;
+    }
 
     if (sticky) {
       if (hasSubmittableContent) {
@@ -330,6 +365,10 @@ export function useEditViewLogic({
         0,
         chats[currentChatIndex].messages.length - (resolvedMessageIndex + 1)
       );
+      if (removeCount > 0 && hasProtectedFollowingNodes(resolvedMessageIndex)) {
+        showToast(i18next.t('protectedPruneStopped', { ns: 'main' }), 'warning');
+        return;
+      }
       replaceMessageAndPruneFollowing(
         currentChatIndex,
         resolvedMessageIndex,
@@ -427,6 +466,7 @@ export function useEditViewLogic({
     handleBranchGenerate,
     handleGenerateNextOnly,
     handleGenerate,
+    generateBelowDisabled: !sticky && hasProtectedFollowingNodes(messageIndex),
     handleCancel,
     handlePaste,
     handleUploadButtonClick,

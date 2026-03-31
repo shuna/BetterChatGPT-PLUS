@@ -61,11 +61,18 @@ export const prepareChatForExport = (
     };
   });
 
-  const collapsedNodes = chat.collapsedNodes
-    ? Object.fromEntries(
-        Object.entries(chat.collapsedNodes).filter(([id]) => includedNodeSet.has(id))
-      )
-    : undefined;
+  const filterNodeRecord = (
+    record: Record<string, boolean> | undefined
+  ): Record<string, boolean> | undefined =>
+    record
+      ? Object.fromEntries(
+          Object.entries(record).filter(([id]) => includedNodeSet.has(id))
+        )
+      : undefined;
+
+  const collapsedNodes = filterNodeRecord(chat.collapsedNodes);
+  const omittedNodes = filterNodeRecord(chat.omittedNodes);
+  const protectedNodes = filterNodeRecord(chat.protectedNodes);
 
   return {
     chat: {
@@ -85,6 +92,8 @@ export const prepareChatForExport = (
         activePath,
       },
       collapsedNodes,
+      omittedNodes,
+      protectedNodes,
     },
     contentStore,
   };

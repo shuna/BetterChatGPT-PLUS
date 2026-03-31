@@ -76,6 +76,7 @@ const EditView = ({
             handleRemoveImage={logic.handleRemoveImage}
             handleGenerate={logic.handleGenerate}
             handleGenerateNextOnly={logic.handleGenerateNextOnly}
+            generateBelowDisabled={logic.generateBelowDisabled}
             handleBranchGenerate={logic.handleBranchGenerate}
             handleSave={logic.handleSave}
             handleBranchOnly={logic.handleBranchOnly}

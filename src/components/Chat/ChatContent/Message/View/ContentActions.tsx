@@ -18,6 +18,7 @@ type ContentActionsProps = {
   messageIndex: number;
   lastMessageIndex: number;
   isDelete: boolean;
+  isProtected: boolean;
   isGeneratingMessage: boolean;
   isCurrentChatGenerating: boolean;
   setIsEdit: React.Dispatch<React.SetStateAction<boolean>>;
@@ -36,6 +37,7 @@ export default function ContentActions({
   messageIndex,
   lastMessageIndex,
   isDelete,
+  isProtected,
   isGeneratingMessage,
   isCurrentChatGenerating,
   setIsEdit,
@@ -73,8 +75,8 @@ export default function ContentActions({
               )}
 
               <CopyButton onClick={onCopy} />
-              {!isGeneratingMessage && <EditButton setIsEdit={setIsEdit} />}
-              <DeleteButton setIsDelete={setIsDelete} />
+              {!isGeneratingMessage && <EditButton setIsEdit={setIsEdit} disabled={isProtected} />}
+              <DeleteButton setIsDelete={setIsDelete} disabled={isProtected} />
             </>
           )}
           {isDelete && (

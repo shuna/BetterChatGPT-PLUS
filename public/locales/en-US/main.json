@@ -56,6 +56,9 @@
   "omitOff": "Include in request",
   "protectOn": "Protect",
   "protectOff": "Unprotect",
+  "protectedCannotDelete": "This message is protected and cannot be deleted.",
+  "protectedCannotEdit": "This message is protected and cannot be edited.",
+  "protectedPruneStopped": "Deletion stopped at a protected message.",
   "globalOmitOn": "Omit All",
   "globalOmitOff": "Omit All"
 }
