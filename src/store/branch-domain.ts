@@ -282,6 +282,15 @@ export const pruneHiddenNodesState = (
       }
     }
   }
+  // Also protect nodes marked via protectedNodes on the chat
+  const chatProtectedNodes = updatedChats[chatIndex].protectedNodes;
+  if (chatProtectedNodes) {
+    for (const [id, value] of Object.entries(chatProtectedNodes)) {
+      if (value && tree.nodes[id]) {
+        protectedSet.add(id);
+      }
+    }
+  }
 
   const toDelete = Object.keys(tree.nodes).filter(
     (id) => !activeSet.has(id) && !protectedSet.has(id)

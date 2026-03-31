@@ -453,6 +453,13 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
   pruneHiddenNodes: (chatIndex) => {
     const contentStore = { ...get().contentStore };
     const chats = finalizeStreamingNodesInChat(get().chats!, chatIndex, contentStore);
+    // Ensure runtime protectedNodeMaps are reflected on the chat object
+    // so pruneHiddenNodesState can see them.
+    const mapKey = String(chatIndex);
+    const runtimeProtected = get().protectedNodeMaps[mapKey];
+    if (runtimeProtected && chats[chatIndex]) {
+      chats[chatIndex] = { ...chats[chatIndex], protectedNodes: runtimeProtected };
+    }
     const result = pruneHiddenNodesState(
       chats,
       chatIndex,
@@ -575,6 +582,23 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
     content,
     removeCount = 0
   ) => {
+    // Clamp removeCount so we never delete past a protected node
+    const chat = get().chats?.[chatIndex];
+    if (chat && removeCount > 0) {
+      const mapKey = String(chatIndex);
+      const protectedNodes = get().protectedNodeMaps[mapKey] ?? chat.protectedNodes ?? {};
+      if (Object.keys(protectedNodes).length > 0) {
+        let allowed = 0;
+        for (let i = 0; i < removeCount; i++) {
+          const idx = messageIndex + 1 + i;
+          const nodeId = chat.branchTree?.activePath?.[idx] ?? String(idx);
+          if (protectedNodes[nodeId]) break;
+          allowed++;
+        }
+        removeCount = allowed;
+      }
+    }
+
     const { chats, contentStore } = replaceMessageAndPruneFollowingState(
       get().chats!,
       chatIndex,
