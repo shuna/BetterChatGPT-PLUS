@@ -42,6 +42,12 @@ export const cloneChatAt = (
     collapsedNodes: chat.collapsedNodes
       ? { ...chat.collapsedNodes }
       : undefined,
+    omittedNodes: chat.omittedNodes
+      ? { ...chat.omittedNodes }
+      : undefined,
+    protectedNodes: chat.protectedNodes
+      ? { ...chat.protectedNodes }
+      : undefined,
   };
   return result;
 };

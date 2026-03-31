@@ -42,6 +42,18 @@ const getMapKey = (chatIndex: number) => String(chatIndex);
 
 type NodeMapField = 'collapsedNodes' | 'omittedNodes' | 'protectedNodes';
 
+/** Produce a new chats array with updated node-map field for one chat. */
+const updateChatNodeField = (
+  chats: ChatInterface[],
+  chatIndex: number,
+  field: NodeMapField,
+  value: Record<string, boolean>
+): ChatInterface[] => {
+  const updated = chats.slice();
+  updated[chatIndex] = { ...updated[chatIndex], [field]: value };
+  return updated;
+};
+
 const getNodesForChat = (
   chats: ChatInterface[] | undefined,
   nodeMaps: Record<string, Record<string, boolean>>,
@@ -203,6 +215,7 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
       const mapKey = getMapKey(chatIndex);
       set((prev: ChatSlice) => ({
         ...prev,
+        chats: updateChatNodeField(chats, chatIndex, 'collapsedNodes', next),
         collapsedNodeMaps: {
           ...prev.collapsedNodeMaps,
           [mapKey]: next,
@@ -232,6 +245,7 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
       const mapKey = getMapKey(chatIndex);
       set((prev: ChatSlice) => ({
         ...prev,
+        chats: updateChatNodeField(chats, chatIndex, 'collapsedNodes', newCollapsed),
         collapsedNodeMaps: {
           ...prev.collapsedNodeMaps,
           [mapKey]: newCollapsed,
@@ -254,6 +268,7 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
       const mapKey = getMapKey(chatIndex);
       set((prev: ChatSlice) => ({
         ...prev,
+        chats: updateChatNodeField(chats, chatIndex, 'omittedNodes', next),
         omittedNodeMaps: {
           ...prev.omittedNodeMaps,
           [mapKey]: next,
@@ -276,6 +291,7 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
       const mapKey = getMapKey(chatIndex);
       set((prev: ChatSlice) => ({
         ...prev,
+        chats: updateChatNodeField(chats, chatIndex, 'protectedNodes', next),
         protectedNodeMaps: {
           ...prev.protectedNodeMaps,
           [mapKey]: next,
@@ -305,6 +321,7 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
       const mapKey = getMapKey(chatIndex);
       set((prev: ChatSlice) => ({
         ...prev,
+        chats: updateChatNodeField(chats, chatIndex, 'omittedNodes', newOmitted),
         omittedNodeMaps: {
           ...prev.omittedNodeMaps,
           [mapKey]: newOmitted,
