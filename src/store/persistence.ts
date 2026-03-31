@@ -151,9 +151,9 @@ const buildPersistedChats = (state: StoreState): PersistedChat[] | undefined =>
     // The toggle functions only update the runtime maps (collapsedNodeMaps,
     // omittedNodeMaps, protectedNodeMaps) without writing back to the
     // ChatInterface fields, so we merge them here before saving.
-    const collapsedNodes = state.collapsedNodeMaps[mapKey] ?? rest.collapsedNodes;
-    const omittedNodes = state.omittedNodeMaps[mapKey] ?? rest.omittedNodes;
-    const protectedNodes = state.protectedNodeMaps[mapKey] ?? rest.protectedNodes;
+    const collapsedNodes = state.collapsedNodeMaps?.[mapKey] ?? rest.collapsedNodes;
+    const omittedNodes = state.omittedNodeMaps?.[mapKey] ?? rest.omittedNodes;
+    const protectedNodes = state.protectedNodeMaps?.[mapKey] ?? rest.protectedNodes;
     const merged = {
       ...rest,
       collapsedNodes,

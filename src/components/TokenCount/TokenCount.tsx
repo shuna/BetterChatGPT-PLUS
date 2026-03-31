@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 
 import countTokens from '@utils/messageUtils';
 import useTokenEncoder from '@hooks/useTokenEncoder';
+import { filterOmittedMessages } from '@hooks/submitHelpers';
 import { countImageInputs, calculateUsageCost } from '@utils/cost';
 import {
   LIVE_TOKEN_RECOUNT_THROTTLE_MS,
@@ -48,10 +49,17 @@ const TokenCount = React.memo(() => {
     const chatId = state.chats?.[state.currentChatIndex]?.id ?? '';
     return Object.values(state.generatingSessions).find((s) => s.chatId === chatId);
   });
+  const currentChatIndex = useStore((state) => state.currentChatIndex);
   const messages = useStore(
     (state) => (state.chats?.[state.currentChatIndex]?.messages ?? []),
     shallow
   );
+  // Subscribe to omitted node changes so we recount when omissions change
+  const omittedNodeVersion = useStore((state) => {
+    const mapKey = String(state.currentChatIndex);
+    const nodes = state.omittedNodeMaps[mapKey] ?? state.chats?.[state.currentChatIndex]?.omittedNodes;
+    return nodes ? Object.keys(nodes).length : 0;
+  });
 
   const { model, providerId } = useStore((state) =>
     state.chats?.[state.currentChatIndex]
@@ -103,7 +111,7 @@ const TokenCount = React.memo(() => {
       lastAssistantStatsKey: null,
     };
   });
-  const latestInputRef = useRef({ messages, generatingSession, model });
+  const latestInputRef = useRef({ messages, generatingSession, model, currentChatIndex });
   const currentCountsRef = useRef<TokenCounts>({
     promptTokenCount,
     completionTokenCount,
@@ -149,9 +157,9 @@ const TokenCount = React.memo(() => {
     const snapshot = latestInputRef.current;
     let nextCounts: TokenCounts;
     if (snapshot.generatingSession) {
-      const promptMessages = snapshot.messages.slice(
-        0,
-        snapshot.generatingSession.messageIndex
+      const promptMessages = filterOmittedMessages(
+        snapshot.messages.slice(0, snapshot.generatingSession.messageIndex),
+        snapshot.currentChatIndex
       );
       const completionMessage = snapshot.messages[snapshot.generatingSession.messageIndex];
       const promptCacheKey = buildPromptCountCacheKey(
@@ -189,11 +197,15 @@ const TokenCount = React.memo(() => {
         imageTokenCount: cachedPrompt.imageTokenCount,
       };
     } else {
-      const nextPromptTokenCount = await countTokens(snapshot.messages, snapshot.model);
+      const filteredMessages = filterOmittedMessages(
+        snapshot.messages,
+        snapshot.currentChatIndex
+      );
+      const nextPromptTokenCount = await countTokens(filteredMessages, snapshot.model);
       nextCounts = {
         promptTokenCount: nextPromptTokenCount,
         completionTokenCount: 0,
-        imageTokenCount: countImageInputs(snapshot.messages),
+        imageTokenCount: countImageInputs(filteredMessages),
       };
     }
 
@@ -334,7 +346,7 @@ const TokenCount = React.memo(() => {
     });
   };
 
-  latestInputRef.current = { messages, generatingSession, model };
+  latestInputRef.current = { messages, generatingSession, model, currentChatIndex };
 
   useEffect(() => {
     currentCountsRef.current = {
@@ -399,7 +411,7 @@ const TokenCount = React.memo(() => {
     throttledCountRef.current?.cancel();
     promptCacheRef.current = null;
     void countCurrentSnapshot(requestVersionRef.current);
-  }, [messages, generatingSession, model, encoderReady]);
+  }, [messages, generatingSession, model, encoderReady, omittedNodeVersion]);
 
   useEffect(() => {
     if (generatingSession) return;

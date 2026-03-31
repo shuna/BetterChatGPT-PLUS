@@ -3,6 +3,7 @@ import { throttle } from 'lodash';
 import useStore from '@store/store';
 import countTokens from '@utils/messageUtils';
 import useTokenEncoder from '@hooks/useTokenEncoder';
+import { filterOmittedMessages } from '@hooks/submitHelpers';
 import {
   buildTokenUsageKey,
   countImageInputs,
@@ -51,7 +52,10 @@ const useLiveTotalTokenUsed = (): TotalTokenUsed => {
         const completionMessage = chat.messages[session.messageIndex];
         if (!completionMessage) return null;
 
-        const promptMessages = chat.messages.slice(0, session.messageIndex);
+        const promptMessages = filterOmittedMessages(
+          chat.messages.slice(0, session.messageIndex),
+          session.chatIndex
+        );
         const promptCacheKey = buildPromptCountCacheKey(
           session.sessionId,
           chat.config.model,

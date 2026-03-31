@@ -180,7 +180,7 @@ const ensureRoleAlternation = (
   return result;
 };
 
-const filterOmittedMessages = (
+export const filterOmittedMessages = (
   messages: MessageInterface[],
   chatIndex: number
 ): MessageInterface[] => {
@@ -244,9 +244,13 @@ export const applySubmitTokenUsage = async (
   const assistantMessage = messages[assistantMessageIndex];
   if (!assistantMessage) return;
 
+  const promptMessages = filterOmittedMessages(
+    messages.slice(0, assistantMessageIndex),
+    chatIndex
+  );
   await updateTotalTokenUsed(
     config.model,
-    messages.slice(0, assistantMessageIndex),
+    promptMessages,
     assistantMessage,
     config.providerId
   );
