@@ -322,9 +322,13 @@ export function useEditViewLogic({
     const nextIndex = resolvedMessageIndex + 1;
     const chats = useStore.getState().chats!;
     const removeCount = nextIndex < chats[currentChatIndex].messages.length ? 1 : 0;
-    if (removeCount > 0 && hasProtectedFollowingNodes(resolvedMessageIndex)) {
-      showToast(i18next.t('protectedPruneStopped', { ns: 'main' }), 'warning');
-      return;
+    // Only block if the immediately next node is protected
+    if (removeCount > 0) {
+      const nextNodeId = chats[currentChatIndex].branchTree?.activePath?.[nextIndex] ?? String(nextIndex);
+      if (isNodeProtected(nextNodeId, nextIndex)) {
+        showToast(i18next.t('protectedCannotDelete', { ns: 'main' }), 'warning');
+        return;
+      }
     }
     replaceMessageAndPruneFollowing(
       currentChatIndex,
@@ -462,6 +466,7 @@ export function useEditViewLogic({
     handleBranchGenerate,
     handleGenerateNextOnly,
     handleGenerate,
+    generateBelowDisabled: !sticky && hasProtectedFollowingNodes(messageIndex),
     handleCancel,
     handlePaste,
     handleUploadButtonClick,

@@ -189,6 +189,7 @@ const UnifiedMessageView = memo(
               handleRemoveImage={editLogic.handleRemoveImage}
               handleGenerate={editLogic.handleGenerate}
               handleGenerateNextOnly={editLogic.handleGenerateNextOnly}
+              generateBelowDisabled={editLogic.generateBelowDisabled}
               handleBranchGenerate={editLogic.handleBranchGenerate}
               handleSave={editLogic.handleSave}
               handleBranchOnly={editLogic.handleBranchOnly}
