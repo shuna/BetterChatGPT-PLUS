@@ -8,9 +8,6 @@ import {
   downloadMarkdown,
   htmlToImg,
 } from '@utils/chat';
-import ImageIcon from '@icon/ImageIcon';
-import MarkdownIcon from '@icon/MarkdownIcon';
-import JsonIcon from '@icon/JsonIcon';
 
 import downloadFile, { downloadFileGzip } from '@utils/downloadFile';
 import { createRoot } from 'react-dom/client';
@@ -79,14 +76,88 @@ const renderAllMessagesForCapture = (
   });
 };
 
+type DownloadFormat = 'image' | 'markdown' | 'json' | 'chatgpt' | 'openrouter' | 'lmstudio';
+
 const DownloadChat = React.memo(
   ({ trigger }: { trigger?: (onClick: () => void) => React.ReactNode }) => {
     const { t } = useTranslation();
     const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
     const [visibleBranchOnly, setVisibleBranchOnly] = useState<boolean>(false);
     const [useGzip, setUseGzip] = useState(true);
+    const [downloadFormat, setDownloadFormat] = useState<DownloadFormat>('json');
 
     const openModal = () => setIsModalOpen(true);
+
+    const handleDownload = async () => {
+      const chats = useStore.getState().chats;
+      const currentChatIndex = useStore.getState().currentChatIndex;
+      if (!chats) return;
+      const chat = chats[currentChatIndex];
+      const contentStore = useStore.getState().contentStore;
+      const filename = chat.title.trim() || 'download';
+
+      switch (downloadFormat) {
+        case 'image': {
+          try {
+            const msgs = getVisibleMessages();
+            const imgData = await renderAllMessagesForCapture(msgs);
+            downloadImg(imgData, `${filename}.png`);
+          } catch (e) {
+            console.error('Image export failed:', e);
+          }
+          break;
+        }
+        case 'markdown': {
+          const exportChat = visibleBranchOnly
+            ? prepareChatForExport(chat, contentStore, { visibleBranchOnly: true }).chat
+            : chat;
+          const markdown = chatToMarkdown(exportChat);
+          downloadMarkdown(markdown, `${filename}.md`);
+          break;
+        }
+        case 'json': {
+          const prepared = prepareChatForExport(chat, contentStore, { visibleBranchOnly });
+          const exportedChat = { ...prepared.chat };
+          delete exportedChat.folder;
+          const fileData = {
+            chats: [exportedChat],
+            contentStore: prepared.contentStore,
+            folders: {},
+            version: 3,
+          } satisfies ExportV3;
+          if (useGzip) {
+            await downloadFileGzip(fileData, exportedChat.title);
+          } else {
+            downloadFile(fileData, exportedChat.title);
+          }
+          break;
+        }
+        case 'chatgpt': {
+          const openaiData = chatToOpenAIFormat(chat, contentStore, { visibleBranchOnly });
+          downloadFile([openaiData], filename);
+          break;
+        }
+        case 'openrouter': {
+          const orData = chatToOpenRouterFormat(chat, contentStore);
+          downloadFile(orData, filename);
+          break;
+        }
+        case 'lmstudio': {
+          const lmsData = chatToLMStudioFormat(chat, contentStore, { visibleBranchOnly });
+          downloadFile(lmsData, filename);
+          break;
+        }
+      }
+    };
+
+    const formatOptions: { value: DownloadFormat; label: string }[] = [
+      { value: 'image', label: 'Image (.png)' },
+      { value: 'markdown', label: 'Markdown (.md)' },
+      { value: 'json', label: 'JSON (v3)' },
+      { value: 'chatgpt', label: t('exportFormatOpenAI') as string },
+      { value: 'openrouter', label: t('exportFormatOpenRouter') as string },
+      { value: 'lmstudio', label: t('exportFormatLMStudio') as string },
+    ];
 
     return (
       <>
@@ -107,8 +178,22 @@ const DownloadChat = React.memo(
             title={t('downloadChat') as string}
             cancelButton={false}
           >
-            <div className='p-6 border-b border-gray-200 dark:border-gray-600 flex flex-col gap-4'>
-              <label className='flex items-center gap-2 text-sm text-gray-900 dark:text-gray-300 cursor-pointer'>
+            <div className='p-6 border-b border-gray-200 dark:border-gray-600 flex flex-col gap-3'>
+              <div className='flex flex-col gap-2 text-xs text-gray-500 dark:text-gray-400'>
+                {formatOptions.map((opt) => (
+                  <label key={opt.value} className='flex items-center gap-1.5 cursor-pointer'>
+                    <input
+                      type='radio'
+                      name='downloadFormat'
+                      checked={downloadFormat === opt.value}
+                      onChange={() => setDownloadFormat(opt.value)}
+                      className='rounded'
+                    />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+              <label className='flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 cursor-pointer'>
                 <input
                   type='checkbox'
                   checked={visibleBranchOnly}
@@ -117,152 +202,23 @@ const DownloadChat = React.memo(
                 />
                 {t('exportVisibleBranchOnly')}
               </label>
-              <label className='flex items-center gap-2 text-sm text-gray-900 dark:text-gray-300 cursor-pointer'>
-                <input
-                  type='checkbox'
-                  checked={useGzip}
-                  onChange={(e) => setUseGzip(e.target.checked)}
-                  className='rounded'
-                />
-                .gz {t('compression', 'compression')}
-              </label>
-              <div className='flex gap-4'>
-              <button
-                className='btn btn-neutral gap-2'
-                aria-label='image'
-                onClick={async () => {
-                  try {
-                    const msgs = getVisibleMessages();
-                    const imgData = await renderAllMessagesForCapture(msgs);
-                    downloadImg(
-                      imgData,
-                      `${
-                        useStore
-                          .getState()
-                          .chats?.[
-                            useStore.getState().currentChatIndex
-                          ].title.trim() ?? 'download'
-                      }.png`
-                    );
-                  } catch (e) {
-                    console.error('Image export failed:', e);
-                  }
-                }}
-              >
-                <ImageIcon />
-                Image
-              </button>
-              <button
-                className='btn btn-neutral gap-2'
-                aria-label='markdown'
-                onClick={async () => {
-                  const chats = useStore.getState().chats;
-                  if (chats) {
-                    const exportChat = visibleBranchOnly
-                      ? prepareChatForExport(
-                          chats[useStore.getState().currentChatIndex],
-                          useStore.getState().contentStore,
-                          { visibleBranchOnly: true }
-                        ).chat
-                      : chats[useStore.getState().currentChatIndex];
-                    const markdown = chatToMarkdown(
-                      exportChat
-                    );
-                    downloadMarkdown(
-                      markdown,
-                      `${
-                        chats[
-                          useStore.getState().currentChatIndex
-                        ].title.trim() ?? 'download'
-                      }.md`
-                    );
-                  }
-                }}
-              >
-                <MarkdownIcon />
-                Markdown
-              </button>
-              <button
-                className='btn btn-neutral gap-2'
-                aria-label='json'
-                onClick={async () => {
-                  const chats = useStore.getState().chats;
-                  if (chats) {
-                    const prepared = prepareChatForExport(
-                      chats[useStore.getState().currentChatIndex],
-                      useStore.getState().contentStore,
-                      { visibleBranchOnly }
-                    );
-                    const exportedChat = { ...prepared.chat };
-                    delete exportedChat.folder;
-                    const fileData = {
-                      chats: [exportedChat],
-                      contentStore: prepared.contentStore,
-                      folders: {},
-                      version: 3,
-                    } satisfies ExportV3;
-                    if (useGzip) {
-                      await downloadFileGzip(fileData, exportedChat.title);
-                    } else {
-                      downloadFile(fileData, exportedChat.title);
-                    }
-                  }
-                }}
-              >
-                <JsonIcon />
-                JSON
-              </button>
-              <button
-                className='btn btn-neutral gap-2'
-                aria-label='chatgpt'
-                onClick={async () => {
-                  const chats = useStore.getState().chats;
-                  if (chats) {
-                    const chat = chats[useStore.getState().currentChatIndex];
-                    const contentStore = useStore.getState().contentStore;
-                    const openaiData = chatToOpenAIFormat(chat, contentStore, { visibleBranchOnly });
-                    const filename = chat.title.trim() || 'download';
-                    downloadFile([openaiData], filename);
-                  }
-                }}
-              >
-                <JsonIcon />
-                ChatGPT
-              </button>
-              <button
-                className='btn btn-neutral gap-2'
-                aria-label='openrouter'
-                onClick={async () => {
-                  const chats = useStore.getState().chats;
-                  if (chats) {
-                    const chat = chats[useStore.getState().currentChatIndex];
-                    const contentStore = useStore.getState().contentStore;
-                    const orData = chatToOpenRouterFormat(chat, contentStore);
-                    const filename = chat.title.trim() || 'download';
-                    downloadFile(orData, filename);
-                  }
-                }}
-              >
-                <JsonIcon />
-                OpenRouter
-              </button>
-              <button
-                className='btn btn-neutral gap-2'
-                aria-label='lmstudio'
-                onClick={async () => {
-                  const chats = useStore.getState().chats;
-                  if (chats) {
-                    const chat = chats[useStore.getState().currentChatIndex];
-                    const contentStore = useStore.getState().contentStore;
-                    const lmsData = chatToLMStudioFormat(chat, contentStore, { visibleBranchOnly });
-                    const filename = chat.title.trim() || 'download';
-                    downloadFile(lmsData, filename);
-                  }
-                }}
-              >
-                <JsonIcon />
-                LM Studio
-              </button>
+              <div className='flex items-center justify-between mt-1'>
+                <label className='flex items-center gap-1.5 cursor-pointer text-xs text-gray-500 dark:text-gray-400'>
+                  <input
+                    type='checkbox'
+                    checked={useGzip}
+                    onChange={(e) => setUseGzip(e.target.checked)}
+                    className='rounded'
+                  />
+                  {t('gzCompression')}
+                </label>
+                <button
+                  className='btn btn-small btn-primary w-32 justify-center'
+                  onClick={handleDownload}
+                  aria-label={t('downloadChat') as string}
+                >
+                  {t('downloadChat')}
+                </button>
               </div>
             </div>
           </PopupModal>
