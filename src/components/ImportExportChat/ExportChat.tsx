@@ -9,14 +9,14 @@ import { resolveContent, buildExportContentStore } from '@utils/contentStore';
 
 import { ChatInterface } from '@type/chat';
 import { ExportV1, ExportV3 } from '@type/export';
-import { chatToOpenAIFormat, chatToOpenRouterFormat } from '@utils/chatExport';
+import { chatToOpenAIFormat, chatToOpenRouterFormat, chatToLMStudioFormat } from '@utils/chatExport';
 
-type ExportFormat = 'v3' | 'v1' | 'openai' | 'openrouter';
+type ExportFormat = 'v3' | 'v1' | 'openai' | 'openrouter' | 'lmstudio';
 
 const ExportChat = () => {
   const { t } = useTranslation();
   const [format, setFormat] = useState<ExportFormat>('v3');
-  const isExternalFormat = format === 'openai' || format === 'openrouter';
+  const isExternalFormat = format === 'openai' || format === 'openrouter' || format === 'lmstudio';
   const [useGzip, setUseGzip] = useState(true);
 
   const handleExport = async () => {
@@ -27,7 +27,9 @@ const ExportChat = () => {
     const filename = getToday();
     let fileData: object;
 
-    if (format === 'openai') {
+    if (format === 'lmstudio') {
+      fileData = chats?.map((chat) => chatToLMStudioFormat(chat, contentStore)) ?? [];
+    } else if (format === 'openai') {
       fileData = chats?.map((chat) => chatToOpenAIFormat(chat, contentStore)) ?? [];
     } else if (format === 'openrouter') {
       fileData = chats?.map((chat) => chatToOpenRouterFormat(chat, contentStore)) ?? [];
@@ -105,6 +107,16 @@ const ExportChat = () => {
             className='rounded'
           />
           {t('exportFormatOpenRouter')}
+        </label>
+        <label className='flex items-center gap-1.5 cursor-pointer'>
+          <input
+            type='radio'
+            name='exportFormat'
+            checked={format === 'lmstudio'}
+            onChange={() => setFormat('lmstudio')}
+            className='rounded'
+          />
+          {t('exportFormatLMStudio')}
         </label>
       </div>
       <div className='flex items-center justify-between mt-3'>

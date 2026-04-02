@@ -118,6 +118,81 @@ export type OpenRouterChat = {
   artifactFileContents: Record<string, unknown>;
 };
 
+export type LMStudioTextContent = {
+  type: 'text';
+  text: string;
+  fromDraftModel?: boolean;
+  tokensCount?: number;
+  isStructural?: boolean;
+};
+
+export type LMStudioContentBlock = {
+  type: 'contentBlock';
+  stepIdentifier: string;
+  content: LMStudioTextContent[];
+  genInfo?: {
+    indexedModelIdentifier: string;
+    identifier: string;
+    loadModelConfig?: { fields: { key: string; value: unknown }[] };
+    predictionConfig?: { fields: { key: string; value: unknown }[] };
+    stats?: Record<string, unknown>;
+  };
+  defaultShouldIncludeInContext?: boolean;
+  shouldIncludeInContext?: boolean;
+};
+
+export type LMStudioUserVersion = {
+  type: 'singleStep';
+  role: 'user';
+  content: { type: 'text'; text: string }[];
+};
+
+export type LMStudioSystemVersion = {
+  type: 'singleStep';
+  role: 'system';
+  content: { type: 'text'; text: string }[];
+};
+
+export type LMStudioAssistantVersion = {
+  type: 'multiStep';
+  role: 'assistant';
+  senderInfo: { senderName: string };
+  steps: LMStudioContentBlock[];
+};
+
+export type LMStudioMessage = {
+  versions: (LMStudioUserVersion | LMStudioSystemVersion | LMStudioAssistantVersion)[];
+  currentlySelected: number;
+};
+
+export type LMStudioChat = {
+  name: string;
+  pinned: boolean;
+  createdAt: number;
+  preset: string;
+  tokenCount: number;
+  userLastMessagedAt?: number;
+  assistantLastMessagedAt?: number;
+  systemPrompt: string;
+  messages: LMStudioMessage[];
+  usePerChatPredictionConfig: boolean;
+  perChatPredictionConfig: { fields: unknown[] };
+  clientInput: string;
+  clientInputFiles: unknown[];
+  userFilesSizeBytes: number;
+  lastUsedModel?: {
+    identifier: string;
+    indexedModelIdentifier: string;
+    instanceLoadTimeConfig: { fields: { key: string; value: unknown }[] };
+    instanceOperationTimeConfig: { fields: unknown[] };
+  };
+  notes: unknown[];
+  plugins: unknown[];
+  pluginConfigs: Record<string, unknown>;
+  disabledPluginTools: unknown[];
+  looseFiles: unknown[];
+};
+
 export interface OpenAIPlaygroundJSON extends ConfigInterface {
   messages: MessageInterface[];
 }

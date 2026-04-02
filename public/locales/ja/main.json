@@ -18,6 +18,7 @@
   "gzCompression": ".gz 圧縮",
   "exportFormatOpenAI": "ChatGPT 互換",
   "exportFormatOpenRouter": "OpenRouter / OpenAI API",
+  "exportFormatLMStudio": "LM Studio",
   "author": "Jing Hua作",
   "about": "概要 & スポンサー",
   "api": "API",

@@ -17,7 +17,7 @@ import { createRoot } from 'react-dom/client';
 import Message from './Message';
 import { MessageInterface } from '@type/chat';
 import { ExportV3 } from '@type/export';
-import { prepareChatForExport, chatToOpenAIFormat, chatToOpenRouterFormat } from '@utils/chatExport';
+import { prepareChatForExport, chatToOpenAIFormat, chatToOpenRouterFormat, chatToLMStudioFormat } from '@utils/chatExport';
 
 const getVisibleMessages = (): Array<{ message: MessageInterface; originalIndex: number }> => {
   const state = useStore.getState();
@@ -245,6 +245,23 @@ const DownloadChat = React.memo(
               >
                 <JsonIcon />
                 OpenRouter
+              </button>
+              <button
+                className='btn btn-neutral gap-2'
+                aria-label='lmstudio'
+                onClick={async () => {
+                  const chats = useStore.getState().chats;
+                  if (chats) {
+                    const chat = chats[useStore.getState().currentChatIndex];
+                    const contentStore = useStore.getState().contentStore;
+                    const lmsData = chatToLMStudioFormat(chat, contentStore, { visibleBranchOnly });
+                    const filename = chat.title.trim() || 'download';
+                    downloadFile(lmsData, filename);
+                  }
+                }}
+              >
+                <JsonIcon />
+                LM Studio
               </button>
               </div>
             </div>

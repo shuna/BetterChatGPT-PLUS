@@ -18,6 +18,7 @@
   "gzCompression": ".gz compression",
   "exportFormatOpenAI": "ChatGPT compatible",
   "exportFormatOpenRouter": "OpenRouter / OpenAI API",
+  "exportFormatLMStudio": "LM Studio",
   "author": "Made by Jing Hua",
   "about": "About & Sponsor",
   "api": "API",

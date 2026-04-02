@@ -1,5 +1,9 @@
 import { ChatInterface, ContentInterface, isTextContent } from '@type/chat';
-import { OpenAIChat, OpenRouterChat, OpenRouterMessage, OpenRouterItem, OpenRouterCharacter } from '@type/export';
+import {
+  OpenAIChat, OpenRouterChat, OpenRouterMessage, OpenRouterItem, OpenRouterCharacter,
+  LMStudioChat, LMStudioMessage, LMStudioContentBlock,
+  LMStudioUserVersion, LMStudioSystemVersion, LMStudioAssistantVersion,
+} from '@type/export';
 import { ContentStoreData, resolveContent } from './contentStore';
 
 type PrepareChatForExportOptions = {
@@ -293,5 +297,119 @@ export const chatToOpenRouterFormat = (
     artifactFiles: {},
     artifactVersions: {},
     artifactFileContents: {},
+  };
+};
+
+const lmsStepId = () => `${Date.now()}-${Math.random().toString().slice(2, 18)}`;
+
+const toLMStudioMessage = (
+  role: string,
+  text: string,
+  modelSlug: string,
+): LMStudioMessage => {
+  if (role === 'assistant') {
+    const stepId = lmsStepId();
+    const contentBlock: LMStudioContentBlock = {
+      type: 'contentBlock',
+      stepIdentifier: stepId,
+      content: [{
+        type: 'text',
+        text,
+        fromDraftModel: false,
+        tokensCount: 0,
+        isStructural: false,
+      }],
+      genInfo: {
+        indexedModelIdentifier: modelSlug,
+        identifier: modelSlug,
+      },
+      defaultShouldIncludeInContext: true,
+      shouldIncludeInContext: true,
+    };
+    const version: LMStudioAssistantVersion = {
+      type: 'multiStep',
+      role: 'assistant',
+      senderInfo: { senderName: modelSlug },
+      steps: [contentBlock],
+    };
+    return { versions: [version], currentlySelected: 0 };
+  }
+
+  const version: LMStudioUserVersion | LMStudioSystemVersion = {
+    type: 'singleStep',
+    role: role as 'user' | 'system',
+    content: [{ type: 'text', text }],
+  };
+  return { versions: [version], currentlySelected: 0 };
+};
+
+export const chatToLMStudioFormat = (
+  chat: ChatInterface,
+  contentStore: ContentStoreData,
+  options: { visibleBranchOnly?: boolean } = {}
+): LMStudioChat => {
+  const visibleBranchOnly = options.visibleBranchOnly ?? false;
+  const modelSlug = chat.config.model;
+  const now = Date.now();
+  const messages: LMStudioMessage[] = [];
+  let tokenCount = 0;
+  let userLastMessagedAt: number | undefined;
+  let assistantLastMessagedAt: number | undefined;
+  let systemPrompt = '';
+
+  const addMsg = (role: string, text: string, timestamp?: number) => {
+    if (!text) return;
+    if (role === 'system') {
+      systemPrompt = text;
+    }
+    messages.push(toLMStudioMessage(role, text, modelSlug));
+    if (role === 'user' && timestamp) userLastMessagedAt = timestamp;
+    if (role === 'assistant' && timestamp) assistantLastMessagedAt = timestamp;
+  };
+
+  if (chat.branchTree) {
+    const tree = chat.branchTree;
+    const nodeIds = visibleBranchOnly
+      ? tree.activePath.filter((id) => tree.nodes[id] !== undefined)
+      : tree.activePath;
+
+    for (const id of nodeIds) {
+      const node = tree.nodes[id];
+      if (!node) continue;
+      const content = resolveContent(contentStore, node.contentHash);
+      addMsg(node.role, contentToString(content), node.createdAt);
+    }
+  } else {
+    for (const msg of chat.messages) {
+      addMsg(msg.role, contentToString(msg.content));
+    }
+  }
+
+  return {
+    name: chat.title,
+    pinned: false,
+    createdAt: chat.branchTree?.nodes[chat.branchTree.rootId]?.createdAt ?? now,
+    preset: '',
+    tokenCount,
+    userLastMessagedAt,
+    assistantLastMessagedAt,
+    systemPrompt,
+    messages,
+    usePerChatPredictionConfig: false,
+    perChatPredictionConfig: { fields: [] },
+    clientInput: '',
+    clientInputFiles: [],
+    userFilesSizeBytes: 0,
+    lastUsedModel: {
+      identifier: modelSlug,
+      indexedModelIdentifier: modelSlug,
+      instanceLoadTimeConfig: { fields: [] },
+      instanceOperationTimeConfig: { fields: [] },
+    },
+    notes: [],
+    plugins: [],
+    pluginConfigs: {},
+    disabledPluginTools: [],
+    looseFiles: [],
   };
 };
