@@ -5,6 +5,7 @@ import {
   ChatInterface,
   ChatView,
   ContentInterface,
+  GeneratingSession,
   Role,
   isSplitView,
 } from '@type/chat';
@@ -42,18 +43,36 @@ import { cloneChatAt } from './branch-domain';
 /**
  * Finalize any streaming nodes in the given chat, mutating contentStore in place.
  * Returns updated chats array if any streaming nodes were found, otherwise the original.
+ *
+ * Nodes that are actively being streamed by an SSE session (present in
+ * `generatingSessions`) are **skipped** so that the in-flight streaming buffer
+ * is not prematurely destroyed.  `resolveContent` already handles streaming
+ * content hashes by reading directly from the buffer, so callers such as
+ * `materializeActivePath` work correctly without eager finalization.
  */
 function finalizeStreamingNodesInChat(
   chats: ChatInterface[],
   chatIndex: number,
-  contentStore: ContentStoreData
+  contentStore: ContentStoreData,
+  generatingSessions?: Record<string, GeneratingSession>
 ): ChatInterface[] {
   const chat = chats[chatIndex];
   const tree = chat.branchTree;
   if (!tree) return chats;
 
-  const streamingNodes = Object.values(tree.nodes).filter((n) =>
-    isStreamingContentHash(n.contentHash)
+  // Build set of node IDs with an active SSE session so we can skip them.
+  const activeNodeIds: Set<string> | undefined = generatingSessions
+    ? new Set(
+        Object.values(generatingSessions)
+          .filter((s) => s.chatId === chat.id)
+          .map((s) => s.targetNodeId)
+      )
+    : undefined;
+
+  const streamingNodes = Object.values(tree.nodes).filter(
+    (n) =>
+      isStreamingContentHash(n.contentHash) &&
+      !(activeNodeIds?.has(n.id))
   );
   if (streamingNodes.length === 0) return chats;
 
@@ -68,6 +87,9 @@ function finalizeStreamingNodesInChat(
   }
   return updatedChats;
 }
+
+/** @visibleForTesting */
+export { finalizeStreamingNodesInChat as _finalizeStreamingNodesInChat };
 
 export interface PendingChatFocus {
   chatIndex: number;
@@ -418,7 +440,8 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
 
   switchBranchAtNode: (chatIndex, nodeId) => {
     const contentStore = { ...get().contentStore };
-    const chats = finalizeStreamingNodesInChat(get().chats!, chatIndex, contentStore);
+    const sessions = get().generatingSessions;
+    const chats = finalizeStreamingNodesInChat(get().chats!, chatIndex, contentStore, sessions);
     get().applyBranchState(
       switchBranchAtNodeState(chats, chatIndex, nodeId, contentStore),
       contentStore
@@ -427,7 +450,8 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
 
   switchActivePath: (chatIndex, newPath) => {
     const contentStore = { ...get().contentStore };
-    const chats = finalizeStreamingNodesInChat(get().chats!, chatIndex, contentStore);
+    const sessions = get().generatingSessions;
+    const chats = finalizeStreamingNodesInChat(get().chats!, chatIndex, contentStore, sessions);
     get().applyBranchState(
       switchActivePathState(chats, chatIndex, newPath, contentStore),
       contentStore
@@ -436,7 +460,8 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
 
   switchActivePathSilent: (chatIndex, newPath) => {
     const contentStore = { ...get().contentStore };
-    const chats = finalizeStreamingNodesInChat(get().chats!, chatIndex, contentStore);
+    const sessions = get().generatingSessions;
+    const chats = finalizeStreamingNodesInChat(get().chats!, chatIndex, contentStore, sessions);
     const updated = switchActivePathState(chats, chatIndex, newPath, contentStore);
     get().setChats(updated);
     set({ contentStore });
@@ -454,7 +479,8 @@ export const createBranchSlice: StoreSlice<BranchSlice> = (set, get) => ({
 
   pruneHiddenNodes: (chatIndex) => {
     const contentStore = { ...get().contentStore };
-    const chats = finalizeStreamingNodesInChat(get().chats!, chatIndex, contentStore);
+    const sessions = get().generatingSessions;
+    const chats = finalizeStreamingNodesInChat(get().chats!, chatIndex, contentStore, sessions);
     // Ensure runtime protectedNodeMaps are reflected on the chat object
     // so pruneHiddenNodesState can see them.
     const mapKey = String(chatIndex);
