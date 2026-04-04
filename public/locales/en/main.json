@@ -269,6 +269,21 @@
       "coherence": "Coherence",
       "conciseness": "Conciseness",
       "instructionFollowing": "Instruction Following"
-    }
+    },
+    "openDetail": "View details",
+    "modalTitle": "Evaluation Results",
+    "modalCategory": "Category",
+    "modalScore": "Score",
+    "modalStatus": "Status",
+    "modalAxis": "Axis",
+    "modalReasoning": "Reasoning",
+    "modalAverage": "Average",
+    "phasePreSend": "Pre-send",
+    "phasePostReceive": "Post-receive",
+    "noResults": "No evaluation results available",
+    "notEvaluated": "Not evaluated",
+    "running": "Running...",
+    "reEvaluate": "Re-evaluate",
+    "runEvaluation": "Run evaluation"
   }
 }

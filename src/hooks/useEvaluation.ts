@@ -135,8 +135,8 @@ export function useEvaluation() {
         );
         const existing = store.evaluationResults[key];
         store.setEvaluationResult(key, {
-          phase,
           ...existing,
+          phase,
           safety,
         });
       } catch (e) {
@@ -171,8 +171,8 @@ export function useEvaluation() {
         );
         const existing = store.evaluationResults[key];
         store.setEvaluationResult(key, {
-          phase,
           ...existing,
+          phase,
           quality,
         });
       } catch (e) {

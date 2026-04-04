@@ -9,6 +9,7 @@ import DownButton from './Button/DownButton';
 import CopyButton from './Button/CopyButton';
 import EditButton from './Button/EditButton';
 import DeleteButton from './Button/DeleteButton';
+import EvaluateButton from './Button/EvaluateButton';
 import BranchSwitcher from '../BranchSwitcher';
 
 type ContentActionsProps = {
@@ -21,6 +22,7 @@ type ContentActionsProps = {
   isProtected: boolean;
   isGeneratingMessage: boolean;
   isCurrentChatGenerating: boolean;
+  showEvaluateButton: boolean;
   setIsEdit: React.Dispatch<React.SetStateAction<boolean>>;
   setIsDelete: React.Dispatch<React.SetStateAction<boolean>>;
   onRefresh: () => void;
@@ -28,6 +30,7 @@ type ContentActionsProps = {
   onMoveDown: () => void;
   onCopy: () => void;
   onDelete: () => void;
+  onEvaluate: () => void;
 };
 
 export default function ContentActions({
@@ -40,6 +43,7 @@ export default function ContentActions({
   isProtected,
   isGeneratingMessage,
   isCurrentChatGenerating,
+  showEvaluateButton,
   setIsEdit,
   setIsDelete,
   onRefresh,
@@ -47,6 +51,7 @@ export default function ContentActions({
   onMoveDown,
   onCopy,
   onDelete,
+  onEvaluate,
 }: ContentActionsProps) {
   return (
     <div className='sticky bottom-2 z-20 mt-2.5 flex min-h-[2.75rem] items-center justify-center gap-2 px-2 md:bottom-3 md:px-3'>
@@ -76,6 +81,9 @@ export default function ContentActions({
 
               <CopyButton onClick={onCopy} />
               {!isGeneratingMessage && <EditButton setIsEdit={setIsEdit} disabled={isProtected} />}
+              {showEvaluateButton && !isGeneratingMessage && (
+                <EvaluateButton onClick={onEvaluate} />
+              )}
               <DeleteButton setIsDelete={setIsDelete} disabled={isProtected} />
             </>
           )}

@@ -263,6 +263,8 @@ const UnifiedMessageView = memo(
               onMoveDown={() => handleMove('down')}
               onCopy={handleCopy}
               onDelete={handleDelete}
+              showEvaluateButton={false}
+              onEvaluate={() => {}}
             />
             {isUnknownContextConfirmOpen && (
               <PopupModal

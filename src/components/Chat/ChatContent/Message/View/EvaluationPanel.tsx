@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import { evaluationResultKey, qualityAxisKeys } from '@type/evaluation';
@@ -65,64 +65,21 @@ const SafetySection = ({ result }: { result: SafetyCheckResult }) => {
   );
 };
 
-const QualitySection = ({ result }: { result: QualityEvaluationResult }) => {
+const QualitySummary = ({ result }: { result: QualityEvaluationResult }) => {
   const { t } = useTranslation('main');
-  const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className='space-y-2'>
+    <div className='space-y-1'>
       <div className='text-xs font-semibold text-gray-600 dark:text-gray-400'>
         {t('evaluation.qualityTitle')}
       </div>
-      <div className='space-y-1'>
-        {qualityAxisKeys.map((axis) => (
-          <ScoreBar
-            key={axis}
-            score={result.scores[axis]}
-            label={t(`evaluation.axis.${axis}`)}
-          />
-        ))}
-      </div>
-      <button
-        className='text-xs text-blue-500 hover:text-blue-600 dark:text-blue-400'
-        onClick={() => setExpanded(!expanded)}
-      >
-        {expanded ? t('evaluation.hideDetails') : t('evaluation.showDetails')}
-      </button>
-      {expanded && (
-        <div className='space-y-2 text-xs text-gray-600 dark:text-gray-400'>
-          {qualityAxisKeys.map((axis) => {
-            const reasoning = result.reasoning[axis];
-            if (!reasoning) return null;
-            return (
-              <div key={axis}>
-                <span className='font-medium'>{t(`evaluation.axis.${axis}`)}: </span>
-                {reasoning}
-              </div>
-            );
-          })}
-          {result.promptSuggestions.length > 0 && (
-            <div>
-              <div className='font-medium mb-0.5'>{t('evaluation.promptSuggestions')}:</div>
-              <ul className='list-disc list-inside'>
-                {result.promptSuggestions.map((s, i) => (
-                  <li key={i}>{s}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {result.configSuggestions.length > 0 && (
-            <div>
-              <div className='font-medium mb-0.5'>{t('evaluation.configSuggestions')}:</div>
-              <ul className='list-disc list-inside'>
-                {result.configSuggestions.map((s, i) => (
-                  <li key={i}>{s}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
+      {qualityAxisKeys.map((axis) => (
+        <ScoreBar
+          key={axis}
+          score={result.scores[axis]}
+          label={t(`evaluation.axis.${axis}`)}
+        />
+      ))}
     </div>
   );
 };
@@ -133,18 +90,25 @@ const EvaluationPanel: React.FC<EvaluationPanelProps> = ({ chatId, nodeId, phase
     (state) => state.evaluationResults[key]
   );
   const pending = useStore((state) => state.evaluationPending[key]);
+  const { t } = useTranslation('main');
 
   if (!result && !pending) return null;
 
+  const phaseLabel =
+    phase === 'pre-send'
+      ? t('evaluation.phasePreSend')
+      : t('evaluation.phasePostReceive');
+
   return (
     <div className='mt-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-3 space-y-3'>
+      <div className='text-xs text-gray-400 dark:text-gray-500'>{phaseLabel}</div>
       {pending && (
         <div className='text-xs text-gray-500 dark:text-gray-400 animate-pulse'>
           Evaluating...
         </div>
       )}
       {result?.safety && <SafetySection result={result.safety} />}
-      {result?.quality && <QualitySection result={result.quality} />}
+      {result?.quality && <QualitySummary result={result.quality} />}
     </div>
   );
 };
