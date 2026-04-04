@@ -29,6 +29,8 @@ import {
   buildVerifiedStatsKey,
   OPENROUTER_VERIFICATION_INITIAL_DELAY_MS,
 } from '@utils/openrouterVerification';
+import { runPreSendEvaluation, runPostReceiveEvaluation } from './useEvaluation';
+import type { EvaluationContext } from './useEvaluation';
 
 export function stopSession(sessionId: string) {
   stopSubmitSession(sessionId);
@@ -137,6 +139,19 @@ const useSubmit = () => {
         chats[chatIndex].config.providerId
       );
 
+      // --- Pre-send evaluation (async, non-blocking) ---
+      const userMsg = [...messages].reverse().find((m) => m.role === 'user');
+      const evalCtx: EvaluationContext = {
+        chatId,
+        nodeId: targetNodeId,
+        endpoint: resolved.endpoint,
+        apiKey: resolved.key,
+        model: chats[chatIndex].config.model,
+      };
+      if (userMsg) {
+        runPreSendEvaluation(userMsg.content, evalCtx).catch(() => {});
+      }
+
       const streamResult = await executeSubmitStream({
         sessionId,
         chatId,
@@ -152,6 +167,15 @@ const useSubmit = () => {
       });
 
       await applySubmitTokenUsage(chatId, targetNodeId);
+
+      // --- Post-receive evaluation (async, non-blocking) ---
+      if (userMsg) {
+        const postChats = useStore.getState().chats;
+        const assistantMsg = postChats?.[chatIndex]?.messages[messageIndex];
+        if (assistantMsg) {
+          runPostReceiveEvaluation(userMsg.content, assistantMsg.content, evalCtx).catch(() => {});
+        }
+      }
 
       if (
         streamResult.generationId &&

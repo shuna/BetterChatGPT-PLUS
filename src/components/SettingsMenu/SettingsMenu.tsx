@@ -24,7 +24,9 @@ import { PromptLibraryInline } from '@components/PromptLibraryMenu/PromptLibrary
 import ImportChat from '@components/ImportExportChat/ImportChat';
 import ExportChat from '@components/ImportExportChat/ExportChat';
 
-type TabId = 'general' | 'chatConfig' | 'providers' | 'proxy' | 'prompts' | 'data';
+import EvaluationSettings from './EvaluationSettings';
+
+type TabId = 'general' | 'chatConfig' | 'providers' | 'proxy' | 'prompts' | 'data' | 'evaluation';
 
 interface TabDef {
   id: TabId;
@@ -38,6 +40,7 @@ const tabs: TabDef[] = [
   { id: 'data', labelKey: 'settingsTab.data' },
   { id: 'prompts', labelKey: 'settingsTab.prompts' },
   { id: 'proxy', labelKey: 'settingsTab.proxy' },
+  { id: 'evaluation', labelKey: 'settingsTab.evaluation' },
 ];
 
 const ResizableNav = ({
@@ -210,6 +213,7 @@ const SettingsDialog = ({
           {activeTab === 'proxy' && <ProxySettingsInline />}
           {activeTab === 'prompts' && <PromptLibraryInline onSettingsChanged={markSettingsChanged} />}
           {activeTab === 'data' && <DataTab />}
+          {activeTab === 'evaluation' && <EvaluationSettings />}
         </div>
       </div>
     </PopupModal>
