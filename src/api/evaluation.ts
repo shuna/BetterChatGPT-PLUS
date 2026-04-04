@@ -62,11 +62,13 @@ export async function runSafetyCheck(
     method: 'POST',
     headers,
     body: JSON.stringify({ input: text }),
+  }).catch((e) => {
+    throw new Error(`Failed to connect to ${moderationUrl}: ${e.message}`);
   });
 
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
-    throw new Error(`Moderation API error (${response.status}): ${detail}`);
+    throw new Error(`Moderation API error (${response.status}) at ${moderationUrl}: ${detail}`);
   }
 
   const data = await response.json();
@@ -199,11 +201,13 @@ export async function runQualityEvaluation(
       temperature: 0,
       max_tokens: 2048,
     }),
+  }).catch((e) => {
+    throw new Error(`Failed to connect to ${chatUrl}: ${e.message}`);
   });
 
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
-    throw new Error(`Quality evaluation API error (${response.status}): ${detail}`);
+    throw new Error(`Quality evaluation API error (${response.status}) at ${chatUrl}: ${detail}`);
   }
 
   const data = await response.json();
