@@ -1,0 +1,188 @@
+/**
+ * Hook for running evaluations on chat messages.
+ * Integrates with the submit flow for auto-evaluation and
+ * exposes manual trigger functions.
+ */
+
+import { useCallback } from 'react';
+import useStore from '@store/store';
+import { runSafetyCheck, runQualityEvaluation } from '@api/evaluation';
+import { evaluationResultKey } from '@type/evaluation';
+import type { EvaluationResult } from '@type/evaluation';
+import type { ContentInterface } from '@type/chat';
+import type { ResolvedProvider } from './submitHelpers';
+
+function extractText(content: ContentInterface[]): string {
+  return content
+    .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+    .map((c) => c.text)
+    .join('\n');
+}
+
+export interface EvaluationContext {
+  chatId: string;
+  nodeId: string;
+  endpoint: string;
+  apiKey?: string;
+  model: string;
+}
+
+async function runEvaluationForPhase(
+  phase: 'pre-send' | 'post-receive',
+  userText: string,
+  assistantText: string | undefined,
+  ctx: EvaluationContext
+): Promise<void> {
+  const store = useStore.getState();
+  const settings = store.evaluationSettings;
+  const key = evaluationResultKey(ctx.chatId, ctx.nodeId, phase);
+
+  const shouldSafety =
+    (phase === 'pre-send' && settings.safetyPreSend === 'auto') ||
+    (phase === 'post-receive' && settings.safetyPostReceive === 'auto');
+
+  const shouldQuality =
+    (phase === 'pre-send' && settings.qualityPreSend === 'auto') ||
+    (phase === 'post-receive' && settings.qualityPostReceive === 'auto');
+
+  if (!shouldSafety && !shouldQuality) return;
+
+  store.setEvaluationPending(key, true);
+
+  const result: EvaluationResult = { phase };
+
+  try {
+    const textToCheck = phase === 'pre-send' ? userText : (assistantText ?? '');
+
+    if (shouldSafety && textToCheck) {
+      try {
+        result.safety = await runSafetyCheck(textToCheck, ctx.endpoint, ctx.apiKey);
+      } catch (e) {
+        console.warn('[evaluation] safety check failed:', e);
+      }
+    }
+
+    if (shouldQuality && userText) {
+      try {
+        result.quality = await runQualityEvaluation(
+          userText,
+          phase === 'post-receive' ? assistantText : undefined,
+          ctx.endpoint,
+          ctx.model,
+          ctx.apiKey
+        );
+      } catch (e) {
+        console.warn('[evaluation] quality evaluation failed:', e);
+      }
+    }
+
+    if (result.safety || result.quality) {
+      useStore.getState().setEvaluationResult(key, result);
+    }
+  } finally {
+    useStore.getState().setEvaluationPending(key, false);
+  }
+}
+
+/**
+ * Run auto-evaluations for pre-send phase.
+ * Called before the prompt is sent to the API.
+ */
+export async function runPreSendEvaluation(
+  userContent: ContentInterface[],
+  ctx: EvaluationContext
+): Promise<void> {
+  const userText = extractText(userContent);
+  if (!userText) return;
+  await runEvaluationForPhase('pre-send', userText, undefined, ctx);
+}
+
+/**
+ * Run auto-evaluations for post-receive phase.
+ * Called after the response is fully received.
+ */
+export async function runPostReceiveEvaluation(
+  userContent: ContentInterface[],
+  assistantContent: ContentInterface[],
+  ctx: EvaluationContext
+): Promise<void> {
+  const userText = extractText(userContent);
+  const assistantText = extractText(assistantContent);
+  if (!userText) return;
+  await runEvaluationForPhase('post-receive', userText, assistantText, ctx);
+}
+
+/**
+ * Hook providing manual evaluation trigger functions.
+ */
+export function useEvaluation() {
+  const triggerManualSafety = useCallback(
+    async (
+      text: string,
+      chatId: string,
+      nodeId: string,
+      phase: 'pre-send' | 'post-receive',
+      resolvedProvider: ResolvedProvider
+    ) => {
+      const store = useStore.getState();
+      const key = evaluationResultKey(chatId, nodeId, phase);
+      store.setEvaluationPending(key, true);
+      try {
+        const safety = await runSafetyCheck(
+          text,
+          resolvedProvider.endpoint,
+          resolvedProvider.key
+        );
+        const existing = store.evaluationResults[key];
+        store.setEvaluationResult(key, {
+          phase,
+          ...existing,
+          safety,
+        });
+      } catch (e) {
+        console.warn('[evaluation] manual safety check failed:', e);
+      } finally {
+        useStore.getState().setEvaluationPending(key, false);
+      }
+    },
+    []
+  );
+
+  const triggerManualQuality = useCallback(
+    async (
+      userText: string,
+      assistantText: string | undefined,
+      chatId: string,
+      nodeId: string,
+      phase: 'pre-send' | 'post-receive',
+      resolvedProvider: ResolvedProvider,
+      model: string
+    ) => {
+      const store = useStore.getState();
+      const key = evaluationResultKey(chatId, nodeId, phase);
+      store.setEvaluationPending(key, true);
+      try {
+        const quality = await runQualityEvaluation(
+          userText,
+          assistantText,
+          resolvedProvider.endpoint,
+          model,
+          resolvedProvider.key
+        );
+        const existing = store.evaluationResults[key];
+        store.setEvaluationResult(key, {
+          phase,
+          ...existing,
+          quality,
+        });
+      } catch (e) {
+        console.warn('[evaluation] manual quality evaluation failed:', e);
+      } finally {
+        useStore.getState().setEvaluationPending(key, false);
+      }
+    },
+    []
+  );
+
+  return { triggerManualSafety, triggerManualQuality };
+}

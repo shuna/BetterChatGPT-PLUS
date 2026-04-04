@@ -157,7 +157,8 @@
     "providers": "AIプロバイダー",
     "proxy": "ストリーム中継",
     "prompts": "プロンプト",
-    "data": "データ"
+    "data": "データ",
+    "evaluation": "評価"
   },
   "settingsSection": {
     "appearance": "外観",
@@ -240,6 +241,31 @@
       "a1": "サイドバーからプロバイダー設定を開き、プロバイダーを選択してAPIキーを入力してください。",
       "q2": "モデルを切り替えるには？",
       "a2": "チャットエリア上部のモデル名をクリックして、お気に入りのモデルから選択できます。"
+    }
+  },
+  "evaluation": {
+    "safetyTitle": "セーフティチェック",
+    "qualityTitle": "品質評価",
+    "safetyPreSend": "送信前セーフティ",
+    "safetyPostReceive": "受信後セーフティ",
+    "qualityPreSend": "送信前品質評価",
+    "qualityPostReceive": "��信後品質評価",
+    "modeOff": "オフ",
+    "modeManual": "手動",
+    "modeAuto": "自動",
+    "description": "セーフティチェックはOpenAI Moderation API互換エンドポイントを使用します。品質評価は別途LLMに評価を依頼します（追加APIコストが発生します）。",
+    "flagged": "検出あり",
+    "safe": "問題なし",
+    "showDetails": "詳細を表���",
+    "hideDetails": "詳細を隠す",
+    "promptSuggestions": "プロンプト改善案",
+    "configSuggestions": "モデル/パラメータ改善案",
+    "axis": {
+      "taskCompletion": "タスク達成度",
+      "faithfulness": "正確性",
+      "coherence": "一貫性",
+      "conciseness": "簡潔性",
+      "instructionFollowing": "指示遵守"
     }
   }
 }

@@ -147,8 +147,6 @@
   "unpin": "Unpin",
   "compareWith": "Compare with...",
   "compareWithSelected": "Compare with selected",
-  "cancel": "Cancel",
-  "save": "Save",
   "saveAsBranch": "Save as branch",
   "overwriteSave": "Overwrite",
   "regenerate": "Regenerate",
@@ -165,7 +163,8 @@
     "providers": "AI Providers",
     "proxy": "Stream Relay",
     "prompts": "Prompts",
-    "data": "Data"
+    "data": "Data",
+    "evaluation": "Evaluation"
   },
   "settingsSection": {
     "appearance": "Appearance",
@@ -245,6 +244,31 @@
       "a1": "Open the provider settings from the sidebar, select your provider, and enter your API key.",
       "q2": "How do I switch models?",
       "a2": "Click the model name at the top of the chat area to select from your favorite models."
+    }
+  },
+  "evaluation": {
+    "safetyTitle": "Safety Check",
+    "qualityTitle": "Quality Evaluation",
+    "safetyPreSend": "Pre-send Safety",
+    "safetyPostReceive": "Post-receive Safety",
+    "qualityPreSend": "Pre-send Quality",
+    "qualityPostReceive": "Post-receive Quality",
+    "modeOff": "Off",
+    "modeManual": "Manual",
+    "modeAuto": "Auto",
+    "description": "Safety check uses an OpenAI Moderation API-compatible endpoint. Quality evaluation sends the prompt/response to a separate LLM for assessment (additional API costs apply).",
+    "flagged": "Flagged",
+    "safe": "Safe",
+    "showDetails": "Show details",
+    "hideDetails": "Hide details",
+    "promptSuggestions": "Prompt improvements",
+    "configSuggestions": "Model/parameter suggestions",
+    "axis": {
+      "taskCompletion": "Task Completion",
+      "faithfulness": "Faithfulness",
+      "coherence": "Coherence",
+      "conciseness": "Conciseness",
+      "instructionFollowing": "Instruction Following"
     }
   }
 }

@@ -20,6 +20,7 @@ import {
 import ContentActions from './ContentActions';
 import ContentAttachments from './ContentAttachments';
 import ContentBody from './ContentBody';
+import EvaluationPanel from './EvaluationPanel';
 
 const ContentView = memo(
   ({
@@ -132,6 +133,12 @@ const ContentView = memo(
           nodeId={nodeId}
         />
         <ContentAttachments images={validImageContents} />
+        {nodeId && currentChatId && (
+          <>
+            <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='pre-send' />
+            <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='post-receive' />
+          </>
+        )}
         <ContentActions
           nodeId={nodeId}
           currentChatIndex={currentChatIndex}
