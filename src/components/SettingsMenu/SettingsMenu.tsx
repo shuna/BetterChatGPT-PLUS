@@ -102,6 +102,8 @@ const SettingsMenu = () => {
   const [initialTab, setInitialTab] = useState<TabId>('general');
   const showProviderMenu = useStore((state) => state.showProviderMenu);
   const setShowProviderMenu = useStore((state) => state.setShowProviderMenu);
+  const showProxySettings = useStore((state) => state.showProxySettings);
+  const setShowProxySettings = useStore((state) => state.setShowProxySettings);
 
   useEffect(() => {
     document.documentElement.className = theme;
@@ -115,6 +117,14 @@ const SettingsMenu = () => {
       setShowProviderMenu(false);
     }
   }, [showProviderMenu, setShowProviderMenu]);
+
+  useEffect(() => {
+    if (showProxySettings) {
+      setInitialTab('proxy');
+      setIsModalOpen(true);
+      setShowProxySettings(false);
+    }
+  }, [showProxySettings, setShowProxySettings]);
 
   return (
     <>

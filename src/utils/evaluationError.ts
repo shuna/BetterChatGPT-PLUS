@@ -1,6 +1,78 @@
 import type { TFunction } from 'i18next';
 
-type KnownEvaluationError =
+// ---------------------------------------------------------------------------
+// A) Structured error tags (thrown by evaluation.ts with [EVAL_*] prefixes)
+// ---------------------------------------------------------------------------
+
+interface StructuredErrorMatcher {
+  key: string;
+  tag: string;
+  /** Extract interpolation params from the error message */
+  params?: (message: string) => Record<string, string>;
+}
+
+const STRUCTURED_MATCHERS: StructuredErrorMatcher[] = [
+  {
+    key: 'apiKeyRequired',
+    tag: '[EVAL_API_KEY_REQUIRED]',
+  },
+  {
+    key: 'proxyNotConfigured',
+    tag: '[EVAL_PROXY_NOT_CONFIGURED]',
+  },
+  {
+    key: 'connectionFailed',
+    tag: '[EVAL_CONNECTION_FAILED]',
+    params: (msg) => {
+      const url = msg.match(/url=(\S+)/)?.[1] ?? '';
+      const detail = msg.match(/detail=(.+)/)?.[1] ?? '';
+      return { url, detail };
+    },
+  },
+  {
+    key: 'moderationApiError',
+    tag: '[EVAL_MODERATION_API_ERROR]',
+    params: (msg) => {
+      const status = msg.match(/status=(\d+)/)?.[1] ?? '';
+      const url = msg.match(/url=(\S+)/)?.[1] ?? '';
+      const detail = msg.match(/detail=(.+)/)?.[1] ?? '';
+      return { status, url, detail };
+    },
+  },
+  {
+    key: 'moderationEmptyResults',
+    tag: '[EVAL_MODERATION_EMPTY_RESULTS]',
+  },
+  {
+    key: 'qualityConnectionFailed',
+    tag: '[EVAL_QUALITY_CONNECTION_FAILED]',
+    params: (msg) => {
+      const url = msg.match(/url=(\S+)/)?.[1] ?? '';
+      const detail = msg.match(/detail=(.+)/)?.[1] ?? '';
+      return { url, detail };
+    },
+  },
+  {
+    key: 'qualityApiError',
+    tag: '[EVAL_QUALITY_API_ERROR]',
+    params: (msg) => {
+      const status = msg.match(/status=(\d+)/)?.[1] ?? '';
+      const url = msg.match(/url=(\S+)/)?.[1] ?? '';
+      const detail = msg.match(/detail=(.+)/)?.[1] ?? '';
+      return { status, url, detail };
+    },
+  },
+  {
+    key: 'qualityEmptyResponse',
+    tag: '[EVAL_QUALITY_EMPTY_RESPONSE]',
+  },
+];
+
+// ---------------------------------------------------------------------------
+// B) Known API error matchers (pattern-match on raw HTTP error bodies)
+// ---------------------------------------------------------------------------
+
+type KnownApiError =
   | 'invalidAuthentication'
   | 'incorrectApiKey'
   | 'orgMembershipRequired'
@@ -9,7 +81,7 @@ type KnownEvaluationError =
   | 'serverError'
   | 'engineOverloaded';
 
-const ERROR_MATCHERS: Array<{ key: KnownEvaluationError; test: (message: string) => boolean }> = [
+const API_ERROR_MATCHERS: Array<{ key: KnownApiError; test: (message: string) => boolean }> = [
   {
     key: 'invalidAuthentication',
     test: (message) =>
@@ -54,16 +126,47 @@ const ERROR_MATCHERS: Array<{ key: KnownEvaluationError; test: (message: string)
   },
 ];
 
-export function formatEvaluationErrorMessage(message: string, t: TFunction<'main'>): string {
-  const match = ERROR_MATCHERS.find((entry) => entry.test(message));
-  if (!match) return message;
+// ---------------------------------------------------------------------------
+// C) Public API
+// ---------------------------------------------------------------------------
 
-  const title = t(`evaluation.apiErrors.${match.key}.title`);
-  const description = t(`evaluation.apiErrors.${match.key}.description`);
-  const tip =
-    match.key === 'rateLimitReached' || match.key === 'quotaExceeded'
-      ? t(`evaluation.apiErrors.${match.key}.tip`)
-      : '';
+export interface FormattedEvaluationError {
+  message: string;
+  /** True when the error is due to proxy not being configured */
+  isProxyNotConfigured: boolean;
+}
 
-  return [message, `${title}\n${description}`, tip].filter(Boolean).join('\n\n');
+export function formatEvaluationErrorMessage(
+  message: string,
+  t: TFunction<'main'>
+): FormattedEvaluationError {
+  // 1) Check structured [EVAL_*] tags first
+  const structured = STRUCTURED_MATCHERS.find((m) => message.includes(m.tag));
+  if (structured) {
+    const params = structured.params?.(message) ?? {};
+    const title = t(`evaluation.errors.${structured.key}.title`);
+    const description = t(`evaluation.errors.${structured.key}.description`, params);
+    return {
+      message: `${title}\n${description}`,
+      isProxyNotConfigured: structured.key === 'proxyNotConfigured',
+    };
+  }
+
+  // 2) Check known API error patterns
+  const apiMatch = API_ERROR_MATCHERS.find((entry) => entry.test(message));
+  if (apiMatch) {
+    const title = t(`evaluation.apiErrors.${apiMatch.key}.title`);
+    const description = t(`evaluation.apiErrors.${apiMatch.key}.description`);
+    const tip =
+      apiMatch.key === 'rateLimitReached' || apiMatch.key === 'quotaExceeded'
+        ? t(`evaluation.apiErrors.${apiMatch.key}.tip`)
+        : '';
+    return {
+      message: [message, `${title}\n${description}`, tip].filter(Boolean).join('\n\n'),
+      isProxyNotConfigured: false,
+    };
+  }
+
+  // 3) Fallback — return raw message
+  return { message, isProxyNotConfigured: false };
 }

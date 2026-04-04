@@ -76,6 +76,9 @@ export interface ConfigSlice {
   setProxyEnabled: (enabled: boolean) => void;
   setProxyEndpoint: (endpoint: string) => void;
   setProxyAuthToken: (token: string) => void;
+  /** Signal to open settings dialog on the proxy tab */
+  showProxySettings: boolean;
+  setShowProxySettings: (show: boolean) => void;
 }
 
 export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
@@ -276,5 +279,9 @@ export const createConfigSlice: StoreSlice<ConfigSlice> = (set, get) => ({
   setProxyAuthToken: (token: string) => {
     if (get().proxyAuthToken === token) return;
     set((prev: ConfigSlice) => ({ ...prev, proxyAuthToken: token }));
+  },
+  showProxySettings: false,
+  setShowProxySettings: (show: boolean) => {
+    set((prev: ConfigSlice) => ({ ...prev, showProxySettings: show }));
   },
 });

@@ -289,6 +289,41 @@
         "description": "OpenAI's server is currently under high load."
       }
     },
+    "errors": {
+      "apiKeyRequired": {
+        "title": "OpenAI API key not configured",
+        "description": "An OpenAI API key is required for safety checks. Please configure it in Settings > Providers > OpenAI."
+      },
+      "proxyNotConfigured": {
+        "title": "Proxy not configured",
+        "description": "Safety checks require a Stream Relay proxy. Please configure the proxy URL in Settings > Proxy."
+      },
+      "connectionFailed": {
+        "title": "Connection failed",
+        "description": "Failed to connect to {{url}}: {{detail}}"
+      },
+      "moderationApiError": {
+        "title": "Moderation API error",
+        "description": "Moderation API error ({{status}}) at {{url}}: {{detail}}"
+      },
+      "moderationEmptyResults": {
+        "title": "Empty response",
+        "description": "Moderation API returned empty results."
+      },
+      "qualityConnectionFailed": {
+        "title": "Connection failed",
+        "description": "Failed to connect to quality evaluation API at {{url}}: {{detail}}"
+      },
+      "qualityApiError": {
+        "title": "Quality evaluation API error",
+        "description": "Quality evaluation API error ({{status}}) at {{url}}: {{detail}}"
+      },
+      "qualityEmptyResponse": {
+        "title": "Empty response",
+        "description": "Quality evaluation returned empty response."
+      }
+    },
+    "openProxySettings": "Open Proxy Settings",
     "flagged": "Flagged",
     "safe": "Safe",
     "showDetails": "Show details",

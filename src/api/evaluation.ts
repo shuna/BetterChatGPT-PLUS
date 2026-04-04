@@ -37,10 +37,7 @@ export function resolveOpenAiCredentials(): { endpoint: string; apiKey: string }
   const openaiProvider = state.providers?.openai;
   const apiKey = openaiProvider?.apiKey;
   if (!apiKey) {
-    throw new Error(
-      'OpenAI API key is required for safety checks. ' +
-      'Please configure it in Settings > Providers > OpenAI.'
-    );
+    throw new Error('[EVAL_API_KEY_REQUIRED]');
   }
   const endpoint = openaiProvider?.endpoint ?? DEFAULT_PROVIDERS.openai.endpoint;
   return { endpoint, apiKey };
@@ -55,41 +52,34 @@ export async function runSafetyCheck(
 ): Promise<SafetyCheckResult> {
   const { endpoint, apiKey } = resolveOpenAiCredentials();
   const moderationUrl = deriveBaseUrl(endpoint) + '/moderations';
-  const { proxyEnabled, proxyEndpoint, proxyAuthToken } = useStore.getState();
+  const { proxyEndpoint, proxyAuthToken } = useStore.getState();
 
-  const response = await (
-    proxyEnabled && proxyEndpoint
-      ? runModerationViaProxy(
-          {
-            endpoint: proxyEndpoint.replace(/\/+$/, ''),
-            authToken: proxyAuthToken || undefined,
-          },
-          {
-            endpoint: moderationUrl,
-            apiKey,
-            input: text,
-          }
-        )
-      : fetch(moderationUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({ input: text }),
-        })
+  if (!proxyEndpoint) {
+    throw new Error('[EVAL_PROXY_NOT_CONFIGURED]');
+  }
+
+  const response = await runModerationViaProxy(
+    {
+      endpoint: proxyEndpoint.replace(/\/+$/, ''),
+      authToken: proxyAuthToken || undefined,
+    },
+    {
+      endpoint: moderationUrl,
+      apiKey,
+      input: text,
+    }
   ).catch((e) => {
-    throw new Error(`Failed to connect to ${moderationUrl}: ${e.message}`);
+    throw new Error(`[EVAL_CONNECTION_FAILED] url=${moderationUrl} detail=${e.message}`);
   });
 
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
-    throw new Error(`Moderation API error (${response.status}) at ${moderationUrl}: ${detail}`);
+    throw new Error(`[EVAL_MODERATION_API_ERROR] status=${response.status} url=${moderationUrl} detail=${detail}`);
   }
 
   const data = await response.json();
   const result = data.results?.[0];
-  if (!result) throw new Error('Moderation API returned empty results');
+  if (!result) throw new Error('[EVAL_MODERATION_EMPTY_RESULTS]');
 
   return {
     flagged: result.flagged ?? false,
@@ -218,17 +208,17 @@ export async function runQualityEvaluation(
       max_tokens: 2048,
     }),
   }).catch((e) => {
-    throw new Error(`Failed to connect to ${chatUrl}: ${e.message}`);
+    throw new Error(`[EVAL_QUALITY_CONNECTION_FAILED] url=${chatUrl} detail=${e.message}`);
   });
 
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
-    throw new Error(`Quality evaluation API error (${response.status}) at ${chatUrl}: ${detail}`);
+    throw new Error(`[EVAL_QUALITY_API_ERROR] status=${response.status} url=${chatUrl} detail=${detail}`);
   }
 
   const data = await response.json();
   const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error('Quality evaluation returned empty response');
+  if (!content) throw new Error('[EVAL_QUALITY_EMPTY_RESPONSE]');
 
   const result = parseJudgeResponse(content);
   return { ...result, timestamp: Date.now() };

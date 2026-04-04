@@ -284,6 +284,41 @@
         "description": "OpenAIのサーバーが高負荷状態です。"
       }
     },
+    "errors": {
+      "apiKeyRequired": {
+        "title": "OpenAI APIキー未設定",
+        "description": "セーフティチェックにはOpenAI APIキーが必要です。設定 > プロバイダー > OpenAI で設定してください。"
+      },
+      "proxyNotConfigured": {
+        "title": "プロキシ未設定",
+        "description": "セーフティチェックにはStream Relayプロキシが必要です。設定 > プロキシ でプロキシURLを設定してください。"
+      },
+      "connectionFailed": {
+        "title": "接続失敗",
+        "description": "{{url}} への接続に失敗しました: {{detail}}"
+      },
+      "moderationApiError": {
+        "title": "Moderation APIエラー",
+        "description": "Moderation APIエラー ({{status}}) {{url}}: {{detail}}"
+      },
+      "moderationEmptyResults": {
+        "title": "空レスポンス",
+        "description": "Moderation APIが空の結果を返しました。"
+      },
+      "qualityConnectionFailed": {
+        "title": "接続失敗",
+        "description": "品質評価APIへの接続に失敗しました ({{url}}): {{detail}}"
+      },
+      "qualityApiError": {
+        "title": "品質評価APIエラー",
+        "description": "品質評価APIエラー ({{status}}) {{url}}: {{detail}}"
+      },
+      "qualityEmptyResponse": {
+        "title": "空レスポンス",
+        "description": "品質評価APIが空のレスポンスを返しました。"
+      }
+    },
+    "openProxySettings": "プロキシ設定を開く",
     "flagged": "検出あり",
     "safe": "問題なし",
     "showDetails": "詳細を表示",

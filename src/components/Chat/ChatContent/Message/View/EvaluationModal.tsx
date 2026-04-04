@@ -12,6 +12,7 @@ import type {
 import { runSafetyCheck, runQualityEvaluation } from '@api/evaluation';
 import type { ResolvedProvider } from '@hooks/submitHelpers';
 import { formatEvaluationErrorMessage } from '@utils/evaluationError';
+import type { FormattedEvaluationError } from '@utils/evaluationError';
 
 type TabId = 'safety' | 'quality';
 
@@ -30,9 +31,23 @@ interface EvaluationModalProps {
 // Safety Tab
 // ---------------------------------------------------------------------------
 
-const ErrorBanner = ({ message }: { message: string }) => (
+const ErrorBanner = ({
+  message,
+  action,
+}: {
+  message: string;
+  action?: { label: string; onClick: () => void };
+}) => (
   <div className='rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 text-sm text-red-700 dark:text-red-400 break-all whitespace-pre-wrap'>
     {message}
+    {action && (
+      <button
+        className='mt-2 block rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors'
+        onClick={action.onClick}
+      >
+        {action.label}
+      </button>
+    )}
   </div>
 );
 
@@ -41,11 +56,13 @@ const SafetyTab = ({
   isRunning,
   onReEvaluate,
   error,
+  onOpenProxySettings,
 }: {
   result?: SafetyCheckResult;
   isRunning: boolean;
   onReEvaluate: () => void;
-  error?: string | null;
+  error?: FormattedEvaluationError | null;
+  onOpenProxySettings: () => void;
 }) => {
   const { t } = useTranslation('main');
 
@@ -86,7 +103,16 @@ const SafetyTab = ({
         </button>
       </div>
 
-      {error && <ErrorBanner message={error} />}
+      {error && (
+        <ErrorBanner
+          message={error.message}
+          action={
+            error.isProxyNotConfigured
+              ? { label: t('evaluation.openProxySettings'), onClick: onOpenProxySettings }
+              : undefined
+          }
+        />
+      )}
 
       {/* Category table */}
       {categoryEntries.length > 0 && (
@@ -144,7 +170,7 @@ const QualityTab = ({
   result?: QualityEvaluationResult;
   isRunning: boolean;
   onReEvaluate: () => void;
-  error?: string | null;
+  error?: FormattedEvaluationError | null;
 }) => {
   const { t } = useTranslation('main');
 
@@ -177,7 +203,7 @@ const QualityTab = ({
         </button>
       </div>
 
-      {error && <ErrorBanner message={error} />}
+      {error && <ErrorBanner message={error.message} />}
 
       {/* Radar chart + Table */}
       {result && (
@@ -303,8 +329,9 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
   const [activeTab, setActiveTab] = useState<TabId>('safety');
   const [safetyRunning, setSafetyRunning] = useState(false);
   const [qualityRunning, setQualityRunning] = useState(false);
-  const [safetyError, setSafetyError] = useState<string | null>(null);
-  const [qualityError, setQualityError] = useState<string | null>(null);
+  const [safetyError, setSafetyError] = useState<FormattedEvaluationError | null>(null);
+  const [qualityError, setQualityError] = useState<FormattedEvaluationError | null>(null);
+  const setShowProxySettings = useStore((state) => state.setShowProxySettings);
 
   const key = evaluationResultKey(chatId, nodeId, phase);
   const result: EvaluationResult | undefined = useStore(
@@ -409,6 +436,10 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
             isRunning={safetyRunning}
             onReEvaluate={handleRunSafety}
             error={safetyError}
+            onOpenProxySettings={() => {
+              setIsModalOpen(false);
+              setShowProxySettings(true);
+            }}
           />
         )}
         {activeTab === 'quality' && (
