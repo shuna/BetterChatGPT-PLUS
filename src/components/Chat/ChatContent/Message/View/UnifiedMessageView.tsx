@@ -1,6 +1,7 @@
-import React, { memo, useState } from 'react';
+import React, { memo, useCallback, useState } from 'react';
 import useStore from '@store/store';
 import useSubmit from '@hooks/useSubmit';
+import { resolveProviderForModel, type ResolvedProvider } from '@hooks/submitHelpers';
 import {
   ContentInterface,
   ImageContentInterface,
@@ -15,6 +16,8 @@ import ContentActions from './ContentActions';
 import ContentAttachments from './ContentAttachments';
 import EditViewButtons from './EditViewButtons';
 import ContentBody from './ContentBody';
+import EvaluationPanel from './EvaluationPanel';
+import EvaluationModal from './EvaluationModal';
 import PopupModal from '@components/PopupModal';
 import { useTranslation } from 'react-i18next';
 import { useModelType } from '@utils/modelLookup';
@@ -56,6 +59,7 @@ const UnifiedMessageView = memo(
       handleUnknownContextCancel,
     } = useSubmit();
     const [isDelete, setIsDelete] = useState(false);
+    const [isEvalModalOpen, setIsEvalModalOpen] = useState(false);
 
     const currentChatIndex = useStore((state) => state.currentChatIndex);
     const removeMessageAtIndex = useStore((state) => state.removeMessageAtIndex);
@@ -133,6 +137,59 @@ const UnifiedMessageView = memo(
         handleSubmitMidChat(plan.insertIndex);
       }
     };
+
+    const handleEvaluate = useCallback(() => {
+      setIsEvalModalOpen(true);
+    }, []);
+
+    const getEvalContext = useCallback(() => {
+      const state = useStore.getState();
+      const chat = state.chats?.[currentChatIndex];
+      if (!chat || !nodeId || !currentChatId) return null;
+
+      const config = chat.config;
+      const fallbackProvider: ResolvedProvider = {
+        endpoint: state.apiEndpoint,
+        key: state.apiKey,
+      };
+      const resolved = resolveProviderForModel(
+        config.model,
+        state.favoriteModels || [],
+        state.providers || {},
+        fallbackProvider,
+        config.providerId
+      );
+
+      const currentText = content
+        .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+        .map((c) => c.text)
+        .join('\n');
+
+      const phase: 'pre-send' | 'post-receive' =
+        role === 'user' ? 'pre-send' : 'post-receive';
+
+      let userText = '';
+      let assistantText: string | undefined;
+
+      if (role === 'user') {
+        userText = currentText;
+      } else {
+        const idx = resolveCurrentMessageIndex();
+        for (let i = idx - 1; i >= 0; i--) {
+          const msg = chat.messages[i];
+          if (msg.role === 'user') {
+            userText = msg.content
+              .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+              .map((c) => c.text)
+              .join('\n');
+            break;
+          }
+        }
+        assistantText = currentText;
+      }
+
+      return { phase, userText, assistantText, resolved, model: config.model };
+    }, [currentChatIndex, currentChatId, nodeId, content, role]);
 
     const streamingText = useStreamingText(isGeneratingMessage ? nodeId : undefined);
     const streamingReasoning = useStreamingReasoning(isGeneratingMessage ? nodeId : undefined);
@@ -246,6 +303,12 @@ const UnifiedMessageView = memo(
               />
             </div>
             <ContentAttachments images={isEditState ? [] : validImageContents} />
+            {nodeId && currentChatId && (
+              <>
+                <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='pre-send' />
+                <EvaluationPanel chatId={currentChatId} nodeId={nodeId} phase='post-receive' />
+              </>
+            )}
             <ContentActions
               nodeId={nodeId}
               currentChatIndex={currentChatIndex}
@@ -264,8 +327,25 @@ const UnifiedMessageView = memo(
               onCopy={handleCopy}
               onDelete={handleDelete}
               showEvaluateButton={true}
-              onEvaluate={() => {}}
+              onEvaluate={handleEvaluate}
             />
+            {(() => {
+              if (!isEvalModalOpen || !nodeId || !currentChatId) return null;
+              const ctx = getEvalContext();
+              if (!ctx) return null;
+              return (
+                <EvaluationModal
+                  chatId={currentChatId}
+                  nodeId={nodeId}
+                  phase={ctx.phase}
+                  userText={ctx.userText}
+                  assistantText={ctx.assistantText}
+                  resolvedProvider={ctx.resolved}
+                  model={ctx.model}
+                  setIsModalOpen={setIsEvalModalOpen}
+                />
+              );
+            })()}
             {isUnknownContextConfirmOpen && (
               <PopupModal
                 setIsModalOpen={setIsUnknownContextConfirmOpen}
