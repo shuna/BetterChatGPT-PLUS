@@ -1,7 +1,7 @@
 /** Evaluation feature types */
 
 /** Trigger mode for each evaluation dimension */
-export type EvaluationTriggerMode = 'off' | 'manual' | 'auto';
+export type EvaluationTriggerMode = 'manual' | 'auto';
 
 /** The 4 evaluation slots: safety/quality × pre-send/post-receive */
 export interface EvaluationSettings {

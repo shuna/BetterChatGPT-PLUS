@@ -75,17 +75,6 @@ const ContentView = memo(
       return protectedNodes[resolvedNodeId] ?? false;
     });
 
-    // Show evaluate button if any evaluation setting is not 'off'
-    const hasEvaluation = useStore((state) => {
-      const s = state.evaluationSettings;
-      return (
-        s.safetyPreSend !== 'off' ||
-        s.safetyPostReceive !== 'off' ||
-        s.qualityPreSend !== 'off' ||
-        s.qualityPostReceive !== 'off'
-      );
-    });
-
     const resolveCurrentMessageIndex = () => {
       if (!nodeId) return messageIndex;
       const activePath =
@@ -228,7 +217,7 @@ const ContentView = memo(
           isProtected={isProtected}
           isGeneratingMessage={isGeneratingMessage}
           isCurrentChatGenerating={isCurrentChatGenerating}
-          showEvaluateButton={hasEvaluation}
+          showEvaluateButton={true}
           setIsEdit={setIsEdit}
           setIsDelete={setIsDelete}
           onRefresh={handleRefresh}

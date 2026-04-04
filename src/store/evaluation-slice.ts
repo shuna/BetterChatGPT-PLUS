@@ -21,10 +21,10 @@ export interface EvaluationSlice {
 }
 
 const defaultSettings: EvaluationSettings = {
-  safetyPreSend: 'off',
-  safetyPostReceive: 'off',
-  qualityPreSend: 'off',
-  qualityPostReceive: 'off',
+  safetyPreSend: 'manual',
+  safetyPostReceive: 'manual',
+  qualityPreSend: 'manual',
+  qualityPostReceive: 'manual',
 };
 
 export const createEvaluationSlice: StoreSlice<EvaluationSlice> = (set, get) => ({

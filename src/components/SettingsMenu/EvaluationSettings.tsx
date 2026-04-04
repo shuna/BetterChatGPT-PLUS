@@ -5,7 +5,6 @@ import { SettingsGroup, SettingsRow } from './SettingsMenu';
 import type { EvaluationSettings as EvaluationSettingsType, EvaluationTriggerMode } from '@type/evaluation';
 
 const modeOptions: { value: EvaluationTriggerMode; labelKey: string }[] = [
-  { value: 'off', labelKey: 'evaluation.modeOff' },
   { value: 'manual', labelKey: 'evaluation.modeManual' },
   { value: 'auto', labelKey: 'evaluation.modeAuto' },
 ];
