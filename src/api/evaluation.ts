@@ -6,6 +6,8 @@
 
 import type { SafetyCheckResult, QualityEvaluationResult, QualityScores } from '@type/evaluation';
 import { qualityAxisKeys } from '@type/evaluation';
+import useStore from '@store/store';
+import { DEFAULT_PROVIDERS } from '@store/provider-config';
 
 // ---------------------------------------------------------------------------
 // A) Safety Check — OpenAI Moderation API
@@ -25,15 +27,36 @@ function deriveBaseUrl(endpoint: string): string {
   return endpoint.replace(/\/chat\/completions\/?$/, '').replace(/\/+$/, '');
 }
 
+/**
+ * Resolve the OpenAI API key from the provider store.
+ * Safety checks always use OpenAI's Moderation API regardless of the chat model.
+ */
+export function resolveOpenAiCredentials(): { endpoint: string; apiKey: string } {
+  const state = useStore.getState();
+  const openaiProvider = state.providers?.openai;
+  const apiKey = openaiProvider?.apiKey;
+  if (!apiKey) {
+    throw new Error(
+      'OpenAI API key is required for safety checks. ' +
+      'Please configure it in Settings > Providers > OpenAI.'
+    );
+  }
+  const endpoint = openaiProvider?.endpoint ?? DEFAULT_PROVIDERS.openai.endpoint;
+  return { endpoint, apiKey };
+}
+
+/**
+ * Run safety check via OpenAI Moderation API.
+ * Always uses the OpenAI provider regardless of the current chat model/provider.
+ */
 export async function runSafetyCheck(
   text: string,
-  endpoint: string,
-  apiKey?: string
 ): Promise<SafetyCheckResult> {
+  const { endpoint, apiKey } = resolveOpenAiCredentials();
   const moderationUrl = deriveBaseUrl(endpoint) + '/moderations';
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+  headers.Authorization = `Bearer ${apiKey}`;
 
   const response = await fetch(moderationUrl, {
     method: 'POST',

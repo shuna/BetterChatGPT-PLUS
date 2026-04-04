@@ -316,11 +316,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
     setSafetyRunning(true);
     setSafetyError(null);
     try {
-      const safety = await runSafetyCheck(
-        textToCheck,
-        resolvedProvider.endpoint,
-        resolvedProvider.key
-      );
+      const safety = await runSafetyCheck(textToCheck);
       const existing = useStore.getState().evaluationResults[key];
       useStore.getState().setEvaluationResult(key, {
         ...existing,

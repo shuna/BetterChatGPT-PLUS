@@ -56,7 +56,7 @@ async function runEvaluationForPhase(
 
     if (shouldSafety && textToCheck) {
       try {
-        result.safety = await runSafetyCheck(textToCheck, ctx.endpoint, ctx.apiKey);
+        result.safety = await runSafetyCheck(textToCheck);
       } catch (e) {
         console.warn('[evaluation] safety check failed:', e);
       }
@@ -128,11 +128,7 @@ export function useEvaluation() {
       const key = evaluationResultKey(chatId, nodeId, phase);
       store.setEvaluationPending(key, true);
       try {
-        const safety = await runSafetyCheck(
-          text,
-          resolvedProvider.endpoint,
-          resolvedProvider.key
-        );
+        const safety = await runSafetyCheck(text);
         const existing = store.evaluationResults[key];
         store.setEvaluationResult(key, {
           ...existing,
