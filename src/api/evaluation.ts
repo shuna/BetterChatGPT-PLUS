@@ -1,86 +1,123 @@
 /**
  * Evaluation API utilities:
- * A) Safety check via OpenAI-compatible Moderation API
+ * A) Safety check via Chat Completions (LLM-based content moderation)
  * B) Quality evaluation via LLM-as-Judge (chat completion)
+ *
+ * Both use the standard /chat/completions endpoint so they work with
+ * any OpenAI-compatible provider and avoid CORS / 404 issues with
+ * dedicated endpoints like /moderations.
  */
 
 import type { SafetyCheckResult, QualityEvaluationResult, QualityScores } from '@type/evaluation';
 import { qualityAxisKeys } from '@type/evaluation';
-import useStore from '@store/store';
-import { DEFAULT_PROVIDERS } from '@store/provider-config';
 
 // ---------------------------------------------------------------------------
-// A) Safety Check — OpenAI Moderation API
+// Shared helpers
 // ---------------------------------------------------------------------------
 
-/**
- * Call the OpenAI Moderation endpoint (or compatible).
- * Falls back to the provider's base endpoint + /moderations path.
- */
-/**
- * Derive the base URL from a chat completions endpoint.
- * e.g. "https://api.openai.com/v1/chat/completions" → "https://api.openai.com/v1"
- *      "https://openrouter.ai/api/v1/chat/completions" → "https://openrouter.ai/api/v1"
- *      "https://api.openai.com/v1" → "https://api.openai.com/v1"
- */
 function deriveBaseUrl(endpoint: string): string {
   return endpoint.replace(/\/chat\/completions\/?$/, '').replace(/\/+$/, '');
 }
 
-/**
- * Resolve the OpenAI API key from the provider store.
- * Safety checks always use OpenAI's Moderation API regardless of the chat model.
- */
-export function resolveOpenAiCredentials(): { endpoint: string; apiKey: string } {
-  const state = useStore.getState();
-  const openaiProvider = state.providers?.openai;
-  const apiKey = openaiProvider?.apiKey;
-  if (!apiKey) {
-    throw new Error(
-      'OpenAI API key is required for safety checks. ' +
-      'Please configure it in Settings > Providers > OpenAI.'
-    );
-  }
-  const endpoint = openaiProvider?.endpoint ?? DEFAULT_PROVIDERS.openai.endpoint;
-  return { endpoint, apiKey };
+function ensureChatCompletionsUrl(endpoint: string): string {
+  return endpoint.includes('/chat/completions')
+    ? endpoint
+    : deriveBaseUrl(endpoint) + '/chat/completions';
 }
 
-/**
- * Run safety check via OpenAI Moderation API.
- * Always uses the OpenAI provider regardless of the current chat model/provider.
- */
-export async function runSafetyCheck(
-  text: string,
-): Promise<SafetyCheckResult> {
-  const { endpoint, apiKey } = resolveOpenAiCredentials();
-  const moderationUrl = deriveBaseUrl(endpoint) + '/moderations';
+async function chatCompletion(
+  endpoint: string,
+  model: string,
+  messages: Array<{ role: string; content: string }>,
+  apiKey?: string,
+): Promise<string> {
+  const url = ensureChatCompletionsUrl(endpoint);
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  headers.Authorization = `Bearer ${apiKey}`;
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
-  const response = await fetch(moderationUrl, {
+  const response = await fetch(url, {
     method: 'POST',
     headers,
-    body: JSON.stringify({ input: text }),
+    body: JSON.stringify({
+      model,
+      messages,
+      temperature: 0,
+      max_tokens: 2048,
+    }),
   }).catch((e) => {
-    throw new Error(`Failed to connect to ${moderationUrl}: ${e.message}`);
+    throw new Error(`Failed to connect to ${url}: ${e.message}`);
   });
 
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
-    throw new Error(`Moderation API error (${response.status}) at ${moderationUrl}: ${detail}`);
+    throw new Error(`API error (${response.status}) at ${url}: ${detail}`);
   }
 
   const data = await response.json();
-  const result = data.results?.[0];
-  if (!result) throw new Error('Moderation API returned empty results');
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error(`Empty response from ${url}`);
+  return content;
+}
+
+// ---------------------------------------------------------------------------
+// A) Safety Check — via Chat Completions
+// ---------------------------------------------------------------------------
+
+const SAFETY_SYSTEM_PROMPT = `You are a content moderation system. Analyze the given text and check for the following categories of harmful content. For each category, provide a boolean flag (true if detected) and a confidence score (0.0-1.0).
+
+Categories:
+- sexual: Sexual content
+- hate: Hate speech
+- harassment: Harassment
+- self-harm: Self-harm content
+- violence: Violence
+- sexual/minors: Sexual content involving minors
+- hate/threatening: Threatening hate speech
+- violence/graphic: Graphic violence
+- harassment/threatening: Threatening harassment
+- self-harm/intent: Self-harm intent
+- self-harm/instructions: Self-harm instructions
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "flagged": false,
+  "categories": { "sexual": false, "hate": false, "harassment": false, "self-harm": false, "violence": false, "sexual/minors": false, "hate/threatening": false, "violence/graphic": false, "harassment/threatening": false, "self-harm/intent": false, "self-harm/instructions": false },
+  "category_scores": { "sexual": 0.0, "hate": 0.0, "harassment": 0.0, "self-harm": 0.0, "violence": 0.0, "sexual/minors": 0.0, "hate/threatening": 0.0, "violence/graphic": 0.0, "harassment/threatening": 0.0, "self-harm/intent": 0.0, "self-harm/instructions": 0.0 }
+}
+
+Set "flagged" to true if ANY category is true.`;
+
+function parseSafetyResponse(text: string): Omit<SafetyCheckResult, 'timestamp'> {
+  const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
+  const jsonStr = jsonMatch[1]?.trim() ?? text.trim();
+  const parsed = JSON.parse(jsonStr);
 
   return {
-    flagged: result.flagged ?? false,
-    categories: result.categories ?? {},
-    categoryScores: result.category_scores ?? {},
-    timestamp: Date.now(),
+    flagged: parsed.flagged ?? false,
+    categories: parsed.categories ?? {},
+    categoryScores: parsed.category_scores ?? {},
   };
+}
+
+/**
+ * Run safety check using the chat completions endpoint.
+ * Uses the same provider/model as the chat — works with any provider.
+ */
+export async function runSafetyCheck(
+  text: string,
+  endpoint: string,
+  model: string,
+  apiKey?: string
+): Promise<SafetyCheckResult> {
+  const messages = [
+    { role: 'system', content: SAFETY_SYSTEM_PROMPT },
+    { role: 'user', content: text },
+  ];
+
+  const responseText = await chatCompletion(endpoint, model, messages, apiKey);
+  const result = parseSafetyResponse(responseText);
+  return { ...result, timestamp: Date.now() };
 }
 
 // ---------------------------------------------------------------------------
@@ -145,10 +182,8 @@ function buildJudgeMessages(
 }
 
 function parseJudgeResponse(text: string): Omit<QualityEvaluationResult, 'timestamp'> {
-  // Extract JSON from markdown code blocks if present
   const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
   const jsonStr = jsonMatch[1]?.trim() ?? text.trim();
-
   const parsed = JSON.parse(jsonStr);
 
   const scores: QualityScores = {
@@ -184,36 +219,8 @@ export async function runQualityEvaluation(
   model: string,
   apiKey?: string
 ): Promise<QualityEvaluationResult> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-
   const messages = buildJudgeMessages(userPrompt, assistantResponse);
-  const chatUrl = endpoint.includes('/chat/completions')
-    ? endpoint
-    : deriveBaseUrl(endpoint) + '/chat/completions';
-
-  const response = await fetch(chatUrl, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: 0,
-      max_tokens: 2048,
-    }),
-  }).catch((e) => {
-    throw new Error(`Failed to connect to ${chatUrl}: ${e.message}`);
-  });
-
-  if (!response.ok) {
-    const detail = await response.text().catch(() => '');
-    throw new Error(`Quality evaluation API error (${response.status}) at ${chatUrl}: ${detail}`);
-  }
-
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error('Quality evaluation returned empty response');
-
-  const result = parseJudgeResponse(content);
+  const responseText = await chatCompletion(endpoint, model, messages, apiKey);
+  const result = parseJudgeResponse(responseText);
   return { ...result, timestamp: Date.now() };
 }
