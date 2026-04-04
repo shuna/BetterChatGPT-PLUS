@@ -43,6 +43,12 @@ interface StreamRequest {
   sessionId: string;
 }
 
+interface ModerationProxyRequest {
+  endpoint: string;
+  apiKey: string;
+  input: string;
+}
+
 function isStringRecord(value: unknown): value is Record<string, string> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return false;
@@ -409,6 +415,57 @@ async function handleStream(
 }
 
 // ---------------------------------------------------------------------------
+// Moderation proxy - forwards non-streaming moderation requests
+// ---------------------------------------------------------------------------
+
+async function handleModeration(request: Request): Promise<Response> {
+  let parsed: ModerationProxyRequest;
+  try {
+    parsed = (await request.json()) as ModerationProxyRequest;
+  } catch {
+    return jsonResponse({ error: 'Invalid JSON body' }, 400);
+  }
+
+  const { endpoint, apiKey, input } = parsed;
+  if (
+    typeof endpoint !== 'string' ||
+    typeof apiKey !== 'string' ||
+    typeof input !== 'string' ||
+    !endpoint ||
+    !apiKey
+  ) {
+    return jsonResponse({ error: 'endpoint, apiKey, and input are required' }, 400);
+  }
+
+  let upstream: Response;
+  try {
+    upstream = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ input }),
+    });
+  } catch (e) {
+    return jsonResponse(
+      { error: `Failed to reach Moderation API: ${(e as Error).message}` },
+      502
+    );
+  }
+
+  const text = await upstream.text();
+  return withCORS(
+    new Response(text, {
+      status: upstream.status,
+      headers: {
+        'Content-Type': upstream.headers.get('Content-Type') || 'application/json',
+      },
+    })
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Recovery handler - replays missed chunks from KV (with polling)
 // ---------------------------------------------------------------------------
 
@@ -669,6 +726,11 @@ export default {
     // POST /api/stream - Start proxied SSE stream
     if (url.pathname === '/api/stream' && request.method === 'POST') {
       return handleStream(request, env, ctx);
+    }
+
+    // POST /api/moderation - Forward a moderation request
+    if (url.pathname === '/api/moderation' && request.method === 'POST') {
+      return handleModeration(request);
     }
 
     // POST /api/cancel/:sessionId - Cancel upstream LLM stream

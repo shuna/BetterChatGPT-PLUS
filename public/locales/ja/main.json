@@ -77,7 +77,7 @@
   "enterToSubmit": "Enterキーを押して送信",
   "animateBubbleNavigation": "アニメーション効果",
   "submitPlaceholder": "メッセージを入力するか、[/] をクリックしてプロンプトを表示します...",
-  "proxyDescription": "AIの応答ストリームを中継サーバー経由で受信します。ネットワークが途切れた場合に、生成された応答を復旧できる場合があります。",
+  "proxyDescription": "AIの応答ストリームとセーフティチェックを中継サーバー経由で処理します。ネットワークが途切れた場合に生成済み応答を復旧できる場合があり、ブラウザ実行時のセーフティチェックでは CORS 回避にも使われます。",
   "proxySettings": "ストリーム中継",
   "proxyEnabled": "ストリーム中継を使用",
   "proxyEndpoint": "中継サーバーURL",
@@ -251,7 +251,39 @@
     "modeOff": "オフ",
     "modeManual": "手動",
     "modeAuto": "自動",
-    "description": "セーフティチェックはOpenAI Moderation API互換エンドポイントを使用します。品質評価は別途LLMに評価を依頼します（追加APIコストが発生します）。",
+    "description": "セーフティチェックはOpenAI Moderation API互換エンドポイントを使用します。ブラウザ実行時は CORS 回避のため Stream Relay を設定してください。品質評価は別途LLMに評価を依頼します（追加APIコストが発生します）。",
+    "apiErrors": {
+      "invalidAuthentication": {
+        "title": "401 Invalid Authentication",
+        "description": "APIキーまたは組織IDが正しくありません。"
+      },
+      "incorrectApiKey": {
+        "title": "401 Incorrect API key provided",
+        "description": "APIキーが間違っている、期限切れ、または無効化されています。"
+      },
+      "orgMembershipRequired": {
+        "title": "401 You must be a member of an organization to use the API",
+        "description": "ユーザーのアカウントが組織に所属していません。"
+      },
+      "rateLimitReached": {
+        "title": "429 Rate limit reached for requests",
+        "description": "一定時間内に送信できるリクエスト数を超えました。",
+        "tip": "Tip: フリーアカウントではこの制限に当たりやすいです。APIアカウントが free tier のままなら、前払い残高を $5 追加して Tier 1 に上げると利用可能な上限が改善する場合があります。"
+      },
+      "quotaExceeded": {
+        "title": "429 You exceeded your current quota, please check your plan and billing details",
+        "description": "ユーザーが設定した最大月間使用量を超えました。",
+        "tip": "Tip: APIアカウントが free tier のままなら、前払い残高を $5 追加して Tier 1 に上げると利用できるようになる場合があります。あわせて OpenAI ダッシュボードの月間予算と billing 設定も確認してください。"
+      },
+      "serverError": {
+        "title": "500 The server had an error while proceeding your request",
+        "description": "OpenAIのサーバー側で問題が発生しました。"
+      },
+      "engineOverloaded": {
+        "title": "503 The engine is currently overloaded, please try again later",
+        "description": "OpenAIのサーバーが高負荷状態です。"
+      }
+    },
     "flagged": "検出あり",
     "safe": "問題なし",
     "showDetails": "詳細を表示",

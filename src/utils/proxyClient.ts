@@ -94,6 +94,23 @@ export async function recoverFromProxy(
   }
 }
 
+/**
+ * Forward a moderation request through the relay worker to avoid browser CORS.
+ */
+export async function runModerationViaProxy(
+  config: ProxyConfig,
+  payload: { endpoint: string; apiKey: string; input: string }
+): Promise<Response> {
+  return fetch(`${config.endpoint}/api/moderation`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders(config),
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Proxy SSE parsing
 // ---------------------------------------------------------------------------

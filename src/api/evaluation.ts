@@ -8,6 +8,7 @@ import type { SafetyCheckResult, QualityEvaluationResult, QualityScores } from '
 import { qualityAxisKeys } from '@type/evaluation';
 import useStore from '@store/store';
 import { DEFAULT_PROVIDERS } from '@store/provider-config';
+import { runModerationViaProxy } from '@utils/proxyClient';
 
 // ---------------------------------------------------------------------------
 // A) Safety Check — OpenAI Moderation API
@@ -54,15 +55,30 @@ export async function runSafetyCheck(
 ): Promise<SafetyCheckResult> {
   const { endpoint, apiKey } = resolveOpenAiCredentials();
   const moderationUrl = deriveBaseUrl(endpoint) + '/moderations';
+  const { proxyEnabled, proxyEndpoint, proxyAuthToken } = useStore.getState();
 
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  headers.Authorization = `Bearer ${apiKey}`;
-
-  const response = await fetch(moderationUrl, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ input: text }),
-  }).catch((e) => {
+  const response = await (
+    proxyEnabled && proxyEndpoint
+      ? runModerationViaProxy(
+          {
+            endpoint: proxyEndpoint.replace(/\/+$/, ''),
+            authToken: proxyAuthToken || undefined,
+          },
+          {
+            endpoint: moderationUrl,
+            apiKey,
+            input: text,
+          }
+        )
+      : fetch(moderationUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({ input: text }),
+        })
+  ).catch((e) => {
     throw new Error(`Failed to connect to ${moderationUrl}: ${e.message}`);
   });
 

@@ -91,7 +91,7 @@
   "exportVisibleBranchOnly": "Include only the currently visible branch",
   "enterToSubmit": "Enter to submit",
   "animateBubbleNavigation": "Animation effects",
-  "proxyDescription": "Route AI response streams through a relay server. May allow recovery of generated responses when the network connection is interrupted.",
+  "proxyDescription": "Route AI response streams and safety checks through a relay server. May allow recovery of generated responses when the network connection is interrupted, and lets browser-based safety checks avoid CORS limits.",
   "proxySettings": "Stream Relay",
   "proxyEnabled": "Use Stream Relay",
   "proxyEndpoint": "Relay Server URL",
@@ -256,7 +256,39 @@
     "modeOff": "Off",
     "modeManual": "Manual",
     "modeAuto": "Auto",
-    "description": "Safety check uses an OpenAI Moderation API-compatible endpoint. Quality evaluation sends the prompt/response to a separate LLM for assessment (additional API costs apply).",
+    "description": "Safety check uses an OpenAI Moderation API-compatible endpoint. In browser environments, configure Stream Relay to proxy safety checks around CORS limits. Quality evaluation sends the prompt/response to a separate LLM for assessment (additional API costs apply).",
+    "apiErrors": {
+      "invalidAuthentication": {
+        "title": "401 Invalid Authentication",
+        "description": "The API key or organization ID is incorrect."
+      },
+      "incorrectApiKey": {
+        "title": "401 Incorrect API key provided",
+        "description": "The API key is incorrect, expired, or disabled."
+      },
+      "orgMembershipRequired": {
+        "title": "401 You must be a member of an organization to use the API",
+        "description": "The user account is not a member of an organization."
+      },
+      "rateLimitReached": {
+        "title": "429 Rate limit reached for requests",
+        "description": "The number of requests allowed within a certain time window has been exceeded.",
+        "tip": "Tip: Free accounts may hit this more easily. If your API account is still on the free tier, adding $5 of prepaid credit can qualify it for Tier 1 and may improve available limits."
+      },
+      "quotaExceeded": {
+        "title": "429 You exceeded your current quota, please check your plan and billing details",
+        "description": "The user-configured monthly usage limit has been exceeded.",
+        "tip": "Tip: If the API account is still on the free tier, adding $5 of prepaid credit can qualify it for Tier 1. Also check monthly budget and billing settings in the OpenAI dashboard."
+      },
+      "serverError": {
+        "title": "500 The server had an error while proceeding your request",
+        "description": "An issue occurred on OpenAI's server side."
+      },
+      "engineOverloaded": {
+        "title": "503 The engine is currently overloaded, please try again later",
+        "description": "OpenAI's server is currently under high load."
+      }
+    },
     "flagged": "Flagged",
     "safe": "Safe",
     "showDetails": "Show details",

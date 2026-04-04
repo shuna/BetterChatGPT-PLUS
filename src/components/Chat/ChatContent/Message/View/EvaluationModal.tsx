@@ -11,6 +11,7 @@ import type {
 } from '@type/evaluation';
 import { runSafetyCheck, runQualityEvaluation } from '@api/evaluation';
 import type { ResolvedProvider } from '@hooks/submitHelpers';
+import { formatEvaluationErrorMessage } from '@utils/evaluationError';
 
 type TabId = 'safety' | 'quality';
 
@@ -30,7 +31,7 @@ interface EvaluationModalProps {
 // ---------------------------------------------------------------------------
 
 const ErrorBanner = ({ message }: { message: string }) => (
-  <div className='rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 text-sm text-red-700 dark:text-red-400 break-all'>
+  <div className='rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 text-sm text-red-700 dark:text-red-400 break-all whitespace-pre-wrap'>
     {message}
   </div>
 );
@@ -325,7 +326,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setSafetyError(msg);
+      setSafetyError(formatEvaluationErrorMessage(msg, t));
       console.warn('[evaluation] safety check failed:', e);
     } finally {
       setSafetyRunning(false);
@@ -352,7 +353,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setQualityError(msg);
+      setQualityError(formatEvaluationErrorMessage(msg, t));
       console.warn('[evaluation] quality evaluation failed:', e);
     } finally {
       setQualityRunning(false);

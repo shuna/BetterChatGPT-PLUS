@@ -84,6 +84,10 @@ npx wrangler dev
 
 The Worker runs at `http://localhost:8787`.
 
+This Worker can also proxy safety checks via `POST /api/moderation`, which is
+useful for browser clients that can call chat completions directly but hit CORS
+restrictions on moderation endpoints.
+
 ## API
 
 ### `POST /api/stream`
@@ -122,6 +126,25 @@ data: "data: {\"choices\":[...]}\n\n"
 event: done
 data: {}
 ```
+
+### `POST /api/moderation`
+
+Proxies a moderation request to an OpenAI-compatible Moderation API endpoint.
+
+**Headers:**
+- `Authorization: Bearer <PROXY_AUTH_TOKEN>` (if token is set)
+- `Content-Type: application/json`
+
+**Body:**
+```json
+{
+  "endpoint": "https://api.openai.com/v1/moderations",
+  "apiKey": "sk-...",
+  "input": "text to classify"
+}
+```
+
+**Response:** The upstream moderation JSON with the original status code.
 
 ### `POST /api/ack/:sessionId`
 
