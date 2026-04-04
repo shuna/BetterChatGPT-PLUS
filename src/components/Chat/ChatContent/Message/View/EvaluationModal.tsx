@@ -29,14 +29,22 @@ interface EvaluationModalProps {
 // Safety Tab
 // ---------------------------------------------------------------------------
 
+const ErrorBanner = ({ message }: { message: string }) => (
+  <div className='rounded-md bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 text-sm text-red-700 dark:text-red-400 break-all'>
+    {message}
+  </div>
+);
+
 const SafetyTab = ({
   result,
   isRunning,
   onReEvaluate,
+  error,
 }: {
   result?: SafetyCheckResult;
   isRunning: boolean;
   onReEvaluate: () => void;
+  error?: string | null;
 }) => {
   const { t } = useTranslation('main');
 
@@ -76,6 +84,8 @@ const SafetyTab = ({
           {isRunning ? t('evaluation.running') : result ? t('evaluation.reEvaluate') : t('evaluation.runEvaluation')}
         </button>
       </div>
+
+      {error && <ErrorBanner message={error} />}
 
       {/* Category table */}
       {categoryEntries.length > 0 && (
@@ -128,10 +138,12 @@ const QualityTab = ({
   result,
   isRunning,
   onReEvaluate,
+  error,
 }: {
   result?: QualityEvaluationResult;
   isRunning: boolean;
   onReEvaluate: () => void;
+  error?: string | null;
 }) => {
   const { t } = useTranslation('main');
 
@@ -163,6 +175,8 @@ const QualityTab = ({
           {isRunning ? t('evaluation.running') : result ? t('evaluation.reEvaluate') : t('evaluation.runEvaluation')}
         </button>
       </div>
+
+      {error && <ErrorBanner message={error} />}
 
       {/* Radar chart + Table */}
       {result && (
@@ -288,6 +302,8 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
   const [activeTab, setActiveTab] = useState<TabId>('safety');
   const [safetyRunning, setSafetyRunning] = useState(false);
   const [qualityRunning, setQualityRunning] = useState(false);
+  const [safetyError, setSafetyError] = useState<string | null>(null);
+  const [qualityError, setQualityError] = useState<string | null>(null);
 
   const key = evaluationResultKey(chatId, nodeId, phase);
   const result: EvaluationResult | undefined = useStore(
@@ -298,6 +314,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
     const textToCheck = phase === 'pre-send' ? userText : (assistantText ?? userText);
     if (!textToCheck) return;
     setSafetyRunning(true);
+    setSafetyError(null);
     try {
       const safety = await runSafetyCheck(
         textToCheck,
@@ -311,6 +328,8 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
         safety,
       });
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setSafetyError(msg);
       console.warn('[evaluation] safety check failed:', e);
     } finally {
       setSafetyRunning(false);
@@ -320,6 +339,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
   const handleRunQuality = useCallback(async () => {
     if (!userText) return;
     setQualityRunning(true);
+    setQualityError(null);
     try {
       const quality = await runQualityEvaluation(
         userText,
@@ -335,6 +355,8 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
         quality,
       });
     } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setQualityError(msg);
       console.warn('[evaluation] quality evaluation failed:', e);
     } finally {
       setQualityRunning(false);
@@ -389,6 +411,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
             result={result?.safety}
             isRunning={safetyRunning}
             onReEvaluate={handleRunSafety}
+            error={safetyError}
           />
         )}
         {activeTab === 'quality' && (
@@ -396,6 +419,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
             result={result?.quality}
             isRunning={qualityRunning}
             onReEvaluate={handleRunQuality}
+            error={qualityError}
           />
         )}
       </div>

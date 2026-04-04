@@ -15,12 +15,22 @@ import { qualityAxisKeys } from '@type/evaluation';
  * Call the OpenAI Moderation endpoint (or compatible).
  * Falls back to the provider's base endpoint + /moderations path.
  */
+/**
+ * Derive the base URL from a chat completions endpoint.
+ * e.g. "https://api.openai.com/v1/chat/completions" → "https://api.openai.com/v1"
+ *      "https://openrouter.ai/api/v1/chat/completions" → "https://openrouter.ai/api/v1"
+ *      "https://api.openai.com/v1" → "https://api.openai.com/v1"
+ */
+function deriveBaseUrl(endpoint: string): string {
+  return endpoint.replace(/\/chat\/completions\/?$/, '').replace(/\/+$/, '');
+}
+
 export async function runSafetyCheck(
   text: string,
   endpoint: string,
   apiKey?: string
 ): Promise<SafetyCheckResult> {
-  const moderationUrl = endpoint.replace(/\/chat\/completions\/?$/, '/moderations');
+  const moderationUrl = deriveBaseUrl(endpoint) + '/moderations';
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
@@ -153,8 +163,11 @@ export async function runQualityEvaluation(
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
   const messages = buildJudgeMessages(userPrompt, assistantResponse);
+  const chatUrl = endpoint.includes('/chat/completions')
+    ? endpoint
+    : deriveBaseUrl(endpoint) + '/chat/completions';
 
-  const response = await fetch(endpoint, {
+  const response = await fetch(chatUrl, {
     method: 'POST',
     headers,
     body: JSON.stringify({
