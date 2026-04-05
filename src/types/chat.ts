@@ -183,6 +183,8 @@ export interface ConfigInterface {
   reasoning_effort?: ReasoningEffort;
   reasoning_budget_tokens?: number;
   verbosity?: Verbosity;
+  /** Per-chat system prompt. This is the source of truth; the top system bubble is a synced view. */
+  systemPrompt?: string;
 }
 
 export interface ChatHistoryInterface {

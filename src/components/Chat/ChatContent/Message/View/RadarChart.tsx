@@ -9,6 +9,9 @@ interface RadarChartProps {
   size?: number;
   /** Optional color override. When provided the internal avg-based heuristic is skipped. */
   colorOverride?: { fill: string; stroke: string };
+  /** When true, axis scale is inverted: center = 1.0, outer edge = 0.0.
+   *  Useful for safety scores where lower = better. */
+  invertAxis?: boolean;
 }
 
 /**
@@ -20,13 +23,16 @@ const RadarChart: React.FC<RadarChartProps> = ({
   scores,
   size = 240,
   colorOverride,
+  invertAxis = false,
 }) => {
-  const padding = 60; // extra space for labels
-  const vbSize = size + padding * 2;
-  const cx = vbSize / 2;
-  const cy = vbSize / 2;
-  const radius = size * 0.35; // chart size unchanged
-  const labelRadius = radius + 24;
+  const hPadding = 90; // horizontal space for labels
+  const vPadding = 0;  // no vertical padding
+  const vbW = size + hPadding * 2;
+  const vbH = size + vPadding * 2;
+  const cx = vbW / 2;
+  const cy = vbH / 2;
+  const radius = size * 0.34;
+  const labelRadius = radius + 42;
   const n = labels.length;
   const levels = 5; // concentric rings
 
@@ -40,8 +46,12 @@ const RadarChart: React.FC<RadarChartProps> = ({
   const polygonPoints = (r: number) =>
     Array.from({ length: n }, (_, i) => pointAt(i, r).join(',')).join(' ');
 
+  // When invertAxis, map score to radius: 0.0 → full radius (outer), 1.0 → center
+  const scoreToRadius = (s: number) =>
+    invertAxis ? radius * Math.max(1 - s, 0.02) : radius * Math.max(s, 0.02);
+
   const scorePoints = scores
-    .map((s, i) => pointAt(i, radius * Math.max(s, 0.02)).join(','))
+    .map((s, i) => pointAt(i, scoreToRadius(s)).join(','))
     .join(' ');
 
   const scoreColor = (score: number) => {
@@ -55,10 +65,10 @@ const RadarChart: React.FC<RadarChartProps> = ({
 
   return (
     <svg
-      width={size}
-      height={size}
-      viewBox={`0 0 ${vbSize} ${vbSize}`}
+      width='100%'
+      viewBox={`0 0 ${vbW} ${vbH}`}
       className='select-none'
+      style={{ display: 'block' }}
     >
       {/* Concentric grid rings */}
       {Array.from({ length: levels }, (_, l) => {
@@ -102,7 +112,7 @@ const RadarChart: React.FC<RadarChartProps> = ({
 
       {/* Score dots */}
       {scores.map((s, i) => {
-        const [x, y] = pointAt(i, radius * Math.max(s, 0.02));
+        const [x, y] = pointAt(i, scoreToRadius(s));
         return (
           <circle
             key={`dot-${i}`}
@@ -114,7 +124,7 @@ const RadarChart: React.FC<RadarChartProps> = ({
         );
       })}
 
-      {/* Labels */}
+      {/* Labels — split long labels into two lines */}
       {labels.map((label, i) => {
         const [x, y] = pointAt(i, labelRadius);
         const a = angleOf(i);
@@ -130,25 +140,46 @@ const RadarChart: React.FC<RadarChartProps> = ({
             : Math.sin(a) > 0
             ? 'hanging'
             : 'auto';
+        // Split long labels into two lines at natural break points
+        const splitLabel = (text: string): string[] => {
+          if (text.includes('/')) return text.split('/').map((s, j) => j === 0 ? s + '/' : s);
+          if (text.length <= 7) return [text];
+          // Try splitting at particles that form natural phrase breaks
+          const particles = ['を伴う', 'の'];
+          for (const p of particles) {
+            const idx = text.indexOf(p);
+            if (idx > 0 && idx + p.length < text.length) {
+              return [text.slice(0, idx + p.length), text.slice(idx + p.length)];
+            }
+          }
+          return [text];
+        };
+        const lines = splitLabel(label);
+        const lineHeight = 16;
+        const yOffset = lines.length > 1 ? -lineHeight / 2 : 0;
         return (
           <text
             key={`label-${i}`}
             x={x}
-            y={y}
+            y={y + yOffset}
             textAnchor={anchor}
             dominantBaseline={baseline}
             className='fill-gray-600 dark:fill-gray-400'
-            fontSize={11}
+            fontSize={16}
           >
-            {label}
+            {lines.map((line, li) => (
+              <tspan key={li} x={x} dy={li === 0 ? 0 : lineHeight}>
+                {line}
+              </tspan>
+            ))}
           </text>
         );
       })}
 
-      {/* Percentage labels on score points */}
+      {/* Percentage labels — placed between outer ring and item labels */}
       {scores.map((s, i) => {
-        const [x, y] = pointAt(i, radius * Math.max(s, 0.02));
-        const offsetY = y < cy ? -10 : 10;
+        const [x, y] = pointAt(i, radius + 14);
+        const offsetY = 0;
         return (
           <text
             key={`pct-${i}`}
@@ -157,7 +188,7 @@ const RadarChart: React.FC<RadarChartProps> = ({
             textAnchor='middle'
             dominantBaseline='central'
             className='fill-gray-500 dark:fill-gray-400'
-            fontSize={9}
+            fontSize={14}
             fontWeight='bold'
           >
             {Math.round(s * 100)}%

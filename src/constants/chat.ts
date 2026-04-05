@@ -42,28 +42,22 @@ export const _defaultChatConfig: ConfigInterface = {
 export const generateDefaultChat = (
   title?: string,
   folder?: string
-): ChatInterface => ({
-  id: uuidv4(),
-  title: title ? title : 'New Chat',
-  messages:
-    useStore.getState().defaultSystemMessage.length > 0
-      ? [
-          {
-            role: 'system',
-            content: [
-              {
-                type: 'text',
-                text: useStore.getState().defaultSystemMessage,
-              } as TextContentInterface,
-            ],
-          },
-        ]
-      : [],
-  config: normalizeConfigStream({ ...useStore.getState().defaultChatConfig }),
-  titleSet: false,
-  folder,
-  imageDetail: useStore.getState().defaultImageDetail,
-});
+): ChatInterface => {
+  const state = useStore.getState();
+  const systemPrompt = state.defaultSystemMessage || undefined;
+  return {
+    id: uuidv4(),
+    title: title ? title : 'New Chat',
+    messages: [],
+    config: normalizeConfigStream({
+      ...state.defaultChatConfig,
+      systemPrompt,
+    }),
+    titleSet: false,
+    folder,
+    imageDetail: state.defaultImageDetail,
+  };
+};
 
 export const codeLanguageSubset = [
   'python',

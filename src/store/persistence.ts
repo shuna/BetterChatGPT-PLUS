@@ -1,4 +1,5 @@
 import { materializeActivePath, buildPathToLeaf } from '@utils/branchUtils';
+import { normalizeSystemPrompt } from '@utils/systemPromptNormalize';
 import { ensureUniqueChatIds } from '@utils/chatIdentity';
 import { ContentStoreData, validateDeltaIntegrity } from '@utils/contentStore';
 import {
@@ -440,6 +441,13 @@ export const rehydrateStoreState = (state: StoreState) => {
         console.warn('[rehydrate] skipping corrupt branchTree for chat', chat.id, e);
         repairedChatTitles.push(chat.title || chat.id);
       }
+    }
+
+    // Normalize system prompt: migrate system bubbles → config.systemPrompt
+    try {
+      normalizeSystemPrompt(chat, contentStore);
+    } catch (e) {
+      console.warn('[rehydrate] system prompt normalization failed for chat', chat.id, e);
     }
   });
   if (repairedChatTitles.length > 0) {

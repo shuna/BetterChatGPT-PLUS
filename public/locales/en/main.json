@@ -387,9 +387,18 @@
     "scopeSingle": "This prompt only",
     "includeOmitted": "Include omitted messages",
     "conditionSingle": "This prompt only",
-    "conditionFullRespectOmitted": "Full context (omitted reflected)",
-    "conditionFullIncludeOmitted": "Full context (omitted included)",
+    "conditionFullRespectOmitted": "Full context",
+    "conditionFullIncludeOmitted": "Evaluate without omitting",
     "noContext": "Cannot resolve evaluation context",
-    "noUserText": "No user messages found in the selected context"
+    "noUserText": "No user messages found in the selected context",
+    "noSystemText": "No system prompt text found",
+    "systemNotSupported": "This model does not support system role evaluation",
+    "systemAxis": {
+      "roleClarity": "Role Clarity",
+      "constraintConsistency": "Constraint Consistency",
+      "safetyAdequacy": "Safety Adequacy",
+      "conciseness": "Conciseness",
+      "operability": "Operability"
+    }
   }
 }

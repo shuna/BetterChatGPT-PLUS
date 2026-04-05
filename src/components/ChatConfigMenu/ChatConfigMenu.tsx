@@ -35,7 +35,8 @@ const isSameConfig = (left: typeof _defaultChatConfig, right: typeof _defaultCha
   left.presence_penalty === right.presence_penalty &&
   left.frequency_penalty === right.frequency_penalty &&
   (left.stream !== false) === (right.stream !== false) &&
-  left.providerId === right.providerId;
+  left.providerId === right.providerId &&
+  (left.systemPrompt ?? '') === (right.systemPrompt ?? '');
 
 const ChatConfigMenu = () => {
   const { t } = useTranslation('model');

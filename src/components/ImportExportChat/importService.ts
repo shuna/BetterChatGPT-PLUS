@@ -18,6 +18,7 @@ import {
 import { flatMessagesToBranchTree } from '@utils/branchUtils';
 import { assignFreshChatIds } from '@utils/chatIdentity';
 import { ContentStoreData, addContent } from '@utils/contentStore';
+import { normalizeSystemPrompt } from '@utils/systemPromptNormalize';
 import { isKnownModel } from '@utils/modelLookup';
 import { BranchNodeLegacy, ChatInterface, Folder, FolderCollection } from '@type/chat';
 import { ExportV1, ExportV2, ExportV3, OpenAIChat, OpenAIPlaygroundJSON } from '@type/export';
@@ -99,6 +100,15 @@ const resetChatsOnlyForReplace = () => {
 
 const mergeChats = (chatsToImport: ChatInterface[]) => {
   assignFreshChatIds(chatsToImport);
+  // Normalize system prompts: migrate system bubbles → config.systemPrompt
+  const contentStore = useStore.getState().contentStore ?? {};
+  for (const chat of chatsToImport) {
+    try {
+      normalizeSystemPrompt(chat, contentStore);
+    } catch (e) {
+      console.warn('[import] system prompt normalization failed for chat', chat.id, e);
+    }
+  }
   const existingChats = useStore.getState().chats;
   if (existingChats) {
     useStore.getState().setChats(chatsToImport.concat(cloneState(existingChats)));

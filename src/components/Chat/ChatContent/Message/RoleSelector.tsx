@@ -8,18 +8,20 @@ import { Role, roles } from '@type/chat';
 import useHideOnOutsideClick from '@hooks/useHideOnOutsideClick';
 
 type RoleSelectorProps =
-  | { role: Role; sticky: true; nodeId?: undefined; messageIndex?: undefined }
-  | { role: Role; sticky?: false; nodeId: string; messageIndex: number };
+  | { role: Role; sticky: true; nodeId?: undefined; messageIndex?: undefined; allowSystem?: boolean }
+  | { role: Role; sticky?: false; nodeId: string; messageIndex: number; allowSystem?: boolean };
 
 const RoleSelector = React.memo(
   (props: RoleSelectorProps) => {
-    const { role, sticky, nodeId, messageIndex } = props;
+    const { role, sticky, nodeId, messageIndex, allowSystem = false } = props;
     const { t } = useTranslation();
     const setInputRole = useStore((state) => state.setInputRole);
     const updateNodeRole = useStore((state) => state.updateNodeRole);
     const currentChatIndex = useStore((state) => state.currentChatIndex);
 
     const [dropDown, setDropDown, dropDownRef] = useHideOnOutsideClick();
+
+    const availableRoles = allowSystem ? roles : roles.filter((r) => r !== 'system');
 
     return (
       <div className='prose dark:prose-invert relative'>
@@ -43,7 +45,7 @@ const RoleSelector = React.memo(
             className='text-sm text-gray-700 dark:text-gray-200 p-0 m-0'
             aria-labelledby='dropdownDefaultButton'
           >
-            {roles.map((r) => (
+            {availableRoles.map((r) => (
               <li
                 className='px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-600 dark:hover:text-white cursor-pointer'
                 onClick={() => {

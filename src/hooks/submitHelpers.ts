@@ -132,16 +132,13 @@ export const resolveProviderForModel = (
   };
 };
 
+/** Check if model supports system role (reasoning models don't) */
+const modelSupportsSystemRole = (modelId: string): boolean => {
+  return !isReasoningModel(modelId);
+};
+
 const isReasoningModel = (modelId: string): boolean =>
   modelId.startsWith('o1-') || modelId.startsWith('o3-') || modelId.startsWith('o1 ');
-
-const stripSystemMessages = (
-  messages: MessageInterface[],
-  modelId: string
-): MessageInterface[] => {
-  if (!isReasoningModel(modelId)) return messages;
-  return messages.filter((m) => m.role !== 'system');
-};
 
 const sanitizeMessageContent = (
   content: ContentInterface[]
@@ -216,13 +213,29 @@ export const getSubmitContextMessages = (
   _mode: SubmitMode,
   messageIndex: number,
   modelId?: string,
-  chatIndex?: number
+  chatIndex?: number,
+  systemPrompt?: string
 ): MessageInterface[] => {
   const sliced = messages.slice(0, messageIndex);
   const filtered = chatIndex !== undefined
     ? filterOmittedMessages(sliced, chatIndex)
     : sliced;
-  return modelId ? stripSystemMessages(filtered, modelId) : filtered;
+
+  // Strip ALL system-role messages from the message array (config is the source of truth)
+  const withoutSystem = filtered.filter((m) => m.role !== 'system');
+
+  // Sanitize (clean content, merge consecutive same-role, etc.)
+  const sanitized = sanitizeMessagesForSubmit(withoutSystem);
+
+  // Prepend config system prompt if non-empty and model supports it
+  const supportsSystem = modelId ? modelSupportsSystemRole(modelId) : true;
+  if (systemPrompt && supportsSystem) {
+    return [
+      { role: 'system', content: [{ type: 'text', text: systemPrompt } as TextContentInterface] },
+      ...sanitized,
+    ];
+  }
+  return sanitized;
 };
 
 export const applySubmitTokenUsage = async (
@@ -244,10 +257,19 @@ export const applySubmitTokenUsage = async (
   const assistantMessage = messages[assistantMessageIndex];
   if (!assistantMessage) return;
 
-  const promptMessages = filterOmittedMessages(
+  let promptMessages = filterOmittedMessages(
     messages.slice(0, assistantMessageIndex),
     chatIndex
-  );
+  ).filter((m) => m.role !== 'system');
+
+  // Include config systemPrompt in token counting
+  if (config.systemPrompt && modelSupportsSystemRole(config.model)) {
+    promptMessages = [
+      { role: 'system', content: [{ type: 'text', text: config.systemPrompt } as TextContentInterface] },
+      ...promptMessages,
+    ];
+  }
+
   await updateTotalTokenUsed(
     config.model,
     promptMessages,

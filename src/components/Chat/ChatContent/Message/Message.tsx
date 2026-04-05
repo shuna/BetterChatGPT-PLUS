@@ -175,7 +175,7 @@ const Message = React.memo(
               <div className='flex items-center gap-2.5'>
                 <Avatar role={role} />
                 {advancedMode && (
-                  <RoleSelector role={role} sticky />
+                  <RoleSelector role={role} sticky allowSystem={false} />
                 )}
               </div>
               <div className='w-full'>
@@ -193,7 +193,7 @@ const Message = React.memo(
               <div className='flex items-center gap-2.5'>
                 <Avatar role={role} />
                 {advancedMode && resolvedNodeId && (
-                  <RoleSelector role={role} nodeId={resolvedNodeId} messageIndex={messageIndex} />
+                  <RoleSelector role={role} nodeId={resolvedNodeId} messageIndex={messageIndex} allowSystem={messageIndex === 0} />
                 )}
                 <div className='ml-auto'>
                   <MetaActions

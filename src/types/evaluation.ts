@@ -74,6 +74,31 @@ export const qualityAxisKeys: (keyof QualityScores)[] = [
   'instructionFollowing',
 ];
 
+/** Quality evaluation mode determines which prompt/axes set to use */
+export type QualityEvaluationMode = 'user' | 'assistant' | 'system';
+
+/** System-specific quality evaluation axes */
+export interface SystemQualityScores {
+  /** Clarity of role definition */
+  roleClarity: number;
+  /** Consistency of constraints and priorities */
+  constraintConsistency: number;
+  /** Adequacy of safety constraints */
+  safetyAdequacy: number;
+  /** Brevity vs verbosity */
+  conciseness: number;
+  /** Practical usability */
+  operability: number;
+}
+
+export const systemQualityAxisKeys: (keyof SystemQualityScores)[] = [
+  'roleClarity',
+  'constraintConsistency',
+  'safetyAdequacy',
+  'conciseness',
+  'operability',
+];
+
 /** Per-axis quality thresholds: score < red → red, score < green → yellow, else → green */
 export interface QualityAxisThreshold {
   red: number;
@@ -90,17 +115,30 @@ export const defaultQualityThresholds: QualityThresholds = {
   instructionFollowing: { red: 0.5, green: 0.8 },
 };
 
-/** Result from quality evaluation (LLM-as-Judge) */
-export interface QualityEvaluationResult {
+/** Standard quality result (user/assistant evaluation) */
+export interface StandardQualityEvaluationResult {
+  kind: 'standard';
   scores: QualityScores;
-  /** Per-axis justification from the judge */
   reasoning: Partial<Record<keyof QualityScores, string>>;
-  /** Concrete suggestions for improving the prompt */
   promptSuggestions: string[];
-  /** Suggestions for model / parameter changes */
   configSuggestions: string[];
   timestamp: number;
 }
+
+/** System role quality result */
+export interface SystemQualityEvaluationResult {
+  kind: 'system';
+  scores: SystemQualityScores;
+  reasoning: Partial<Record<keyof SystemQualityScores, string>>;
+  promptSuggestions: string[];
+  configSuggestions: string[];
+  timestamp: number;
+}
+
+/** Result from quality evaluation (LLM-as-Judge) */
+export type QualityEvaluationResult =
+  | StandardQualityEvaluationResult
+  | SystemQualityEvaluationResult;
 
 /** Evaluation scope: single prompt vs full conversation context */
 export type EvaluationScope = 'single' | 'full-context';

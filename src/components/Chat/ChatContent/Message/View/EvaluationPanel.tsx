@@ -60,14 +60,23 @@ const QualitySummary = ({ result }: { result: QualityEvaluationResult }) => {
       <div className='text-xs font-semibold text-gray-600 dark:text-gray-400'>
         {t('evaluation.qualityTitle')}
       </div>
-      {qualityAxisKeys.map((axis) => (
-        <ScoreBar
-          key={axis}
-          score={result.scores[axis]}
-          label={t(`evaluation.axis.${axis}`)}
-          threshold={qualityThresholds[axis]}
-        />
-      ))}
+      {result.kind === 'system'
+        ? (Object.keys(result.scores) as string[]).map((axis) => (
+            <ScoreBar
+              key={axis}
+              score={(result.scores as unknown as Record<string, number>)[axis]}
+              label={t(`evaluation.systemAxis.${axis}`)}
+              threshold={qualityThresholds[axis as keyof typeof qualityThresholds] ?? { red: 0.5, green: 0.8 }}
+            />
+          ))
+        : qualityAxisKeys.map((axis) => (
+            <ScoreBar
+              key={axis}
+              score={result.scores[axis]}
+              label={t(`evaluation.axis.${axis}`)}
+              threshold={qualityThresholds[axis]}
+            />
+          ))}
     </div>
   );
 };

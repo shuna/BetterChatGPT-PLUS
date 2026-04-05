@@ -5,6 +5,7 @@ import {
   ContentInterface,
   MessageInterface,
   Role,
+  isTextContent,
 } from '@type/chat';
 import {
   buildPathToLeaf,
@@ -19,9 +20,28 @@ import {
   addContentDelta,
   isContentEqual,
   releaseContent,
+  resolveContent,
   retainContent,
 } from '@utils/contentStore';
 import { v4 as uuidv4 } from 'uuid';
+
+/** Extract concatenated text from content array */
+const extractSystemText = (content: ContentInterface[]): string =>
+  content.filter(isTextContent).map((c) => c.text).filter(Boolean).join('\n');
+
+/** Sync system bubble content → config.systemPrompt when index-0 system node is edited */
+const syncBubbleToConfig = (
+  chat: ChatInterface,
+  tree: NonNullable<ChatInterface['branchTree']>,
+  contentStore: ContentStoreData
+): void => {
+  const topNodeId = tree.activePath[0];
+  if (!topNodeId) return;
+  const topNode = tree.nodes[topNodeId];
+  if (!topNode || topNode.role !== 'system') return;
+  const content = resolveContent(contentStore, topNode.contentHash);
+  chat.config = { ...chat.config, systemPrompt: extractSystemText(content) || undefined };
+};
 
 export const cloneChatAt = (
   chats: ChatInterface[],
@@ -428,6 +448,11 @@ export const upsertMessageAtIndexState = (
     }
   }
 
+  // Sync: if index-0 system node was edited, update config.systemPrompt
+  if (messageIndex === 0) {
+    syncBubbleToConfig(chat, tree, contentStore);
+  }
+
   return finalizePreparedBranchMutationState({
     chats: updatedChats,
     chat,
@@ -522,6 +547,19 @@ export const moveMessageState = (
   const { chats: updatedChats, chat, tree, contentStore } =
     prepareBranchMutationState(chats, chatIndex, currentContentStore);
   const targetIndex = direction === 'up' ? messageIndex - 1 : messageIndex + 1;
+
+  // Guard: system node at index 0 is pinned — cannot be moved or swapped with
+  const topNode = tree.activePath[0] ? tree.nodes[tree.activePath[0]] : undefined;
+  if (topNode?.role === 'system') {
+    if (messageIndex === 0 || targetIndex === 0) {
+      return finalizePreparedBranchMutationState({
+        chats: updatedChats,
+        chat,
+        tree,
+        contentStore,
+      });
+    }
+  }
 
   if (
     targetIndex < 0 ||
@@ -703,9 +741,24 @@ export const updateNodeRoleState = (
   contentStore: ContentStoreData
 ) => {
   const updatedChats = cloneChatAt(chats, chatIndex);
-  const tree = updatedChats[chatIndex].branchTree!;
+  const chat = updatedChats[chatIndex];
+  const tree = chat.branchTree!;
+  const prevRole = tree.nodes[nodeId]?.role;
   tree.nodes[nodeId] = { ...tree.nodes[nodeId], role };
-  updatedChats[chatIndex].messages = materializeActivePath(tree, contentStore);
+
+  // Sync config.systemPrompt when index-0 node role changes
+  const isTopNode = tree.activePath[0] === nodeId;
+  if (isTopNode) {
+    if (prevRole === 'system' && role !== 'system') {
+      // Changing away from system → clear config
+      chat.config = { ...chat.config, systemPrompt: undefined };
+    } else if (prevRole !== 'system' && role === 'system') {
+      // Changing to system → populate config from content
+      syncBubbleToConfig(chat, tree, contentStore);
+    }
+  }
+
+  chat.messages = materializeActivePath(tree, contentStore);
   return updatedChats;
 };
 

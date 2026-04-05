@@ -115,6 +115,32 @@ export function resolveEvalContext(
   const currentText = extractText(targetMsg);
   const includeOmitted = omittedMode === 'include-omitted';
 
+  // ── System role ──
+  if (role === 'system') {
+    // For system evaluation, the system prompt text IS the target to evaluate.
+    // Use config.systemPrompt as the source of truth if available.
+    const systemText = chat.config.systemPrompt || currentText;
+    if (!systemText) return null;
+
+    if (scope === 'single') {
+      return {
+        userText: systemText,
+        contextText: systemText,
+      };
+    }
+    // Full-context: include conversation as backdrop
+    const contextMsgs = buildContextMessages(
+      chat.messages,
+      chat.messages.length,
+      chatIndex,
+      includeOmitted
+    );
+    return {
+      userText: systemText,
+      contextText: collectAllText(contextMsgs),
+    };
+  }
+
   if (scope === 'single') {
     // ── Single prompt ──
     if (role === 'user') {

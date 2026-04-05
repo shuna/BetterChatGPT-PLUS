@@ -79,7 +79,7 @@ export default function ContentActions({
                 <RegenerateNextButton onClick={onRefresh} />
               )}
               {messageIndex !== 0 && <UpButton onClick={onMoveUp} />}
-              {messageIndex !== lastMessageIndex && (
+              {messageIndex !== lastMessageIndex && !(messageIndex === 0 && role === 'system') && (
                 <DownButton onClick={onMoveDown} />
               )}
 

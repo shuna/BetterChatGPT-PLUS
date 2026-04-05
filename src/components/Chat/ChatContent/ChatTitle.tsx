@@ -30,12 +30,18 @@ const ChatTitle = React.memo(() => {
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState<boolean>(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  const setChatSystemPrompt = useStore((state) => state.setChatSystemPrompt);
   const setConfig = (config: ConfigInterface) => {
     const chats = useStore.getState().chats;
     if (!chats) return;
+    const prevSystemPrompt = chats[currentChatIndex]?.config?.systemPrompt;
     const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
     updatedChats[currentChatIndex].config = normalizeConfigStream(config);
     setChats(updatedChats);
+    // If system prompt changed, trigger bubble sync
+    if ((config.systemPrompt ?? '') !== (prevSystemPrompt ?? '')) {
+      setChatSystemPrompt(currentChatIndex, config.systemPrompt ?? '');
+    }
   };
 
   const setImageDetail = (imageDetail: ImageDetail) => {

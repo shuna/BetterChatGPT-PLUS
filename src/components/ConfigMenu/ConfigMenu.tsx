@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
+import { PromptLibraryPicker } from '@components/PromptLibraryMenu/PromptLibraryMenu';
 import { ConfigInterface, ImageDetail, ReasoningEffort, Verbosity } from '@type/chat';
 import {
   getModelConfigContextInfo,
@@ -33,6 +34,47 @@ const DEFAULT_REASONING_BUDGET = 0;
 const DEFAULT_REASONING_EFFORT: ReasoningEffort = 'medium';
 const DEFAULT_VERBOSITY: Verbosity = 'medium';
 
+const SystemPromptField = ({
+  systemPrompt,
+  setSystemPrompt,
+}: {
+  systemPrompt: string;
+  setSystemPrompt: React.Dispatch<React.SetStateAction<string>>;
+}) => {
+  const { t } = useTranslation('model');
+  const [isPickerOpen, setIsPickerOpen] = useState(false);
+
+  return (
+    <div className='mt-3 pt-3 border-t border-gray-200 dark:border-gray-600'>
+      <div className='flex items-center justify-between'>
+        <FieldLabel>{t('chatSystemPrompt', 'System Prompt')}</FieldLabel>
+        <button
+          type='button'
+          className='text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors'
+          onClick={() => setIsPickerOpen(true)}
+        >
+          {t('insertFromLibrary', 'Insert from library')}
+        </button>
+      </div>
+      <textarea
+        className='w-full mt-1 px-2 py-1.5 text-sm rounded-lg bg-transparent border border-gray-400/50 focus:ring-1 focus:ring-blue resize-y min-h-[2.5rem] max-h-[12rem] leading-6 text-gray-900 dark:text-gray-100'
+        value={systemPrompt}
+        onChange={(e) => setSystemPrompt(e.target.value)}
+        placeholder={t('systemPromptPlaceholder', 'Enter system prompt for this chat...') as string}
+        rows={2}
+      />
+      {isPickerOpen && (
+        <PromptLibraryPicker
+          setIsModalOpen={setIsPickerOpen}
+          onInsert={(text) => {
+            setSystemPrompt((prev) => prev ? prev + '\n\n' + text : text);
+          }}
+        />
+      )}
+    </div>
+  );
+};
+
 const ConfigMenu = ({
   setIsModalOpen,
   config,
@@ -62,6 +104,7 @@ const ConfigMenu = ({
   const [_reasoningEffort, _setReasoningEffort] = useState<ReasoningEffort | undefined>(config.reasoning_effort ?? DEFAULT_REASONING_EFFORT);
   const [_reasoningBudget, _setReasoningBudget] = useState<number>(config.reasoning_budget_tokens ?? DEFAULT_REASONING_BUDGET);
   const [_verbosity, _setVerbosity] = useState<Verbosity | undefined>(config.verbosity ?? DEFAULT_VERBOSITY);
+  const [_systemPrompt, _setSystemPrompt] = useState<string>(config.systemPrompt ?? '');
   const { t } = useTranslation('model');
   const isStreamSupported = isModelStreamSupported(_model, _providerId);
   const reasoningSupported = useModelSupportsReasoning(_model, _providerId);
@@ -94,9 +137,10 @@ const ConfigMenu = ({
       reasoning_effort: reasoningSupported ? _reasoningEffort : undefined,
       reasoning_budget_tokens: reasoningSupported && _reasoningBudget >= 1024 ? _reasoningBudget : undefined,
       verbosity: verbositySupported ? _verbosity : undefined,
+      systemPrompt: _systemPrompt || undefined,
     }));
     setImageDetail(_imageDetail);
-  }, [_maxToken, _model, _providerId, _temperature, _presencePenalty, _topP, _frequencyPenalty, _imageDetail, _stream, _reasoningEffort, _reasoningBudget, _verbosity]);
+  }, [_maxToken, _model, _providerId, _temperature, _presencePenalty, _topP, _frequencyPenalty, _imageDetail, _stream, _reasoningEffort, _reasoningBudget, _verbosity, _systemPrompt]);
 
   return (
     <PopupModal
@@ -180,6 +224,10 @@ const ConfigMenu = ({
             disabled={!isStreamSupported}
           />
         </div>
+        <SystemPromptField
+          systemPrompt={_systemPrompt}
+          setSystemPrompt={_setSystemPrompt}
+        />
       </div>
       </div>
     </PopupModal>

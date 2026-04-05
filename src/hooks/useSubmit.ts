@@ -97,14 +97,13 @@ const useSubmit = () => {
     );
 
     try {
-      const contextMessages = sanitizeMessagesForSubmit(
-        getSubmitContextMessages(
-          updatedChats[chatIndex].messages,
-          mode,
-          messageIndex,
-          chats[chatIndex].config.model,
-          chatIndex
-        )
+      const contextMessages = getSubmitContextMessages(
+        updatedChats[chatIndex].messages,
+        mode,
+        messageIndex,
+        chats[chatIndex].config.model,
+        chatIndex,
+        chats[chatIndex].config.systemPrompt
       );
 
       if (contextMessages.length === 0)

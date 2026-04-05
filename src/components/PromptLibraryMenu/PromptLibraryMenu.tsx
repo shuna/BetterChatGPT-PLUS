@@ -118,6 +118,20 @@ const PromptLibraryMenuPopUp = ({
                   value={prompt.name}
                   rows={1}
                 ></textarea>
+                <select
+                  className='text-xs mt-0.5 px-1 py-0.5 rounded bg-transparent border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400'
+                  value={prompt.label ?? ''}
+                  onChange={(e) => {
+                    const val = e.target.value as '' | 'system' | 'user';
+                    _setPrompts((prev) =>
+                      prev.map((p, i) => (i === index ? { ...p, label: val || undefined } : p))
+                    );
+                  }}
+                >
+                  <option value=''>{t('noLabel', '-')}</option>
+                  <option value='system'>system</option>
+                  <option value='user'>user</option>
+                </select>
               </div>
               <div className='flex-1'>
                 <textarea
@@ -268,6 +282,20 @@ const PromptLibraryInline = ({ onSettingsChanged }: { onSettingsChanged?: () => 
                 value={prompt.name}
                 rows={1}
               ></textarea>
+              <select
+                className='text-xs mt-0.5 px-1 py-0.5 rounded bg-transparent border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400'
+                value={prompt.label ?? ''}
+                onChange={(e) => {
+                  const val = e.target.value as '' | 'system' | 'user';
+                  _setPrompts((prev) =>
+                    prev.map((p, i) => (i === index ? { ...p, label: val || undefined } : p))
+                  );
+                }}
+              >
+                <option value=''>{t('noLabel', '-')}</option>
+                <option value='system'>system</option>
+                <option value='user'>user</option>
+              </select>
             </div>
             <div className='flex-1'>
               <textarea
@@ -316,6 +344,67 @@ const PromptLibraryInline = ({ onSettingsChanged }: { onSettingsChanged?: () => 
         </a>
       </div>
     </div>
+  );
+};
+
+/**
+ * Picker modal: shows prompt library in read-only mode.
+ * User clicks a prompt to insert its text via `onInsert` callback.
+ */
+export const PromptLibraryPicker = ({
+  setIsModalOpen,
+  onInsert,
+}: {
+  setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  onInsert: (text: string) => void;
+}) => {
+  const { t } = useTranslation();
+  const prompts = useStore((state) => state.prompts);
+
+  return (
+    <PopupModal
+      title={t('promptLibrary') as string}
+      setIsModalOpen={setIsModalOpen}
+      cancelButton={false}
+    >
+      <div className='p-4 w-[80vw] max-w-[600px] max-h-[60vh] overflow-y-auto text-sm text-gray-900 dark:text-gray-300'>
+        {prompts.length === 0 ? (
+          <div className='text-center text-gray-500 dark:text-gray-400 py-4'>
+            {t('noPrompts', 'No prompts available')}
+          </div>
+        ) : (
+          <div className='space-y-1'>
+            {prompts.map((prompt) => (
+              <button
+                key={prompt.id}
+                type='button'
+                className='w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors'
+                onClick={() => {
+                  onInsert(prompt.prompt);
+                  setIsModalOpen(false);
+                }}
+              >
+                <div className='flex items-center gap-2'>
+                  <span className='font-medium truncate'>{prompt.name}</span>
+                  {prompt.label && (
+                    <span className={`text-xs px-1.5 py-0.5 rounded ${
+                      prompt.label === 'system'
+                        ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                        : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+                    }`}>
+                      {prompt.label}
+                    </span>
+                  )}
+                </div>
+                <div className='text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5'>
+                  {prompt.prompt.slice(0, 120)}{prompt.prompt.length > 120 ? '...' : ''}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </PopupModal>
   );
 };
 

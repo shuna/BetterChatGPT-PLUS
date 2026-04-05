@@ -120,6 +120,7 @@ export const chatToOpenAIFormat = (
 ): OpenAIChat => {
   const visibleBranchOnly = options.visibleBranchOnly ?? false;
   const modelSlug = chat.config.model;
+  const configSystemPrompt = chat.config.systemPrompt;
 
   const mapping: OpenAIChat['mapping'] = {};
 
@@ -128,24 +129,47 @@ export const chatToOpenAIFormat = (
     const nodeIds = visibleBranchOnly
       ? tree.activePath.filter((id) => tree.nodes[id] !== undefined)
       : Object.keys(tree.nodes);
-    const nodeSet = new Set(nodeIds);
+    // Skip tree system-role nodes — config.systemPrompt is the source
+    const filteredIds = nodeIds.filter((id) => tree.nodes[id]?.role !== 'system');
+    const nodeSet = new Set(filteredIds);
 
     // Build children map
     const childrenMap: Record<string, string[]> = {};
-    for (const id of nodeIds) {
+    for (const id of filteredIds) {
       childrenMap[id] = [];
     }
-    for (const id of nodeIds) {
+    for (const id of filteredIds) {
       const node = tree.nodes[id];
       if (node.parentId && nodeSet.has(node.parentId)) {
         childrenMap[node.parentId].push(id);
       }
     }
 
-    for (const id of nodeIds) {
+    // If config has a system prompt, prepend a synthetic system node
+    let systemNodeId: string | null = null;
+    if (configSystemPrompt) {
+      systemNodeId = '__system__';
+      const firstNonSystem = filteredIds.find((id) => {
+        const n = tree.nodes[id];
+        return n && !n.parentId;
+      }) ?? filteredIds[0];
+      mapping[systemNodeId] = {
+        id: systemNodeId,
+        message: {
+          author: { role: 'system' },
+          content: { parts: [configSystemPrompt] },
+          metadata: { model_slug: modelSlug },
+        },
+        parent: null,
+        children: firstNonSystem ? [firstNonSystem] : [],
+      };
+    }
+
+    for (const id of filteredIds) {
       const node = tree.nodes[id];
       const content = resolveContent(contentStore, node.contentHash);
       const parts = contentToTextParts(content);
+      const parentInSet = node.parentId && nodeSet.has(node.parentId) ? node.parentId : null;
       mapping[id] = {
         id,
         message: {
@@ -153,13 +177,13 @@ export const chatToOpenAIFormat = (
           content: { parts },
           metadata: { model_slug: modelSlug },
         },
-        parent: node.parentId && nodeSet.has(node.parentId) ? node.parentId : null,
+        parent: parentInSet ?? systemNodeId,
         children: childrenMap[id] ?? [],
       };
     }
 
     const activePath = tree.activePath.filter((id) => nodeSet.has(id));
-    const currentNode = activePath[activePath.length - 1] ?? tree.rootId;
+    const currentNode = activePath[activePath.length - 1] ?? filteredIds[0] ?? systemNodeId ?? '';
 
     return {
       title: chat.title,
@@ -174,7 +198,27 @@ export const chatToOpenAIFormat = (
   // Fallback: flat messages → linear mapping
   let parentId: string | null = null;
   const ids: string[] = [];
+
+  // Prepend config system prompt
+  if (configSystemPrompt) {
+    const sysId = 'msg-system';
+    ids.push(sysId);
+    mapping[sysId] = {
+      id: sysId,
+      message: {
+        author: { role: 'system' },
+        content: { parts: [configSystemPrompt] },
+        metadata: { model_slug: modelSlug },
+      },
+      parent: null,
+      children: [],
+    };
+    parentId = sysId;
+  }
+
   chat.messages.forEach((msg, i) => {
+    // Skip system-role messages in flat array — config is the source
+    if (msg.role === 'system') return;
     const id = `msg-${i}`;
     ids.push(id);
     const parts = contentToTextParts(msg.content);
@@ -274,15 +318,21 @@ export const chatToOpenRouterFormat = (
     prevMsgId = msgId;
   };
 
+  // Prepend config system prompt
+  if (chat.config.systemPrompt) {
+    addMessage('system', chat.config.systemPrompt);
+  }
+
   if (chat.branchTree) {
     for (const id of chat.branchTree.activePath) {
       const node = chat.branchTree.nodes[id];
-      if (!node) continue;
+      if (!node || node.role === 'system') continue; // skip tree system nodes
       const content = resolveContent(contentStore, node.contentHash);
       addMessage(node.role, contentToString(content), node.createdAt);
     }
   } else {
     for (const msg of chat.messages) {
+      if (msg.role === 'system') continue; // skip — config is the source
       addMessage(msg.role, contentToString(msg.content));
     }
   }
@@ -355,13 +405,13 @@ export const chatToLMStudioFormat = (
   let tokenCount = 0;
   let userLastMessagedAt: number | undefined;
   let assistantLastMessagedAt: number | undefined;
-  let systemPrompt = '';
+  // Use config.systemPrompt as the authoritative source
+  const systemPrompt = chat.config.systemPrompt ?? '';
 
   const addMsg = (role: string, text: string, timestamp?: number) => {
     if (!text) return;
-    if (role === 'system') {
-      systemPrompt = text;
-    }
+    // Skip system-role messages from the tree — config is the source
+    if (role === 'system') return;
     messages.push(toLMStudioMessage(role, text, modelSlug));
     if (role === 'user' && timestamp) userLastMessagedAt = timestamp;
     if (role === 'assistant' && timestamp) assistantLastMessagedAt = timestamp;

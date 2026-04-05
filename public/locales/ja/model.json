@@ -69,6 +69,9 @@
   },
   "defaultChatConfig": "デフォルトチャット設定",
   "defaultSystemMessage": "デフォルトシステムメッセージ",
+  "chatSystemPrompt": "システムプロンプト",
+  "systemPromptPlaceholder": "このチャットのシステムプロンプトを入力...",
+  "insertFromLibrary": "ライブラリから挿入",
   "resetToDefault": "デフォルトにリセット",
   "provider": {
     "title": "AIプロバイダ設定",

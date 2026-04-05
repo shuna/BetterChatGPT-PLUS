@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
 import RadarChart from './RadarChart';
 import useStore from '@store/store';
-import { evaluationResultKey, qualityAxisKeys, moderationCategoryKeys, categoryToI18nKey } from '@type/evaluation';
+import { evaluationResultKey, qualityAxisKeys, systemQualityAxisKeys, moderationCategoryKeys, categoryToI18nKey } from '@type/evaluation';
+import type { QualityEvaluationMode } from '@type/evaluation';
 import type {
   EvaluationResult,
   SafetyCheckResult,
@@ -168,7 +169,7 @@ const SafetyTab = ({
     : [];
 
   const radarLabels = categoryEntries.map(([cat]) => t(`evaluation.category.${categoryToI18nKey(cat)}`));
-  const radarScores = categoryEntries.map(([, score]) => 1 - score);
+  const radarScores = categoryEntries.map(([, score]) => score);
 
   return (
     <div className='space-y-4'>
@@ -219,7 +220,8 @@ const SafetyTab = ({
           <RadarChart
             labels={radarLabels}
             scores={radarScores}
-            size={320}
+            size={400}
+            invertAxis
             colorOverride={
               result?.flagged
                 ? { fill: 'rgba(239,68,68,0.25)', stroke: 'rgb(239,68,68)' }
@@ -297,8 +299,11 @@ const QualityTab = ({
 }) => {
   const { t } = useTranslation('main');
 
-  const labels = qualityAxisKeys.map((k) => t(`evaluation.axis.${k}`));
-  const scores = result ? qualityAxisKeys.map((k) => result.scores[k]) : [];
+  const isSystem = result?.kind === 'system';
+  const axisKeys = isSystem ? systemQualityAxisKeys : qualityAxisKeys;
+  const axisPrefix = isSystem ? 'evaluation.systemAxis' : 'evaluation.axis';
+  const labels = axisKeys.map((k) => t(`${axisPrefix}.${k}`));
+  const scores = result ? axisKeys.map((k) => (result.scores as unknown as Record<string, number>)[k]) : [];
   const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
 
   const avgRed = qualityAxisKeys.reduce((s, k) => s + thresholds[k].red, 0) / qualityAxisKeys.length;
@@ -353,7 +358,7 @@ const QualityTab = ({
       {/* Radar chart */}
       {result && (
         <div className='flex justify-center'>
-          <RadarChart labels={labels} scores={scores} size={320} colorOverride={radarColor} />
+          <RadarChart labels={labels} scores={scores} size={400} colorOverride={radarColor} />
         </div>
       )}
 
@@ -369,15 +374,16 @@ const QualityTab = ({
             </tr>
           </thead>
           <tbody>
-            {qualityAxisKeys.map((axis) => {
-              const score = result.scores[axis];
-              const th = thresholds[axis];
+            {axisKeys.map((axis) => {
+              const score = (result.scores as unknown as Record<string, number>)[axis];
+              const th = (thresholds as Record<string, { red: number; green: number }>)[axis]
+                ?? { red: 0.5, green: 0.8 };
               const dotColor =
                 score >= th.green ? 'bg-green-500' : score >= th.red ? 'bg-yellow-500' : 'bg-red-500';
               return (
                 <tr key={axis} className='border-t border-gray-100 dark:border-gray-700'>
                   <td className='py-2 text-gray-700 dark:text-gray-300'>
-                    {t(`evaluation.axis.${axis}`)}
+                    {t(`${axisPrefix}.${axis}`)}
                   </td>
                   <td className='py-2 text-right text-gray-500 dark:text-gray-400'>
                     {Math.round(th.red * 100)}%
@@ -412,14 +418,14 @@ const QualityTab = ({
       {/* Reasoning per axis */}
       {result && (
         <div className='space-y-2'>
-          {qualityAxisKeys.map((axis) => {
-            const reasoning = result.reasoning[axis];
+          {axisKeys.map((axis) => {
+            const reasoning = (result.reasoning as unknown as Record<string, string>)[axis];
             if (!reasoning) return null;
             return (
               <div key={axis} className='text-sm'>
                 <div className='flex items-center gap-1'>
                   <span className='font-medium text-gray-700 dark:text-gray-300'>
-                    {t(`evaluation.axis.${axis}`)}:
+                    {t(`${axisPrefix}.${axis}`)}:
                   </span>
                   <button
                     className='p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors'
@@ -529,10 +535,17 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
     omittedMode: scope === 'full-context' ? omittedMode : 'respect-omitted',
   };
 
+  const evaluationMode: QualityEvaluationMode = role === 'system' ? 'system' : role === 'assistant' ? 'assistant' : 'user';
+
   // Pre-resolve context to check availability for button disabling (P3)
   const preResolvedCtx = resolveEvalContext(chatIndex, messageIndex, role, scope, omittedMode);
   const qualityDisabledReason: string | null = (() => {
     if (!preResolvedCtx) return t('evaluation.noContext') as string;
+    if (role === 'system') {
+      // System evaluation: check if there's system prompt text
+      if (!preResolvedCtx.userText) return t('evaluation.noSystemText') as string;
+      return null;
+    }
     const promptText = scope === 'full-context' ? preResolvedCtx.contextText : preResolvedCtx.userText;
     if (!promptText) return t('evaluation.noUserText') as string;
     return null;
@@ -599,7 +612,8 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
         resolvedProvider.endpoint,
         model,
         resolvedProvider.key,
-        i18next.language
+        i18next.language,
+        evaluationMode
       );
       const existing = useStore.getState().evaluationResults[key];
       useStore.getState().setEvaluationResult(key, {
@@ -656,10 +670,14 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
                 <span className={`ml-1.5 inline-block w-2 h-2 rounded-full ${result.safety.flagged ? 'bg-red-500' : 'bg-green-500'}`} />
               )}
               {tab.id === 'quality' && result?.quality && (() => {
-                const qScores = qualityAxisKeys.map((k) => result.quality!.scores[k]);
-                const qAvg = qScores.reduce((a, b) => a + b, 0) / qScores.length;
-                const qAvgRed = qualityAxisKeys.reduce((s, k) => s + qualityThresholds[k].red, 0) / qualityAxisKeys.length;
-                const qAvgGreen = qualityAxisKeys.reduce((s, k) => s + qualityThresholds[k].green, 0) / qualityAxisKeys.length;
+                const q = result.quality!;
+                const scoresObj = q.scores as unknown as Record<string, number>;
+                const keys: string[] = q.kind === 'system' ? [...systemQualityAxisKeys] : [...qualityAxisKeys];
+                const qScores = keys.map((k) => scoresObj[k]);
+                const qAvg = qScores.reduce((a: number, b: number) => a + b, 0) / qScores.length;
+                const thObj = qualityThresholds as unknown as Record<string, { red: number; green: number }>;
+                const qAvgRed = keys.reduce((s: number, k: string) => s + (thObj[k]?.red ?? 0.5), 0) / keys.length;
+                const qAvgGreen = keys.reduce((s: number, k: string) => s + (thObj[k]?.green ?? 0.8), 0) / keys.length;
                 const qDot = qAvg >= qAvgGreen ? 'bg-green-500' : qAvg >= qAvgRed ? 'bg-yellow-500' : 'bg-red-500';
                 return <span className={`ml-1.5 inline-block w-2 h-2 rounded-full ${qDot}`} />;
               })()}

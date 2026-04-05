@@ -25,6 +25,9 @@
   },
   "defaultChatConfig": "Default Chat Config",
   "defaultSystemMessage": "Default System Message",
+  "chatSystemPrompt": "System Prompt",
+  "systemPromptPlaceholder": "Enter system prompt for this chat...",
+  "insertFromLibrary": "Insert from library",
   "resetToDefault": "Reset To Default",
   "stream": {
     "label": "Stream response text",

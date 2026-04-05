@@ -4,8 +4,8 @@
  * B) Quality evaluation via LLM-as-Judge (chat completion)
  */
 
-import type { SafetyCheckResult, QualityEvaluationResult, QualityScores } from '@type/evaluation';
-import { qualityAxisKeys } from '@type/evaluation';
+import type { SafetyCheckResult, QualityEvaluationResult, QualityScores, SystemQualityScores, QualityEvaluationMode } from '@type/evaluation';
+import { qualityAxisKeys, systemQualityAxisKeys } from '@type/evaluation';
 import useStore from '@store/store';
 import { DEFAULT_PROVIDERS } from '@store/provider-config';
 import { runModerationViaProxy } from '@utils/proxyClient';
@@ -136,6 +136,47 @@ Respond ONLY with valid JSON in this exact format:
   "configSuggestions": ["..."]
 }`;
 
+const QUALITY_SYSTEM_ROLE_PROMPT = `You are an expert evaluation judge for AI system prompts. You will receive a system prompt used to configure an AI assistant. Evaluate the system prompt quality on these 5 axes (score 0.0-1.0 each):
+
+1. roleClarity: Does the system prompt clearly define the assistant's role and persona?
+2. constraintConsistency: Are the constraints, priorities, and rules internally consistent?
+3. safetyAdequacy: Are safety constraints appropriate and well-defined?
+4. conciseness: Is the prompt appropriately brief without unnecessary redundancy?
+5. operability: Is the prompt practical and easy to maintain in production?
+
+Also provide:
+- promptSuggestions: concrete ways to improve this system prompt
+- configSuggestions: recommendations for model or parameter changes
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "scores": { "roleClarity": 0.0, "constraintConsistency": 0.0, "safetyAdequacy": 0.0, "conciseness": 0.0, "operability": 0.0 },
+  "reasoning": { "roleClarity": "...", "constraintConsistency": "...", "safetyAdequacy": "...", "conciseness": "...", "operability": "..." },
+  "promptSuggestions": ["..."],
+  "configSuggestions": ["..."]
+}`;
+
+function buildSystemJudgeMessages(
+  systemPromptText: string,
+  conversationContext?: string,
+  language?: string
+): Array<{ role: string; content: string }> {
+  const langInstruction = language && language !== 'en'
+    ? `\n\nIMPORTANT: Write ALL reasoning, promptSuggestions, and configSuggestions text in ${language}. The JSON keys must remain in English.`
+    : '';
+  const evalSystemPrompt = QUALITY_SYSTEM_ROLE_PROMPT + langInstruction;
+
+  let userContent = `## System Prompt to Evaluate\n${systemPromptText}`;
+  if (conversationContext) {
+    userContent += `\n\n## Conversation Context\n${conversationContext}`;
+  }
+
+  return [
+    { role: 'system', content: evalSystemPrompt },
+    { role: 'user', content: userContent },
+  ];
+}
+
 function buildJudgeMessages(
   userPrompt: string,
   assistantResponse?: string,
@@ -158,12 +199,35 @@ function buildJudgeMessages(
   ];
 }
 
-function parseJudgeResponse(text: string): Omit<QualityEvaluationResult, 'timestamp'> {
+function parseJudgeResponse(text: string, mode?: QualityEvaluationMode): Omit<QualityEvaluationResult, 'timestamp'> {
   // Extract JSON from markdown code blocks if present
   const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, text];
   const jsonStr = jsonMatch[1]?.trim() ?? text.trim();
 
   const parsed = JSON.parse(jsonStr);
+
+  if (mode === 'system') {
+    const scores: SystemQualityScores = {
+      roleClarity: 0,
+      constraintConsistency: 0,
+      safetyAdequacy: 0,
+      conciseness: 0,
+      operability: 0,
+    };
+    for (const key of systemQualityAxisKeys) {
+      const val = parsed.scores?.[key];
+      if (typeof val === 'number' && val >= 0 && val <= 1) {
+        scores[key] = val;
+      }
+    }
+    return {
+      kind: 'system',
+      scores,
+      reasoning: parsed.reasoning ?? {},
+      promptSuggestions: Array.isArray(parsed.promptSuggestions) ? parsed.promptSuggestions : [],
+      configSuggestions: Array.isArray(parsed.configSuggestions) ? parsed.configSuggestions : [],
+    };
+  }
 
   const scores: QualityScores = {
     taskCompletion: 0,
@@ -181,6 +245,7 @@ function parseJudgeResponse(text: string): Omit<QualityEvaluationResult, 'timest
   }
 
   return {
+    kind: 'standard',
     scores,
     reasoning: parsed.reasoning ?? {},
     promptSuggestions: Array.isArray(parsed.promptSuggestions) ? parsed.promptSuggestions : [],
@@ -197,7 +262,8 @@ export async function runQualityEvaluation(
   endpoint: string,
   model: string,
   apiKey?: string,
-  language?: string
+  language?: string,
+  evaluationMode?: QualityEvaluationMode
 ): Promise<QualityEvaluationResult> {
   if (!model) {
     throw new Error('[EVAL_MODEL_NOT_SELECTED]');
@@ -206,7 +272,9 @@ export async function runQualityEvaluation(
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
-  const messages = buildJudgeMessages(userPrompt, assistantResponse, language);
+  const messages = evaluationMode === 'system'
+    ? buildSystemJudgeMessages(userPrompt, assistantResponse, language)
+    : buildJudgeMessages(userPrompt, assistantResponse, language);
   const chatUrl = endpoint.includes('/chat/completions')
     ? endpoint
     : deriveBaseUrl(endpoint) + '/chat/completions';
@@ -241,6 +309,6 @@ export async function runQualityEvaluation(
   const content = data.choices?.[0]?.message?.content;
   if (!content) throw new Error('[EVAL_QUALITY_EMPTY_RESPONSE]');
 
-  const result = parseJudgeResponse(content);
-  return { ...result, timestamp: Date.now() };
+  const result = parseJudgeResponse(content, evaluationMode);
+  return { ...result, timestamp: Date.now() } as QualityEvaluationResult;
 }

@@ -113,19 +113,24 @@ describe('submitHelpers', () => {
     expect(contextMessages).toEqual([userMessage, assistantMessage]);
   });
 
-  it('strips system messages for reasoning models', () => {
+  it('strips system messages from array and uses config systemPrompt', () => {
     const systemMsg = textMessage('system', 'You are helpful');
     const userMsg = textMessage('user', 'Hello');
     const messages = [systemMsg, userMsg, textMessage('assistant', '')];
 
-    const withO1 = getSubmitContextMessages(messages, 'append', 2, 'o1-preview');
+    // Reasoning models: no system even with config systemPrompt
+    const withO1 = getSubmitContextMessages(messages, 'append', 2, 'o1-preview', undefined, 'Config system');
     expect(withO1).toEqual([userMsg]);
 
-    const withO3 = getSubmitContextMessages(messages, 'append', 2, 'o3-mini-high');
-    expect(withO3).toEqual([userMsg]);
+    // Non-reasoning models: config systemPrompt prepended, array system stripped
+    const withGpt4 = getSubmitContextMessages(messages, 'append', 2, 'gpt-4o', undefined, 'Config system');
+    expect(withGpt4[0].role).toBe('system');
+    expect(withGpt4[0].content[0]).toEqual({ type: 'text', text: 'Config system' });
+    expect(withGpt4[1]).toEqual(userMsg);
 
-    const withGpt4 = getSubmitContextMessages(messages, 'append', 2, 'gpt-4o');
-    expect(withGpt4).toEqual([systemMsg, userMsg]);
+    // No config systemPrompt: no system at all
+    const noConfig = getSubmitContextMessages(messages, 'append', 2, 'gpt-4o');
+    expect(noConfig).toEqual([userMsg]);
   });
 
   it('treats whitespace-only text as empty while preserving images', () => {

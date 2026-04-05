@@ -1,6 +1,9 @@
+import { v4 as uuidv4 } from 'uuid';
 import { StoreSlice } from './store';
-import { ChatInterface, FolderCollection, GeneratingSession, MessageInterface } from '@type/chat';
+import { ChatInterface, FolderCollection, GeneratingSession, MessageInterface, TextContentInterface } from '@type/chat';
 import { notifyStorageError, setLocalStorageItem } from './storage/storageErrors';
+import { addContent } from '@utils/contentStore';
+import { materializeActivePath } from '@utils/branchUtils';
 
 export interface ChatSlice {
   messages: MessageInterface[];
@@ -26,6 +29,7 @@ export interface ChatSlice {
     chatIndex: number | null,
     chatId?: string | null
   ) => void;
+  setChatSystemPrompt: (chatIndex: number, systemPrompt: string) => void;
   setFolders: (folders: FolderCollection) => void;
   addSession: (session: GeneratingSession) => void;
   removeSession: (sessionId: string) => void;
@@ -154,6 +158,69 @@ export const createChatSlice: StoreSlice<ChatSlice> = (set, get) => {
         ...prev,
         error: error,
       }));
+    },
+    setChatSystemPrompt: (chatIndex: number, systemPrompt: string) => {
+      const chats = get().chats;
+      if (!chats || !chats[chatIndex]) return;
+      const contentStore = { ...(get() as any).contentStore };
+      const updated = chats.slice();
+      const chat = { ...updated[chatIndex] };
+      chat.config = { ...chat.config, systemPrompt: systemPrompt || undefined };
+      updated[chatIndex] = chat;
+
+      // Sync config → bubble
+      if (chat.branchTree) {
+        const tree = {
+          ...chat.branchTree,
+          nodes: { ...chat.branchTree.nodes },
+          activePath: chat.branchTree.activePath.slice(),
+        };
+        chat.branchTree = tree;
+        const topNodeId = tree.activePath[0];
+        const topNode = topNodeId ? tree.nodes[topNodeId] : undefined;
+
+        if (systemPrompt) {
+          const newContent = [{ type: 'text', text: systemPrompt } as TextContentInterface];
+          if (topNode && topNode.role === 'system') {
+            // Update existing top system node content
+            tree.nodes[topNodeId] = {
+              ...topNode,
+              contentHash: addContent(contentStore, newContent),
+            };
+          } else {
+            // Create new system node at top
+            const newId = uuidv4();
+            tree.nodes[newId] = {
+              id: newId,
+              parentId: null,
+              role: 'system',
+              contentHash: addContent(contentStore, newContent),
+              createdAt: Date.now(),
+            };
+            // Relink existing top node
+            if (topNodeId && tree.nodes[topNodeId]) {
+              tree.nodes[topNodeId] = { ...tree.nodes[topNodeId], parentId: newId };
+            }
+            tree.activePath.unshift(newId);
+            tree.rootId = newId;
+          }
+        } else {
+          // Empty system prompt → remove top system node if present
+          if (topNode && topNode.role === 'system') {
+            const nextId = tree.activePath[1];
+            if (nextId && tree.nodes[nextId]) {
+              tree.nodes[nextId] = { ...tree.nodes[nextId], parentId: null };
+            }
+            tree.activePath.splice(0, 1);
+            if (tree.activePath.length > 0) {
+              tree.rootId = tree.activePath[0];
+            }
+          }
+        }
+        chat.messages = materializeActivePath(tree, contentStore);
+      }
+
+      set((prev: ChatSlice) => ({ ...prev, chats: updated, contentStore } as any));
     },
     setFolders: (folders: FolderCollection) => {
       set((prev: ChatSlice) => ({

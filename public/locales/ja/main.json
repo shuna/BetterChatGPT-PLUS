@@ -382,9 +382,18 @@
     "scopeSingle": "このプロンプトだけ",
     "includeOmitted": "省略メッセージを含める",
     "conditionSingle": "このプロンプトだけ",
-    "conditionFullRespectOmitted": "文脈全体（省略を反映）",
-    "conditionFullIncludeOmitted": "文脈全体（省略を含む）",
+    "conditionFullRespectOmitted": "文脈全体",
+    "conditionFullIncludeOmitted": "省略しないで評価",
     "noContext": "評価文脈を解決できません",
-    "noUserText": "選択した文脈にユーザーメッセージがありません"
+    "noUserText": "選択した文脈にユーザーメッセージがありません",
+    "noSystemText": "システムプロンプトのテキストがありません",
+    "systemNotSupported": "このモデルはシステムロール評価に対応していません",
+    "systemAxis": {
+      "roleClarity": "役割定義の明確さ",
+      "constraintConsistency": "制約の整合性",
+      "safetyAdequacy": "安全制約の妥当性",
+      "conciseness": "簡潔さ",
+      "operability": "実運用しやすさ"
+    }
   }
 }
