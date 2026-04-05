@@ -357,7 +357,9 @@
       "violence": "Violence",
       "harassmentThreatening": "Harassment/Threatening",
       "selfHarmIntent": "Self-harm/Intent",
-      "selfHarmInstructions": "Self-harm/Instructions"
+      "selfHarmInstructions": "Self-harm/Instructions",
+      "illicit": "Illicit",
+      "illicitViolent": "Illicit/Violent"
     },
     "openDetail": "View details",
     "modalTitle": "Evaluation Results",
@@ -379,6 +381,15 @@
     "running": "Running...",
     "reEvaluate": "Re-evaluate",
     "runEvaluation": "Run evaluation",
-    "evaluateThisOnly": "Evaluate this message only"
+    "evaluateThisOnly": "Evaluate this message only",
+    "evaluateAllPrompts": "Evaluate all prompts",
+    "scopeFullContext": "Full context",
+    "scopeSingle": "This prompt only",
+    "includeOmitted": "Include omitted messages",
+    "conditionSingle": "This prompt only",
+    "conditionFullRespectOmitted": "Full context (omitted reflected)",
+    "conditionFullIncludeOmitted": "Full context (omitted included)",
+    "noContext": "Cannot resolve evaluation context",
+    "noUserText": "No user messages found in the selected context"
   }
 }

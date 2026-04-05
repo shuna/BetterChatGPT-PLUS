@@ -60,8 +60,6 @@ const UnifiedMessageView = memo(
     } = useSubmit();
     const [isDelete, setIsDelete] = useState(false);
     const [isEvalModalOpen, setIsEvalModalOpen] = useState(false);
-    const [evalInitialTab, setEvalInitialTab] = useState<'safety' | 'quality'>('safety');
-    const [evalAllPrompts, setEvalAllPrompts] = useState(false);
 
     const currentChatIndex = useStore((state) => state.currentChatIndex);
     const removeMessageAtIndex = useStore((state) => state.removeMessageAtIndex);
@@ -141,103 +139,30 @@ const UnifiedMessageView = memo(
     };
 
     const handleEvaluate = useCallback(() => {
-      setEvalAllPrompts(false);
       setIsEvalModalOpen(true);
     }, []);
 
-    const handleEvaluateSafety = useCallback(() => {
-      setEvalInitialTab('safety');
-      setEvalAllPrompts(true);
-      setIsEvalModalOpen(true);
-    }, []);
-
-    const handleEvaluateQuality = useCallback(() => {
-      setEvalInitialTab('quality');
-      setEvalAllPrompts(true);
-      setIsEvalModalOpen(true);
-    }, []);
-
-    const handleEvaluateSafetyOnly = useCallback(() => {
-      setEvalInitialTab('safety');
-      setEvalAllPrompts(false);
-      setIsEvalModalOpen(true);
-    }, []);
-
-    const handleEvaluateQualityOnly = useCallback(() => {
-      setEvalInitialTab('quality');
-      setEvalAllPrompts(false);
-      setIsEvalModalOpen(true);
-    }, []);
-
-    const getEvalContext = useCallback((allPrompts: boolean) => {
+    /** Resolve provider for this chat's model config */
+    const getResolvedProvider = useCallback(() => {
       const state = useStore.getState();
       const chat = state.chats?.[currentChatIndex];
-      if (!chat || !nodeId || !currentChatId) return null;
-
+      if (!chat) return null;
       const config = chat.config;
       const fallbackProvider: ResolvedProvider = {
         endpoint: state.apiEndpoint,
         key: state.apiKey,
       };
-      const resolved = resolveProviderForModel(
-        config.model,
-        state.favoriteModels || [],
-        state.providers || {},
-        fallbackProvider,
-        config.providerId
-      );
-
-      const currentText = content
-        .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-        .map((c) => c.text)
-        .join('\n');
-
-      const phase: 'pre-send' | 'post-receive' =
-        role === 'user' ? 'pre-send' : 'post-receive';
-
-      let userText = '';
-      let assistantText: string | undefined;
-
-      if (allPrompts) {
-        // Collect ALL user messages up to and including the current position
-        const idx = resolveCurrentMessageIndex();
-        const userTexts: string[] = [];
-        for (let i = 0; i <= idx; i++) {
-          const msg = chat.messages[i];
-          if (msg.role === 'user') {
-            const text = msg.content
-              .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-              .map((c) => c.text)
-              .join('\n');
-            userTexts.push(text);
-          }
-        }
-        userText = userTexts.join('\n');
-        if (role === 'assistant') {
-          assistantText = currentText;
-        }
-      } else if (role === 'user') {
-        userText = currentText;
-      } else {
-        // Collect consecutive user messages preceding this assistant message
-        // (mirrors ensureRoleAlternation in submitHelpers.ts)
-        const idx = resolveCurrentMessageIndex();
-        const userTexts: string[] = [];
-        for (let i = idx - 1; i >= 0; i--) {
-          const msg = chat.messages[i];
-          if (msg.role !== 'user') break;
-          const text = msg.content
-            .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-            .map((c) => c.text)
-            .join('\n');
-          userTexts.unshift(text);
-        }
-        userText = userTexts.join('\n');
-        assistantText = currentText;
-      }
-
-      return { phase, userText, assistantText, resolved, model: config.model };
-    }, [currentChatIndex, currentChatId, nodeId, content, role]);
+      return {
+        resolved: resolveProviderForModel(
+          config.model,
+          state.favoriteModels || [],
+          state.providers || {},
+          fallbackProvider,
+          config.providerId
+        ),
+        model: config.model,
+      };
+    }, [currentChatIndex]);
 
     const streamingText = useStreamingText(isGeneratingMessage ? nodeId : undefined);
     const streamingReasoning = useStreamingReasoning(isGeneratingMessage ? nodeId : undefined);
@@ -376,26 +301,22 @@ const UnifiedMessageView = memo(
               onDelete={handleDelete}
               showEvaluateButton={true}
               onEvaluate={handleEvaluate}
-              onEvaluateSafety={handleEvaluateSafety}
-              onEvaluateQuality={handleEvaluateQuality}
-              onEvaluateSafetyOnly={handleEvaluateSafetyOnly}
-              onEvaluateQualityOnly={handleEvaluateQualityOnly}
             />
             {(() => {
               if (!isEvalModalOpen || !nodeId || !currentChatId) return null;
-              const ctx = getEvalContext(evalAllPrompts);
-              if (!ctx) return null;
+              const providerInfo = getResolvedProvider();
+              if (!providerInfo) return null;
               return (
                 <EvaluationModal
                   chatId={currentChatId}
                   nodeId={nodeId}
-                  phase={ctx.phase}
-                  userText={ctx.userText}
-                  assistantText={ctx.assistantText}
-                  resolvedProvider={ctx.resolved}
-                  model={ctx.model}
+                  chatIndex={currentChatIndex}
+                  messageIndex={resolveCurrentMessageIndex()}
+                  phase={role === 'user' ? 'pre-send' : 'post-receive'}
+                  role={role}
+                  resolvedProvider={providerInfo.resolved}
+                  model={providerInfo.model}
                   setIsModalOpen={setIsEvalModalOpen}
-                  initialTab={evalInitialTab}
                 />
               );
             })()}

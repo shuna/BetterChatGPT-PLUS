@@ -1,19 +1,23 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
 import RadarChart from './RadarChart';
 import useStore from '@store/store';
-import { evaluationResultKey, qualityAxisKeys, moderationCategoryKeys, categoryToI18nKey, moderationThresholds } from '@type/evaluation';
+import { evaluationResultKey, qualityAxisKeys, moderationCategoryKeys, categoryToI18nKey } from '@type/evaluation';
 import type {
   EvaluationResult,
   SafetyCheckResult,
   QualityEvaluationResult,
   QualityThresholds,
+  EvaluationScope,
+  EvaluationOmittedMode,
+  EvaluationContextInfo,
 } from '@type/evaluation';
 import { runSafetyCheck, runQualityEvaluation } from '@api/evaluation';
 import type { ResolvedProvider } from '@hooks/submitHelpers';
 import { formatEvaluationErrorMessage } from '@utils/evaluationError';
 import type { FormattedEvaluationError } from '@utils/evaluationError';
+import { resolveEvalContext } from '@utils/evaluationContext';
 import i18next from 'i18next';
 
 type TabId = 'safety' | 'quality';
@@ -21,17 +25,99 @@ type TabId = 'safety' | 'quality';
 interface EvaluationModalProps {
   chatId: string;
   nodeId: string;
+  chatIndex: number;
+  messageIndex: number;
   phase: 'pre-send' | 'post-receive';
-  userText: string;
-  assistantText?: string;
+  role: string;
   resolvedProvider: ResolvedProvider;
   model: string;
   setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  initialTab?: TabId;
 }
 
 // ---------------------------------------------------------------------------
-// Safety Tab
+// Scope / Omitted Options
+// ---------------------------------------------------------------------------
+
+const EvalScopeSelector = ({
+  scope,
+  omittedMode,
+  onScopeChange,
+  onOmittedModeChange,
+}: {
+  scope: EvaluationScope;
+  omittedMode: EvaluationOmittedMode;
+  onScopeChange: (s: EvaluationScope) => void;
+  onOmittedModeChange: (m: EvaluationOmittedMode) => void;
+}) => {
+  const { t } = useTranslation('main');
+  return (
+    <div className='flex flex-wrap items-center gap-3 text-xs'>
+      {/* Scope radio */}
+      <label className='flex items-center gap-1.5 cursor-pointer text-gray-600 dark:text-gray-400'>
+        <input
+          type='radio'
+          name='eval-scope'
+          checked={scope === 'full-context'}
+          onChange={() => onScopeChange('full-context')}
+          className='accent-blue-600'
+        />
+        {t('evaluation.scopeFullContext')}
+      </label>
+      <label className='flex items-center gap-1.5 cursor-pointer text-gray-600 dark:text-gray-400'>
+        <input
+          type='radio'
+          name='eval-scope'
+          checked={scope === 'single'}
+          onChange={() => onScopeChange('single')}
+          className='accent-blue-600'
+        />
+        {t('evaluation.scopeSingle')}
+      </label>
+
+      {/* Omitted toggle — only when full-context */}
+      {scope === 'full-context' && (
+        <label className='flex items-center gap-1.5 cursor-pointer text-gray-500 dark:text-gray-400 ml-2 border-l border-gray-300 dark:border-gray-600 pl-3'>
+          <input
+            type='checkbox'
+            checked={omittedMode === 'include-omitted'}
+            onChange={(e) =>
+              onOmittedModeChange(
+                e.target.checked ? 'include-omitted' : 'respect-omitted'
+              )
+            }
+            className='accent-blue-600'
+          />
+          {t('evaluation.includeOmitted')}
+        </label>
+      )}
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Context condition badge
+// ---------------------------------------------------------------------------
+
+const ContextConditionBadge = ({ ctx }: { ctx?: EvaluationContextInfo }) => {
+  const { t } = useTranslation('main');
+  if (!ctx) return null;
+  let label: string;
+  if (ctx.scope === 'single') {
+    label = t('evaluation.conditionSingle');
+  } else if (ctx.omittedMode === 'include-omitted') {
+    label = t('evaluation.conditionFullIncludeOmitted');
+  } else {
+    label = t('evaluation.conditionFullRespectOmitted');
+  }
+  return (
+    <span className='text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'>
+      {label}
+    </span>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Error Banner
 // ---------------------------------------------------------------------------
 
 const ErrorBanner = ({
@@ -54,14 +140,20 @@ const ErrorBanner = ({
   </div>
 );
 
+// ---------------------------------------------------------------------------
+// Safety Tab
+// ---------------------------------------------------------------------------
+
 const SafetyTab = ({
   result,
+  resultContext,
   isRunning,
   onReEvaluate,
   error,
   onOpenProxySettings,
 }: {
   result?: SafetyCheckResult;
+  resultContext?: EvaluationContextInfo;
   isRunning: boolean;
   onReEvaluate: () => void;
   error?: FormattedEvaluationError | null;
@@ -76,7 +168,6 @@ const SafetyTab = ({
     : [];
 
   const radarLabels = categoryEntries.map(([cat]) => t(`evaluation.category.${categoryToI18nKey(cat)}`));
-  // Invert scores: 0% risk → 100 (safe), 100% risk → 0
   const radarScores = categoryEntries.map(([, score]) => 1 - score);
 
   return (
@@ -95,6 +186,7 @@ const SafetyTab = ({
               {result.flagged ? t('evaluation.flagged') : t('evaluation.safe')}
             </span>
           )}
+          <ContextConditionBadge ctx={resultContext} />
           {!result && !isRunning && (
             <span className='text-sm text-gray-500 dark:text-gray-400'>
               {t('evaluation.notEvaluated')}
@@ -143,7 +235,6 @@ const SafetyTab = ({
           <thead>
             <tr className='text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-600'>
               <th className='py-2 font-medium'>{t('evaluation.modalCategory')}</th>
-              <th className='py-2 font-medium text-right'>{t('evaluation.modalThreshold')}</th>
               <th className='py-2 font-medium text-right'>{t('evaluation.modalScore')}</th>
               <th className='py-2 font-medium text-center'>{t('evaluation.modalStatus')}</th>
             </tr>
@@ -152,15 +243,10 @@ const SafetyTab = ({
             {categoryEntries.map(([cat, score]) => {
               const flagged = result?.categories[cat];
               const pct = (score * 100).toFixed(1);
-              const threshold = moderationThresholds[cat];
-              const thresholdPct = (threshold * 100).toFixed(1);
               return (
                 <tr key={cat} className='border-t border-gray-100 dark:border-gray-700'>
                   <td className='py-2 text-gray-700 dark:text-gray-300'>
                     {t(`evaluation.category.${categoryToI18nKey(cat)}`)}
-                  </td>
-                  <td className='py-2 text-right text-gray-500 dark:text-gray-400'>
-                    {thresholdPct}%
                   </td>
                   <td className='py-2 text-right text-gray-600 dark:text-gray-400'>
                     {pct}%
@@ -194,16 +280,20 @@ const SafetyTab = ({
 
 const QualityTab = ({
   result,
+  resultContext,
   isRunning,
   onReEvaluate,
   error,
   thresholds,
+  disabledReason,
 }: {
   result?: QualityEvaluationResult;
+  resultContext?: EvaluationContextInfo;
   isRunning: boolean;
   thresholds: QualityThresholds;
   onReEvaluate: () => void;
   error?: FormattedEvaluationError | null;
+  disabledReason?: string | null;
 }) => {
   const { t } = useTranslation('main');
 
@@ -211,7 +301,6 @@ const QualityTab = ({
   const scores = result ? qualityAxisKeys.map((k) => result.scores[k]) : [];
   const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
 
-  // Compute average color from thresholds (use mean of per-axis reds/greens)
   const avgRed = qualityAxisKeys.reduce((s, k) => s + thresholds[k].red, 0) / qualityAxisKeys.length;
   const avgGreen = qualityAxisKeys.reduce((s, k) => s + thresholds[k].green, 0) / qualityAxisKeys.length;
   const avgDotColor =
@@ -236,6 +325,7 @@ const QualityTab = ({
               </span>
             </>
           )}
+          <ContextConditionBadge ctx={resultContext} />
           {!result && !isRunning && (
             <span className='text-sm text-gray-500 dark:text-gray-400'>
               {t('evaluation.notEvaluated')}
@@ -245,11 +335,18 @@ const QualityTab = ({
         <button
           className='text-xs px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50'
           onClick={onReEvaluate}
-          disabled={isRunning}
+          disabled={isRunning || !!disabledReason}
+          title={disabledReason ?? undefined}
         >
           {isRunning ? t('evaluation.running') : result ? t('evaluation.reEvaluate') : t('evaluation.runEvaluation')}
         </button>
       </div>
+
+      {disabledReason && !isRunning && (
+        <div className='text-xs text-amber-600 dark:text-amber-400'>
+          {disabledReason}
+        </div>
+      )}
 
       {error && <ErrorBanner message={error.message} />}
 
@@ -260,7 +357,7 @@ const QualityTab = ({
         </div>
       )}
 
-      {/* Score table – same layout as SafetyTab */}
+      {/* Score table */}
       {result && (
         <table className='w-full text-sm'>
           <thead>
@@ -278,10 +375,7 @@ const QualityTab = ({
               const dotColor =
                 score >= th.green ? 'bg-green-500' : score >= th.red ? 'bg-yellow-500' : 'bg-red-500';
               return (
-                <tr
-                  key={axis}
-                  className='border-t border-gray-100 dark:border-gray-700'
-                >
+                <tr key={axis} className='border-t border-gray-100 dark:border-gray-700'>
                   <td className='py-2 text-gray-700 dark:text-gray-300'>
                     {t(`evaluation.axis.${axis}`)}
                   </td>
@@ -387,20 +481,41 @@ const QualityTab = ({
 const EvaluationModal: React.FC<EvaluationModalProps> = ({
   chatId,
   nodeId,
+  chatIndex,
+  messageIndex,
   phase,
-  userText,
-  assistantText,
+  role,
   resolvedProvider,
   model,
   setIsModalOpen,
-  initialTab,
 }) => {
   const { t } = useTranslation('main');
-  const [activeTab, setActiveTab] = useState<TabId>(initialTab ?? 'safety');
+
+  // Fixed width based on viewport — recalculated only on window resize
+  const computeDialogWidth = () => {
+    const vw = window.innerWidth;
+    if (vw < 640) return vw - 32;          // mobile: full width minus padding
+    if (vw < 1024) return Math.min(vw - 64, 720);  // tablet
+    return Math.min(vw - 128, 896);        // desktop: max ~56rem
+  };
+  const [dialogWidth, setDialogWidth] = useState(computeDialogWidth);
+
+  useEffect(() => {
+    const handleResize = () => setDialogWidth(computeDialogWidth());
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const [activeTab, setActiveTab] = useState<TabId>('safety');
   const [safetyRunning, setSafetyRunning] = useState(false);
   const [qualityRunning, setQualityRunning] = useState(false);
   const [safetyError, setSafetyError] = useState<FormattedEvaluationError | null>(null);
   const [qualityError, setQualityError] = useState<FormattedEvaluationError | null>(null);
+
+  // Scope options (shared across tabs)
+  const [scope, setScope] = useState<EvaluationScope>('full-context');
+  const [omittedMode, setOmittedMode] = useState<EvaluationOmittedMode>('respect-omitted');
+
   const setShowProxySettings = useStore((state) => state.setShowProxySettings);
   const qualityThresholds = useStore((state) => state.qualityThresholds);
 
@@ -409,9 +524,43 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
     (state) => state.evaluationResults[key]
   );
 
+  const currentContextInfo: EvaluationContextInfo = {
+    scope,
+    omittedMode: scope === 'full-context' ? omittedMode : 'respect-omitted',
+  };
+
+  // Pre-resolve context to check availability for button disabling (P3)
+  const preResolvedCtx = resolveEvalContext(chatIndex, messageIndex, role, scope, omittedMode);
+  const qualityDisabledReason: string | null = (() => {
+    if (!preResolvedCtx) return t('evaluation.noContext') as string;
+    const promptText = scope === 'full-context' ? preResolvedCtx.contextText : preResolvedCtx.userText;
+    if (!promptText) return t('evaluation.noUserText') as string;
+    return null;
+  })();
+
   const handleRunSafety = useCallback(async () => {
-    const textToCheck = phase === 'pre-send' ? userText : (assistantText ?? userText);
+    const ctx = resolveEvalContext(chatIndex, messageIndex, role, scope, omittedMode);
+    if (!ctx) return;
+
+    // For full-context: check the full conversation text (all roles)
+    // plus assistant text if post-receive.
+    // For single: check just the target message text.
+    let textToCheck: string;
+    if (scope === 'full-context') {
+      // Include the full conversation context
+      const parts = [ctx.contextText];
+      if (phase === 'post-receive' && ctx.assistantText) {
+        parts.push(`[assistant]\n${ctx.assistantText}`);
+      }
+      textToCheck = parts.join('\n\n');
+    } else {
+      // Single: check just the target message
+      textToCheck = phase === 'post-receive'
+        ? (ctx.assistantText ?? ctx.userText)
+        : ctx.userText;
+    }
     if (!textToCheck) return;
+
     setSafetyRunning(true);
     setSafetyError(null);
     try {
@@ -421,6 +570,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
         ...existing,
         phase,
         safety,
+        safetyContext: { ...currentContextInfo },
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -429,16 +579,23 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
     } finally {
       setSafetyRunning(false);
     }
-  }, [key, phase, userText, assistantText, resolvedProvider]);
+  }, [key, phase, chatIndex, messageIndex, role, scope, omittedMode, t]);
 
   const handleRunQuality = useCallback(async () => {
-    if (!userText) return;
+    const ctx = resolveEvalContext(chatIndex, messageIndex, role, scope, omittedMode);
+    if (!ctx) return;
+    // full-context: use contextText (all roles) so the judge sees the
+    // actual generation context including prior assistant turns and system
+    // messages.  single: use userText (user-role only).
+    const promptText = scope === 'full-context' ? ctx.contextText : ctx.userText;
+    if (!promptText) return;
+
     setQualityRunning(true);
     setQualityError(null);
     try {
       const quality = await runQualityEvaluation(
-        userText,
-        phase === 'post-receive' ? assistantText : undefined,
+        promptText,
+        phase === 'post-receive' ? ctx.assistantText : undefined,
         resolvedProvider.endpoint,
         model,
         resolvedProvider.key,
@@ -449,6 +606,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
         ...existing,
         phase,
         quality,
+        qualityContext: { ...currentContextInfo },
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -457,7 +615,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
     } finally {
       setQualityRunning(false);
     }
-  }, [key, phase, userText, assistantText, resolvedProvider, model]);
+  }, [key, phase, chatIndex, messageIndex, role, scope, omittedMode, resolvedProvider, model, t]);
 
   const tabs: { id: TabId; label: string }[] = [
     { id: 'safety', label: t('evaluation.safetyTitle') },
@@ -469,9 +627,17 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
       title={t('evaluation.modalTitle') as string}
       setIsModalOpen={setIsModalOpen}
       cancelButton={false}
-      maxWidth='max-w-3xl'
+      maxWidth='max-w-4xl'
     >
-      <div className='p-6 space-y-4'>
+      <div className='p-6 space-y-4' style={{ width: dialogWidth }}>
+        {/* Scope selector — shared across tabs */}
+        <EvalScopeSelector
+          scope={scope}
+          omittedMode={omittedMode}
+          onScopeChange={setScope}
+          onOmittedModeChange={setOmittedMode}
+        />
+
         {/* Tab bar */}
         <div className='flex border-b border-gray-200 dark:border-gray-600'>
           {tabs.map((tab) => (
@@ -505,6 +671,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
         {activeTab === 'safety' && (
           <SafetyTab
             result={result?.safety}
+            resultContext={result?.safetyContext}
             isRunning={safetyRunning}
             onReEvaluate={handleRunSafety}
             error={safetyError}
@@ -517,10 +684,12 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
         {activeTab === 'quality' && (
           <QualityTab
             result={result?.quality}
+            resultContext={result?.qualityContext}
             isRunning={qualityRunning}
             onReEvaluate={handleRunQuality}
             error={qualityError}
             thresholds={qualityThresholds}
+            disabledReason={qualityDisabledReason}
           />
         )}
       </div>

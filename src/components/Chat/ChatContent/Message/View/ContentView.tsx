@@ -43,8 +43,6 @@ const ContentView = memo(
 
     const [isDelete, setIsDelete] = useState<boolean>(false);
     const [isEvalModalOpen, setIsEvalModalOpen] = useState(false);
-    const [evalInitialTab, setEvalInitialTab] = useState<'safety' | 'quality'>('safety');
-    const [evalAllPrompts, setEvalAllPrompts] = useState(false);
 
     const currentChatIndex = useStore((state) => state.currentChatIndex);
     const removeMessageAtIndex = useStore((state) => state.removeMessageAtIndex);
@@ -123,106 +121,30 @@ const ContentView = memo(
     };
 
     const handleEvaluate = useCallback(() => {
-      setEvalAllPrompts(false);
       setIsEvalModalOpen(true);
     }, []);
 
-    const handleEvaluateSafety = useCallback(() => {
-      setEvalInitialTab('safety');
-      setEvalAllPrompts(true);
-      setIsEvalModalOpen(true);
-    }, []);
-
-    const handleEvaluateQuality = useCallback(() => {
-      setEvalInitialTab('quality');
-      setEvalAllPrompts(true);
-      setIsEvalModalOpen(true);
-    }, []);
-
-    const handleEvaluateSafetyOnly = useCallback(() => {
-      setEvalInitialTab('safety');
-      setEvalAllPrompts(false);
-      setIsEvalModalOpen(true);
-    }, []);
-
-    const handleEvaluateQualityOnly = useCallback(() => {
-      setEvalInitialTab('quality');
-      setEvalAllPrompts(false);
-      setIsEvalModalOpen(true);
-    }, []);
-
-    // Resolve evaluation context for the modal
-    const getEvalContext = useCallback((allPrompts: boolean) => {
+    /** Resolve provider for this chat's model config */
+    const getResolvedProvider = useCallback(() => {
       const state = useStore.getState();
       const chat = state.chats?.[currentChatIndex];
-      if (!chat || !nodeId || !currentChatId) return null;
-
+      if (!chat) return null;
       const config = chat.config;
       const fallbackProvider: ResolvedProvider = {
         endpoint: state.apiEndpoint,
         key: state.apiKey,
       };
-      const resolved = resolveProviderForModel(
-        config.model,
-        state.favoriteModels || [],
-        state.providers || {},
-        fallbackProvider,
-        config.providerId
-      );
-
-      const currentText = content
-        .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-        .map((c) => c.text)
-        .join('\n');
-
-      const phase: 'pre-send' | 'post-receive' =
-        role === 'user' ? 'pre-send' : 'post-receive';
-
-      let userText = '';
-      let assistantText: string | undefined;
-
-      if (allPrompts) {
-        const idx = resolveCurrentMessageIndex();
-        const userTexts: string[] = [];
-        for (let i = 0; i <= idx; i++) {
-          const msg = chat.messages[i];
-          if (msg.role === 'user') {
-            const text = msg.content
-              .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-              .map((c) => c.text)
-              .join('\n');
-            userTexts.push(text);
-          }
-        }
-        userText = userTexts.join('\n');
-        if (role === 'assistant') {
-          assistantText = currentText;
-        }
-      } else if (role === 'user') {
-        userText = currentText;
-      } else {
-        const idx = resolveCurrentMessageIndex();
-        for (let i = idx - 1; i >= 0; i--) {
-          const msg = chat.messages[i];
-          if (msg.role === 'user') {
-            userText = msg.content
-              .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-              .map((c) => c.text)
-              .join('\n');
-            break;
-          }
-        }
-        assistantText = currentText;
-      }
-
       return {
-        phase,
-        userText,
-        assistantText,
-        resolved,
+        resolved: resolveProviderForModel(
+          config.model,
+          state.favoriteModels || [],
+          state.providers || {},
+          fallbackProvider,
+          config.providerId
+        ),
         model: config.model,
       };
-    }, [currentChatIndex, currentChatId, nodeId, content, role]);
+    }, [currentChatIndex]);
 
     const currentTextContent = content?.[0] && isTextContent(content[0]) ? content[0].text : '';
     const handleCopy = () => {
@@ -232,7 +154,7 @@ const ContentView = memo(
     ? (content.slice(1).filter(isImageContent) as ImageContentInterface[])
     : [];
 
-    const evalContext = isEvalModalOpen ? getEvalContext(evalAllPrompts) : null;
+    const providerInfo = isEvalModalOpen ? getResolvedProvider() : null;
 
     return (
       <>
@@ -270,22 +192,18 @@ const ContentView = memo(
           onCopy={handleCopy}
           onDelete={handleDelete}
           onEvaluate={handleEvaluate}
-          onEvaluateSafety={handleEvaluateSafety}
-          onEvaluateQuality={handleEvaluateQuality}
-          onEvaluateSafetyOnly={handleEvaluateSafetyOnly}
-          onEvaluateQualityOnly={handleEvaluateQualityOnly}
         />
-        {isEvalModalOpen && nodeId && currentChatId && evalContext && (
+        {isEvalModalOpen && nodeId && currentChatId && providerInfo && (
           <EvaluationModal
             chatId={currentChatId}
             nodeId={nodeId}
-            phase={evalContext.phase}
-            userText={evalContext.userText}
-            assistantText={evalContext.assistantText}
-            resolvedProvider={evalContext.resolved}
-            model={evalContext.model}
+            chatIndex={currentChatIndex}
+            messageIndex={resolveCurrentMessageIndex()}
+            phase={role === 'user' ? 'pre-send' : 'post-receive'}
+            role={role}
+            resolvedProvider={providerInfo.resolved}
+            model={providerInfo.model}
             setIsModalOpen={setIsEvalModalOpen}
-            initialTab={evalInitialTab}
           />
         )}
       </>

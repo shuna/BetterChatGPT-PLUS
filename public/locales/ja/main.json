@@ -368,12 +368,23 @@
       "violence": "暴力",
       "harassmentThreatening": "脅迫を伴うハラスメント",
       "selfHarmIntent": "自傷の意図",
-      "selfHarmInstructions": "自傷の手順"
+      "selfHarmInstructions": "自傷の手順",
+      "illicit": "違法行為",
+      "illicitViolent": "暴力を伴う違法行為"
     },
     "notEvaluated": "未評価",
     "running": "評価中...",
     "reEvaluate": "再評価",
     "runEvaluation": "評価を実行",
-    "evaluateThisOnly": "このメッセージのみ評価"
+    "evaluateThisOnly": "このメッセージのみ評価",
+    "evaluateAllPrompts": "全プロンプトで評価",
+    "scopeFullContext": "文脈全体",
+    "scopeSingle": "このプロンプトだけ",
+    "includeOmitted": "省略メッセージを含める",
+    "conditionSingle": "このプロンプトだけ",
+    "conditionFullRespectOmitted": "文脈全体（省略を反映）",
+    "conditionFullIncludeOmitted": "文脈全体（省略を含む）",
+    "noContext": "評価文脈を解決できません",
+    "noUserText": "選択した文脈にユーザーメッセージがありません"
   }
 }

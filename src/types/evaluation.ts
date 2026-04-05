@@ -24,6 +24,8 @@ export interface ModerationCategories {
   'harassment/threatening': boolean;
   'self-harm/intent': boolean;
   'self-harm/instructions': boolean;
+  illicit: boolean;
+  'illicit/violent': boolean;
 }
 
 /** All moderation category keys in API order */
@@ -31,27 +33,13 @@ export const moderationCategoryKeys: (keyof ModerationCategories)[] = [
   'sexual', 'hate', 'harassment', 'self-harm', 'sexual/minors',
   'hate/threatening', 'violence/graphic', 'violence',
   'harassment/threatening', 'self-harm/intent', 'self-harm/instructions',
+  'illicit', 'illicit/violent',
 ];
 
 /** Convert API category key (e.g. "self-harm/intent") to i18n key (e.g. "selfHarmIntent") */
 export function categoryToI18nKey(cat: string): string {
   return cat.replace(/[/-](\w)/g, (_, c) => c.toUpperCase());
 }
-
-/** Default flagging thresholds per moderation category (OpenAI defaults) */
-export const moderationThresholds: Record<keyof ModerationCategories, number> = {
-  sexual: 0.5,
-  hate: 0.5,
-  harassment: 0.5,
-  'self-harm': 0.5,
-  'sexual/minors': 0.5,
-  'hate/threatening': 0.5,
-  'violence/graphic': 0.5,
-  violence: 0.5,
-  'harassment/threatening': 0.5,
-  'self-harm/intent': 0.5,
-  'self-harm/instructions': 0.5,
-};
 
 /** OpenAI Moderation API category scores */
 export type ModerationCategoryScores = Record<keyof ModerationCategories, number>;
@@ -114,12 +102,29 @@ export interface QualityEvaluationResult {
   timestamp: number;
 }
 
+/** Evaluation scope: single prompt vs full conversation context */
+export type EvaluationScope = 'single' | 'full-context';
+
+/** How omitted messages are handled when scope is full-context */
+export type EvaluationOmittedMode = 'respect-omitted' | 'include-omitted';
+
+/** Metadata describing the conditions under which an evaluation was run */
+export interface EvaluationContextInfo {
+  scope: EvaluationScope;
+  /** Only meaningful when scope is 'full-context' */
+  omittedMode: EvaluationOmittedMode;
+}
+
 /** Evaluation result attached to a message */
 export interface EvaluationResult {
   /** Which phase this evaluation was for */
   phase: 'pre-send' | 'post-receive';
   safety?: SafetyCheckResult;
   quality?: QualityEvaluationResult;
+  /** Conditions under which the safety evaluation was run */
+  safetyContext?: EvaluationContextInfo;
+  /** Conditions under which the quality evaluation was run */
+  qualityContext?: EvaluationContextInfo;
 }
 
 /** Map from "chatId:nodeId:phase" to evaluation result */
