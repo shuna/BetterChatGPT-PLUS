@@ -242,7 +242,7 @@
     }
   },
   "evaluation": {
-    "safetyTitle": "セーフティチェック",
+    "safetyTitle": "安全性評価",
     "qualityTitle": "品質評価",
     "safetyPreSend": "送信前セーフティ",
     "safetyPostReceive": "受信後セーフティ",
@@ -285,6 +285,10 @@
       }
     },
     "errors": {
+      "modelNotSelected": {
+        "title": "モデル未選択",
+        "description": "品質評価を実行するにはモデルを選択してください。モデルセレクターからモデルを選択してください。"
+      },
       "apiKeyRequired": {
         "title": "OpenAI APIキー未設定",
         "description": "セーフティチェックにはOpenAI APIキーが必要です。設定 > プロバイダー > OpenAI で設定してください。"
@@ -296,6 +300,10 @@
       "connectionFailed": {
         "title": "接続失敗",
         "description": "{{url}} への接続に失敗しました: {{detail}}"
+      },
+      "moderationNotFound": {
+        "title": "Moderation API: 404 Not Found",
+        "description": "Moderation APIが {{url}} で404を返しました。考えられる原因: 1) エンドポイントURLが正しくない可能性、2) APIキーまたはプロジェクトがモデレーションモデルへのアクセス権を持っていない可能性、3) プロバイダーがOpenAI Moderation APIに対応していない可能性。設定でOpenAIのエンドポイントとAPIキーの権限を確認してください。"
       },
       "moderationApiError": {
         "title": "Moderation APIエラー",
@@ -342,6 +350,19 @@
       "coherence": "一貫性",
       "conciseness": "簡潔性",
       "instructionFollowing": "指示遵守"
+    },
+    "category": {
+      "sexual": "性的コンテンツ",
+      "hate": "ヘイト",
+      "harassment": "ハラスメント",
+      "selfHarm": "自傷行為",
+      "sexualMinors": "未成年の性的コンテンツ",
+      "hateThreatening": "脅迫を伴うヘイト",
+      "violenceGraphic": "暴力的描写",
+      "violence": "暴力",
+      "harassmentThreatening": "脅迫を伴うハラスメント",
+      "selfHarmIntent": "自傷の意図",
+      "selfHarmInstructions": "自傷の手順"
     },
     "notEvaluated": "未評価",
     "running": "評価中...",

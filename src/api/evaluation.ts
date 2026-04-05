@@ -74,6 +74,9 @@ export async function runSafetyCheck(
 
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
+    if (response.status === 404) {
+      throw new Error(`[EVAL_MODERATION_NOT_FOUND] url=${moderationUrl} detail=${detail}`);
+    }
     throw new Error(`[EVAL_MODERATION_API_ERROR] status=${response.status} url=${moderationUrl} detail=${detail}`);
   }
 
@@ -135,10 +138,15 @@ Respond ONLY with valid JSON in this exact format:
 
 function buildJudgeMessages(
   userPrompt: string,
-  assistantResponse?: string
+  assistantResponse?: string,
+  language?: string
 ): Array<{ role: string; content: string }> {
   const isPreSend = !assistantResponse;
-  const systemPrompt = isPreSend ? QUALITY_PROMPT_ONLY_SYSTEM : QUALITY_SYSTEM_PROMPT;
+  const basePrompt = isPreSend ? QUALITY_PROMPT_ONLY_SYSTEM : QUALITY_SYSTEM_PROMPT;
+  const langInstruction = language && language !== 'en'
+    ? `\n\nIMPORTANT: Write ALL reasoning, promptSuggestions, and configSuggestions text in ${language}. The JSON keys must remain in English.`
+    : '';
+  const systemPrompt = basePrompt + langInstruction;
 
   const userContent = isPreSend
     ? `## User Prompt\n${userPrompt}`
@@ -188,25 +196,38 @@ export async function runQualityEvaluation(
   assistantResponse: string | undefined,
   endpoint: string,
   model: string,
-  apiKey?: string
+  apiKey?: string,
+  language?: string
 ): Promise<QualityEvaluationResult> {
+  if (!model) {
+    throw new Error('[EVAL_MODEL_NOT_SELECTED]');
+  }
+
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
 
-  const messages = buildJudgeMessages(userPrompt, assistantResponse);
+  const messages = buildJudgeMessages(userPrompt, assistantResponse, language);
   const chatUrl = endpoint.includes('/chat/completions')
     ? endpoint
     : deriveBaseUrl(endpoint) + '/chat/completions';
 
+  // Only include response_format for providers known to support JSON mode.
+  // Sending it to unsupported providers can cause 4xx errors.
+  const supportsJsonMode = /openai\.com|openrouter\.ai|together\.xyz|fireworks\.ai|groq\.com|mistral\.ai|deepinfra\.com/i.test(chatUrl);
+  const body: Record<string, unknown> = {
+    model,
+    messages,
+    temperature: 0,
+    max_tokens: 2048,
+  };
+  if (supportsJsonMode) {
+    body.response_format = { type: 'json_object' };
+  }
+
   const response = await fetch(chatUrl, {
     method: 'POST',
     headers,
-    body: JSON.stringify({
-      model,
-      messages,
-      temperature: 0,
-      max_tokens: 2048,
-    }),
+    body: JSON.stringify(body),
   }).catch((e) => {
     throw new Error(`[EVAL_QUALITY_CONNECTION_FAILED] url=${chatUrl} detail=${e.message}`);
   });

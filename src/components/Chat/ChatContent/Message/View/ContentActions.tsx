@@ -81,9 +81,6 @@ export default function ContentActions({
 
               <CopyButton onClick={onCopy} />
               {!isGeneratingMessage && <EditButton setIsEdit={setIsEdit} disabled={isProtected} />}
-              {showEvaluateButton && !isGeneratingMessage && (
-                <EvaluateButton onClick={onEvaluate} />
-              )}
               <DeleteButton setIsDelete={setIsDelete} disabled={isProtected} />
             </>
           )}
@@ -108,6 +105,11 @@ export default function ContentActions({
         </div>
       </div>
       </div>
+      {showEvaluateButton && !isGeneratingMessage && !isDelete && (
+        <div className='absolute right-0 top-1/2 -translate-y-1/2 min-w-0 shrink-0 md:right-1 pointer-events-none opacity-0 transition duration-150 group-hover:pointer-events-auto group-hover:opacity-100'>
+          <EvaluateButton onClick={onEvaluate} />
+        </div>
+      )}
     </div>
   );
 }

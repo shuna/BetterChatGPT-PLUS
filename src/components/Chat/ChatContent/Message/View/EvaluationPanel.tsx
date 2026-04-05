@@ -1,7 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
-import { evaluationResultKey, qualityAxisKeys } from '@type/evaluation';
+import { evaluationResultKey, qualityAxisKeys, categoryToI18nKey } from '@type/evaluation';
 import type { EvaluationResult, SafetyCheckResult, QualityEvaluationResult } from '@type/evaluation';
 
 interface EvaluationPanelProps {
@@ -34,33 +34,27 @@ const SafetySection = ({ result }: { result: SafetyCheckResult }) => {
     .map(([k]) => k);
 
   return (
-    <div className='space-y-1.5'>
-      <div className='flex items-center gap-2'>
-        <span className='text-xs font-semibold text-gray-600 dark:text-gray-400'>
-          {t('evaluation.safetyTitle')}
-        </span>
+    <div className='flex flex-wrap items-center gap-1.5'>
+      <span className='text-xs font-semibold text-gray-600 dark:text-gray-400'>
+        {t('evaluation.safetyTitle')}
+      </span>
+      <span
+        className={`text-xs font-medium px-1.5 py-0.5 rounded ${
+          result.flagged
+            ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+            : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+        }`}
+      >
+        {result.flagged ? t('evaluation.flagged') : t('evaluation.safe')}
+      </span>
+      {flaggedCategories.map((cat) => (
         <span
-          className={`text-xs font-medium px-1.5 py-0.5 rounded ${
-            result.flagged
-              ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-              : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-          }`}
+          key={cat}
+          className='text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'
         >
-          {result.flagged ? t('evaluation.flagged') : t('evaluation.safe')}
+          {t(`evaluation.category.${categoryToI18nKey(cat)}`)}
         </span>
-      </div>
-      {flaggedCategories.length > 0 && (
-        <div className='flex flex-wrap gap-1'>
-          {flaggedCategories.map((cat) => (
-            <span
-              key={cat}
-              className='text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'
-            >
-              {cat}
-            </span>
-          ))}
-        </div>
-      )}
+      ))}
     </div>
   );
 };
