@@ -247,8 +247,9 @@ const SafetyTab = ({
           <thead>
             <tr className='text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-600'>
               <th className='py-2 font-medium'>{t('evaluation.modalCategory')}</th>
-              <th className='py-2 font-medium text-right'>{t('evaluation.modalThreshold')}</th>
               <th className='py-2 font-medium text-right'>{t('evaluation.modalScore')}</th>
+              <th className='py-2 font-medium text-right'>{t('evaluation.modalThresholdPass')}</th>
+              <th className='py-2 font-medium text-right'>{t('evaluation.modalThresholdWarn')}</th>
               <th className='py-2 font-medium text-center'>{t('evaluation.modalStatus')}</th>
             </tr>
           </thead>
@@ -262,11 +263,14 @@ const SafetyTab = ({
                   <td className='py-2 text-gray-700 dark:text-gray-300'>
                     {t(`evaluation.category.${categoryToI18nKey(cat)}`)}
                   </td>
-                  <td className='py-2 text-right text-gray-500 dark:text-gray-400'>
-                    {Math.round(threshold.review * 100)}% / {Math.round(threshold.block * 100)}%
-                  </td>
                   <td className='py-2 text-right text-gray-600 dark:text-gray-400'>
                     {pct}%
+                  </td>
+                  <td className='py-2 text-right text-gray-500 dark:text-gray-400'>
+                    {Math.round(threshold.review * 100)}%
+                  </td>
+                  <td className='py-2 text-right text-gray-500 dark:text-gray-400'>
+                    {Math.round(threshold.block * 100)}%
                   </td>
                   <td className='py-2 text-center'>
                     {status === 'block' ? (
@@ -400,8 +404,8 @@ const QualityTab = ({
           <thead>
             <tr className='text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-600'>
               <th className='py-2 font-medium'>{t('evaluation.modalAxis')}</th>
-              <th className='py-2 font-medium text-right'>{t('evaluation.modalThreshold')}</th>
               <th className='py-2 font-medium text-right'>{t('evaluation.modalScore')}</th>
+              <th className='py-2 font-medium text-right'>{t('evaluation.modalThreshold')}</th>
               <th className='py-2 font-medium text-center'>{t('evaluation.modalStatus')}</th>
             </tr>
           </thead>
@@ -417,11 +421,11 @@ const QualityTab = ({
                   <td className='py-2 text-gray-700 dark:text-gray-300'>
                     {t(`${axisPrefix}.${axis}`)}
                   </td>
-                  <td className='py-2 text-right text-gray-500 dark:text-gray-400'>
-                    {Math.round(th.red * 100)}%
-                  </td>
                   <td className='py-2 text-right text-gray-600 dark:text-gray-400'>
                     {Math.round(score * 100)}%
+                  </td>
+                  <td className='py-2 text-right text-gray-500 dark:text-gray-400'>
+                    {Math.round(th.red * 100)}%
                   </td>
                   <td className='py-2 text-center'>
                     <span className={`inline-block w-2.5 h-2.5 rounded-full ${dotColor}`} />
@@ -435,10 +439,10 @@ const QualityTab = ({
               <td className='py-2 font-semibold text-gray-900 dark:text-gray-200'>
                 {t('evaluation.modalAverage')}
               </td>
-              <td />
               <td className='py-2 text-right font-bold text-gray-900 dark:text-gray-200'>
                 {Math.round(avgScore * 100)}%
               </td>
+              <td />
               <td className='py-2 text-center'>
                 <span className={`inline-block w-2.5 h-2.5 rounded-full ${avgDotColor}`} />
               </td>
@@ -665,8 +669,8 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
   }, [key, phase, chatIndex, messageIndex, role, scope, omittedMode, resolvedProvider, model, t]);
 
   const tabs: { id: TabId; label: string }[] = [
-    { id: 'safety', label: t('evaluation.safetyTitle') },
-    { id: 'quality', label: t('evaluation.qualityTitle') },
+    { id: 'safety', label: t('evaluation.safetyTabLabel') },
+    { id: 'quality', label: t('evaluation.qualityTabLabel') },
   ];
 
   return (

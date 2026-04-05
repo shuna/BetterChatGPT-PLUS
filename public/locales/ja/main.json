@@ -244,6 +244,8 @@
   "evaluation": {
     "safetyTitle": "安全性評価の実行タイミング",
     "qualityTitle": "品質評価の実行タイミング",
+    "safetyTabLabel": "安全性評価",
+    "qualityTabLabel": "品質評価",
     "safetyAboutTitle": "安全性評価について",
     "qualityAboutTitle": "品質評価について",
     "safetyPreSend": "送信前安全性評価",
@@ -343,6 +345,8 @@
     "modalCategory": "カテゴリ",
     "modalScore": "スコア",
     "modalThreshold": "閾値",
+    "modalThresholdPass": "合格",
+    "modalThresholdWarn": "警告",
     "modalStatus": "状態",
     "modalAxis": "評価軸",
     "modalReasoning": "根拠",

@@ -249,6 +249,8 @@
   "evaluation": {
     "safetyTitle": "Safety Evaluation Timing",
     "qualityTitle": "Quality Evaluation Timing",
+    "safetyTabLabel": "Safety Evaluation",
+    "qualityTabLabel": "Quality Evaluation",
     "safetyAboutTitle": "About Safety Evaluation",
     "qualityAboutTitle": "About Quality Evaluation",
     "safetyPreSend": "Pre-send Safety Evaluation",
@@ -392,6 +394,8 @@
     "modalCategory": "Category",
     "modalScore": "Score",
     "modalThreshold": "Threshold",
+    "modalThresholdPass": "Pass",
+    "modalThresholdWarn": "Warning",
     "modalStatus": "Status",
     "modalAxis": "Axis",
     "modalReasoning": "Reasoning",
