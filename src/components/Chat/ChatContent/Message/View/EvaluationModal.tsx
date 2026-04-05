@@ -13,6 +13,8 @@ import type {
   SafetyThresholds,
   EvaluationScope,
   EvaluationOmittedMode,
+  LocalModerationResult,
+  LocalQualityHint,
   EvaluationContextInfo,
 } from '@type/evaluation';
 import { runSafetyCheck, runQualityEvaluation } from '@api/evaluation';
@@ -130,6 +132,7 @@ const ErrorBanner = ({
 
 const SafetyTab = ({
   result,
+  localSafety,
   isRunning,
   onReEvaluate,
   error,
@@ -142,6 +145,7 @@ const SafetyTab = ({
   onOmittedModeChange,
 }: {
   result?: SafetyCheckResult;
+  localSafety?: LocalModerationResult;
   isRunning: boolean;
   onReEvaluate: () => void;
   error?: FormattedEvaluationError | null;
@@ -289,6 +293,50 @@ const SafetyTab = ({
         </table>
       )}
 
+      {/* Local screening section */}
+      {localSafety && (
+        <div className='mt-4 rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/10 p-3 space-y-2'>
+          <div className='flex items-center gap-2'>
+            <span className='text-xs font-semibold text-amber-800 dark:text-amber-300'>
+              {t('evaluation.localScreening')}
+            </span>
+            <span className='text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-800/40 text-amber-600 dark:text-amber-400'>
+              {t('evaluation.localScreeningReference')}
+            </span>
+          </div>
+          <div className='flex items-center gap-2'>
+            <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
+              localSafety.screening === 'safe' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+              localSafety.screening === 'warn' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+              'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+            }`}>
+              {localSafety.screening}
+            </span>
+          </div>
+          {localSafety.rawScores.length > 0 && (
+            <div className='space-y-1'>
+              {localSafety.rawScores.map((s) => (
+                <div key={s.label} className='flex items-center gap-2 text-xs'>
+                  <span className='w-28 text-gray-600 dark:text-gray-400 truncate'>{s.label}</span>
+                  <div className='flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden'>
+                    <div
+                      className='h-full bg-amber-500 rounded-full'
+                      style={{ width: `${Math.round(s.score * 100)}%` }}
+                    />
+                  </div>
+                  <span className='w-8 text-right text-gray-500 dark:text-gray-400'>
+                    {Math.round(s.score * 100)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className='text-[10px] text-gray-400 dark:text-gray-500'>
+            {new Date(localSafety.timestamp).toLocaleString(i18next.language)}
+          </div>
+        </div>
+      )}
+
       {result && (
         <div className='text-xs text-gray-400 dark:text-gray-500'>
           {new Date(result.timestamp).toLocaleString(i18next.language)}
@@ -304,6 +352,7 @@ const SafetyTab = ({
 
 const QualityTab = ({
   result,
+  localQualityHint,
   isRunning,
   onReEvaluate,
   error,
@@ -316,6 +365,7 @@ const QualityTab = ({
   onOmittedModeChange,
 }: {
   result?: QualityEvaluationResult;
+  localQualityHint?: LocalQualityHint;
   isRunning: boolean;
   thresholds: QualityThresholds;
   onReEvaluate: () => void;
@@ -505,6 +555,37 @@ const QualityTab = ({
               <li key={i}>{s}</li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Local quality hint section */}
+      {localQualityHint && (
+        <div className='mt-4 rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/10 p-3 space-y-2'>
+          <div className='flex items-center gap-2'>
+            <span className='text-xs font-semibold text-amber-800 dark:text-amber-300'>
+              {t('evaluation.localQualityHint')}
+            </span>
+            <span className='text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-800/40 text-amber-600 dark:text-amber-400'>
+              {t('evaluation.localQualityExperimental')}
+            </span>
+          </div>
+          <div className='flex items-center gap-2'>
+            <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
+              localQualityHint.grade === 'good' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
+              localQualityHint.grade === 'fair' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
+              'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+            }`}>
+              {localQualityHint.grade}
+            </span>
+          </div>
+          {localQualityHint.comment && (
+            <p className='text-xs text-gray-600 dark:text-gray-400'>
+              {localQualityHint.comment}
+            </p>
+          )}
+          <div className='text-[10px] text-gray-400 dark:text-gray-500'>
+            {new Date(localQualityHint.timestamp).toLocaleString(i18next.language)}
+          </div>
         </div>
       )}
 
@@ -726,6 +807,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
         {activeTab === 'safety' && (
           <SafetyTab
             result={result?.safety}
+            localSafety={result?.localSafety}
             isRunning={safetyRunning}
             onReEvaluate={handleRunSafety}
             error={safetyError}
@@ -744,6 +826,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
         {activeTab === 'quality' && (
           <QualityTab
             result={result?.quality}
+            localQualityHint={result?.localQualityHint}
             isRunning={qualityRunning}
             onReEvaluate={handleRunQuality}
             error={qualityError}

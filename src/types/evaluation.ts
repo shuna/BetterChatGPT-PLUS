@@ -3,12 +3,25 @@
 /** Trigger mode for each evaluation dimension */
 export type EvaluationTriggerMode = 'manual' | 'auto';
 
+/**
+ * Safety evaluation engine.
+ * - remote: OpenAI Moderation API only (default)
+ * - local: local classifier screening only
+ * - hybrid: local screening first + remote verification
+ *   (hybrid shows local results immediately, not a speed optimization)
+ */
+export type SafetyEngineMode = 'remote' | 'local' | 'hybrid';
+
 /** The 4 evaluation slots: safety/quality × pre-send/post-receive */
 export interface EvaluationSettings {
   safetyPreSend: EvaluationTriggerMode;
   safetyPostReceive: EvaluationTriggerMode;
   qualityPreSend: EvaluationTriggerMode;
   qualityPostReceive: EvaluationTriggerMode;
+  /** Which engine(s) to use for safety checks */
+  safetyEngine: SafetyEngineMode;
+  /** In hybrid mode: run remote even when local says safe (default: true for false-negative safety) */
+  hybridRemoteOnSafe: boolean;
 }
 
 /** OpenAI Moderation API category flags */
@@ -217,12 +230,44 @@ export interface EvaluationContextInfo {
   omittedMode: EvaluationOmittedMode;
 }
 
+// ---------------------------------------------------------------------------
+// Local evaluation types (supplementary, not replacing remote evaluation)
+// ---------------------------------------------------------------------------
+
+/**
+ * Local moderation screening result.
+ * NOT a replacement for remote 13-category moderation.
+ * Used as a lightweight first-pass triage.
+ */
+export interface LocalModerationResult {
+  screening: 'safe' | 'warn' | 'block-candidate';
+  rawScores: { label: string; score: number }[];
+  source: 'local';
+  timestamp: number;
+}
+
+/**
+ * Local quality hint (experimental).
+ * Coarse 3-level grade from a small local model.
+ * Should be displayed as a reference hint, not authoritative scoring.
+ */
+export interface LocalQualityHint {
+  grade: 'good' | 'fair' | 'poor';
+  comment: string;
+  source: 'local';
+  timestamp: number;
+}
+
 /** Evaluation result attached to a message */
 export interface EvaluationResult {
   /** Which phase this evaluation was for */
   phase: 'pre-send' | 'post-receive';
   safety?: SafetyCheckResult;
   quality?: QualityEvaluationResult;
+  /** Local moderation screening (supplementary) */
+  localSafety?: LocalModerationResult;
+  /** Local quality hint (experimental, supplementary) */
+  localQualityHint?: LocalQualityHint;
   /** Conditions under which the safety evaluation was run */
   safetyContext?: EvaluationContextInfo;
   /** Conditions under which the quality evaluation was run */

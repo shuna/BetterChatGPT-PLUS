@@ -156,7 +156,8 @@
     "proxy": "ストリームプロキシ",
     "prompts": "プロンプト",
     "data": "データ",
-    "evaluation": "評価"
+    "evaluation": "評価",
+    "localModels": "ローカルモデル"
   },
   "settingsSection": {
     "appearance": "外観",
@@ -431,6 +432,40 @@
       "safetyAdequacy": "安全制約の妥当性",
       "conciseness": "簡潔さ",
       "operability": "実運用しやすさ"
-    }
+    },
+    "safetyEngine": "安全性エンジン",
+    "hybridRemoteOnSafe": "ローカル判定がsafeでもリモート判定を実行する（推奨）",
+    "localModelRequired": "ローカルモデルタブでモデルを有効化・設定してください。",
+    "localScreening": "ローカルスクリーニング",
+    "localScreeningReference": "参考値",
+    "localQualityHint": "ローカル品質ヒント",
+    "localQualityExperimental": "実験的 — 参考値",
+    "moderationModelRequired": "ローカルモデルタブでモデレーションモデルを割り当ててください。"
+  },
+  "localModel": {
+    "enabled": "ローカルモデルを有効化",
+    "enabledDescription": "WebAssemblyを使用してブラウザ内でLLMモデルを直接実行します",
+    "selectGgufFile": "GGUFモデルを選択",
+    "selectGgufHint": "コンピュータから.ggufファイルを選択してください",
+    "modelStatus": {
+      "idle": "未ロード",
+      "loading": "読み込み中...",
+      "ready": "準備完了",
+      "busy": "処理中...",
+      "error": "エラー",
+      "unloaded": "アンロード済み"
+    },
+    "testGenerate": "テスト生成",
+    "testPrompt": "テストプロンプト",
+    "testPromptPlaceholder": "生成テスト用のプロンプトを入力...",
+    "unload": "モデルをアンロード",
+    "output": "出力",
+    "generating": "生成中...",
+    "noModelLoaded": "モデルが読み込まれていません。GGUFファイルを選択して開始してください。",
+    "loadError": "モデルの読み込みに失敗しました",
+    "modelInfo": "モデル情報",
+    "contextLength": "コンテキスト長",
+    "experimental": "実験的",
+    "experimentalNote": "ローカルモデルのサポートは実験的です。パフォーマンスはデバイスに依存します。"
   }
 }
