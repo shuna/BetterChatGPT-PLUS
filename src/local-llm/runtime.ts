@@ -134,7 +134,7 @@ export class LocalModelRuntime {
         };
       } else {
         // Transformers.js — send file entries to worker for customCache
-        const fileEntries = provider.getFileEntries();
+        const fileEntries = await provider.getFileEntries();
         await this.sendRequest(def.id, {
           type: 'loadClassifier',
           modelId: def.origin,

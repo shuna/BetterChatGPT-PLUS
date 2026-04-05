@@ -74,6 +74,7 @@ export type PersistedStoreState = Omit<
   | 'localModelEnabled'
   | 'localModels'
   | 'activeLocalModels'
+  | 'savedModelMeta'
   >,
   'chats'
 > & {
@@ -115,6 +116,7 @@ const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'localModelEnabled',
   'localModels',
   'activeLocalModels',
+  'savedModelMeta',
 ];
 
 const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
@@ -142,6 +144,7 @@ const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
   'localModelEnabled',
   'localModels',
   'activeLocalModels',
+  'savedModelMeta',
 ];
 
 let previousFullInputRefs: Partial<Record<keyof PersistedStoreState, unknown>> = {};
@@ -309,6 +312,7 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     localModelEnabled: state.localModelEnabled,
     localModels: state.localModels,
     activeLocalModels: state.activeLocalModels,
+    savedModelMeta: state.savedModelMeta,
   };
 }
 
@@ -366,6 +370,7 @@ function buildLocalStoragePartializedState(
     localModelEnabled: state.localModelEnabled,
     localModels: state.localModels,
     activeLocalModels: state.activeLocalModels,
+    savedModelMeta: state.savedModelMeta,
   };
 }
 

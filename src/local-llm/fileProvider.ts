@@ -48,8 +48,9 @@ export interface ModelFileProvider {
   /**
    * For Transformers.js worker: get file entries as serializable array.
    * Returns [relativePath, Blob][] pairs that can be posted to a Worker.
+   * Async because OPFS-backed providers need I/O.
    */
-  getFileEntries(): [string, Blob][];
+  getFileEntries(): Promise<[string, Blob][]>;
 
   /** Release held resources (revoke object URLs, release handles, etc.) */
   dispose(): void;
@@ -106,7 +107,7 @@ export class EphemeralFileProvider implements ModelFileProvider {
     return file;
   }
 
-  getFileEntries(): [string, Blob][] {
+  async getFileEntries(): Promise<[string, Blob][]> {
     return Array.from(this.files.entries()).map(([key, blob]) => [key, blob]);
   }
 
