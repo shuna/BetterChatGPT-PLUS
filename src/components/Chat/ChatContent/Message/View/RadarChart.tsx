@@ -176,9 +176,11 @@ const RadarChart: React.FC<RadarChartProps> = ({
         );
       })}
 
-      {/* Percentage labels — placed between outer ring and item labels */}
+      {/* Percentage labels — placed near the data point, offset outward */}
       {scores.map((s, i) => {
-        const [x, y] = pointAt(i, radius + 14);
+        const dataR = scoreToRadius(s);
+        const pctR = dataR + 12;
+        const [x, y] = pointAt(i, pctR);
         const offsetY = 0;
         return (
           <text
