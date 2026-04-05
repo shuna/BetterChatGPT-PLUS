@@ -38,6 +38,21 @@ export function categoryToI18nKey(cat: string): string {
   return cat.replace(/[/-](\w)/g, (_, c) => c.toUpperCase());
 }
 
+/** Default flagging thresholds per moderation category (OpenAI defaults) */
+export const moderationThresholds: Record<keyof ModerationCategories, number> = {
+  sexual: 0.5,
+  hate: 0.5,
+  harassment: 0.5,
+  'self-harm': 0.5,
+  'sexual/minors': 0.5,
+  'hate/threatening': 0.5,
+  'violence/graphic': 0.5,
+  violence: 0.5,
+  'harassment/threatening': 0.5,
+  'self-harm/intent': 0.5,
+  'self-harm/instructions': 0.5,
+};
+
 /** OpenAI Moderation API category scores */
 export type ModerationCategoryScores = Record<keyof ModerationCategories, number>;
 
@@ -70,6 +85,22 @@ export const qualityAxisKeys: (keyof QualityScores)[] = [
   'conciseness',
   'instructionFollowing',
 ];
+
+/** Per-axis quality thresholds: score < red → red, score < green → yellow, else → green */
+export interface QualityAxisThreshold {
+  red: number;
+  green: number;
+}
+
+export type QualityThresholds = Record<keyof QualityScores, QualityAxisThreshold>;
+
+export const defaultQualityThresholds: QualityThresholds = {
+  taskCompletion: { red: 0.5, green: 0.8 },
+  faithfulness: { red: 0.5, green: 0.8 },
+  coherence: { red: 0.5, green: 0.8 },
+  conciseness: { red: 0.5, green: 0.8 },
+  instructionFollowing: { red: 0.5, green: 0.8 },
+};
 
 /** Result from quality evaluation (LLM-as-Judge) */
 export interface QualityEvaluationResult {

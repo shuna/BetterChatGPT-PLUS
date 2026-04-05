@@ -55,7 +55,7 @@ export default function ContentActions({
 }: ContentActionsProps) {
   return (
     <div className='sticky bottom-2 z-20 mt-2.5 flex min-h-[2.75rem] items-center justify-center gap-2 px-2 md:bottom-3 md:px-3'>
-      <div className='absolute left-0 top-1/2 -translate-y-1/2 min-w-0 shrink-0 md:left-1 pointer-events-auto'>
+      <div className='absolute left-2 top-1/2 -translate-y-1/2 min-w-0 shrink-0 md:left-3 pointer-events-auto'>
         {nodeId && (
           <BranchSwitcher
             chatIndex={currentChatIndex}
@@ -106,7 +106,7 @@ export default function ContentActions({
       </div>
       </div>
       {showEvaluateButton && !isGeneratingMessage && !isDelete && (
-        <div className='absolute right-0 top-1/2 -translate-y-1/2 min-w-0 shrink-0 md:right-1 pointer-events-none opacity-0 transition duration-150 group-hover:pointer-events-auto group-hover:opacity-100'>
+        <div className='absolute right-2 top-1/2 -translate-y-1/2 min-w-0 shrink-0 md:right-3 pointer-events-none opacity-0 transition duration-150 group-hover:pointer-events-auto group-hover:opacity-100'>
           <EvaluateButton onClick={onEvaluate} />
         </div>
       )}

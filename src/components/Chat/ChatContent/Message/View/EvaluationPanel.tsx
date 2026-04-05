@@ -2,7 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import { evaluationResultKey, qualityAxisKeys, categoryToI18nKey } from '@type/evaluation';
-import type { EvaluationResult, SafetyCheckResult, QualityEvaluationResult } from '@type/evaluation';
+import type { EvaluationResult, SafetyCheckResult, QualityEvaluationResult, QualityAxisThreshold } from '@type/evaluation';
 
 interface EvaluationPanelProps {
   chatId: string;
@@ -10,10 +10,10 @@ interface EvaluationPanelProps {
   phase: 'pre-send' | 'post-receive';
 }
 
-const ScoreBar = ({ score, label }: { score: number; label: string }) => {
+const ScoreBar = ({ score, label, threshold }: { score: number; label: string; threshold: QualityAxisThreshold }) => {
   const pct = Math.round(score * 100);
   const color =
-    score >= 0.8 ? 'bg-green-500' : score >= 0.5 ? 'bg-yellow-500' : 'bg-red-500';
+    score >= threshold.green ? 'bg-green-500' : score >= threshold.red ? 'bg-yellow-500' : 'bg-red-500';
   return (
     <div className='flex items-center gap-2 text-xs'>
       <span className='w-32 text-gray-600 dark:text-gray-400 truncate' title={label}>
@@ -38,29 +38,22 @@ const SafetySection = ({ result }: { result: SafetyCheckResult }) => {
       <span className='text-xs font-semibold text-gray-600 dark:text-gray-400'>
         {t('evaluation.safetyTitle')}
       </span>
-      <span
-        className={`text-xs font-medium px-1.5 py-0.5 rounded ${
-          result.flagged
-            ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-            : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-        }`}
-      >
-        {result.flagged ? t('evaluation.flagged') : t('evaluation.safe')}
-      </span>
-      {flaggedCategories.map((cat) => (
-        <span
-          key={cat}
-          className='text-xs px-1.5 py-0.5 rounded bg-red-50 text-red-600 dark:bg-red-900/20 dark:text-red-400'
-        >
-          {t(`evaluation.category.${categoryToI18nKey(cat)}`)}
+      {result.flagged ? (
+        <span className='text-xs font-medium px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'>
+          {t('evaluation.flagged')}（{flaggedCategories.map((cat) => t(`evaluation.category.${categoryToI18nKey(cat)}`)).join(' ')}）
         </span>
-      ))}
+      ) : (
+        <span className='text-xs font-medium px-1.5 py-0.5 rounded bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'>
+          {t('evaluation.safe')}
+        </span>
+      )}
     </div>
   );
 };
 
 const QualitySummary = ({ result }: { result: QualityEvaluationResult }) => {
   const { t } = useTranslation('main');
+  const qualityThresholds = useStore((state) => state.qualityThresholds);
 
   return (
     <div className='space-y-1'>
@@ -72,6 +65,7 @@ const QualitySummary = ({ result }: { result: QualityEvaluationResult }) => {
           key={axis}
           score={result.scores[axis]}
           label={t(`evaluation.axis.${axis}`)}
+          threshold={qualityThresholds[axis]}
         />
       ))}
     </div>
@@ -88,14 +82,8 @@ const EvaluationPanel: React.FC<EvaluationPanelProps> = ({ chatId, nodeId, phase
 
   if (!result && !pending) return null;
 
-  const phaseLabel =
-    phase === 'pre-send'
-      ? t('evaluation.phasePreSend')
-      : t('evaluation.phasePostReceive');
-
   return (
     <div className='mt-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 p-3 space-y-3'>
-      <div className='text-xs text-gray-400 dark:text-gray-500'>{phaseLabel}</div>
       {pending && (
         <div className='text-xs text-gray-500 dark:text-gray-400 animate-pulse'>
           Evaluating...

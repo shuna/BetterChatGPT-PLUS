@@ -303,7 +303,7 @@
       },
       "moderationNotFound": {
         "title": "Moderation API: 404 Not Found",
-        "description": "Moderation APIが {{url}} で404を返しました。考えられる原因: 1) エンドポイントURLが正しくない可能性、2) APIキーまたはプロジェクトがモデレーションモデルへのアクセス権を持っていない可能性、3) プロバイダーがOpenAI Moderation APIに対応していない可能性。設定でOpenAIのエンドポイントとAPIキーの権限を確認してください。"
+        "description": "Moderation APIが {{url}} で404を返しました。プロキシURLが正しく設定されていない可能性があります。設定 > プロキシ でURLを確認してください。"
       },
       "moderationApiError": {
         "title": "Moderation APIエラー",
@@ -332,17 +332,23 @@
     "showDetails": "詳細を表示",
     "hideDetails": "詳細を隠す",
     "openDetail": "詳細を表示",
+    "copyReasoning": "コピー",
     "promptSuggestions": "プロンプト改善案",
     "configSuggestions": "モデル/パラメータ改善案",
     "modalTitle": "評価結果",
     "modalCategory": "カテゴリ",
     "modalScore": "スコア",
+    "modalThreshold": "閾値",
     "modalStatus": "状態",
     "modalAxis": "評価軸",
     "modalReasoning": "根拠",
     "modalAverage": "平均",
     "phasePreSend": "送信前",
     "phasePostReceive": "受信後",
+    "qualityThresholds": "品質評価閾値",
+    "thresholdRed": "警告",
+    "thresholdYellow": "注意",
+    "thresholdGreen": "合格",
     "noResults": "評価結果がありません",
     "axis": {
       "taskCompletion": "タスク達成度",

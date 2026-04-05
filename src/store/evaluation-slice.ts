@@ -4,16 +4,25 @@ import type {
   EvaluationTriggerMode,
   EvaluationResult,
   EvaluationResultMap,
+  QualityThresholds,
+  QualityScores,
+  QualityAxisThreshold,
 } from '@type/evaluation';
+import { defaultQualityThresholds } from '@type/evaluation';
 
 export interface EvaluationSlice {
   evaluationSettings: EvaluationSettings;
+  qualityThresholds: QualityThresholds;
   evaluationResults: EvaluationResultMap;
   /** Currently running evaluation keys (for loading indicators) */
   evaluationPending: Record<string, boolean>;
   setEvaluationSetting: (
     key: keyof EvaluationSettings,
     mode: EvaluationTriggerMode
+  ) => void;
+  setQualityThreshold: (
+    axis: keyof QualityScores,
+    threshold: QualityAxisThreshold
   ) => void;
   setEvaluationResult: (key: string, result: EvaluationResult) => void;
   clearEvaluationResult: (key: string) => void;
@@ -29,8 +38,15 @@ const defaultSettings: EvaluationSettings = {
 
 export const createEvaluationSlice: StoreSlice<EvaluationSlice> = (set, get) => ({
   evaluationSettings: defaultSettings,
+  qualityThresholds: defaultQualityThresholds,
   evaluationResults: {},
   evaluationPending: {},
+
+  setQualityThreshold: (axis, threshold) => {
+    set((prev: EvaluationSlice) => ({
+      qualityThresholds: { ...prev.qualityThresholds, [axis]: threshold },
+    }));
+  },
 
   setEvaluationSetting: (key, mode) => {
     const current = get().evaluationSettings[key];

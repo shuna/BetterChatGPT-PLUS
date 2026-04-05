@@ -3,11 +3,12 @@ import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
 import RadarChart from './RadarChart';
 import useStore from '@store/store';
-import { evaluationResultKey, qualityAxisKeys, moderationCategoryKeys, categoryToI18nKey } from '@type/evaluation';
+import { evaluationResultKey, qualityAxisKeys, moderationCategoryKeys, categoryToI18nKey, moderationThresholds } from '@type/evaluation';
 import type {
   EvaluationResult,
   SafetyCheckResult,
   QualityEvaluationResult,
+  QualityThresholds,
 } from '@type/evaluation';
 import { runSafetyCheck, runQualityEvaluation } from '@api/evaluation';
 import type { ResolvedProvider } from '@hooks/submitHelpers';
@@ -74,7 +75,8 @@ const SafetyTab = ({
     : [];
 
   const radarLabels = categoryEntries.map(([cat]) => t(`evaluation.category.${categoryToI18nKey(cat)}`));
-  const radarScores = categoryEntries.map(([, score]) => score);
+  // Invert scores: 0% risk → 100 (safe), 100% risk → 0
+  const radarScores = categoryEntries.map(([, score]) => 1 - score);
 
   return (
     <div className='space-y-4'>
@@ -131,6 +133,7 @@ const SafetyTab = ({
           <thead>
             <tr className='text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-600'>
               <th className='py-2 font-medium'>{t('evaluation.modalCategory')}</th>
+              <th className='py-2 font-medium text-right'>{t('evaluation.modalThreshold')}</th>
               <th className='py-2 font-medium text-right'>{t('evaluation.modalScore')}</th>
               <th className='py-2 font-medium text-center'>{t('evaluation.modalStatus')}</th>
             </tr>
@@ -139,10 +142,15 @@ const SafetyTab = ({
             {categoryEntries.map(([cat, score]) => {
               const flagged = result?.categories[cat];
               const pct = (score * 100).toFixed(1);
+              const threshold = moderationThresholds[cat];
+              const thresholdPct = (threshold * 100).toFixed(1);
               return (
                 <tr key={cat} className='border-t border-gray-100 dark:border-gray-700'>
                   <td className='py-2 text-gray-700 dark:text-gray-300'>
                     {t(`evaluation.category.${categoryToI18nKey(cat)}`)}
+                  </td>
+                  <td className='py-2 text-right text-gray-500 dark:text-gray-400'>
+                    {thresholdPct}%
                   </td>
                   <td className='py-2 text-right text-gray-600 dark:text-gray-400'>
                     {pct}%
@@ -179,9 +187,11 @@ const QualityTab = ({
   isRunning,
   onReEvaluate,
   error,
+  thresholds,
 }: {
   result?: QualityEvaluationResult;
   isRunning: boolean;
+  thresholds: QualityThresholds;
   onReEvaluate: () => void;
   error?: FormattedEvaluationError | null;
 }) => {
@@ -218,57 +228,64 @@ const QualityTab = ({
 
       {error && <ErrorBanner message={error.message} />}
 
-      {/* Radar chart + Table */}
+      {/* Radar chart */}
       {result && (
-        <div className='flex flex-col md:flex-row gap-4 items-center md:items-start'>
-          <div className='flex-shrink-0'>
-            <RadarChart labels={labels} scores={scores} size={260} />
-          </div>
-          <div className='flex-1 min-w-0'>
-            <table className='w-full text-sm'>
-              <thead>
-                <tr className='text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-600'>
-                  <th className='py-2 font-medium'>{t('evaluation.modalAxis')}</th>
-                  <th className='py-2 font-medium text-right'>{t('evaluation.modalScore')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {qualityAxisKeys.map((axis) => {
-                  const score = result.scores[axis];
-                  const colorClass =
-                    score >= 0.8
-                      ? 'text-green-600 dark:text-green-400'
-                      : score >= 0.5
-                      ? 'text-yellow-600 dark:text-yellow-400'
-                      : 'text-red-600 dark:text-red-400';
-                  return (
-                    <tr
-                      key={axis}
-                      className='border-t border-gray-100 dark:border-gray-700'
-                    >
-                      <td className='py-2 text-gray-700 dark:text-gray-300'>
-                        {t(`evaluation.axis.${axis}`)}
-                      </td>
-                      <td className={`py-2 text-right font-semibold ${colorClass}`}>
-                        {Math.round(score * 100)}%
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                <tr className='border-t-2 border-gray-200 dark:border-gray-600'>
-                  <td className='py-2 font-semibold text-gray-900 dark:text-gray-200'>
-                    {t('evaluation.modalAverage')}
-                  </td>
-                  <td className='py-2 text-right font-bold text-gray-900 dark:text-gray-200'>
-                    {Math.round(avgScore * 100)}%
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+        <div className='flex justify-center'>
+          <RadarChart labels={labels} scores={scores} size={260} />
         </div>
+      )}
+
+      {/* Score table – same layout as SafetyTab */}
+      {result && (
+        <table className='w-full text-sm'>
+          <thead>
+            <tr className='text-left text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-600'>
+              <th className='py-2 font-medium'>{t('evaluation.modalAxis')}</th>
+              <th className='py-2 font-medium text-right'>{t('evaluation.modalThreshold')}</th>
+              <th className='py-2 font-medium text-right'>{t('evaluation.modalScore')}</th>
+              <th className='py-2 font-medium text-center'>{t('evaluation.modalStatus')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {qualityAxisKeys.map((axis) => {
+              const score = result.scores[axis];
+              const th = thresholds[axis];
+              const dotColor =
+                score >= th.green ? 'bg-green-500' : score >= th.red ? 'bg-yellow-500' : 'bg-red-500';
+              return (
+                <tr
+                  key={axis}
+                  className='border-t border-gray-100 dark:border-gray-700'
+                >
+                  <td className='py-2 text-gray-700 dark:text-gray-300'>
+                    {t(`evaluation.axis.${axis}`)}
+                  </td>
+                  <td className='py-2 text-right text-gray-500 dark:text-gray-400'>
+                    {Math.round(th.red * 100)}%
+                  </td>
+                  <td className='py-2 text-right text-gray-600 dark:text-gray-400'>
+                    {Math.round(score * 100)}%
+                  </td>
+                  <td className='py-2 text-center'>
+                    <span className={`inline-block w-2.5 h-2.5 rounded-full ${dotColor}`} />
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          <tfoot>
+            <tr className='border-t-2 border-gray-200 dark:border-gray-600'>
+              <td className='py-2 font-semibold text-gray-900 dark:text-gray-200'>
+                {t('evaluation.modalAverage')}
+              </td>
+              <td />
+              <td className='py-2 text-right font-bold text-gray-900 dark:text-gray-200'>
+                {Math.round(avgScore * 100)}%
+              </td>
+              <td />
+            </tr>
+          </tfoot>
+        </table>
       )}
 
       {/* Reasoning per axis */}
@@ -279,9 +296,21 @@ const QualityTab = ({
             if (!reasoning) return null;
             return (
               <div key={axis} className='text-sm'>
-                <span className='font-medium text-gray-700 dark:text-gray-300'>
-                  {t(`evaluation.axis.${axis}`)}:
-                </span>{' '}
+                <div className='flex items-center gap-1'>
+                  <span className='font-medium text-gray-700 dark:text-gray-300'>
+                    {t(`evaluation.axis.${axis}`)}:
+                  </span>
+                  <button
+                    className='p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors'
+                    title={t('evaluation.copyReasoning') as string}
+                    onClick={() => navigator.clipboard.writeText(reasoning)}
+                  >
+                    <svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='currentColor' className='w-3.5 h-3.5'>
+                      <path d='M7 3.5A1.5 1.5 0 018.5 2h3.879a1.5 1.5 0 011.06.44l3.122 3.12A1.5 1.5 0 0117 6.622V12.5a1.5 1.5 0 01-1.5 1.5h-1v-3.379a3 3 0 00-.879-2.121L10.5 5.379A3 3 0 008.379 4.5H7v-1z' />
+                      <path d='M4.5 6A1.5 1.5 0 003 7.5v9A1.5 1.5 0 004.5 18h7a1.5 1.5 0 001.5-1.5v-5.879a1.5 1.5 0 00-.44-1.06L9.44 6.439A1.5 1.5 0 008.378 6H4.5z' />
+                    </svg>
+                  </button>
+                </div>
                 <span className='text-gray-600 dark:text-gray-400'>{reasoning}</span>
               </div>
             );
@@ -345,6 +374,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
   const [safetyError, setSafetyError] = useState<FormattedEvaluationError | null>(null);
   const [qualityError, setQualityError] = useState<FormattedEvaluationError | null>(null);
   const setShowProxySettings = useStore((state) => state.setShowProxySettings);
+  const qualityThresholds = useStore((state) => state.qualityThresholds);
 
   const key = evaluationResultKey(chatId, nodeId, phase);
   const result: EvaluationResult | undefined = useStore(
@@ -457,6 +487,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
             isRunning={qualityRunning}
             onReEvaluate={handleRunQuality}
             error={qualityError}
+            thresholds={qualityThresholds}
           />
         )}
       </div>

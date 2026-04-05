@@ -18,10 +18,12 @@ const RadarChart: React.FC<RadarChartProps> = ({
   scores,
   size = 240,
 }) => {
-  const cx = size / 2;
-  const cy = size / 2;
-  const radius = size * 0.35;
-  const labelRadius = size * 0.46;
+  const padding = 60; // extra space for labels
+  const vbSize = size + padding * 2;
+  const cx = vbSize / 2;
+  const cy = vbSize / 2;
+  const radius = size * 0.35; // chart size unchanged
+  const labelRadius = radius + 24;
   const n = labels.length;
   const levels = 5; // concentric rings
 
@@ -52,7 +54,7 @@ const RadarChart: React.FC<RadarChartProps> = ({
     <svg
       width={size}
       height={size}
-      viewBox={`0 0 ${size} ${size}`}
+      viewBox={`0 0 ${vbSize} ${vbSize}`}
       className='select-none'
     >
       {/* Concentric grid rings */}
@@ -119,13 +121,19 @@ const RadarChart: React.FC<RadarChartProps> = ({
             : Math.cos(a) > 0
             ? 'start'
             : 'end';
+        const baseline =
+          Math.abs(Math.sin(a)) < 0.1
+            ? 'central'
+            : Math.sin(a) > 0
+            ? 'hanging'
+            : 'auto';
         return (
           <text
             key={`label-${i}`}
             x={x}
             y={y}
             textAnchor={anchor}
-            dominantBaseline='central'
+            dominantBaseline={baseline}
             className='fill-gray-600 dark:fill-gray-400'
             fontSize={11}
           >
