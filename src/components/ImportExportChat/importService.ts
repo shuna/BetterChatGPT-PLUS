@@ -22,6 +22,7 @@ import { normalizeSystemPrompt } from '@utils/systemPromptNormalize';
 import { isKnownModel } from '@utils/modelLookup';
 import { BranchNodeLegacy, ChatInterface, Folder, FolderCollection } from '@type/chat';
 import { ExportV1, ExportV2, ExportV3, OpenAIChat, OpenAIPlaygroundJSON } from '@type/export';
+import type { EvaluationResultMap } from '@type/evaluation';
 
 export type ImportResult = {
   success: boolean;
@@ -99,7 +100,12 @@ const resetChatsOnlyForReplace = () => {
 };
 
 const mergeChats = (chatsToImport: ChatInterface[]) => {
-  assignFreshChatIds(chatsToImport);
+  const chatIdMap: Record<string, string> = {};
+  chatsToImport.forEach((chat) => {
+    const prevId = chat.id;
+    assignFreshChatIds([chat]);
+    chatIdMap[prevId] = chat.id;
+  });
   // Normalize system prompts: migrate system bubbles → config.systemPrompt
   const contentStore = useStore.getState().contentStore ?? {};
   for (const chat of chatsToImport) {
@@ -115,6 +121,24 @@ const mergeChats = (chatsToImport: ChatInterface[]) => {
   } else {
     useStore.getState().setChats(chatsToImport);
   }
+  return chatIdMap;
+};
+
+const remapEvaluationResultKeys = (
+  results: EvaluationResultMap | undefined,
+  chatIdMap: Record<string, string>
+): EvaluationResultMap => {
+  if (!results) return {};
+  return Object.fromEntries(
+    Object.entries(results).map(([key, value]) => {
+      const firstSep = key.indexOf(':');
+      const secondSep = key.indexOf(':', firstSep + 1);
+      if (firstSep < 0 || secondSep < 0) return [key, value];
+      const chatId = key.slice(0, firstSep);
+      const nextChatId = chatIdMap[chatId] ?? chatId;
+      return [`${nextChatId}${key.slice(firstSep)}`, value];
+    })
+  );
 };
 
 const clearMissingFolderReferences = (
@@ -267,7 +291,12 @@ const importLegacyChats = (
     : buildFailureResult(t('notifications.nothingImported', { ns: 'import' }));
 };
 
-const importExportV3 = (parsedData: ExportV3, t: Translator): ImportResult => {
+const importExportV3 = (
+  parsedData: ExportV3,
+  t: Translator,
+  mode: ImportMode,
+  includeSettings: boolean
+): ImportResult => {
   if (!validateExportV3(parsedData)) {
     return buildFailureResult(
       t('notifications.invalidFormatForVersion', { ns: 'import' })
@@ -289,7 +318,21 @@ const importExportV3 = (parsedData: ExportV3, t: Translator): ImportResult => {
     }
   }
   useStore.setState({ contentStore: existingContentStore });
-  mergeChats(chats);
+  const chatIdMap = mergeChats(chats);
+
+  if (parsedData.evaluationResults) {
+    const remapped = remapEvaluationResultKeys(parsedData.evaluationResults, chatIdMap);
+    const existingResults = useStore.getState().evaluationResults;
+    useStore.setState({
+      evaluationResults: { ...existingResults, ...remapped },
+    });
+  }
+
+  if (includeSettings && mode === 'replace' && parsedData.evaluationSettings) {
+    useStore.setState({
+      evaluationSettings: parsedData.evaluationSettings,
+    });
+  }
 
   return chats.length > 0
     ? buildSuccessResult(t('notifications.successfulImport', { ns: 'import' }))
@@ -463,7 +506,7 @@ const importParsedData = async (
             t
           );
         case 'ExportV3':
-          return importExportV3(parsedData as ExportV3, t);
+          return importExportV3(parsedData as ExportV3, t, mode, includeSettings);
         case 'ExportV2':
           return importExportV2(parsedData as ExportV2, t);
         case 'ExportV1':

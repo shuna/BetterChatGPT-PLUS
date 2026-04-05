@@ -18,6 +18,7 @@ import {
 } from '@constants/chat';
 import { ExportV1, ExportV2, ExportV3, OpenAIChat, OpenAIPlaygroundJSON } from '@type/export';
 import { BranchNode, BranchTree } from '@type/chat';
+import type { EvaluationResultMap, EvaluationSettings } from '@type/evaluation';
 import { ContentStoreData, addContent, resolveContent } from '@utils/contentStore';
 import { ensureUniqueChatIds } from '@utils/chatIdentity';
 import i18next from 'i18next';
@@ -226,6 +227,26 @@ const validateContentStore = (contentStore: unknown): contentStore is ContentSto
   return true;
 };
 
+const isEvaluationSettings = (value: unknown): value is EvaluationSettings => {
+  if (!isRecord(value)) return false;
+  const modes = ['manual', 'auto'];
+  return (
+    modes.includes(value.safetyPreSend as string) &&
+    modes.includes(value.safetyPostReceive as string) &&
+    modes.includes(value.qualityPreSend as string) &&
+    modes.includes(value.qualityPostReceive as string)
+  );
+};
+
+const isEvaluationResultMap = (value: unknown): value is EvaluationResultMap => {
+  if (!isRecord(value)) return false;
+  return Object.values(value).every((entry) => {
+    if (!isRecord(entry)) return false;
+    if (entry.phase !== 'pre-send' && entry.phase !== 'post-receive') return false;
+    return true;
+  });
+};
+
 export const validateExportV3 = (data: ExportV3): data is ExportV3 => {
   if (
     !validateAndFixChats(data.chats) ||
@@ -252,6 +273,20 @@ export const validateExportV3 = (data: ExportV3): data is ExportV3 => {
     }
   }
 
+  if (
+    data.evaluationSettings !== undefined &&
+    !isEvaluationSettings(data.evaluationSettings)
+  ) {
+    return false;
+  }
+
+  if (
+    data.evaluationResults !== undefined &&
+    !isEvaluationResultMap(data.evaluationResults)
+  ) {
+    return false;
+  }
+
   return true;
 };
 
@@ -266,6 +301,22 @@ const isContentInterface = (content: unknown): content is ContentInterface => {
       isRecord(content.image_url) &&
       typeof content.image_url.url === 'string' &&
       typeof content.image_url.detail === 'string'
+    );
+  }
+  if (content.type === 'reasoning') {
+    return typeof content.text === 'string';
+  }
+  if (content.type === 'tool_call') {
+    return (
+      typeof content.id === 'string' &&
+      typeof content.name === 'string' &&
+      typeof content.arguments === 'string'
+    );
+  }
+  if (content.type === 'tool_result') {
+    return (
+      typeof content.tool_call_id === 'string' &&
+      typeof content.content === 'string'
     );
   }
   return false;

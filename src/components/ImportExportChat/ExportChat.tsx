@@ -23,6 +23,8 @@ const ExportChat = () => {
     const chats = useStore.getState().chats;
     const folders = useStore.getState().folders;
     const contentStore = useStore.getState().contentStore;
+    const evaluationSettings = useStore.getState().evaluationSettings;
+    const evaluationResults = useStore.getState().evaluationResults;
 
     const filename = getToday();
     let fileData: object;
@@ -52,7 +54,14 @@ const ExportChat = () => {
       fileData = { chats: v1Chats, folders, version: 1 } satisfies ExportV1;
     } else {
       // V3 Compact: contentStore + chats with contentHash references
-      fileData = { chats, contentStore: buildExportContentStore(contentStore), folders, version: 3 } satisfies ExportV3;
+      fileData = {
+        chats,
+        contentStore: buildExportContentStore(contentStore),
+        folders,
+        evaluationSettings,
+        evaluationResults,
+        version: 3,
+      } satisfies ExportV3;
     }
 
     if (useGzip && !isExternalFormat) {

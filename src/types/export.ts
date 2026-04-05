@@ -6,6 +6,7 @@ import {
   MessageInterface,
   Role,
 } from './chat';
+import type { EvaluationResultMap, EvaluationSettings } from './evaluation';
 import { ContentStoreData } from '@utils/contentStore';
 
 export interface ExportBase {
@@ -27,6 +28,8 @@ export interface ExportV3 extends ExportBase {
   chats?: ChatInterface[];
   contentStore: ContentStoreData;
   folders: FolderCollection;
+  evaluationSettings?: EvaluationSettings;
+  evaluationResults?: EvaluationResultMap;
   version: 3;
 }
 

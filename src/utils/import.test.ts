@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import { _defaultChatConfig, _defaultImageDetail } from '@constants/chat';
-import type { ExportV2, OpenAIChat } from '@type/export';
+import type { ExportV2, ExportV3, OpenAIChat } from '@type/export';
 import {
   isOpenAIContent,
   validateAndFixChats,
   validateExportV2,
+  validateExportV3,
 } from './import';
 
 describe('import utilities', () => {
@@ -83,6 +84,66 @@ describe('import utilities', () => {
     };
 
     expect(validateExportV2(exportData)).toBe(true);
+  });
+
+  it('accepts export v3 payloads containing reasoning content', () => {
+    const exportData: ExportV3 = {
+      version: 3,
+      folders: {},
+      chats: [
+        {
+          id: 'chat-1',
+          title: 'Chat',
+          titleSet: true,
+          config: { ..._defaultChatConfig },
+          imageDetail: _defaultImageDetail,
+          messages: [
+            {
+              role: 'assistant',
+              content: [
+                { type: 'reasoning', text: 'internal reasoning' },
+                { type: 'text', text: 'hello' },
+              ],
+            },
+          ],
+          branchTree: {
+            rootId: 'node-1',
+            activePath: ['node-1'],
+            nodes: {
+              'node-1': {
+                id: 'node-1',
+                parentId: null,
+                role: 'assistant',
+                contentHash: 'hash-1',
+                createdAt: Date.now(),
+              },
+            },
+          },
+        },
+      ],
+      contentStore: {
+        'hash-1': {
+          refCount: 1,
+          content: [
+            { type: 'reasoning', text: 'internal reasoning' },
+            { type: 'text', text: 'hello' },
+          ],
+        },
+      },
+      evaluationSettings: {
+        safetyPreSend: 'manual',
+        safetyPostReceive: 'manual',
+        qualityPreSend: 'manual',
+        qualityPostReceive: 'manual',
+      },
+      evaluationResults: {
+        'chat-1:node-1:post-receive': {
+          phase: 'post-receive',
+        },
+      },
+    };
+
+    expect(validateExportV3(exportData)).toBe(true);
   });
 
   it('detects OpenAI chat exports', () => {

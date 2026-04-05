@@ -94,6 +94,8 @@ const DownloadChat = React.memo(
       if (!chats) return;
       const chat = chats[currentChatIndex];
       const contentStore = useStore.getState().contentStore;
+      const evaluationSettings = useStore.getState().evaluationSettings;
+      const evaluationResults = useStore.getState().evaluationResults;
       const filename = chat.title.trim() || 'download';
 
       switch (downloadFormat) {
@@ -119,10 +121,17 @@ const DownloadChat = React.memo(
           const prepared = prepareChatForExport(chat, contentStore, { visibleBranchOnly });
           const exportedChat = { ...prepared.chat };
           delete exportedChat.folder;
+          const exportedEvaluationResults = Object.fromEntries(
+            Object.entries(evaluationResults).filter(([key]) =>
+              key.startsWith(`${exportedChat.id}:`)
+            )
+          );
           const fileData = {
             chats: [exportedChat],
             contentStore: prepared.contentStore,
             folders: {},
+            evaluationSettings,
+            evaluationResults: exportedEvaluationResults,
             version: 3,
           } satisfies ExportV3;
           if (useGzip) {
