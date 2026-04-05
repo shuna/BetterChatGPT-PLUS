@@ -373,6 +373,7 @@
     "notEvaluated": "未評価",
     "running": "評価中...",
     "reEvaluate": "再評価",
-    "runEvaluation": "評価を実行"
+    "runEvaluation": "評価を実行",
+    "evaluateThisOnly": "このメッセージのみ評価"
   }
 }

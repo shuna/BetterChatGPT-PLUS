@@ -7,6 +7,8 @@ interface RadarChartProps {
   scores: number[];
   /** SVG width/height */
   size?: number;
+  /** Optional color override. When provided the internal avg-based heuristic is skipped. */
+  colorOverride?: { fill: string; stroke: string };
 }
 
 /**
@@ -17,6 +19,7 @@ const RadarChart: React.FC<RadarChartProps> = ({
   labels,
   scores,
   size = 240,
+  colorOverride,
 }) => {
   const padding = 60; // extra space for labels
   const vbSize = size + padding * 2;
@@ -48,7 +51,7 @@ const RadarChart: React.FC<RadarChartProps> = ({
     return { fill: 'rgba(239,68,68,0.25)', stroke: 'rgb(239,68,68)' };
   };
 
-  const colors = scoreColor(0);
+  const colors = colorOverride ?? scoreColor(0);
 
   return (
     <svg

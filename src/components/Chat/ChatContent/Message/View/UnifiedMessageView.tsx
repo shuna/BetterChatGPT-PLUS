@@ -60,6 +60,8 @@ const UnifiedMessageView = memo(
     } = useSubmit();
     const [isDelete, setIsDelete] = useState(false);
     const [isEvalModalOpen, setIsEvalModalOpen] = useState(false);
+    const [evalInitialTab, setEvalInitialTab] = useState<'safety' | 'quality'>('safety');
+    const [evalAllPrompts, setEvalAllPrompts] = useState(false);
 
     const currentChatIndex = useStore((state) => state.currentChatIndex);
     const removeMessageAtIndex = useStore((state) => state.removeMessageAtIndex);
@@ -139,10 +141,35 @@ const UnifiedMessageView = memo(
     };
 
     const handleEvaluate = useCallback(() => {
+      setEvalAllPrompts(false);
       setIsEvalModalOpen(true);
     }, []);
 
-    const getEvalContext = useCallback(() => {
+    const handleEvaluateSafety = useCallback(() => {
+      setEvalInitialTab('safety');
+      setEvalAllPrompts(true);
+      setIsEvalModalOpen(true);
+    }, []);
+
+    const handleEvaluateQuality = useCallback(() => {
+      setEvalInitialTab('quality');
+      setEvalAllPrompts(true);
+      setIsEvalModalOpen(true);
+    }, []);
+
+    const handleEvaluateSafetyOnly = useCallback(() => {
+      setEvalInitialTab('safety');
+      setEvalAllPrompts(false);
+      setIsEvalModalOpen(true);
+    }, []);
+
+    const handleEvaluateQualityOnly = useCallback(() => {
+      setEvalInitialTab('quality');
+      setEvalAllPrompts(false);
+      setIsEvalModalOpen(true);
+    }, []);
+
+    const getEvalContext = useCallback((allPrompts: boolean) => {
       const state = useStore.getState();
       const chat = state.chats?.[currentChatIndex];
       if (!chat || !nodeId || !currentChatId) return null;
@@ -171,7 +198,25 @@ const UnifiedMessageView = memo(
       let userText = '';
       let assistantText: string | undefined;
 
-      if (role === 'user') {
+      if (allPrompts) {
+        // Collect ALL user messages up to and including the current position
+        const idx = resolveCurrentMessageIndex();
+        const userTexts: string[] = [];
+        for (let i = 0; i <= idx; i++) {
+          const msg = chat.messages[i];
+          if (msg.role === 'user') {
+            const text = msg.content
+              .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+              .map((c) => c.text)
+              .join('\n');
+            userTexts.push(text);
+          }
+        }
+        userText = userTexts.join('\n');
+        if (role === 'assistant') {
+          assistantText = currentText;
+        }
+      } else if (role === 'user') {
         userText = currentText;
       } else {
         // Collect consecutive user messages preceding this assistant message
@@ -331,10 +376,14 @@ const UnifiedMessageView = memo(
               onDelete={handleDelete}
               showEvaluateButton={true}
               onEvaluate={handleEvaluate}
+              onEvaluateSafety={handleEvaluateSafety}
+              onEvaluateQuality={handleEvaluateQuality}
+              onEvaluateSafetyOnly={handleEvaluateSafetyOnly}
+              onEvaluateQualityOnly={handleEvaluateQualityOnly}
             />
             {(() => {
               if (!isEvalModalOpen || !nodeId || !currentChatId) return null;
-              const ctx = getEvalContext();
+              const ctx = getEvalContext(evalAllPrompts);
               if (!ctx) return null;
               return (
                 <EvaluationModal
@@ -346,6 +395,7 @@ const UnifiedMessageView = memo(
                   resolvedProvider={ctx.resolved}
                   model={ctx.model}
                   setIsModalOpen={setIsEvalModalOpen}
+                  initialTab={evalInitialTab}
                 />
               );
             })()}

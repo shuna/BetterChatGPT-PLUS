@@ -378,6 +378,7 @@
     "notEvaluated": "Not evaluated",
     "running": "Running...",
     "reEvaluate": "Re-evaluate",
-    "runEvaluation": "Run evaluation"
+    "runEvaluation": "Run evaluation",
+    "evaluateThisOnly": "Evaluate this message only"
   }
 }

@@ -27,6 +27,7 @@ interface EvaluationModalProps {
   resolvedProvider: ResolvedProvider;
   model: string;
   setIsModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  initialTab?: TabId;
 }
 
 // ---------------------------------------------------------------------------
@@ -123,7 +124,16 @@ const SafetyTab = ({
       {/* Radar chart */}
       {categoryEntries.length > 0 && (
         <div className='flex justify-center'>
-          <RadarChart labels={radarLabels} scores={radarScores} size={300} />
+          <RadarChart
+            labels={radarLabels}
+            scores={radarScores}
+            size={320}
+            colorOverride={
+              result?.flagged
+                ? { fill: 'rgba(239,68,68,0.25)', stroke: 'rgb(239,68,68)' }
+                : { fill: 'rgba(34,197,94,0.25)', stroke: 'rgb(34,197,94)' }
+            }
+          />
         </div>
       )}
 
@@ -201,15 +211,30 @@ const QualityTab = ({
   const scores = result ? qualityAxisKeys.map((k) => result.scores[k]) : [];
   const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
 
+  // Compute average color from thresholds (use mean of per-axis reds/greens)
+  const avgRed = qualityAxisKeys.reduce((s, k) => s + thresholds[k].red, 0) / qualityAxisKeys.length;
+  const avgGreen = qualityAxisKeys.reduce((s, k) => s + thresholds[k].green, 0) / qualityAxisKeys.length;
+  const avgDotColor =
+    avgScore >= avgGreen ? 'bg-green-500' : avgScore >= avgRed ? 'bg-yellow-500' : 'bg-red-500';
+  const radarColor: { fill: string; stroke: string } =
+    avgScore >= avgGreen
+      ? { fill: 'rgba(34,197,94,0.25)', stroke: 'rgb(34,197,94)' }
+      : avgScore >= avgRed
+      ? { fill: 'rgba(234,179,8,0.25)', stroke: 'rgb(234,179,8)' }
+      : { fill: 'rgba(239,68,68,0.25)', stroke: 'rgb(239,68,68)' };
+
   return (
     <div className='space-y-4'>
       {/* Header + Re-evaluate */}
       <div className='flex items-center justify-between'>
-        <div>
+        <div className='flex items-center gap-2'>
           {result && (
-            <span className='text-sm font-medium text-gray-700 dark:text-gray-300'>
-              {t('evaluation.modalAverage')}: {Math.round(avgScore * 100)}%
-            </span>
+            <>
+              <span className={`inline-block w-2.5 h-2.5 rounded-full ${avgDotColor}`} />
+              <span className='text-sm font-medium text-gray-700 dark:text-gray-300'>
+                {t('evaluation.modalAverage')}: {Math.round(avgScore * 100)}%
+              </span>
+            </>
           )}
           {!result && !isRunning && (
             <span className='text-sm text-gray-500 dark:text-gray-400'>
@@ -231,7 +256,7 @@ const QualityTab = ({
       {/* Radar chart */}
       {result && (
         <div className='flex justify-center'>
-          <RadarChart labels={labels} scores={scores} size={260} />
+          <RadarChart labels={labels} scores={scores} size={320} colorOverride={radarColor} />
         </div>
       )}
 
@@ -282,7 +307,9 @@ const QualityTab = ({
               <td className='py-2 text-right font-bold text-gray-900 dark:text-gray-200'>
                 {Math.round(avgScore * 100)}%
               </td>
-              <td />
+              <td className='py-2 text-center'>
+                <span className={`inline-block w-2.5 h-2.5 rounded-full ${avgDotColor}`} />
+              </td>
             </tr>
           </tfoot>
         </table>
@@ -366,9 +393,10 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
   resolvedProvider,
   model,
   setIsModalOpen,
+  initialTab,
 }) => {
   const { t } = useTranslation('main');
-  const [activeTab, setActiveTab] = useState<TabId>('safety');
+  const [activeTab, setActiveTab] = useState<TabId>(initialTab ?? 'safety');
   const [safetyRunning, setSafetyRunning] = useState(false);
   const [qualityRunning, setQualityRunning] = useState(false);
   const [safetyError, setSafetyError] = useState<FormattedEvaluationError | null>(null);
@@ -461,9 +489,14 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
               {tab.id === 'safety' && result?.safety && (
                 <span className={`ml-1.5 inline-block w-2 h-2 rounded-full ${result.safety.flagged ? 'bg-red-500' : 'bg-green-500'}`} />
               )}
-              {tab.id === 'quality' && result?.quality && (
-                <span className='ml-1.5 inline-block w-2 h-2 rounded-full bg-blue-500' />
-              )}
+              {tab.id === 'quality' && result?.quality && (() => {
+                const qScores = qualityAxisKeys.map((k) => result.quality!.scores[k]);
+                const qAvg = qScores.reduce((a, b) => a + b, 0) / qScores.length;
+                const qAvgRed = qualityAxisKeys.reduce((s, k) => s + qualityThresholds[k].red, 0) / qualityAxisKeys.length;
+                const qAvgGreen = qualityAxisKeys.reduce((s, k) => s + qualityThresholds[k].green, 0) / qualityAxisKeys.length;
+                const qDot = qAvg >= qAvgGreen ? 'bg-green-500' : qAvg >= qAvgRed ? 'bg-yellow-500' : 'bg-red-500';
+                return <span className={`ml-1.5 inline-block w-2 h-2 rounded-full ${qDot}`} />;
+              })()}
             </button>
           ))}
         </div>
