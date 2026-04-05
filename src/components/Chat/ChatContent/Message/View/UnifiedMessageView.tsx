@@ -174,17 +174,20 @@ const UnifiedMessageView = memo(
       if (role === 'user') {
         userText = currentText;
       } else {
+        // Collect consecutive user messages preceding this assistant message
+        // (mirrors ensureRoleAlternation in submitHelpers.ts)
         const idx = resolveCurrentMessageIndex();
+        const userTexts: string[] = [];
         for (let i = idx - 1; i >= 0; i--) {
           const msg = chat.messages[i];
-          if (msg.role === 'user') {
-            userText = msg.content
-              .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
-              .map((c) => c.text)
-              .join('\n');
-            break;
-          }
+          if (msg.role !== 'user') break;
+          const text = msg.content
+            .filter((c): c is { type: 'text'; text: string } => c.type === 'text')
+            .map((c) => c.text)
+            .join('\n');
+          userTexts.unshift(text);
         }
+        userText = userTexts.join('\n');
         assistantText = currentText;
       }
 

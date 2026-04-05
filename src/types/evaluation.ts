@@ -26,6 +26,18 @@ export interface ModerationCategories {
   'self-harm/instructions': boolean;
 }
 
+/** All moderation category keys in API order */
+export const moderationCategoryKeys: (keyof ModerationCategories)[] = [
+  'sexual', 'hate', 'harassment', 'self-harm', 'sexual/minors',
+  'hate/threatening', 'violence/graphic', 'violence',
+  'harassment/threatening', 'self-harm/intent', 'self-harm/instructions',
+];
+
+/** Convert API category key (e.g. "self-harm/intent") to i18n key (e.g. "selfHarmIntent") */
+export function categoryToI18nKey(cat: string): string {
+  return cat.replace(/[/-](\w)/g, (_, c) => c.toUpperCase());
+}
+
 /** OpenAI Moderation API category scores */
 export type ModerationCategoryScores = Record<keyof ModerationCategories, number>;
 

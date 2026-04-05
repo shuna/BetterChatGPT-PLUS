@@ -13,6 +13,10 @@ interface StructuredErrorMatcher {
 
 const STRUCTURED_MATCHERS: StructuredErrorMatcher[] = [
   {
+    key: 'modelNotSelected',
+    tag: '[EVAL_MODEL_NOT_SELECTED]',
+  },
+  {
     key: 'apiKeyRequired',
     tag: '[EVAL_API_KEY_REQUIRED]',
   },
@@ -23,6 +27,15 @@ const STRUCTURED_MATCHERS: StructuredErrorMatcher[] = [
   {
     key: 'connectionFailed',
     tag: '[EVAL_CONNECTION_FAILED]',
+    params: (msg) => {
+      const url = msg.match(/url=(\S+)/)?.[1] ?? '';
+      const detail = msg.match(/detail=(.+)/)?.[1] ?? '';
+      return { url, detail };
+    },
+  },
+  {
+    key: 'moderationNotFound',
+    tag: '[EVAL_MODERATION_NOT_FOUND]',
     params: (msg) => {
       const url = msg.match(/url=(\S+)/)?.[1] ?? '';
       const detail = msg.match(/detail=(.+)/)?.[1] ?? '';

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
 import RadarChart from './RadarChart';
 import useStore from '@store/store';
-import { evaluationResultKey, qualityAxisKeys } from '@type/evaluation';
+import { evaluationResultKey, qualityAxisKeys, moderationCategoryKeys, categoryToI18nKey } from '@type/evaluation';
 import type {
   EvaluationResult,
   SafetyCheckResult,
@@ -13,6 +13,7 @@ import { runSafetyCheck, runQualityEvaluation } from '@api/evaluation';
 import type { ResolvedProvider } from '@hooks/submitHelpers';
 import { formatEvaluationErrorMessage } from '@utils/evaluationError';
 import type { FormattedEvaluationError } from '@utils/evaluationError';
+import i18next from 'i18next';
 
 type TabId = 'safety' | 'quality';
 
@@ -67,10 +68,13 @@ const SafetyTab = ({
   const { t } = useTranslation('main');
 
   const categoryEntries = result
-    ? Object.entries(result.categoryScores)
-        .filter(([, v]) => typeof v === 'number')
-        .sort(([, a], [, b]) => (b as number) - (a as number))
+    ? moderationCategoryKeys
+        .filter((k) => typeof result.categoryScores[k] === 'number')
+        .map((k) => [k, result.categoryScores[k] as number] as const)
     : [];
+
+  const radarLabels = categoryEntries.map(([cat]) => t(`evaluation.category.${categoryToI18nKey(cat)}`));
+  const radarScores = categoryEntries.map(([, score]) => score);
 
   return (
     <div className='space-y-4'>
@@ -114,6 +118,13 @@ const SafetyTab = ({
         />
       )}
 
+      {/* Radar chart */}
+      {categoryEntries.length > 0 && (
+        <div className='flex justify-center'>
+          <RadarChart labels={radarLabels} scores={radarScores} size={300} />
+        </div>
+      )}
+
       {/* Category table */}
       {categoryEntries.length > 0 && (
         <table className='w-full text-sm'>
@@ -126,11 +137,13 @@ const SafetyTab = ({
           </thead>
           <tbody>
             {categoryEntries.map(([cat, score]) => {
-              const flagged = result?.categories[cat as keyof SafetyCheckResult['categories']];
-              const pct = ((score as number) * 100).toFixed(1);
+              const flagged = result?.categories[cat];
+              const pct = (score * 100).toFixed(1);
               return (
                 <tr key={cat} className='border-t border-gray-100 dark:border-gray-700'>
-                  <td className='py-2 text-gray-700 dark:text-gray-300'>{cat}</td>
+                  <td className='py-2 text-gray-700 dark:text-gray-300'>
+                    {t(`evaluation.category.${categoryToI18nKey(cat)}`)}
+                  </td>
                   <td className='py-2 text-right text-gray-600 dark:text-gray-400'>
                     {pct}%
                   </td>
@@ -150,7 +163,7 @@ const SafetyTab = ({
 
       {result && (
         <div className='text-xs text-gray-400 dark:text-gray-500'>
-          {new Date(result.timestamp).toLocaleString()}
+          {new Date(result.timestamp).toLocaleString(i18next.language)}
         </div>
       )}
     </div>
@@ -304,7 +317,7 @@ const QualityTab = ({
 
       {result && (
         <div className='text-xs text-gray-400 dark:text-gray-500'>
-          {new Date(result.timestamp).toLocaleString()}
+          {new Date(result.timestamp).toLocaleString(i18next.language)}
         </div>
       )}
     </div>
@@ -370,7 +383,8 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
         phase === 'post-receive' ? assistantText : undefined,
         resolvedProvider.endpoint,
         model,
-        resolvedProvider.key
+        resolvedProvider.key,
+        i18next.language
       );
       const existing = useStore.getState().evaluationResults[key];
       useStore.getState().setEvaluationResult(key, {
@@ -387,11 +401,6 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
     }
   }, [key, phase, userText, assistantText, resolvedProvider, model]);
 
-  const phaseLabel =
-    phase === 'pre-send'
-      ? t('evaluation.phasePreSend')
-      : t('evaluation.phasePostReceive');
-
   const tabs: { id: TabId; label: string }[] = [
     { id: 'safety', label: t('evaluation.safetyTitle') },
     { id: 'quality', label: t('evaluation.qualityTitle') },
@@ -399,7 +408,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
 
   return (
     <PopupModal
-      title={`${t('evaluation.modalTitle')} — ${phaseLabel}`}
+      title={t('evaluation.modalTitle') as string}
       setIsModalOpen={setIsModalOpen}
       cancelButton={false}
       maxWidth='max-w-3xl'

@@ -11,6 +11,7 @@ import { evaluationResultKey } from '@type/evaluation';
 import type { EvaluationResult } from '@type/evaluation';
 import type { ContentInterface } from '@type/chat';
 import type { ResolvedProvider } from './submitHelpers';
+import i18next from 'i18next';
 
 function extractText(content: ContentInterface[]): string {
   return content
@@ -69,7 +70,8 @@ async function runEvaluationForPhase(
           phase === 'post-receive' ? assistantText : undefined,
           ctx.endpoint,
           ctx.model,
-          ctx.apiKey
+          ctx.apiKey,
+          i18next.language
         );
       } catch (e) {
         console.warn('[evaluation] quality evaluation failed:', e);
@@ -163,7 +165,8 @@ export function useEvaluation() {
           assistantText,
           resolvedProvider.endpoint,
           model,
-          resolvedProvider.key
+          resolvedProvider.key,
+          i18next.language
         );
         const existing = store.evaluationResults[key];
         store.setEvaluationResult(key, {

@@ -67,6 +67,7 @@ export type PersistedStoreState = Omit<
   | 'verifiedStats'
   | 'pendingVerifications'
   | 'evaluationSettings'
+  | 'evaluationResults'
   >,
   'chats'
 > & {
@@ -102,6 +103,7 @@ const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'verifiedStats',
   'pendingVerifications',
   'evaluationSettings',
+  'evaluationResults',
 ];
 
 const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
@@ -123,6 +125,7 @@ const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
   'verifiedStats',
   'pendingVerifications',
   'evaluationSettings',
+  'evaluationResults',
 ];
 
 let previousFullInputRefs: Partial<Record<keyof PersistedStoreState, unknown>> = {};
@@ -284,6 +287,7 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     verifiedStats: state.verifiedStats,
     pendingVerifications: state.pendingVerifications,
     evaluationSettings: state.evaluationSettings,
+    evaluationResults: state.evaluationResults,
   };
 }
 
@@ -335,6 +339,7 @@ function buildLocalStoragePartializedState(
     verifiedStats: state.verifiedStats,
     pendingVerifications: state.pendingVerifications,
     evaluationSettings: state.evaluationSettings,
+    evaluationResults: state.evaluationResults,
   };
 }
 
