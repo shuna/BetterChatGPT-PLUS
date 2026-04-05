@@ -84,6 +84,17 @@ export default defineConfig({
             return 'vendor-tiktoken';
           }
 
+          if (id.includes('node_modules/@wllama/')) {
+            return 'vendor-wllama';
+          }
+
+          if (
+            id.includes('node_modules/@huggingface/transformers') ||
+            id.includes('node_modules/onnxruntime-')
+          ) {
+            return 'vendor-transformers';
+          }
+
           return undefined;
         },
       },

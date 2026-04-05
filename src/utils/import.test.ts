@@ -135,6 +135,8 @@ describe('import utilities', () => {
         safetyPostReceive: 'manual',
         qualityPreSend: 'manual',
         qualityPostReceive: 'manual',
+        safetyEngine: 'remote',
+        hybridRemoteOnSafe: true,
       },
       evaluationResults: {
         'chat-1:node-1:post-receive': {

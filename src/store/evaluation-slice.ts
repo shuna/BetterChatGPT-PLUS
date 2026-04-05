@@ -10,6 +10,7 @@ import type {
   QualityAxisThreshold,
   ModerationCategories,
   SafetyCategoryThreshold,
+  SafetyEngineMode,
 } from '@type/evaluation';
 import { defaultQualityThresholds, defaultSafetyThresholds } from '@type/evaluation';
 
@@ -35,6 +36,8 @@ export interface EvaluationSlice {
   setEvaluationResult: (key: string, result: EvaluationResult) => void;
   clearEvaluationResult: (key: string) => void;
   setEvaluationPending: (key: string, pending: boolean) => void;
+  setSafetyEngine: (mode: SafetyEngineMode) => void;
+  setHybridRemoteOnSafe: (enabled: boolean) => void;
 }
 
 const defaultSettings: EvaluationSettings = {
@@ -42,6 +45,8 @@ const defaultSettings: EvaluationSettings = {
   safetyPostReceive: 'manual',
   qualityPreSend: 'manual',
   qualityPostReceive: 'manual',
+  safetyEngine: 'remote',
+  hybridRemoteOnSafe: true,
 };
 
 export const createEvaluationSlice: StoreSlice<EvaluationSlice> = (set, get) => ({
@@ -90,6 +95,18 @@ export const createEvaluationSlice: StoreSlice<EvaluationSlice> = (set, get) => 
   setEvaluationPending: (key, pending) => {
     set((prev: EvaluationSlice) => ({
       evaluationPending: { ...prev.evaluationPending, [key]: pending },
+    }));
+  },
+
+  setSafetyEngine: (mode) => {
+    set((prev: EvaluationSlice) => ({
+      evaluationSettings: { ...prev.evaluationSettings, safetyEngine: mode },
+    }));
+  },
+
+  setHybridRemoteOnSafe: (enabled) => {
+    set((prev: EvaluationSlice) => ({
+      evaluationSettings: { ...prev.evaluationSettings, hybridRemoteOnSafe: enabled },
     }));
   },
 });

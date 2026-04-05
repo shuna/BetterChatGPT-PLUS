@@ -277,13 +277,20 @@ const EvaluationSettings = () => {
   const { t } = useTranslation('main');
   const settings = useStore((state) => state.evaluationSettings);
   const setEvaluationSetting = useStore((state) => state.setEvaluationSetting);
+  const setSafetyEngine = useStore((state) => state.setSafetyEngine);
+  const setHybridRemoteOnSafe = useStore((state) => state.setHybridRemoteOnSafe);
+  const localModelEnabled = useStore((state) => state.localModelEnabled);
+  const hasModerationModel = useStore((state) => !!state.activeLocalModels.moderation);
+  const localSafetyReady = localModelEnabled && hasModerationModel;
   const safetyThresholds = useStore((state) => state.safetyThresholds);
   const setSafetyThreshold = useStore((state) => state.setSafetyThreshold);
   const qualityThresholds = useStore((state) => state.qualityThresholds);
   const setQualityThreshold = useStore((state) => state.setQualityThreshold);
 
+  type TriggerKey = 'safetyPreSend' | 'safetyPostReceive' | 'qualityPreSend' | 'qualityPostReceive';
+
   const settingRows: {
-    key: keyof EvaluationSettingsType;
+    key: TriggerKey;
     labelKey: string;
   }[] = [
     { key: 'safetyPreSend', labelKey: 'evaluation.safetyPreSend' },
@@ -313,6 +320,38 @@ const EvaluationSettings = () => {
             />
           </SettingsRow>
         ))}
+        {/* Safety engine selection */}
+        <SettingsRow label={t('evaluation.safetyEngine') || 'Safety Engine'}>
+          <select
+            className='rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
+            value={settings.safetyEngine}
+            onChange={(e) => setSafetyEngine(e.target.value as 'remote' | 'local' | 'hybrid')}
+          >
+            <option value='remote'>Remote</option>
+            <option value='local' disabled={!localSafetyReady}>Local</option>
+            <option value='hybrid' disabled={!localSafetyReady}>Hybrid</option>
+          </select>
+        </SettingsRow>
+        {settings.safetyEngine === 'hybrid' && (
+          <div className='px-4 py-2 flex items-center justify-between'>
+            <span className='text-xs text-gray-500 dark:text-gray-400'>
+              {t('evaluation.hybridRemoteOnSafe') || 'Run remote even when local says safe (recommended)'}
+            </span>
+            <input
+              type='checkbox'
+              className='h-4 w-4 rounded border-gray-300 text-green-500 focus:ring-green-500'
+              checked={settings.hybridRemoteOnSafe}
+              onChange={(e) => setHybridRemoteOnSafe(e.target.checked)}
+            />
+          </div>
+        )}
+        {!localSafetyReady && (settings.safetyEngine === 'local' || settings.safetyEngine === 'hybrid') && (
+          <div className='px-4 py-2 text-xs text-amber-600 dark:text-amber-400'>
+            {!localModelEnabled
+              ? (t('evaluation.localModelRequired') || 'Enable and configure a local model in the Local Models tab first.')
+              : (t('evaluation.moderationModelRequired') || 'Assign a moderation model in the Local Models tab.')}
+          </div>
+        )}
       </SettingsGroup>
 
       <SettingsGroup

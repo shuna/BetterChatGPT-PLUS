@@ -164,7 +164,8 @@
     "proxy": "Stream Proxy",
     "prompts": "Prompts",
     "data": "Data",
-    "evaluation": "Evaluation"
+    "evaluation": "Evaluation",
+    "localModels": "Local Models"
   },
   "settingsSection": {
     "appearance": "Appearance",
@@ -436,6 +437,40 @@
       "safetyAdequacy": "Safety Adequacy",
       "conciseness": "Conciseness",
       "operability": "Operability"
-    }
+    },
+    "safetyEngine": "Safety Engine",
+    "hybridRemoteOnSafe": "Run remote even when local says safe (recommended)",
+    "localModelRequired": "Enable and configure a local model in the Local Models tab first.",
+    "localScreening": "Local Screening",
+    "localScreeningReference": "Reference only",
+    "localQualityHint": "Local Quality Hint",
+    "localQualityExperimental": "Experimental — reference only",
+    "moderationModelRequired": "Assign a moderation model in the Local Models tab."
+  },
+  "localModel": {
+    "enabled": "Enable local models",
+    "enabledDescription": "Run LLM models directly in your browser using WebAssembly",
+    "selectGgufFile": "Select GGUF Model",
+    "selectGgufHint": "Choose a .gguf file from your computer",
+    "modelStatus": {
+      "idle": "Not loaded",
+      "loading": "Loading...",
+      "ready": "Ready",
+      "busy": "Processing...",
+      "error": "Error",
+      "unloaded": "Unloaded"
+    },
+    "testGenerate": "Test Generate",
+    "testPrompt": "Test prompt",
+    "testPromptPlaceholder": "Enter a prompt to test generation...",
+    "unload": "Unload Model",
+    "output": "Output",
+    "generating": "Generating...",
+    "noModelLoaded": "No model loaded. Select a GGUF file to get started.",
+    "loadError": "Failed to load model",
+    "modelInfo": "Model Info",
+    "contextLength": "Context Length",
+    "experimental": "Experimental",
+    "experimentalNote": "Local model support is experimental. Performance depends on your device."
   }
 }

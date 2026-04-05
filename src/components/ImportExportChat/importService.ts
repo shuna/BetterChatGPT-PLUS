@@ -329,8 +329,10 @@ const importExportV3 = (
   }
 
   if (includeSettings && mode === 'replace' && parsedData.evaluationSettings) {
+    // Backfill defaults for fields added after initial release
+    const currentDefaults = useStore.getState().evaluationSettings;
     useStore.setState({
-      evaluationSettings: parsedData.evaluationSettings,
+      evaluationSettings: { ...currentDefaults, ...parsedData.evaluationSettings },
     });
   }
 

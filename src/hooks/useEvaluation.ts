@@ -7,6 +7,7 @@
 import { useCallback } from 'react';
 import useStore from '@store/store';
 import { runSafetyCheck, runQualityEvaluation } from '@api/evaluation';
+import { runLocalModeration, runLocalQualityHint } from '@api/localEvaluation';
 import { evaluationResultKey } from '@type/evaluation';
 import type { EvaluationResult } from '@type/evaluation';
 import type { ContentInterface } from '@type/chat';
@@ -54,12 +55,40 @@ async function runEvaluationForPhase(
 
   try {
     const textToCheck = phase === 'pre-send' ? userText : (assistantText ?? '');
+    const { safetyEngine, hybridRemoteOnSafe } = settings;
 
     if (shouldSafety && textToCheck) {
-      try {
-        result.safety = await runSafetyCheck(textToCheck);
-      } catch (e) {
-        console.warn('[evaluation] safety check failed:', e);
+      // --- Local safety (if engine is local or hybrid) ---
+      if (safetyEngine === 'local' || safetyEngine === 'hybrid') {
+        try {
+          result.localSafety = await runLocalModeration(textToCheck);
+        } catch (e) {
+          console.warn('[evaluation] local safety screening failed:', e);
+        }
+      }
+
+      // --- Remote safety ---
+      // In 'local' mode, if local failed, fall back to remote as a safety net
+      const localOnlyButFailed = safetyEngine === 'local' && !result.localSafety;
+      const shouldRunRemote =
+        safetyEngine === 'remote' ||
+        localOnlyButFailed ||
+        (safetyEngine === 'hybrid' && (
+          // Always run remote if local found issues
+          result.localSafety?.screening === 'warn' ||
+          result.localSafety?.screening === 'block-candidate' ||
+          // Also run remote if hybridRemoteOnSafe is true (default)
+          hybridRemoteOnSafe ||
+          // Also run remote if local failed (no result)
+          !result.localSafety
+        ));
+
+      if (shouldRunRemote) {
+        try {
+          result.safety = await runSafetyCheck(textToCheck);
+        } catch (e) {
+          console.warn('[evaluation] remote safety check failed:', e);
+        }
       }
     }
 
@@ -76,9 +105,19 @@ async function runEvaluationForPhase(
       } catch (e) {
         console.warn('[evaluation] quality evaluation failed:', e);
       }
+
+      // --- Local quality hint (supplementary, if wllama model is available) ---
+      const qualityText = phase === 'post-receive' ? (assistantText ?? '') : userText;
+      if (qualityText) {
+        try {
+          result.localQualityHint = await runLocalQualityHint(qualityText);
+        } catch {
+          // Silently skip — local quality is best-effort
+        }
+      }
     }
 
-    if (result.safety || result.quality) {
+    if (result.safety || result.quality || result.localSafety || result.localQualityHint) {
       useStore.getState().setEvaluationResult(key, result);
     }
   } finally {

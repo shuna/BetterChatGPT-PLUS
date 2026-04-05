@@ -71,6 +71,9 @@ export type PersistedStoreState = Omit<
   | 'safetyThresholds'
   | 'qualityThresholds'
   | 'evaluationResults'
+  | 'localModelEnabled'
+  | 'localModels'
+  | 'activeLocalModels'
   >,
   'chats'
 > & {
@@ -109,6 +112,9 @@ const FULL_PERSIST_KEYS: (keyof PersistedStoreState)[] = [
   'safetyThresholds',
   'qualityThresholds',
   'evaluationResults',
+  'localModelEnabled',
+  'localModels',
+  'activeLocalModels',
 ];
 
 const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
@@ -133,6 +139,9 @@ const LOCAL_STORAGE_PERSIST_KEYS: (keyof LocalStoragePersistedState)[] = [
   'safetyThresholds',
   'qualityThresholds',
   'evaluationResults',
+  'localModelEnabled',
+  'localModels',
+  'activeLocalModels',
 ];
 
 let previousFullInputRefs: Partial<Record<keyof PersistedStoreState, unknown>> = {};
@@ -297,6 +306,9 @@ function buildPartializedState(state: StoreState): PersistedStoreState {
     safetyThresholds: state.safetyThresholds,
     qualityThresholds: state.qualityThresholds,
     evaluationResults: state.evaluationResults,
+    localModelEnabled: state.localModelEnabled,
+    localModels: state.localModels,
+    activeLocalModels: state.activeLocalModels,
   };
 }
 
@@ -351,6 +363,9 @@ function buildLocalStoragePartializedState(
     safetyThresholds: state.safetyThresholds,
     qualityThresholds: state.qualityThresholds,
     evaluationResults: state.evaluationResults,
+    localModelEnabled: state.localModelEnabled,
+    localModels: state.localModels,
+    activeLocalModels: state.activeLocalModels,
   };
 }
 
@@ -416,6 +431,17 @@ export const createLocalStoragePartializedState = (
 
 export const rehydrateStoreState = (state: StoreState) => {
   state.providers = normalizeProviderConfigs(state.providers);
+
+  // Backfill evaluationSettings fields added after initial release
+  if (state.evaluationSettings) {
+    if (!('safetyEngine' in state.evaluationSettings)) {
+      (state.evaluationSettings as Record<string, unknown>).safetyEngine = 'remote';
+    }
+    if (!('hybridRemoteOnSafe' in state.evaluationSettings)) {
+      (state.evaluationSettings as Record<string, unknown>).hybridRemoteOnSafe = true;
+    }
+  }
+
   const savedIndex = parseInt(localStorage.getItem('currentChatIndex') ?? '-1', 10);
   let repaired = false;
   if (state.chats) {

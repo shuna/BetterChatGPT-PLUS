@@ -2,7 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import { evaluationResultKey, qualityAxisKeys, categoryToI18nKey, summarizeSafetyScores } from '@type/evaluation';
-import type { EvaluationResult, SafetyCheckResult, QualityEvaluationResult, QualityAxisThreshold } from '@type/evaluation';
+import type { EvaluationResult, SafetyCheckResult, QualityEvaluationResult, QualityAxisThreshold, LocalModerationResult, LocalQualityHint } from '@type/evaluation';
 import type { TabId } from './EvaluationModal';
 
 interface EvaluationPanelProps {
@@ -100,6 +100,44 @@ const QualitySummary = ({ result, onOpenTab }: { result: QualityEvaluationResult
   );
 };
 
+const LocalSafetyBadge = ({ result }: { result: LocalModerationResult }) => {
+  const { t } = useTranslation('main');
+  const colorMap = {
+    'safe': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    'warn': 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+    'block-candidate': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  };
+  return (
+    <div className='flex items-center gap-2'>
+      <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${colorMap[result.screening]}`}>
+        Local: {result.screening}
+      </span>
+      <span className='text-[10px] text-gray-400 dark:text-gray-500'>
+        {t('evaluation.localScreeningReference')}
+      </span>
+    </div>
+  );
+};
+
+const LocalQualityBadge = ({ result }: { result: LocalQualityHint }) => {
+  const { t } = useTranslation('main');
+  const colorMap = {
+    'good': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    'fair': 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+    'poor': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+  };
+  return (
+    <div className='flex items-center gap-2'>
+      <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${colorMap[result.grade]}`}>
+        Local: {result.grade}
+      </span>
+      <span className='text-[10px] text-gray-400 dark:text-gray-500'>
+        {t('evaluation.localQualityExperimental')}
+      </span>
+    </div>
+  );
+};
+
 const EvaluationPanel: React.FC<EvaluationPanelProps> = ({ chatId, nodeId, phase, onOpenTab }) => {
   const key = evaluationResultKey(chatId, nodeId, phase);
   const result: EvaluationResult | undefined = useStore(
@@ -117,8 +155,10 @@ const EvaluationPanel: React.FC<EvaluationPanelProps> = ({ chatId, nodeId, phase
           Evaluating...
         </div>
       )}
+      {result?.localSafety && <LocalSafetyBadge result={result.localSafety} />}
       {result?.safety && <SafetySection result={result.safety} onOpenTab={onOpenTab} />}
       {result?.quality && <QualitySummary result={result.quality} onOpenTab={onOpenTab} />}
+      {result?.localQualityHint && <LocalQualityBadge result={result.localQualityHint} />}
     </div>
   );
 };
