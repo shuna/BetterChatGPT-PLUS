@@ -39,22 +39,27 @@ interface EvaluationModalProps {
 // Scope / Omitted Options
 // ---------------------------------------------------------------------------
 
-const EvalScopeSelector = ({
+/** Inline scope controls: radio buttons + omitted checkbox, placed in each tab header */
+const InlineScopeControls = ({
   scope,
   omittedMode,
+  role,
   onScopeChange,
   onOmittedModeChange,
 }: {
   scope: EvaluationScope;
   omittedMode: EvaluationOmittedMode;
+  role: string;
   onScopeChange: (s: EvaluationScope) => void;
   onOmittedModeChange: (m: EvaluationOmittedMode) => void;
 }) => {
   const { t } = useTranslation('main');
+  const singleLabel = role === 'assistant'
+    ? t('evaluation.scopeSingleAssistant')
+    : t('evaluation.scopeSingle');
   return (
-    <div className='flex flex-wrap items-center gap-3 text-xs'>
-      {/* Scope radio */}
-      <label className='flex items-center gap-1.5 cursor-pointer text-gray-600 dark:text-gray-400'>
+    <div className='flex flex-wrap items-center gap-2.5 text-xs pl-2'>
+      <label className='flex items-center gap-1 cursor-pointer text-gray-600 dark:text-gray-400'>
         <input
           type='radio'
           name='eval-scope'
@@ -64,7 +69,7 @@ const EvalScopeSelector = ({
         />
         {t('evaluation.scopeFullContext')}
       </label>
-      <label className='flex items-center gap-1.5 cursor-pointer text-gray-600 dark:text-gray-400'>
+      <label className='flex items-center gap-1 cursor-pointer text-gray-600 dark:text-gray-400'>
         <input
           type='radio'
           name='eval-scope'
@@ -72,12 +77,10 @@ const EvalScopeSelector = ({
           onChange={() => onScopeChange('single')}
           className='accent-blue-600'
         />
-        {t('evaluation.scopeSingle')}
+        {singleLabel}
       </label>
-
-      {/* Omitted toggle — only when full-context */}
       {scope === 'full-context' && (
-        <label className='flex items-center gap-1.5 cursor-pointer text-gray-500 dark:text-gray-400 ml-2 border-l border-gray-300 dark:border-gray-600 pl-3'>
+        <label className='flex items-center gap-1 cursor-pointer text-gray-500 dark:text-gray-400 ml-1 border-l border-gray-300 dark:border-gray-600 pl-2'>
           <input
             type='checkbox'
             checked={omittedMode === 'include-omitted'}
@@ -92,28 +95,6 @@ const EvalScopeSelector = ({
         </label>
       )}
     </div>
-  );
-};
-
-// ---------------------------------------------------------------------------
-// Context condition badge
-// ---------------------------------------------------------------------------
-
-const ContextConditionBadge = ({ ctx }: { ctx?: EvaluationContextInfo }) => {
-  const { t } = useTranslation('main');
-  if (!ctx) return null;
-  let label: string;
-  if (ctx.scope === 'single') {
-    label = t('evaluation.conditionSingle');
-  } else if (ctx.omittedMode === 'include-omitted') {
-    label = t('evaluation.conditionFullIncludeOmitted');
-  } else {
-    label = t('evaluation.conditionFullRespectOmitted');
-  }
-  return (
-    <span className='text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'>
-      {label}
-    </span>
   );
 };
 
@@ -147,18 +128,26 @@ const ErrorBanner = ({
 
 const SafetyTab = ({
   result,
-  resultContext,
   isRunning,
   onReEvaluate,
   error,
   onOpenProxySettings,
+  scope,
+  omittedMode,
+  role,
+  onScopeChange,
+  onOmittedModeChange,
 }: {
   result?: SafetyCheckResult;
-  resultContext?: EvaluationContextInfo;
   isRunning: boolean;
   onReEvaluate: () => void;
   error?: FormattedEvaluationError | null;
   onOpenProxySettings: () => void;
+  scope: EvaluationScope;
+  omittedMode: EvaluationOmittedMode;
+  role: string;
+  onScopeChange: (s: EvaluationScope) => void;
+  onOmittedModeChange: (m: EvaluationOmittedMode) => void;
 }) => {
   const { t } = useTranslation('main');
 
@@ -173,12 +162,12 @@ const SafetyTab = ({
 
   return (
     <div className='space-y-4'>
-      {/* Header + Re-evaluate */}
+      {/* Header row 1: status + re-evaluate */}
       <div className='flex items-center justify-between'>
         <div className='flex items-center gap-2'>
           {result && (
             <span
-              className={`text-sm font-medium px-2 py-1 rounded ${
+              className={`text-sm font-medium px-2 py-1 rounded whitespace-nowrap ${
                 result.flagged
                   ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
                   : 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
@@ -187,21 +176,28 @@ const SafetyTab = ({
               {result.flagged ? t('evaluation.flagged') : t('evaluation.safe')}
             </span>
           )}
-          <ContextConditionBadge ctx={resultContext} />
           {!result && !isRunning && (
-            <span className='text-sm text-gray-500 dark:text-gray-400'>
+            <span className='text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap'>
               {t('evaluation.notEvaluated')}
             </span>
           )}
         </div>
         <button
-          className='text-xs px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50'
+          className='text-xs px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50 whitespace-nowrap'
           onClick={onReEvaluate}
           disabled={isRunning}
         >
           {isRunning ? t('evaluation.running') : result ? t('evaluation.reEvaluate') : t('evaluation.runEvaluation')}
         </button>
       </div>
+      {/* Header row 2: scope controls */}
+      <InlineScopeControls
+        scope={scope}
+        omittedMode={omittedMode}
+        role={role}
+        onScopeChange={onScopeChange}
+        onOmittedModeChange={onOmittedModeChange}
+      />
 
       {error && (
         <ErrorBanner
@@ -282,20 +278,28 @@ const SafetyTab = ({
 
 const QualityTab = ({
   result,
-  resultContext,
   isRunning,
   onReEvaluate,
   error,
   thresholds,
   disabledReason,
+  scope,
+  omittedMode,
+  role,
+  onScopeChange,
+  onOmittedModeChange,
 }: {
   result?: QualityEvaluationResult;
-  resultContext?: EvaluationContextInfo;
   isRunning: boolean;
   thresholds: QualityThresholds;
   onReEvaluate: () => void;
   error?: FormattedEvaluationError | null;
   disabledReason?: string | null;
+  scope: EvaluationScope;
+  omittedMode: EvaluationOmittedMode;
+  role: string;
+  onScopeChange: (s: EvaluationScope) => void;
+  onOmittedModeChange: (m: EvaluationOmittedMode) => void;
 }) => {
   const { t } = useTranslation('main');
 
@@ -319,26 +323,25 @@ const QualityTab = ({
 
   return (
     <div className='space-y-4'>
-      {/* Header + Re-evaluate */}
+      {/* Header row 1: status + re-evaluate */}
       <div className='flex items-center justify-between'>
         <div className='flex items-center gap-2'>
           {result && (
             <>
               <span className={`inline-block w-2.5 h-2.5 rounded-full ${avgDotColor}`} />
-              <span className='text-sm font-medium text-gray-700 dark:text-gray-300'>
+              <span className='text-sm font-medium text-gray-700 dark:text-gray-300 whitespace-nowrap'>
                 {t('evaluation.modalAverage')}: {Math.round(avgScore * 100)}%
               </span>
             </>
           )}
-          <ContextConditionBadge ctx={resultContext} />
           {!result && !isRunning && (
-            <span className='text-sm text-gray-500 dark:text-gray-400'>
+            <span className='text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap'>
               {t('evaluation.notEvaluated')}
             </span>
           )}
         </div>
         <button
-          className='text-xs px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50'
+          className='text-xs px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 disabled:opacity-50 whitespace-nowrap'
           onClick={onReEvaluate}
           disabled={isRunning || !!disabledReason}
           title={disabledReason ?? undefined}
@@ -346,6 +349,14 @@ const QualityTab = ({
           {isRunning ? t('evaluation.running') : result ? t('evaluation.reEvaluate') : t('evaluation.runEvaluation')}
         </button>
       </div>
+      {/* Header row 2: scope controls */}
+      <InlineScopeControls
+        scope={scope}
+        omittedMode={omittedMode}
+        role={role}
+        onScopeChange={onScopeChange}
+        onOmittedModeChange={onOmittedModeChange}
+      />
 
       {disabledReason && !isRunning && (
         <div className='text-xs text-amber-600 dark:text-amber-400'>
@@ -643,15 +654,7 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
       cancelButton={false}
       maxWidth='max-w-4xl'
     >
-      <div className='p-6 space-y-4' style={{ width: dialogWidth }}>
-        {/* Scope selector — shared across tabs */}
-        <EvalScopeSelector
-          scope={scope}
-          omittedMode={omittedMode}
-          onScopeChange={setScope}
-          onOmittedModeChange={setOmittedMode}
-        />
-
+      <div className='px-6 pt-2 pb-6 space-y-4' style={{ width: dialogWidth }}>
         {/* Tab bar */}
         <div className='flex border-b border-gray-200 dark:border-gray-600'>
           {tabs.map((tab) => (
@@ -689,7 +692,6 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
         {activeTab === 'safety' && (
           <SafetyTab
             result={result?.safety}
-            resultContext={result?.safetyContext}
             isRunning={safetyRunning}
             onReEvaluate={handleRunSafety}
             error={safetyError}
@@ -697,17 +699,26 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
               setIsModalOpen(false);
               setShowProxySettings(true);
             }}
+            scope={scope}
+            omittedMode={omittedMode}
+            role={role}
+            onScopeChange={setScope}
+            onOmittedModeChange={setOmittedMode}
           />
         )}
         {activeTab === 'quality' && (
           <QualityTab
             result={result?.quality}
-            resultContext={result?.qualityContext}
             isRunning={qualityRunning}
             onReEvaluate={handleRunQuality}
             error={qualityError}
             thresholds={qualityThresholds}
             disabledReason={qualityDisabledReason}
+            scope={scope}
+            omittedMode={omittedMode}
+            role={role}
+            onScopeChange={setScope}
+            onOmittedModeChange={setOmittedMode}
           />
         )}
       </div>

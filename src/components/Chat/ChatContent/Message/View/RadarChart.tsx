@@ -68,7 +68,7 @@ const RadarChart: React.FC<RadarChartProps> = ({
       width='100%'
       viewBox={`0 0 ${vbW} ${vbH}`}
       className='select-none'
-      style={{ display: 'block' }}
+      style={{ display: 'block', maxWidth: 480 }}
     >
       {/* Concentric grid rings */}
       {Array.from({ length: levels }, (_, l) => {
