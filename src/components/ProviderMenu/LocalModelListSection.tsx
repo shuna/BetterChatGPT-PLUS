@@ -3,11 +3,12 @@
  * Shows saved local models with favorite checkboxes.
  */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import type { LocalModelDefinition } from '@src/local-llm/types';
 import type { SavedModelMeta } from '@src/local-llm/storage';
+import { CURATED_MODELS } from '@src/local-llm/catalog';
 import { formatBytes } from '@src/local-llm/device';
 
 const LocalModelListSection = () => {
@@ -17,10 +18,41 @@ const LocalModelListSection = () => {
   const favoriteIds = useStore((s) => s.favoriteLocalModelIds);
   const toggleFavorite = useStore((s) => s.toggleFavoriteLocalModel);
 
-  // Only show models that are saved in OPFS
-  const savedModels = localModels.filter(
-    (m) => m.source === 'opfs' && savedMeta[m.id]?.storageState === 'saved',
-  );
+  // Show models that are saved in OPFS.
+  // Merge localModels (persisted store) with catalog models whose savedModelMeta
+  // indicates 'saved', so downloaded models appear even if addLocalModel was not
+  // called (e.g. models downloaded before the fix, or before settings page was opened).
+  const savedModels = useMemo(() => {
+    const seen = new Set<string>();
+    const result: LocalModelDefinition[] = [];
+
+    // 1. Models already registered in localModels
+    for (const m of localModels) {
+      if (m.source !== 'opfs' || savedMeta[m.id]?.storageState !== 'saved') continue;
+      seen.add(m.id);
+      result.push(m);
+    }
+
+    // 2. Catalog models saved in OPFS but not yet in localModels
+    for (const cm of CURATED_MODELS) {
+      if (seen.has(cm.id)) continue;
+      const meta = savedMeta[cm.id];
+      if (!meta || meta.storageState !== 'saved') continue;
+      result.push({
+        id: cm.id,
+        engine: cm.engine,
+        tasks: cm.tasks,
+        label: cm.label,
+        origin: cm.huggingFaceRepo,
+        source: 'opfs',
+        manifest: cm.manifest,
+        fileSize: meta.storedBytes || cm.expectedDownloadSize,
+        displayMeta: cm.displayMeta,
+      });
+    }
+
+    return result;
+  }, [localModels, savedMeta]);
 
   if (savedModels.length === 0) return null;
 

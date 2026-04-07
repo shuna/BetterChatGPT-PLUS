@@ -13,16 +13,18 @@ import type { LocalModelTask } from './types';
 // Store access (lazy to avoid circular imports)
 // ---------------------------------------------------------------------------
 
-function getStoreState() {
-  // Dynamic import pattern — store is always available at call time
-  const useStore = require('@store/store').default as {
-    getState: () => {
-      localModelEnabled: boolean;
-      activeLocalModels: Partial<Record<LocalModelTask, string>>;
-      localModelExecutionMode: 'sequential' | 'parallel-if-possible';
-    };
-  };
-  return useStore.getState();
+let _cachedStore: { getState: () => {
+  localModelEnabled: boolean;
+  activeLocalModels: Partial<Record<LocalModelTask, string>>;
+  localModelExecutionMode: 'sequential' | 'parallel-if-possible';
+}; } | null = null;
+
+async function getStoreState() {
+  if (!_cachedStore) {
+    const mod = await import('@store/store');
+    _cachedStore = mod.default;
+  }
+  return _cachedStore!.getState();
 }
 
 // ---------------------------------------------------------------------------
@@ -40,7 +42,7 @@ export async function prepareModelsForExecution(
   const ids = [...new Set(requiredModelIds.filter(Boolean))];
   if (ids.length === 0) return;
 
-  const state = getStoreState();
+  const state = await getStoreState();
   const mode = state.localModelExecutionMode;
 
   if (mode === 'parallel-if-possible' && ids.length > 1) {
@@ -103,14 +105,12 @@ export async function evictIrrelevantModels(
 /**
  * Get all model IDs needed for evaluation tasks.
  */
-export function getEvaluationModelIds(): string[] {
-  const state = getStoreState();
+export async function getEvaluationModelIds(): Promise<string[]> {
+  const state = await getStoreState();
   if (!state.localModelEnabled) return [];
 
   const ids: string[] = [];
-  const mod = state.activeLocalModels.moderation;
-  const qual = state.activeLocalModels.quality ?? state.activeLocalModels.generation;
-  if (mod) ids.push(mod);
-  if (qual) ids.push(qual);
+  const analysis = state.activeLocalModels.analysis;
+  if (analysis) ids.push(analysis);
   return ids;
 }

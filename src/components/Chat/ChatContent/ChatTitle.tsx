@@ -9,11 +9,17 @@ import { ModelOptions } from '@type/chat';
 import type { ProviderId } from '@type/provider';
 import { cloneChatAtIndex } from '@utils/chatShallowClone';
 import { normalizeConfigStream } from '@utils/streamSupport';
+import { CURATED_MODELS } from '@src/local-llm/catalog';
+import { localModelRuntime } from '@src/local-llm/runtime';
+import { OpfsFileProvider } from '@src/local-llm/storage';
 
 const ChatTitle = React.memo(() => {
   const { t } = useTranslation('model');
   const favoriteModels = useStore((state) => state.favoriteModels) || [];
   const providers = useStore((state) => state.providers) || {};
+  const localModels = useStore((state) => state.localModels) || [];
+  const favoriteLocalIds = useStore((state) => state.favoriteLocalModelIds) || [];
+  const savedMeta = useStore((state) => state.savedModelMeta) || {};
   const chat = useStore(
     (state) =>
       state.chats &&
@@ -52,7 +58,7 @@ const ChatTitle = React.memo(() => {
     setChats(updatedChats);
   };
 
-  const handleModelChange = (modelId: string, providerId?: ProviderId) => {
+  const handleModelChange = (modelId: string, providerId?: ProviderId, modelSource?: 'remote' | 'local') => {
     const chats = useStore.getState().chats;
     if (!chats) return;
     const updatedChats = cloneChatAtIndex(chats, currentChatIndex);
@@ -60,12 +66,44 @@ const ChatTitle = React.memo(() => {
       ...updatedChats[currentChatIndex].config,
       model: modelId as ModelOptions,
       providerId,
+      modelSource,
     });
     setChats(updatedChats);
     setIsModelDropdownOpen(false);
+
+    // Auto-load local model if not already loaded
+    if (modelSource === 'local' && !localModelRuntime.isLoaded(modelId)) {
+      const catalogModel = CURATED_MODELS.find((cm) => cm.id === modelId);
+      const storeDef = localModels.find((m) => m.id === modelId);
+      if (catalogModel) {
+        const provider = new OpfsFileProvider(catalogModel.id, catalogModel.manifest);
+        localModelRuntime.loadModel(
+          {
+            id: catalogModel.id,
+            engine: catalogModel.engine,
+            tasks: catalogModel.tasks,
+            label: catalogModel.label,
+            origin: catalogModel.huggingFaceRepo,
+            source: 'opfs',
+            manifest: catalogModel.manifest,
+          },
+          provider,
+        ).catch(() => {});
+      } else if (storeDef?.source === 'opfs' && storeDef.manifest) {
+        const provider = new OpfsFileProvider(storeDef.id, storeDef.manifest);
+        localModelRuntime.loadModel(storeDef, provider).catch(() => {});
+      }
+    }
   };
 
-  const getModelDisplayName = (modelId: string, providerId?: ProviderId) => {
+  const getModelDisplayName = (modelId: string, providerId?: ProviderId, modelSource?: 'remote' | 'local') => {
+    if (modelSource === 'local') {
+      const storeDef = localModels.find((m) => m.id === modelId);
+      if (storeDef) return `${storeDef.label} (Local)`;
+      const catalogModel = CURATED_MODELS.find((cm) => cm.id === modelId);
+      if (catalogModel) return `${catalogModel.label} (Local)`;
+      return `${modelId} (Local)`;
+    }
     const fav = providerId
       ? favoriteModels.find((f) => f.modelId === modelId && f.providerId === providerId)
       : favoriteModels.find((f) => f.modelId === modelId);
@@ -117,34 +155,70 @@ const ChatTitle = React.memo(() => {
               setIsModelDropdownOpen(!isModelDropdownOpen);
             }}
           >
-            {t('model')}: {getModelDisplayName(chat.config.model, chat.config.providerId)}
+            {t('model')}: {getModelDisplayName(chat.config.model, chat.config.providerId, chat.config.modelSource)}
             <svg className='w-3 h-3 ml-1' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
               <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M19 9l-7 7-7-7' />
             </svg>
           </div>
-          {isModelDropdownOpen && (
+          {isModelDropdownOpen && (() => {
+            // Build local model candidates (favorited + saved)
+            const localCandidates: { id: string; label: string }[] = [];
+            const seenLocal = new Set<string>();
+            for (const m of localModels) {
+              if (favoriteLocalIds.includes(m.id) && savedMeta[m.id]?.storageState === 'saved') {
+                seenLocal.add(m.id);
+                localCandidates.push({ id: m.id, label: m.label });
+              }
+            }
+            for (const cm of CURATED_MODELS) {
+              if (!seenLocal.has(cm.id) && favoriteLocalIds.includes(cm.id) && savedMeta[cm.id]?.storageState === 'saved') {
+                localCandidates.push({ id: cm.id, label: cm.label });
+              }
+            }
+            const hasAny = favoriteModels.length > 0 || localCandidates.length > 0;
+
+            return (
             <div className='absolute top-full left-0 mt-1 min-w-[280px] max-h-[300px] overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-md shadow-lg z-50'>
-              {favoriteModels.length === 0 ? (
+              {!hasAny ? (
                 <div className='px-3 py-2 text-sm text-gray-500'>
                   {t('provider.noModelSelected', 'モデル未選択')}
                 </div>
               ) : (
-                favoriteModels.map((fav) => (
-                  <div
-                    key={`${fav.providerId}-${fav.modelId}`}
-                    className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${
-                      chat.config.model === fav.modelId && chat.config.providerId === fav.providerId
-                        ? 'bg-gray-100 dark:bg-gray-700 font-medium'
-                        : ''
-                    }`}
-                    onClick={() => handleModelChange(fav.modelId, fav.providerId)}
-                  >
-                    {fav.modelId} ({providers[fav.providerId]?.name || fav.providerId})
-                  </div>
-                ))
+                <>
+                  {favoriteModels.map((fav) => (
+                    <div
+                      key={`${fav.providerId}-${fav.modelId}`}
+                      className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                        chat.config.model === fav.modelId && chat.config.providerId === fav.providerId && chat.config.modelSource !== 'local'
+                          ? 'bg-gray-100 dark:bg-gray-700 font-medium'
+                          : ''
+                      }`}
+                      onClick={() => handleModelChange(fav.modelId, fav.providerId)}
+                    >
+                      {fav.modelId} ({providers[fav.providerId]?.name || fav.providerId})
+                    </div>
+                  ))}
+                  {localCandidates.length > 0 && favoriteModels.length > 0 && (
+                    <div className='border-t border-gray-200 dark:border-gray-600 my-1' />
+                  )}
+                  {localCandidates.map((lm) => (
+                    <div
+                      key={`local-${lm.id}`}
+                      className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 ${
+                        chat.config.model === lm.id && chat.config.modelSource === 'local'
+                          ? 'bg-gray-100 dark:bg-gray-700 font-medium'
+                          : ''
+                      }`}
+                      onClick={() => handleModelChange(lm.id, undefined, 'local')}
+                    >
+                      {lm.label} (Local)
+                    </div>
+                  ))}
+                </>
               )}
             </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* Model options button */}

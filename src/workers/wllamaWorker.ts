@@ -86,6 +86,28 @@ function respondError(id: number, message: string) {
   self.postMessage({ id, type: 'error', message });
 }
 
+/** Forward logs to main thread since worker console is not visible in preview tools */
+function forwardLog(level: string, ...args: unknown[]) {
+  const text = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+  self.postMessage({ id: 0, type: '__log', level, text: `[wllama-native] ${text}` });
+  // Collect error/warn logs for inclusion in user-facing error messages
+  if (level === 'error' || level === 'warn') {
+    recentNativeLogs.push(text);
+    if (recentNativeLogs.length > 20) recentNativeLogs.shift();
+  }
+}
+
+/** Recent native error/warn logs for diagnostic messages */
+const recentNativeLogs: string[] = [];
+
+const workerLogger = {
+  debug: (...args: unknown[]) => forwardLog('debug', ...args),
+  log: (...args: unknown[]) => forwardLog('info', ...args),
+  info: (...args: unknown[]) => forwardLog('info', ...args),
+  warn: (...args: unknown[]) => forwardLog('warn', ...args),
+  error: (...args: unknown[]) => forwardLog('error', ...args),
+};
+
 // ---------------------------------------------------------------------------
 // Request handlers
 // ---------------------------------------------------------------------------
@@ -93,12 +115,19 @@ function respondError(id: number, message: string) {
 async function handleInit(req: InitRequest) {
   try {
     const paths = getWasmPaths();
+    console.info('[wllamaWorker] init, WASM paths:', paths);
     wllama = new Wllama(paths, {
-      suppressNativeLog: true,
+      suppressNativeLog: false,
+      logger: workerLogger,
     });
+    console.info('[wllamaWorker] init success');
     respond(req.id, 'ready');
   } catch (e) {
-    respondError(req.id, `Init failed: ${(e as Error).message}`);
+    const err = e as Error;
+    console.error('[wllamaWorker] init error:', err.message);
+    respondError(req.id,
+      `WASMランタイムの初期化に失敗しました: ${err.message}。` +
+      'ブラウザがWebAssemblyをサポートしていないか、WASMバイナリの読み込みに失敗した可能性があります。');
   }
 }
 
@@ -108,7 +137,30 @@ async function handleLoad(req: LoadRequest) {
     return;
   }
 
+  // Clear native log buffer before each load attempt
+  recentNativeLogs.length = 0;
+
   try {
+    console.info('[wllamaWorker] handleLoad start, file:', req.file.name, 'size:', req.file.size);
+
+    // Validate GGUF magic header before passing to wllama
+    if (req.file.size < 4) {
+      respondError(req.id,
+        `GGUFファイルの検証に失敗しました: ファイルサイズが${req.file.size}バイトしかありません（最低4バイト必要）。` +
+        'ダウンロードが中断された可能性があります。モデルを削除して再ダウンロードしてください。');
+      return;
+    }
+    const magic = new Uint8Array(await req.file.slice(0, 4).arrayBuffer());
+    const magicHex = Array.from(magic).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ');
+    console.info('[wllamaWorker] GGUF magic bytes:', magicHex);
+    if (magic[0] !== 0x47 || magic[1] !== 0x47 || magic[2] !== 0x55 || magic[3] !== 0x46) {
+      respondError(req.id,
+        `GGUFファイルの検証に失敗しました: ファイル先頭のマジックバイトが不正です（検出: ${magicHex}、期待: 0x47 0x47 0x55 0x46 "GGUF"）。` +
+        'ファイルが破損しているか、GGUF以外の形式です。モデルを削除して再ダウンロードしてください。');
+      return;
+    }
+
+    console.info('[wllamaWorker] GGUF magic valid, calling wllama.loadModel...');
     // wllama.loadModel accepts Blob[] — wrap the single File in an array
     await wllama.loadModel([req.file], {
       n_ctx: 2048,
@@ -122,7 +174,37 @@ async function handleLoad(req: LoadRequest) {
       nLayer: info.n_layer,
     });
   } catch (e) {
-    respondError(req.id, `Model load failed: ${(e as Error).message}`);
+    const err = e as Error;
+    const msg = err.message;
+    // Forward stack trace to main thread for debugging
+    self.postMessage({ id: req.id, type: '__log', level: 'error', text: `[wllamaWorker] loadModel error: ${msg}\nStack: ${err.stack}` });
+
+    // Build diagnostic detail from native llama.cpp logs
+    const nativeDetail = recentNativeLogs.length > 0
+      ? '\n\n[llama.cpp ログ]\n' + recentNativeLogs.join('\n')
+      : '';
+
+    if (msg.includes('Invalid magic number')) {
+      // wllama Glue protocol error — llama.cpp returned non-Glue response (typically after a native load failure)
+      const hasUnsupportedType = recentNativeLogs.some(l => l.includes('invalid ggml type'));
+      const typeMatch = recentNativeLogs.find(l => l.includes('invalid ggml type'))?.match(/ggml type (\d+)/);
+      if (hasUnsupportedType) {
+        respondError(req.id,
+          `モデルの読み込みに失敗しました: このGGUFファイルに含まれるテンソルの量子化形式（ggml type ${typeMatch?.[1] ?? '不明'}）は、` +
+          `現在のwllamaランタイム（@wllama/wllama v2.3.7 同梱のllama.cpp）でサポートされていません。` +
+          'このモデルは、より新しいバージョンのllama.cppで導入された量子化形式を使用しています。' +
+          nativeDetail);
+      } else {
+        respondError(req.id,
+          'モデルの読み込みに失敗しました: llama.cppがモデルを処理できませんでした（wllama Glueプロトコルエラー: Invalid magic number）。' +
+          'モデルファイルとwllamaランタイムの互換性に問題がある可能性があります。' +
+          nativeDetail);
+      }
+    } else {
+      respondError(req.id,
+        `モデルの読み込みに失敗しました: ${msg}` +
+        nativeDetail);
+    }
   }
 }
 
@@ -153,6 +235,8 @@ async function handleGenerate(req: GenerateRequest) {
     let tokensGenerated = 0;
     let stopped = false;
 
+    console.info('[wllamaWorker] generate start, prompt length:', req.prompt.length, 'maxTokens:', req.maxTokens);
+
     for await (const chunk of stream) {
       fullText = chunk.currentText;
       tokensGenerated++;
@@ -177,13 +261,17 @@ async function handleGenerate(req: GenerateRequest) {
       }
     }
 
+    console.info('[wllamaWorker] generate done, tokensGenerated:', tokensGenerated, 'fullText length:', fullText.length, 'stopped:', stopped);
     respond(req.id, 'done', { fullText, tokensGenerated });
   } catch (e) {
     const err = e as Error;
     if (err.name === 'AbortError') {
       respond(req.id, 'done', { fullText: '', tokensGenerated: 0, aborted: true });
     } else {
-      respondError(req.id, `Generation failed: ${err.message}`);
+      const nativeDetail = recentNativeLogs.length > 0
+        ? '\n\n[llama.cpp ログ]\n' + recentNativeLogs.join('\n')
+        : '';
+      respondError(req.id, `テキスト生成に失敗しました: ${err.message}${nativeDetail}`);
     }
   } finally {
     currentAbortController = null;
@@ -205,7 +293,7 @@ async function handleUnload(req: UnloadRequest) {
     }
     respond(req.id, 'unloaded');
   } catch (e) {
-    respondError(req.id, `Unload failed: ${(e as Error).message}`);
+    respondError(req.id, `モデルのアンロードに失敗しました: ${(e as Error).message}`);
   }
 }
 

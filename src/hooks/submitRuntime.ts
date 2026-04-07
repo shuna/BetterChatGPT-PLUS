@@ -662,6 +662,7 @@ export const executeLocalSubmit = async ({
         setStreamingBufferText(targetNodeId, text);
         notifyStreamingUpdate(targetNodeId);
       },
+      'chat',
     );
   } catch (e) {
     if ((e as Error).name === 'AbortError' || abortController.signal.aborted) {

@@ -199,6 +199,7 @@ export interface StandardQualityEvaluationResult {
   reasoning: Partial<Record<keyof QualityScores, string>>;
   promptSuggestions: string[];
   configSuggestions: string[];
+  source?: 'remote' | 'local';
   timestamp: number;
 }
 
@@ -209,6 +210,7 @@ export interface SystemQualityEvaluationResult {
   reasoning: Partial<Record<keyof SystemQualityScores, string>>;
   promptSuggestions: string[];
   configSuggestions: string[];
+  source?: 'remote' | 'local';
   timestamp: number;
 }
 
@@ -266,7 +268,7 @@ export interface EvaluationResult {
   quality?: QualityEvaluationResult;
   /** Local moderation screening (supplementary) */
   localSafety?: LocalModerationResult;
-  /** Local quality hint (experimental, supplementary) */
+  /** @deprecated Use quality with source='local' instead */
   localQualityHint?: LocalQualityHint;
   /** Conditions under which the safety evaluation was run */
   safetyContext?: EvaluationContextInfo;
@@ -276,6 +278,10 @@ export interface EvaluationResult {
 
 /** Map from "chatId:nodeId:phase" to evaluation result */
 export type EvaluationResultMap = Record<string, EvaluationResult>;
+
+/** Per-axis progress state for local quality evaluation */
+export type AxisProgressState = 'waiting' | 'generating' | 'done';
+export type AxisProgressMap = Partial<Record<keyof QualityScores, AxisProgressState>>;
 
 export function evaluationResultKey(
   chatId: string,

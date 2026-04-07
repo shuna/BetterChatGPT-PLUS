@@ -2,7 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import useStore from '@store/store';
 import { evaluationResultKey, qualityAxisKeys, categoryToI18nKey, summarizeSafetyScores } from '@type/evaluation';
-import type { EvaluationResult, SafetyCheckResult, QualityEvaluationResult, QualityAxisThreshold, LocalModerationResult, LocalQualityHint } from '@type/evaluation';
+import type { EvaluationResult, SafetyCheckResult, QualityEvaluationResult, QualityAxisThreshold, LocalModerationResult, AxisProgressMap, QualityScores, AxisProgressState } from '@type/evaluation';
 import type { TabId } from './EvaluationModal';
 
 interface EvaluationPanelProps {
@@ -12,7 +12,8 @@ interface EvaluationPanelProps {
   onOpenTab?: (tab: TabId) => void;
 }
 
-const ScoreBar = ({ score, label, threshold }: { score: number; label: string; threshold: QualityAxisThreshold }) => {
+const ScoreBar = ({ score, label, threshold, axisState }: { score: number; label: string; threshold: QualityAxisThreshold; axisState?: AxisProgressState }) => {
+  const { t } = useTranslation('main');
   const pct = Math.round(score * 100);
   const color =
     score >= threshold.green ? 'bg-green-500' : score >= threshold.red ? 'bg-yellow-500' : 'bg-red-500';
@@ -21,10 +22,18 @@ const ScoreBar = ({ score, label, threshold }: { score: number; label: string; t
       <span className='w-32 text-gray-600 dark:text-gray-400 truncate' title={label}>
         {label}
       </span>
-      <div className='flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden'>
-        <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className='w-8 text-right text-gray-500 dark:text-gray-400'>{pct}%</span>
+      {axisState && axisState !== 'done' ? (
+        <span className={`flex-1 text-[10px] ${axisState === 'generating' ? 'text-blue-500 dark:text-blue-400 animate-pulse' : 'text-gray-400 dark:text-gray-500'}`}>
+          {axisState === 'generating' ? t('evaluation.axisGenerating') : t('evaluation.axisWaiting')}
+        </span>
+      ) : (
+        <>
+          <div className='flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden'>
+            <div className={`h-full ${color} rounded-full transition-all`} style={{ width: `${pct}%` }} />
+          </div>
+          <span className='w-8 text-right text-gray-500 dark:text-gray-400'>{pct}%</span>
+        </>
+      )}
     </div>
   );
 };
@@ -64,19 +73,26 @@ const SafetySection = ({ result, onOpenTab }: { result: SafetyCheckResult; onOpe
   );
 };
 
-const QualitySummary = ({ result, onOpenTab }: { result: QualityEvaluationResult; onOpenTab?: (tab: TabId) => void }) => {
+const QualitySummary = ({ result, onOpenTab, axisProgress }: { result: QualityEvaluationResult; onOpenTab?: (tab: TabId) => void; axisProgress?: AxisProgressMap }) => {
   const { t } = useTranslation('main');
   const qualityThresholds = useStore((state) => state.qualityThresholds);
 
   return (
     <div className='space-y-1'>
-      <button
-        type='button'
-        className='text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer'
-        onClick={() => onOpenTab?.('quality')}
-      >
-        {t('evaluation.qualityTabLabel')}
-      </button>
+      <div className='flex items-center gap-2'>
+        <button
+          type='button'
+          className='text-xs font-semibold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer'
+          onClick={() => onOpenTab?.('quality')}
+        >
+          {t('evaluation.qualityTabLabel')}
+        </button>
+        {result.source === 'local' && (
+          <span className='text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-800/40 text-amber-600 dark:text-amber-400'>
+            {t('evaluation.localQualityExperimental')}
+          </span>
+        )}
+      </div>
       <div className='pl-4 space-y-1'>
         {result.kind === 'system'
           ? (Object.keys(result.scores) as string[]).map((axis) => (
@@ -93,6 +109,7 @@ const QualitySummary = ({ result, onOpenTab }: { result: QualityEvaluationResult
                 score={result.scores[axis]}
                 label={t(`evaluation.axis.${axis}`)}
                 threshold={qualityThresholds[axis]}
+                axisState={axisProgress?.[axis]}
               />
             ))}
       </div>
@@ -119,31 +136,15 @@ const LocalSafetyBadge = ({ result }: { result: LocalModerationResult }) => {
   );
 };
 
-const LocalQualityBadge = ({ result }: { result: LocalQualityHint }) => {
-  const { t } = useTranslation('main');
-  const colorMap = {
-    'good': 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-    'fair': 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
-    'poor': 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-  };
-  return (
-    <div className='flex items-center gap-2'>
-      <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${colorMap[result.grade]}`}>
-        Local: {result.grade}
-      </span>
-      <span className='text-[10px] text-gray-400 dark:text-gray-500'>
-        {t('evaluation.localQualityExperimental')}
-      </span>
-    </div>
-  );
-};
-
 const EvaluationPanel: React.FC<EvaluationPanelProps> = ({ chatId, nodeId, phase, onOpenTab }) => {
   const key = evaluationResultKey(chatId, nodeId, phase);
   const result: EvaluationResult | undefined = useStore(
     (state) => state.evaluationResults[key]
   );
   const pending = useStore((state) => state.evaluationPending[key]);
+  const axisProgress: AxisProgressMap | undefined = useStore(
+    (state) => state.evaluationAxisProgress[key]
+  );
   const { t } = useTranslation('main');
 
   if (!result && !pending) return null;
@@ -157,8 +158,7 @@ const EvaluationPanel: React.FC<EvaluationPanelProps> = ({ chatId, nodeId, phase
       )}
       {result?.localSafety && <LocalSafetyBadge result={result.localSafety} />}
       {result?.safety && <SafetySection result={result.safety} onOpenTab={onOpenTab} />}
-      {result?.quality && <QualitySummary result={result.quality} onOpenTab={onOpenTab} />}
-      {result?.localQualityHint && <LocalQualityBadge result={result.localQualityHint} />}
+      {result?.quality && <QualitySummary result={result.quality} onOpenTab={onOpenTab} axisProgress={axisProgress} />}
     </div>
   );
 };

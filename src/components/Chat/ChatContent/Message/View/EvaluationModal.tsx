@@ -4,7 +4,7 @@ import PopupModal from '@components/PopupModal';
 import RadarChart from './RadarChart';
 import useStore from '@store/store';
 import { evaluationResultKey, qualityAxisKeys, systemQualityAxisKeys, moderationCategoryKeys, categoryToI18nKey, getSafetyStatus, summarizeSafetyScores } from '@type/evaluation';
-import type { QualityEvaluationMode } from '@type/evaluation';
+import type { QualityEvaluationMode, QualityScores, AxisProgressState } from '@type/evaluation';
 import type {
   EvaluationResult,
   SafetyCheckResult,
@@ -14,14 +14,17 @@ import type {
   EvaluationScope,
   EvaluationOmittedMode,
   LocalModerationResult,
-  LocalQualityHint,
   EvaluationContextInfo,
+  AxisProgressMap,
 } from '@type/evaluation';
 import { runSafetyCheck, runQualityEvaluation } from '@api/evaluation';
+import { runLocalQualityEvaluation } from '@api/localEvaluation';
+import { prepareModelsForExecution } from '@src/local-llm/orchestrator';
 import type { ResolvedProvider } from '@hooks/submitHelpers';
 import { formatEvaluationErrorMessage } from '@utils/evaluationError';
 import type { FormattedEvaluationError } from '@utils/evaluationError';
 import { resolveEvalContext } from '@utils/evaluationContext';
+import { useLocalModelBusy } from '@hooks/useLocalModelBusy';
 import i18next from 'i18next';
 
 export type TabId = 'safety' | 'quality';
@@ -350,9 +353,28 @@ const SafetyTab = ({
 // Quality Tab
 // ---------------------------------------------------------------------------
 
+const AxisProgressBadge = ({ state }: { state?: AxisProgressState }) => {
+  const { t } = useTranslation('main');
+  if (!state || state === 'done') return null;
+  if (state === 'generating') {
+    return (
+      <span className='inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-800/40 text-blue-600 dark:text-blue-400 animate-pulse'>
+        <svg className='w-2.5 h-2.5 animate-spin' viewBox='0 0 16 16' fill='none'>
+          <circle cx='8' cy='8' r='6' stroke='currentColor' strokeWidth='2' strokeDasharray='28' strokeDashoffset='8' />
+        </svg>
+        {t('evaluation.axisGenerating')}
+      </span>
+    );
+  }
+  return (
+    <span className='text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400'>
+      {t('evaluation.axisWaiting')}
+    </span>
+  );
+};
+
 const QualityTab = ({
   result,
-  localQualityHint,
   isRunning,
   onReEvaluate,
   error,
@@ -363,14 +385,15 @@ const QualityTab = ({
   role,
   onScopeChange,
   onOmittedModeChange,
+  axisProgress,
 }: {
   result?: QualityEvaluationResult;
-  localQualityHint?: LocalQualityHint;
   isRunning: boolean;
   thresholds: QualityThresholds;
   onReEvaluate: () => void;
   error?: FormattedEvaluationError | null;
   disabledReason?: string | null;
+  axisProgress?: AxisProgressMap;
   scope: EvaluationScope;
   omittedMode: EvaluationOmittedMode;
   role: string;
@@ -442,6 +465,15 @@ const QualityTab = ({
 
       {error && <ErrorBanner message={error.message} />}
 
+      {/* Local source badge */}
+      {result?.source === 'local' && (
+        <div className='flex items-center gap-2 mb-1'>
+          <span className='text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-800/40 text-amber-600 dark:text-amber-400 font-medium'>
+            {t('evaluation.localQualityExperimental')}
+          </span>
+        </div>
+      )}
+
       {/* Radar chart */}
       {result && (
         <div className='flex justify-center'>
@@ -470,7 +502,10 @@ const QualityTab = ({
               return (
                 <tr key={axis} className='border-t border-gray-100 dark:border-gray-700'>
                   <td className='py-2 text-gray-700 dark:text-gray-300'>
-                    {t(`${axisPrefix}.${axis}`)}
+                    <span className='flex items-center gap-1.5'>
+                      {t(`${axisPrefix}.${axis}`)}
+                      <AxisProgressBadge state={axisProgress?.[axis as keyof QualityScores]} />
+                    </span>
                   </td>
                   <td className='py-2 text-right text-gray-600 dark:text-gray-400'>
                     {Math.round(score * 100)}%
@@ -503,18 +538,20 @@ const QualityTab = ({
       )}
 
       {/* Reasoning per axis */}
-      {result && (
+      {(result || axisProgress) && (
         <div className='space-y-2'>
           {axisKeys.map((axis) => {
-            const reasoning = (result.reasoning as unknown as Record<string, string>)[axis];
-            if (!reasoning) return null;
+            const reasoning = result ? (result.reasoning as unknown as Record<string, string>)[axis] : undefined;
+            const progress = axisProgress?.[axis as keyof QualityScores];
+            if (!reasoning && !progress) return null;
             return (
               <div key={axis} className='text-sm'>
                 <div className='flex items-center gap-1'>
                   <span className='font-medium text-gray-700 dark:text-gray-300'>
                     {t(`${axisPrefix}.${axis}`)}:
                   </span>
-                  <button
+                  <AxisProgressBadge state={progress} />
+                  {reasoning && <button
                     className='p-0.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors'
                     title={t('evaluation.copyReasoning') as string}
                     onClick={() => navigator.clipboard.writeText(reasoning)}
@@ -523,9 +560,9 @@ const QualityTab = ({
                       <path d='M7 3.5A1.5 1.5 0 018.5 2h3.879a1.5 1.5 0 011.06.44l3.122 3.12A1.5 1.5 0 0117 6.622V12.5a1.5 1.5 0 01-1.5 1.5h-1v-3.379a3 3 0 00-.879-2.121L10.5 5.379A3 3 0 008.379 4.5H7v-1z' />
                       <path d='M4.5 6A1.5 1.5 0 003 7.5v9A1.5 1.5 0 004.5 18h7a1.5 1.5 0 001.5-1.5v-5.879a1.5 1.5 0 00-.44-1.06L9.44 6.439A1.5 1.5 0 008.378 6H4.5z' />
                     </svg>
-                  </button>
+                  </button>}
                 </div>
-                <span className='text-gray-600 dark:text-gray-400'>{reasoning}</span>
+                {reasoning && <span className='text-gray-600 dark:text-gray-400'>{reasoning}</span>}
               </div>
             );
           })}
@@ -555,37 +592,6 @@ const QualityTab = ({
               <li key={i}>{s}</li>
             ))}
           </ul>
-        </div>
-      )}
-
-      {/* Local quality hint section */}
-      {localQualityHint && (
-        <div className='mt-4 rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/10 p-3 space-y-2'>
-          <div className='flex items-center gap-2'>
-            <span className='text-xs font-semibold text-amber-800 dark:text-amber-300'>
-              {t('evaluation.localQualityHint')}
-            </span>
-            <span className='text-[10px] px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-800/40 text-amber-600 dark:text-amber-400'>
-              {t('evaluation.localQualityExperimental')}
-            </span>
-          </div>
-          <div className='flex items-center gap-2'>
-            <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
-              localQualityHint.grade === 'good' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-              localQualityHint.grade === 'fair' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' :
-              'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-            }`}>
-              {localQualityHint.grade}
-            </span>
-          </div>
-          {localQualityHint.comment && (
-            <p className='text-xs text-gray-600 dark:text-gray-400'>
-              {localQualityHint.comment}
-            </p>
-          )}
-          <div className='text-[10px] text-gray-400 dark:text-gray-500'>
-            {new Date(localQualityHint.timestamp).toLocaleString(i18next.language)}
-          </div>
         </div>
       )}
 
@@ -649,6 +655,9 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
   const result: EvaluationResult | undefined = useStore(
     (state) => state.evaluationResults[key]
   );
+  const axisProgress: AxisProgressMap | undefined = useStore(
+    (state) => state.evaluationAxisProgress[key]
+  );
 
   const currentContextInfo: EvaluationContextInfo = {
     scope,
@@ -657,9 +666,20 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
 
   const evaluationMode: QualityEvaluationMode = role === 'system' ? 'system' : role === 'assistant' ? 'assistant' : 'user';
 
+  // Local model busy check for quality tab.
+  // handleRunQuality only takes the local path when activeLocalModels['analysis'] is set,
+  // so we must match exactly that condition — not the wider fallback chain in localEvaluation.ts.
+  const qualityLocalModelId = useStore((s) =>
+    s.localModelEnabled ? (s.activeLocalModels['analysis'] ?? null) : null
+  );
+  const { isBusy: isQualityModelBusy, busyReason: qualityBusyReason } = useLocalModelBusy(qualityLocalModelId);
+
   // Pre-resolve context to check availability for button disabling (P3)
   const preResolvedCtx = resolveEvalContext(chatIndex, messageIndex, role, scope, omittedMode);
   const qualityDisabledReason: string | null = (() => {
+    if (isQualityModelBusy && qualityBusyReason) {
+      return t(`localModel.busy.${qualityBusyReason}`) as string;
+    }
     if (!preResolvedCtx) return t('evaluation.noContext') as string;
     if (role === 'system') {
       // System evaluation: check if there's system prompt text
@@ -726,28 +746,52 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
     setQualityRunning(true);
     setQualityError(null);
     try {
-      const quality = await runQualityEvaluation(
-        promptText,
-        phase === 'post-receive' ? ctx.assistantText : undefined,
-        resolvedProvider.endpoint,
-        model,
-        resolvedProvider.key,
-        i18next.language,
-        evaluationMode
-      );
-      const existing = useStore.getState().evaluationResults[key];
-      useStore.getState().setEvaluationResult(key, {
-        ...existing,
-        phase,
-        quality,
-        qualityContext: { ...currentContextInfo },
-      });
+      const store = useStore.getState();
+      const analysisModelId = store.localModelEnabled
+        ? (store.activeLocalModels['analysis'] ?? null)
+        : null;
+
+      if (analysisModelId) {
+        // Use local analysis (evaluation) model
+        await prepareModelsForExecution([analysisModelId]);
+        const qualityText = phase === 'post-receive' ? (ctx.assistantText ?? promptText) : promptText;
+        const axisProgress = (axis: keyof QualityScores, state: AxisProgressState) => {
+          useStore.getState().setEvaluationAxisProgress(key, { [axis]: state });
+        };
+        const quality = await runLocalQualityEvaluation(qualityText, axisProgress);
+        const existing = store.evaluationResults[key];
+        store.setEvaluationResult(key, {
+          ...existing,
+          phase,
+          quality,
+          qualityContext: { ...currentContextInfo },
+        });
+      } else {
+        // Use remote API
+        const quality = await runQualityEvaluation(
+          promptText,
+          phase === 'post-receive' ? ctx.assistantText : undefined,
+          resolvedProvider.endpoint,
+          model,
+          resolvedProvider.key,
+          i18next.language,
+          evaluationMode
+        );
+        const existing = store.evaluationResults[key];
+        store.setEvaluationResult(key, {
+          ...existing,
+          phase,
+          quality,
+          qualityContext: { ...currentContextInfo },
+        });
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setQualityError(formatEvaluationErrorMessage(msg, t));
       console.warn('[evaluation] quality evaluation failed:', e);
     } finally {
       setQualityRunning(false);
+      useStore.getState().clearEvaluationAxisProgress(key);
     }
   }, [key, phase, chatIndex, messageIndex, role, scope, omittedMode, resolvedProvider, model, t]);
 
@@ -826,12 +870,12 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
         {activeTab === 'quality' && (
           <QualityTab
             result={result?.quality}
-            localQualityHint={result?.localQualityHint}
             isRunning={qualityRunning}
             onReEvaluate={handleRunQuality}
             error={qualityError}
             thresholds={qualityThresholds}
             disabledReason={qualityDisabledReason}
+            axisProgress={axisProgress}
             scope={scope}
             omittedMode={omittedMode}
             role={role}

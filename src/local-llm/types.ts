@@ -103,6 +103,9 @@ export interface LocalModelDefinition {
  */
 export type LocalModelStatus = 'idle' | 'loading' | 'ready' | 'busy' | 'error' | 'unloaded';
 
+/** Why a model is currently busy — used for UI messaging and conflict resolution. */
+export type LocalModelBusyReason = 'chat' | 'evaluation' | 'moderation' | 'test';
+
 // ---------------------------------------------------------------------------
 // Capabilities reported after model load
 // ---------------------------------------------------------------------------

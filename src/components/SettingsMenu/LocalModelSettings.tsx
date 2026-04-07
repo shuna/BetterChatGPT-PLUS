@@ -15,6 +15,7 @@ import { estimateDeviceTier, getModelFit, formatBytes } from '@src/local-llm/dev
 import type { DeviceTier, ModelFitLabel } from '@src/local-llm/device';
 import { localAnalyze, localFormat } from '@api/localGeneration';
 import type {
+  LocalModelDefinition,
   LocalModelStatus,
   LocalModelTask,
   HfSearchResult,
@@ -68,12 +69,15 @@ const fitColors: Record<ModelFitLabel, string> = {
   'not-recommended': 'text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30',
 };
 
-const FitBadge = ({ fit }: { fit: ModelFitLabel }) => {
+const FitBadge = ({ fit, variant = 'catalog' }: { fit: ModelFitLabel; variant?: 'catalog' | 'search' }) => {
   const { t } = useTranslation('main');
   const [showTip, setShowTip] = useState(false);
+  const recommendedLabel = variant === 'search'
+    ? t('localModel.modelFit.balanced')
+    : t('localModel.modelFit.recommended');
   const labels: Record<ModelFitLabel, string> = {
     lightweight: t('localModel.modelFit.lightweight'),
-    recommended: t('localModel.modelFit.recommended'),
+    recommended: recommendedLabel,
     heavy: t('localModel.modelFit.heavy'),
     'very-heavy': t('localModel.modelFit.veryHeavy'),
     extreme: t('localModel.modelFit.extreme'),
@@ -315,6 +319,127 @@ const CatalogCard = ({
 };
 
 // ---------------------------------------------------------------------------
+// Downloaded model row (unified for catalog + search models)
+// ---------------------------------------------------------------------------
+
+const DownloadedModelRow = ({
+  modelId,
+  label,
+  tasks,
+  fileSize,
+  fitBadge,
+  runtimeStatus,
+  isSelected,
+  onSelect,
+  isFavorite,
+  onToggleFavorite,
+  onUnload,
+  onDelete,
+}: {
+  modelId: string;
+  label: string;
+  tasks: string[];
+  fileSize?: number;
+  fitBadge?: React.ReactNode;
+  runtimeStatus: LocalModelStatus;
+  isSelected: boolean;
+  onSelect: () => void;
+  isFavorite: boolean;
+  onToggleFavorite: () => void;
+  onUnload: (modelId: string) => void;
+  onDelete: (modelId: string) => void;
+}) => {
+  const { t } = useTranslation('main');
+  const isLoaded = runtimeStatus === 'ready' || runtimeStatus === 'busy';
+  const isLoading = runtimeStatus === 'loading';
+
+  const canSelect = !isLoaded && !isLoading;
+
+  return (
+    <div
+      className={`px-4 py-2.5 flex flex-col gap-1 ${canSelect ? 'cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors' : ''}`}
+      onClick={canSelect ? onSelect : undefined}
+    >
+      {/* Row 1: radio/status + model name + actions (right) */}
+      <div className='flex items-center gap-3'>
+        <div className='flex-shrink-0 w-5 flex justify-center'>
+          {canSelect && (
+            <input
+              type='radio'
+              checked={isSelected}
+              onChange={onSelect}
+              onClick={(e) => e.stopPropagation()}
+              className='h-4 w-4 border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500'
+            />
+          )}
+          {(isLoaded || isLoading) && (
+            <span className={`inline-block w-2.5 h-2.5 rounded-full ${statusColors[runtimeStatus]}`}
+              title={t(`localModel.modelStatus.${runtimeStatus}`) as string}
+            />
+          )}
+        </div>
+        <span className='flex-1 min-w-0 text-sm font-medium text-gray-900 dark:text-gray-100 break-words'>
+          {label}
+        </span>
+
+        {/* Favorite star */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
+          className={`flex-shrink-0 p-0.5 rounded transition-colors ${
+            isFavorite
+              ? 'text-yellow-500 hover:text-yellow-600'
+              : 'text-gray-300 dark:text-gray-600 hover:text-gray-400 dark:hover:text-gray-500'
+          }`}
+          title={isFavorite ? t('localModel.unfavorite') as string : t('localModel.favorite') as string}
+        >
+          <svg className='w-4 h-4' viewBox='0 0 20 20' fill='currentColor'>
+            <path d='M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z' />
+          </svg>
+        </button>
+
+        {/* Unload (loaded models) */}
+        {isLoaded && (
+          <button
+            className='flex-shrink-0 text-xs px-2 py-0.5 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40'
+            onClick={(e) => { e.stopPropagation(); onUnload(modelId); }}
+            disabled={runtimeStatus === 'busy'}
+          >
+            {t('localModel.unload')}
+          </button>
+        )}
+
+        {/* Delete (non-loaded models) */}
+        {canSelect && (
+          <button
+            className='flex-shrink-0 text-xs px-2 py-0.5 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+            onClick={(e) => { e.stopPropagation(); onDelete(modelId); }}
+          >
+            {t('localModel.delete')}
+          </button>
+        )}
+
+        {isLoading && (
+          <span className='flex-shrink-0 text-xs text-gray-500 dark:text-gray-400 animate-pulse'>
+            {t('localModel.modelStatus.loading')}
+          </span>
+        )}
+      </div>
+
+      {/* Row 2: badges + size — indented to align with label */}
+      <div className='flex items-center gap-2 pl-8 flex-wrap'>
+        {fitBadge}
+        <TaskBadges tasks={tasks} />
+        {fileSize != null && (
+          <span className='text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap'>
+            {formatBytes(fileSize)}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
 // Task assignment helpers
 // ---------------------------------------------------------------------------
 
@@ -356,12 +481,12 @@ const TaskAssignmentRow = ({
 }: TaskAssignmentRowProps) => {
   return (
     <div className='px-4 py-3 flex flex-col gap-1.5'>
-      <div className='flex items-center justify-between gap-4'>
-        <span className='text-sm font-medium text-gray-900 dark:text-gray-300'>
+      <div className='flex flex-wrap items-center gap-x-4 gap-y-1'>
+        <span className='text-sm font-medium text-gray-900 dark:text-gray-300 whitespace-nowrap'>
           {taskLabel}
         </span>
         <select
-          className='rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500 max-w-[240px]'
+          className='flex-1 min-w-[180px] rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-2 py-1 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
           value={currentModelId ?? ''}
           onChange={(e) => onAssign(task, e.target.value || null)}
         >
@@ -592,13 +717,13 @@ const SearchResultCard = ({
           {formatDownloads(result.downloads)}
         </span>
         <span className='flex-1' />
-        {fitLabel && <FitBadge fit={fitLabel} />}
+        {fitLabel && <FitBadge fit={fitLabel} variant='search' />}
       </div>
       {/* Desktop: FitBadge on row 2 */}
       {fitLabel && (
         <div className='hidden sm:flex items-center px-3 pb-0.5 ml-5'>
           <span className='flex-1' />
-          <FitBadge fit={fitLabel} />
+          <FitBadge fit={fitLabel} variant='search' />
         </div>
       )}
 
@@ -743,6 +868,8 @@ const LocalModelSettings = () => {
   const [output, setOutput] = useState('');
   const [generating, setGenerating] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [ephemeralLoadError, setEphemeralLoadError] = useState<string | null>(null);
+  const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [contextLength, setContextLength] = useState<number | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [testMode, setTestMode] = useState<'generate' | 'analyze' | 'format'>('generate');
@@ -778,7 +905,19 @@ const LocalModelSettings = () => {
   const [loadingMore, setLoadingMore] = useState(false);
 
   // Runtime statuses for all known models (catalog + ephemeral)
-  const [runtimeStatuses, setRuntimeStatuses] = useState<Record<string, LocalModelStatus>>({});
+  const [runtimeStatuses, setRuntimeStatuses] = useState<Record<string, LocalModelStatus>>(() => {
+    const initial: Record<string, LocalModelStatus> = {};
+    initial[EPHEMERAL_MODEL_ID] = localModelRuntime.getStatus(EPHEMERAL_MODEL_ID);
+    for (const model of CURATED_MODELS) {
+      initial[model.id] = localModelRuntime.getStatus(model.id);
+    }
+    for (const m of useStore.getState().localModels) {
+      if (!(m.id in initial)) {
+        initial[m.id] = localModelRuntime.getStatus(m.id);
+      }
+    }
+    return initial;
+  });
 
   // Device tier (computed once)
   const deviceTier = useMemo(() => estimateDeviceTier(), []);
@@ -847,6 +986,23 @@ const LocalModelSettings = () => {
       const store = useStore.getState();
       for (const [id, m] of Object.entries(meta)) {
         store.updateSavedModelMeta(id, m);
+        // Ensure saved models have a definition in localModels
+        if (m.storageState === 'saved' && !store.localModels.some((lm) => lm.id === id)) {
+          const catalog = CURATED_MODELS.find((c) => c.id === id);
+          if (catalog) {
+            store.addLocalModel({
+              id: catalog.id,
+              engine: catalog.engine,
+              tasks: catalog.tasks,
+              label: catalog.label,
+              origin: catalog.huggingFaceRepo,
+              source: 'opfs',
+              manifest: catalog.manifest,
+              fileSize: m.storedBytes || catalog.expectedDownloadSize,
+              displayMeta: catalog.displayMeta,
+            });
+          }
+        }
       }
       setRehydrated(true);
     }).catch(() => {
@@ -894,11 +1050,24 @@ const LocalModelSettings = () => {
         });
       },
       onComplete: (totalBytes) => {
-        useStore.getState().updateSavedModelMeta(model.id, {
+        const store = useStore.getState();
+        store.updateSavedModelMeta(model.id, {
           storageState: 'saved',
           storedBytes: totalBytes,
           storedFiles: [...model.downloadFiles],
           lastVerifiedAt: Date.now(),
+        });
+        // Register model definition so it appears in the model list
+        store.addLocalModel({
+          id: model.id,
+          engine: model.engine,
+          tasks: model.tasks,
+          label: model.label,
+          origin: model.huggingFaceRepo,
+          source: 'opfs',
+          manifest: model.manifest,
+          fileSize: totalBytes,
+          displayMeta: model.displayMeta,
         });
         setDownloadProgresses((prev) => {
           const { [model.id]: _, ...rest } = prev;
@@ -1055,6 +1224,11 @@ const LocalModelSettings = () => {
       // Auto-assign only to tasks that are currently unset
       autoAssignIfUnset(model.id, model.tasks);
 
+      // Auto-favorite on load
+      if (!store.favoriteLocalModelIds.includes(model.id)) {
+        store.toggleFavoriteLocalModel(model.id);
+      }
+
       if (caps?.contextLength) setContextLength(caps.contextLength);
       setOutput('');
     } catch (err) {
@@ -1072,7 +1246,7 @@ const LocalModelSettings = () => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setLoadError(null);
+    setEphemeralLoadError(null);
     setFileName(file.name);
     setOutput('');
     setContextLength(null);
@@ -1120,7 +1294,7 @@ const LocalModelSettings = () => {
       // Auto-assign only to tasks that are currently unset
       autoAssignIfUnset(EPHEMERAL_MODEL_ID, ['generation', 'analysis']);
     } catch (err) {
-      setLoadError((err as Error).message);
+      setEphemeralLoadError((err as Error).message);
     }
 
     e.target.value = '';
@@ -1187,6 +1361,7 @@ const LocalModelSettings = () => {
             outputRef.current.scrollTop = outputRef.current.scrollHeight;
           }
         },
+        'test',
       );
     } catch (err) {
       setOutput((prev) => prev + `\n[Error: ${(err as Error).message}]`);
@@ -1200,7 +1375,7 @@ const LocalModelSettings = () => {
     setGenerating(true);
     setOutput('');
     try {
-      const result = await localAnalyze(prompt, analyzeInstruction);
+      const result = await localAnalyze(prompt, analyzeInstruction, 'test');
       setOutput(result);
     } catch (err) {
       setOutput(`[Error: ${(err as Error).message}]`);
@@ -1214,7 +1389,7 @@ const LocalModelSettings = () => {
     setGenerating(true);
     setOutput('');
     try {
-      const result = await localFormat(prompt, formatPreset);
+      const result = await localFormat(prompt, formatPreset, 'test');
       setOutput(result);
     } catch (err) {
       setOutput(`[Error: ${(err as Error).message}]`);
@@ -1659,11 +1834,59 @@ const LocalModelSettings = () => {
       }
 
       autoAssignIfUnset(modelId, candidate.tasks);
+
+      // Auto-favorite on load
+      if (!store.favoriteLocalModelIds.includes(modelId)) {
+        store.toggleFavoriteLocalModel(modelId);
+      }
+
       setOutput('');
     } catch (err) {
       setLoadError((err as Error).message);
     }
   }, [autoAssignIfUnset]);
+
+  // Load the selected model from the Downloaded Models section
+  const handleLoadSelected = useCallback(async () => {
+    if (!selectedModelId) return;
+    setLoadError(null);
+    try {
+      // ensureLoaded works for both catalog and search models
+      await localModelRuntime.ensureLoaded(selectedModelId);
+
+      // Ensure model def exists in store (catalog models may not be registered yet)
+      const store = useStore.getState();
+      if (!store.localModels.some((m) => m.id === selectedModelId)) {
+        const catalog = CURATED_MODELS.find((c) => c.id === selectedModelId);
+        if (catalog) {
+          store.addLocalModel({
+            id: catalog.id,
+            engine: catalog.engine,
+            tasks: catalog.tasks,
+            label: catalog.label,
+            origin: catalog.huggingFaceRepo,
+            source: 'opfs',
+            manifest: catalog.manifest,
+            fileSize: catalog.expectedDownloadSize,
+            displayMeta: catalog.displayMeta,
+          });
+        }
+      }
+
+      const def = store.localModels.find((m) => m.id === selectedModelId);
+      if (def) {
+        autoAssignIfUnset(selectedModelId, def.tasks);
+        if (!store.favoriteLocalModelIds.includes(selectedModelId)) {
+          store.toggleFavoriteLocalModel(selectedModelId);
+        }
+      }
+
+      setSelectedModelId(null);
+      setOutput('');
+    } catch (err) {
+      setLoadError((err as Error).message);
+    }
+  }, [selectedModelId, autoAssignIfUnset]);
 
   const handleUnloadSearchModel = useCallback(async (modelId: string) => {
     await localModelRuntime.unloadModel(modelId);
@@ -1764,45 +1987,228 @@ const LocalModelSettings = () => {
 
       {enabled && (
         <>
-          {/* 2. Downloaded models list — only fully saved models */}
-          <SettingsGroup label={t('localModel.downloadedModels')}>
-            {(() => {
-              const completedModels = CURATED_MODELS.filter((m) =>
-                savedModelMeta[m.id]?.storageState === 'saved',
-              );
+          {/* Task Assignment */}
+          {(localModels.length > 0 || Object.values(savedModelMeta).some((m) => m.storageState === 'saved')) && (
+            <SettingsGroup label={t('localModel.taskAssignment')}>
+              {ASSIGNABLE_TASKS.map((task) => {
+                const currentId = activeLocalModels[task];
+                const currentStatus = currentId ? (runtimeStatuses[currentId] ?? 'idle') : 'idle';
+                const isCurrentLoaded = currentStatus === 'ready' || currentStatus === 'busy';
 
-              if (completedModels.length === 0) {
                 return (
+                  <TaskAssignmentRow
+                    key={task}
+                    task={task}
+                    taskLabel={taskLabels[task] ?? task}
+                    currentModelId={currentId}
+                    candidates={getTaskCandidates(task)}
+                    isCurrentLoaded={isCurrentLoaded}
+                    onAssign={handleTaskAssign}
+                    requiresLoadText={t('localModel.assignmentRequiresLoad') as string}
+                  />
+                );
+              })}
+              {analysisFallsBack && (
+                <div className='px-4 py-2'>
+                  <span className='text-xs text-gray-500 dark:text-gray-400 italic'>
+                    {t('localModel.analysisFallsBackToGeneration')}
+                  </span>
+                </div>
+              )}
+            </SettingsGroup>
+          )}
+
+          {/* Test generation area */}
+          {showTestArea && (
+            <SettingsGroup label={t('localModel.testGenerate')}>
+              <div className='px-4 py-3 flex flex-col gap-3'>
+                {/* Mode tabs */}
+                <div className='flex gap-1 rounded-md bg-gray-100 dark:bg-gray-700 p-0.5'>
+                  {(['generate', 'analyze', 'format'] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      className={`flex-1 text-xs py-1.5 rounded transition-colors ${
+                        testMode === mode
+                          ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 shadow-sm'
+                          : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                      }`}
+                      onClick={() => setTestMode(mode)}
+                    >
+                      {mode === 'generate' ? 'Generate' : mode === 'analyze' ? 'Analyze' : 'Format'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Input area */}
+                <textarea
+                  className='w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2 text-sm text-gray-900 dark:text-gray-100 resize-none focus:outline-none focus:ring-1 focus:ring-blue-500'
+                  rows={3}
+                  placeholder={testMode === 'generate'
+                    ? (t('localModel.testPromptPlaceholder') as string)
+                    : 'Enter text...'
+                  }
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  disabled={generating}
+                />
+
+                {testMode === 'analyze' && (
+                  <input
+                    type='text'
+                    className='w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                    placeholder='Instruction (e.g. "Identify the key themes")'
+                    value={analyzeInstruction}
+                    onChange={(e) => setAnalyzeInstruction(e.target.value)}
+                    disabled={generating}
+                  />
+                )}
+
+                {testMode === 'format' && (
+                  <select
+                    className='w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
+                    value={formatPreset}
+                    onChange={(e) => setFormatPreset(e.target.value as typeof formatPreset)}
+                    disabled={generating}
+                  >
+                    <option value='summarize'>Summarize</option>
+                    <option value='rewrite'>Rewrite</option>
+                    <option value='bullets'>Bullet Points</option>
+                  </select>
+                )}
+
+                {/* Action buttons */}
+                <div className='flex gap-2'>
+                  <button
+                    className='btn btn-primary text-sm px-4 py-1.5'
+                    onClick={
+                      testMode === 'generate' ? handleGenerate
+                        : testMode === 'analyze' ? handleAnalyze
+                        : handleFormat
+                    }
+                    disabled={
+                      generating || !prompt.trim() ||
+                      !isTestModelLoaded(testMode) ||
+                      (testMode === 'analyze' && !analyzeInstruction.trim())
+                    }
+                  >
+                    {generating ? t('localModel.generating') : (
+                      testMode === 'generate' ? t('localModel.testGenerate')
+                        : testMode === 'analyze' ? 'Analyze'
+                        : 'Format'
+                    )}
+                  </button>
+                  {generating && (
+                    <button
+                      className='btn btn-neutral text-sm px-4 py-1.5'
+                      onClick={handleAbort}
+                    >
+                      Stop
+                    </button>
+                  )}
+                </div>
+
+                {/* Output */}
+                {output && (
+                  <div className='flex flex-col gap-1'>
+                    <span className='text-xs font-medium text-gray-500 dark:text-gray-400'>
+                      {t('localModel.output')}
+                    </span>
+                    <div
+                      ref={outputRef}
+                      className='max-h-64 overflow-y-auto rounded-md border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 p-3 text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap font-mono'
+                    >
+                      {output}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </SettingsGroup>
+          )}
+
+          {/* 2. Downloaded models list — only fully saved models */}
+          {(() => {
+            const catalogIds = new Set(CURATED_MODELS.map((m) => m.id));
+            const completedCatalog = CURATED_MODELS.filter((m) =>
+              savedModelMeta[m.id]?.storageState === 'saved',
+            );
+            const completedSearch = localModels.filter((m) =>
+              m.source === 'opfs'
+              && !catalogIds.has(m.id)
+              && savedModelMeta[m.id]?.storageState === 'saved',
+            );
+            const hasAnyDownloaded = completedCatalog.length > 0 || completedSearch.length > 0;
+            const anyLoading = selectedModelId
+              ? (runtimeStatuses[selectedModelId] ?? 'idle') === 'loading'
+              : false;
+            const selectedAlreadyLoaded = selectedModelId
+              ? ['ready', 'busy'].includes(runtimeStatuses[selectedModelId] ?? 'idle')
+              : false;
+
+            return (
+              <SettingsGroup label={
+                <div className='flex items-center justify-between w-full'>
+                  <span>{t('localModel.downloadedModels')}</span>
+                  {hasAnyDownloaded && (
+                    <button
+                      className='btn btn-primary text-xs px-3 py-1 normal-case tracking-normal font-normal disabled:opacity-50 disabled:cursor-not-allowed'
+                      onClick={handleLoadSelected}
+                      disabled={!selectedModelId || anyLoading || selectedAlreadyLoaded}
+                    >
+                      {anyLoading ? t('localModel.modelStatus.loading') : t('localModel.load')}
+                    </button>
+                  )}
+                </div>
+              }>
+                {!hasAnyDownloaded && (
                   <div className='px-4 py-6 text-center'>
                     <p className='text-xs text-gray-400 dark:text-gray-500'>
                       {t('localModel.noDownloadedModels')}
                     </p>
                   </div>
-                );
-              }
+                )}
 
-              return completedModels.map((model) => (
-                <CatalogCard
-                  key={model.id}
-                  model={model}
-                  deviceTier={deviceTier}
-                  meta={savedModelMeta[model.id]}
-                  runtimeStatus={runtimeStatuses[model.id] ?? 'idle'}
-                  downloadProgress={null}
-                  resumeFallbackMessage={null}
-                  isFavorite={favoriteLocalModelIds.includes(model.id)}
-                  onToggleFavorite={() => toggleFavoriteLocalModel(model.id)}
-                  onDownload={handleDownload}
-                  onCancel={handleCancelDownload}
-                  onResume={handleResumeCatalog}
-                  onRetry={handleRetry}
-                  onDelete={handleDeleteCatalogModel}
-                  onLoad={handleLoadCatalogModel}
-                  onUnload={handleUnloadCatalogModel}
-                />
-              ));
-            })()}
-          </SettingsGroup>
+                {loadError && (
+                  <div className='px-4 py-2 text-xs text-red-600 dark:text-red-400 whitespace-pre-wrap'>
+                    {t('localModel.loadError')}: {loadError}
+                  </div>
+                )}
+
+                {completedCatalog.map((model) => (
+                  <DownloadedModelRow
+                    key={model.id}
+                    modelId={model.id}
+                    label={model.label}
+                    tasks={model.tasks}
+                    fileSize={model.expectedDownloadSize}
+                    fitBadge={<FitBadge fit={getModelFit(model.recommendedDeviceTier, deviceTier)} />}
+                    runtimeStatus={runtimeStatuses[model.id] ?? 'idle'}
+                    isSelected={selectedModelId === model.id}
+                    onSelect={() => setSelectedModelId(model.id)}
+                    isFavorite={favoriteLocalModelIds.includes(model.id)}
+                    onToggleFavorite={() => toggleFavoriteLocalModel(model.id)}
+                    onUnload={handleUnloadCatalogModel}
+                    onDelete={handleDeleteCatalogModel}
+                  />
+                ))}
+                {completedSearch.map((model) => (
+                  <DownloadedModelRow
+                    key={model.id}
+                    modelId={model.id}
+                    label={model.label}
+                    tasks={model.tasks}
+                    fileSize={model.fileSize}
+                    runtimeStatus={runtimeStatuses[model.id] ?? 'idle'}
+                    isSelected={selectedModelId === model.id}
+                    onSelect={() => setSelectedModelId(model.id)}
+                    isFavorite={favoriteLocalModelIds.includes(model.id)}
+                    onToggleFavorite={() => toggleFavoriteLocalModel(model.id)}
+                    onUnload={handleUnloadSearchModel}
+                    onDelete={handleDeleteSearchModel}
+                  />
+                ))}
+              </SettingsGroup>
+            );
+          })()}
 
           {/* 3. Manual import */}
           <SettingsGroup label={t('localModel.importedFiles')}>
@@ -1834,9 +2240,9 @@ const LocalModelSettings = () => {
                 </div>
               )}
 
-              {loadError && (
-                <div className='text-xs text-red-600 dark:text-red-400'>
-                  {t('localModel.loadError')}: {loadError}
+              {ephemeralLoadError && (
+                <div className='text-xs text-red-600 dark:text-red-400 whitespace-pre-wrap'>
+                  {t('localModel.loadError')}: {ephemeralLoadError}
                 </div>
               )}
 
@@ -2063,144 +2469,6 @@ const LocalModelSettings = () => {
 
             </div>
           </SettingsGroup>
-
-          {/* Task Assignment */}
-          {(localModels.length > 0 || Object.values(savedModelMeta).some((m) => m.storageState === 'saved')) && (
-            <SettingsGroup label={t('localModel.taskAssignment')}>
-              {ASSIGNABLE_TASKS.map((task) => {
-                const currentId = activeLocalModels[task];
-                const currentStatus = currentId ? (runtimeStatuses[currentId] ?? 'idle') : 'idle';
-                const isCurrentLoaded = currentStatus === 'ready' || currentStatus === 'busy';
-
-                return (
-                  <TaskAssignmentRow
-                    key={task}
-                    task={task}
-                    taskLabel={taskLabels[task] ?? task}
-                    currentModelId={currentId}
-                    candidates={getTaskCandidates(task)}
-                    isCurrentLoaded={isCurrentLoaded}
-                    onAssign={handleTaskAssign}
-                    requiresLoadText={t('localModel.assignmentRequiresLoad') as string}
-                  />
-                );
-              })}
-              {analysisFallsBack && (
-                <div className='px-4 py-2'>
-                  <span className='text-xs text-gray-500 dark:text-gray-400 italic'>
-                    {t('localModel.analysisFallsBackToGeneration')}
-                  </span>
-                </div>
-              )}
-            </SettingsGroup>
-          )}
-
-          {/* Test generation area */}
-          {showTestArea && (
-            <SettingsGroup label={t('localModel.testGenerate')}>
-              <div className='px-4 py-3 flex flex-col gap-3'>
-                {/* Mode tabs */}
-                <div className='flex gap-1 rounded-md bg-gray-100 dark:bg-gray-700 p-0.5'>
-                  {(['generate', 'analyze', 'format'] as const).map((mode) => (
-                    <button
-                      key={mode}
-                      className={`flex-1 text-xs py-1.5 rounded transition-colors ${
-                        testMode === mode
-                          ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 shadow-sm'
-                          : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                      }`}
-                      onClick={() => setTestMode(mode)}
-                    >
-                      {mode === 'generate' ? 'Generate' : mode === 'analyze' ? 'Analyze' : 'Format'}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Input area */}
-                <textarea
-                  className='w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2 text-sm text-gray-900 dark:text-gray-100 resize-none focus:outline-none focus:ring-1 focus:ring-blue-500'
-                  rows={3}
-                  placeholder={testMode === 'generate'
-                    ? (t('localModel.testPromptPlaceholder') as string)
-                    : 'Enter text...'
-                  }
-                  value={prompt}
-                  onChange={(e) => setPrompt(e.target.value)}
-                  disabled={generating}
-                />
-
-                {testMode === 'analyze' && (
-                  <input
-                    type='text'
-                    className='w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                    placeholder='Instruction (e.g. "Identify the key themes")'
-                    value={analyzeInstruction}
-                    onChange={(e) => setAnalyzeInstruction(e.target.value)}
-                    disabled={generating}
-                  />
-                )}
-
-                {testMode === 'format' && (
-                  <select
-                    className='w-full rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 p-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-blue-500'
-                    value={formatPreset}
-                    onChange={(e) => setFormatPreset(e.target.value as typeof formatPreset)}
-                    disabled={generating}
-                  >
-                    <option value='summarize'>Summarize</option>
-                    <option value='rewrite'>Rewrite</option>
-                    <option value='bullets'>Bullet Points</option>
-                  </select>
-                )}
-
-                {/* Action buttons */}
-                <div className='flex gap-2'>
-                  <button
-                    className='btn btn-primary text-sm px-4 py-1.5'
-                    onClick={
-                      testMode === 'generate' ? handleGenerate
-                        : testMode === 'analyze' ? handleAnalyze
-                        : handleFormat
-                    }
-                    disabled={
-                      generating || !prompt.trim() ||
-                      !isTestModelLoaded(testMode) ||
-                      (testMode === 'analyze' && !analyzeInstruction.trim())
-                    }
-                  >
-                    {generating ? t('localModel.generating') : (
-                      testMode === 'generate' ? t('localModel.testGenerate')
-                        : testMode === 'analyze' ? 'Analyze'
-                        : 'Format'
-                    )}
-                  </button>
-                  {generating && (
-                    <button
-                      className='btn btn-neutral text-sm px-4 py-1.5'
-                      onClick={handleAbort}
-                    >
-                      Stop
-                    </button>
-                  )}
-                </div>
-
-                {/* Output */}
-                {output && (
-                  <div className='flex flex-col gap-1'>
-                    <span className='text-xs font-medium text-gray-500 dark:text-gray-400'>
-                      {t('localModel.output')}
-                    </span>
-                    <div
-                      ref={outputRef}
-                      className='max-h-64 overflow-y-auto rounded-md border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 p-3 text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap font-mono'
-                    >
-                      {output}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </SettingsGroup>
-          )}
 
         </>
       )}

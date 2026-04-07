@@ -445,6 +445,8 @@
     "localScreeningReference": "Reference only",
     "localQualityHint": "Local Quality Hint",
     "localQualityExperimental": "Experimental — reference only",
+    "axisGenerating": "Generating",
+    "axisWaiting": "Waiting",
     "moderationModelRequired": "Assign a moderation model in the Local Models tab."
   },
   "localModel": {
@@ -483,6 +485,7 @@
     "modelFit": {
       "lightweight": "Lightweight",
       "recommended": "Recommended",
+      "balanced": "Balanced",
       "heavy": "Heavy",
       "veryHeavy": "Very Heavy",
       "extreme": "Extreme",
@@ -513,7 +516,7 @@
     "confirmDelete": "Are you sure you want to delete this model? This cannot be undone.",
     "taskAssignment": "Task Assignment",
     "taskGeneration": "Generation model",
-    "taskAnalysis": "Analysis model",
+    "taskAnalysis": "Evaluation model (Safety & Quality)",
     "none": "None",
     "notLoaded": "not loaded",
     "loaded": "loaded",
@@ -569,6 +572,12 @@
     "parallelIfPossible": "Parallel (if possible)",
     "autoLoading": "Auto-loading model...",
     "localGeneration": "Local generation",
-    "free": "Free"
+    "free": "Free",
+    "busy": {
+      "chat": "Local model is generating chat response",
+      "evaluation": "Local model is running quality evaluation",
+      "moderation": "Local model is running moderation",
+      "test": "Local model is running test generation"
+    }
   }
 }

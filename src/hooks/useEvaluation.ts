@@ -7,10 +7,10 @@
 import { useCallback } from 'react';
 import useStore from '@store/store';
 import { runSafetyCheck, runQualityEvaluation } from '@api/evaluation';
-import { runLocalModeration, runLocalQualityHint } from '@api/localEvaluation';
+import { runLocalModeration, runLocalQualityEvaluation } from '@api/localEvaluation';
 import { prepareModelsForExecution } from '@src/local-llm/orchestrator';
-import { evaluationResultKey } from '@type/evaluation';
-import type { EvaluationResult } from '@type/evaluation';
+import { evaluationResultKey, qualityAxisKeys } from '@type/evaluation';
+import type { EvaluationResult, QualityScores, AxisProgressState } from '@type/evaluation';
 import type { ContentInterface } from '@type/chat';
 import type { ResolvedProvider } from './submitHelpers';
 import i18next from 'i18next';
@@ -61,10 +61,8 @@ async function runEvaluationForPhase(
     // Prepare local evaluation models before first use
     if (store.localModelEnabled) {
       const evalIds: string[] = [];
-      const moderationModelId = store.activeLocalModels['moderation'];
-      const qualityModelId = store.activeLocalModels['quality'] ?? store.activeLocalModels['generation'];
-      if (moderationModelId) evalIds.push(moderationModelId);
-      if (qualityModelId) evalIds.push(qualityModelId);
+      const analysisModelId = store.activeLocalModels['analysis'];
+      if (analysisModelId) evalIds.push(analysisModelId);
       if (evalIds.length > 0) await prepareModelsForExecution(evalIds);
     }
 
@@ -104,35 +102,47 @@ async function runEvaluationForPhase(
     }
 
     if (shouldQuality && userText) {
-      try {
-        result.quality = await runQualityEvaluation(
-          userText,
-          phase === 'post-receive' ? assistantText : undefined,
-          ctx.endpoint,
-          ctx.model,
-          ctx.apiKey,
-          i18next.language
-        );
-      } catch (e) {
-        console.warn('[evaluation] quality evaluation failed:', e);
-      }
+      // Determine if a local model is assigned to the analysis (evaluation) task
+      const analysisModelId = store.localModelEnabled
+        ? (store.activeLocalModels['analysis'] ?? null)
+        : null;
 
-      // --- Local quality hint (supplementary, if wllama model is available) ---
-      const qualityText = phase === 'post-receive' ? (assistantText ?? '') : userText;
-      if (qualityText) {
+      if (analysisModelId) {
+        // Use local quality evaluation as the primary evaluator
+        const qualityText = phase === 'post-receive' ? (assistantText ?? '') : userText;
+        if (qualityText) {
+          try {
+            const axisProgress = (axis: keyof QualityScores, state: AxisProgressState) => {
+              useStore.getState().setEvaluationAxisProgress(key, { [axis]: state });
+            };
+            result.quality = await runLocalQualityEvaluation(qualityText, axisProgress);
+          } catch (e) {
+            console.warn('[evaluation] local quality evaluation failed:', e);
+          }
+        }
+      } else {
+        // Use remote API for quality evaluation
         try {
-          result.localQualityHint = await runLocalQualityHint(qualityText);
-        } catch {
-          // Silently skip — local quality is best-effort
+          result.quality = await runQualityEvaluation(
+            userText,
+            phase === 'post-receive' ? assistantText : undefined,
+            ctx.endpoint,
+            ctx.model,
+            ctx.apiKey,
+            i18next.language
+          );
+        } catch (e) {
+          console.warn('[evaluation] quality evaluation failed:', e);
         }
       }
     }
 
-    if (result.safety || result.quality || result.localSafety || result.localQualityHint) {
+    if (result.safety || result.quality || result.localSafety) {
       useStore.getState().setEvaluationResult(key, result);
     }
   } finally {
     useStore.getState().setEvaluationPending(key, false);
+    useStore.getState().clearEvaluationAxisProgress(key);
   }
 }
 
@@ -210,24 +220,48 @@ export function useEvaluation() {
       const key = evaluationResultKey(chatId, nodeId, phase);
       store.setEvaluationPending(key, true);
       try {
-        const quality = await runQualityEvaluation(
-          userText,
-          assistantText,
-          resolvedProvider.endpoint,
-          model,
-          resolvedProvider.key,
-          i18next.language
-        );
-        const existing = store.evaluationResults[key];
-        store.setEvaluationResult(key, {
-          ...existing,
-          phase,
-          quality,
-        });
+        const analysisModelId = store.localModelEnabled
+          ? (store.activeLocalModels['analysis'] ?? null)
+          : null;
+
+        if (analysisModelId) {
+          // Use local quality evaluation
+          if (store.localModelEnabled) {
+            await prepareModelsForExecution([analysisModelId]);
+          }
+          const qualityText = assistantText ?? userText;
+          const axisProgress = (axis: keyof QualityScores, state: AxisProgressState) => {
+            useStore.getState().setEvaluationAxisProgress(key, { [axis]: state });
+          };
+          const quality = await runLocalQualityEvaluation(qualityText, axisProgress);
+          const existing = store.evaluationResults[key];
+          store.setEvaluationResult(key, {
+            ...existing,
+            phase,
+            quality,
+          });
+        } else {
+          // Use remote API
+          const quality = await runQualityEvaluation(
+            userText,
+            assistantText,
+            resolvedProvider.endpoint,
+            model,
+            resolvedProvider.key,
+            i18next.language
+          );
+          const existing = store.evaluationResults[key];
+          store.setEvaluationResult(key, {
+            ...existing,
+            phase,
+            quality,
+          });
+        }
       } catch (e) {
         console.warn('[evaluation] manual quality evaluation failed:', e);
       } finally {
         useStore.getState().setEvaluationPending(key, false);
+        useStore.getState().clearEvaluationAxisProgress(key);
       }
     },
     []

@@ -18,20 +18,22 @@ import type {
   LocalModelTask,
   GenerateOptions,
   ClassificationLabel,
+  LocalModelBusyReason,
 } from './types';
 import type { ModelFileProvider } from './fileProvider';
+import { CURATED_MODELS } from './catalog';
 
 // ---------------------------------------------------------------------------
 // Worker proxy interfaces (engine-specific facades)
 // ---------------------------------------------------------------------------
 
 export interface WllamaWorkerProxy {
-  generate(prompt: string, opts: GenerateOptions, onChunk: (text: string) => void): Promise<string>;
+  generate(prompt: string, opts: GenerateOptions, onChunk: (text: string) => void, reason?: LocalModelBusyReason): Promise<string>;
   abort(): void;
 }
 
 export interface TransformersWorkerProxy {
-  classify(text: string): Promise<ClassificationLabel[]>;
+  classify(text: string, reason?: LocalModelBusyReason): Promise<ClassificationLabel[]>;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,6 +56,8 @@ interface EngineEntry {
   onChunk: ((text: string) => void) | null;
   /** Abort flag — checked by the worker to stop generation */
   abortRequested: boolean;
+  /** Why this model is currently busy (only meaningful when status === 'busy') */
+  busyReason?: LocalModelBusyReason;
 }
 
 // ---------------------------------------------------------------------------
@@ -79,6 +83,10 @@ export class LocalModelRuntime {
 
   isBusy(modelId: string): boolean {
     return this.getStatus(modelId) === 'busy';
+  }
+
+  getBusyReason(modelId: string): LocalModelBusyReason | undefined {
+    return this.engines.get(modelId)?.busyReason;
   }
 
   getCapabilities(modelId: string): LocalModelCapabilities | null {
@@ -123,12 +131,16 @@ export class LocalModelRuntime {
 
     try {
       // Init worker
+      console.info('[LocalModelRuntime] init worker for', def.id, 'engine:', def.engine);
       await this.sendRequest(def.id, { type: 'init' });
+      console.info('[LocalModelRuntime] init done for', def.id);
 
       // Load model — engine-specific
       if (def.engine === 'wllama') {
         const file = await provider.getFile();
+        console.info('[LocalModelRuntime] loading model file:', (file as File).name ?? '(blob)', 'size:', file.size);
         const result = await this.sendRequest(def.id, { type: 'load', file }) as { contextLength?: number };
+        console.info('[LocalModelRuntime] model loaded, contextLength:', result?.contextLength);
         entry.capabilities = {
           contextLength: result?.contextLength,
           supportsStreaming: true,
@@ -150,6 +162,7 @@ export class LocalModelRuntime {
 
       this.setStatus(def.id, 'ready');
     } catch (e) {
+      console.error('[LocalModelRuntime] loadModel failed for', def.id, ':', (e as Error).message);
       this.setStatus(def.id, 'error');
       throw e;
     }
@@ -230,11 +243,11 @@ export class LocalModelRuntime {
     if (!this.isLoaded(modelId)) return null;
 
     return {
-      generate: async (prompt: string, opts: GenerateOptions, onChunk: (text: string) => void): Promise<string> => {
+      generate: async (prompt: string, opts: GenerateOptions, onChunk: (text: string) => void, reason?: LocalModelBusyReason): Promise<string> => {
         if (this.isBusy(modelId)) {
           throw new Error(`Model ${modelId} is busy`);
         }
-        this.setStatus(modelId, 'busy');
+        this.setStatus(modelId, 'busy', reason ?? 'chat');
         entry.onChunk = onChunk;
         entry.abortRequested = false;
 
@@ -265,11 +278,11 @@ export class LocalModelRuntime {
     if (!this.isLoaded(modelId)) return null;
 
     return {
-      classify: async (text: string): Promise<ClassificationLabel[]> => {
+      classify: async (text: string, reason?: LocalModelBusyReason): Promise<ClassificationLabel[]> => {
         if (this.isBusy(modelId)) {
           throw new Error(`Model ${modelId} is busy`);
         }
-        this.setStatus(modelId, 'busy');
+        this.setStatus(modelId, 'busy', reason ?? 'moderation');
 
         try {
           const result = await this.sendRequest(modelId, {
@@ -322,10 +335,11 @@ export class LocalModelRuntime {
     );
   }
 
-  private setStatus(modelId: string, status: LocalModelStatus): void {
+  private setStatus(modelId: string, status: LocalModelStatus, busyReason?: LocalModelBusyReason): void {
     const entry = this.engines.get(modelId);
     if (entry) {
       entry.status = status;
+      entry.busyReason = status === 'busy' ? busyReason : undefined;
       this.notifyListeners();
     }
   }
@@ -353,6 +367,15 @@ export class LocalModelRuntime {
 
     const id = data.id as number;
     const type = data.type as string;
+
+    // Worker log forwarding (worker console is not visible in preview tools)
+    if (type === '__log') {
+      const level = data.level as string;
+      const text = data.text as string;
+      if (level === 'error') console.error(text);
+      else console.info(text);
+      return;
+    }
 
     // Streaming chunks don't resolve the pending promise
     if (type === 'chunk') {
@@ -402,13 +425,7 @@ export function findModelDefinition(modelId: string): LocalModelDefinition | nul
     if (def) return def;
   }
 
-  // Fallback: check curated catalog (import is safe — no circular dep)
-  const { CURATED_MODELS } = require('./catalog') as {
-    CURATED_MODELS: Array<{
-      id: string; engine: LocalModelEngine; tasks: LocalModelTask[];
-      label: string; huggingFaceRepo: string; manifest: LocalModelManifest;
-    }>;
-  };
+  // Fallback: check curated catalog
   const cat = CURATED_MODELS.find((c) => c.id === modelId);
   if (cat) {
     return {

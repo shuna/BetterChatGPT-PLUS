@@ -440,6 +440,8 @@
     "localScreeningReference": "参考値",
     "localQualityHint": "ローカル品質ヒント",
     "localQualityExperimental": "実験的 — 参考値",
+    "axisGenerating": "生成中",
+    "axisWaiting": "待機中",
     "moderationModelRequired": "ローカルモデルタブでモデレーションモデルを割り当ててください。"
   },
   "localModel": {
@@ -478,6 +480,7 @@
     "modelFit": {
       "lightweight": "軽量",
       "recommended": "推奨",
+      "balanced": "バランス",
       "heavy": "やや重い",
       "veryHeavy": "重い",
       "extreme": "非常に重い",
@@ -508,7 +511,7 @@
     "confirmDelete": "このモデルを削除してもよろしいですか？この操作は取り消せません。",
     "taskAssignment": "タスク割当",
     "taskGeneration": "生成モデル",
-    "taskAnalysis": "分析モデル",
+    "taskAnalysis": "評価モデル（安全性・品質）",
     "none": "なし",
     "notLoaded": "未ロード",
     "loaded": "ロード済み",
@@ -564,6 +567,12 @@
     "parallelIfPossible": "並列実行（可能な場合）",
     "autoLoading": "モデルを自動読み込み中...",
     "localGeneration": "ローカル生成",
-    "free": "無料"
+    "free": "無料",
+    "busy": {
+      "chat": "ローカルモデルがチャット生成中です",
+      "evaluation": "ローカルモデルが品質評価中です",
+      "moderation": "ローカルモデルがモデレーション中です",
+      "test": "ローカルモデルがテスト生成中です"
+    }
   }
 }

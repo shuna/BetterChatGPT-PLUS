@@ -13,6 +13,9 @@ import { isModelStreamSupported, normalizeConfigStream } from '@utils/streamSupp
 import { clampCompletionTokens, getMaxCompletionTokensForContext } from '@utils/tokenBudget';
 import { _defaultChatConfig } from '@constants/chat';
 import useStore from '@store/store';
+import { CURATED_MODELS } from '@src/local-llm/catalog';
+import { localModelRuntime } from '@src/local-llm/runtime';
+import { OpfsFileProvider } from '@src/local-llm/storage';
 import { ProviderId } from '@type/provider';
 import {
   isOpenRouterAdaptiveReasoningModel,
@@ -263,12 +266,25 @@ export const ModelSelector = ({
   }));
 
   // Local model options (composite key: "local:::modelId")
-  const localOptions = localModels
-    .filter((m) => favoriteLocalIds.includes(m.id) && savedMeta[m.id]?.storageState === 'saved')
-    .map((m) => ({
-      value: `local:::${m.id}`,
-      label: `${m.label} (Local${m.displayMeta?.quantization ? ' · ' + m.displayMeta.quantization : ''})`,
-    }));
+  // Include both store-registered models and curated catalog models that are saved & favorited
+  const localOptionMap = new Map<string, { value: string; label: string }>();
+  for (const m of localModels) {
+    if (favoriteLocalIds.includes(m.id) && savedMeta[m.id]?.storageState === 'saved') {
+      localOptionMap.set(m.id, {
+        value: `local:::${m.id}`,
+        label: `${m.label} (Local${m.displayMeta?.quantization ? ' · ' + m.displayMeta.quantization : ''})`,
+      });
+    }
+  }
+  for (const cm of CURATED_MODELS) {
+    if (!localOptionMap.has(cm.id) && favoriteLocalIds.includes(cm.id) && savedMeta[cm.id]?.storageState === 'saved') {
+      localOptionMap.set(cm.id, {
+        value: `local:::${cm.id}`,
+        label: `${cm.label} (Local)`,
+      });
+    }
+  }
+  const localOptions = Array.from(localOptionMap.values());
 
   const allOptions = [
     ...remoteOptions,
@@ -302,6 +318,29 @@ export const ModelSelector = ({
             _onModelChange(localModelId as ModelOptions, undefined, 'local');
           } else {
             _setModel(localModelId as ModelOptions);
+          }
+          // Auto-load if not already loaded
+          if (!localModelRuntime.isLoaded(localModelId)) {
+            const catalogModel = CURATED_MODELS.find((cm) => cm.id === localModelId);
+            const storeDef = localModels.find((m) => m.id === localModelId);
+            if (catalogModel) {
+              const provider = new OpfsFileProvider(catalogModel.id, catalogModel.manifest);
+              localModelRuntime.loadModel(
+                {
+                  id: catalogModel.id,
+                  engine: catalogModel.engine,
+                  tasks: catalogModel.tasks,
+                  label: catalogModel.label,
+                  origin: catalogModel.huggingFaceRepo,
+                  source: 'opfs',
+                  manifest: catalogModel.manifest,
+                },
+                provider,
+              ).catch(() => {});
+            } else if (storeDef?.source === 'opfs' && storeDef.manifest) {
+              const provider = new OpfsFileProvider(storeDef.id, storeDef.manifest);
+              localModelRuntime.loadModel(storeDef, provider).catch(() => {});
+            }
           }
         } else {
           const [modelId, providerId] = raw.split(':::');

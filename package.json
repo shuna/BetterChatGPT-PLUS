@@ -37,6 +37,7 @@
   "scripts": {
     "dev": "vite",
     "dev:mock-proxy": "node scripts/mock-stream-proxy.cjs",
+    "prebuild": "yarn install",
     "build": "tsc && vite build",
     "test": "vitest run",
     "preview": "vite preview",

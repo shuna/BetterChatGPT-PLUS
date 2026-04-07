@@ -58,6 +58,24 @@ export interface SavedModelMeta {
 const MODELS_DIR = 'models';
 const PART_SUFFIX = '.part';
 
+/** GGUF magic bytes: "GGUF" in little-endian */
+const GGUF_MAGIC = new Uint8Array([0x47, 0x47, 0x55, 0x46]);
+
+/**
+ * Check whether a File/Blob starts with the GGUF magic header.
+ * Returns false for files smaller than 4 bytes or with wrong magic.
+ */
+export async function hasGgufMagic(file: File | Blob): Promise<boolean> {
+  if (file.size < 4) return false;
+  const buf = new Uint8Array(await file.slice(0, 4).arrayBuffer());
+  return (
+    buf[0] === GGUF_MAGIC[0] &&
+    buf[1] === GGUF_MAGIC[1] &&
+    buf[2] === GGUF_MAGIC[2] &&
+    buf[3] === GGUF_MAGIC[3]
+  );
+}
+
 async function opfsRoot(): Promise<FileSystemDirectoryHandle> {
   return navigator.storage.getDirectory();
 }
@@ -315,6 +333,11 @@ export async function verifyStoredModel(
     if (exists) {
       const size = await fileSize(dir, entrypoint);
       if (size === 0) return 'invalid';
+      // 2b. GGUF files must start with correct magic bytes
+      if (entrypoint.endsWith('.gguf')) {
+        const file = await readFile(modelId, entrypoint);
+        if (!(await hasGgufMagic(file))) return 'invalid';
+      }
     }
     // 3. .part exists but no final → partial
     if (!exists && hasPart) return 'partial';

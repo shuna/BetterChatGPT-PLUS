@@ -7,6 +7,7 @@ import type { ProviderId } from '@type/provider';
 import { useModelType } from '@utils/modelLookup';
 import { hasMeaningfulContent } from '@utils/contentValidation';
 import useHideOnOutsideClick from '@hooks/useHideOnOutsideClick';
+import { useLocalModelBusy } from '@hooks/useLocalModelBusy';
 import AttachmentIcon from '@icon/AttachmentIcon';
 import DownChevronArrow from '@icon/DownChevronArrow';
 import CommandPrompt from '../CommandPrompt';
@@ -70,6 +71,13 @@ const EditViewButtons = memo(
       const chatId = state.chats?.[state.currentChatIndex]?.id ?? '';
       return Object.values(state.generatingSessions).some((s) => s.chatId === chatId);
     });
+    const modelSource = useStore((s) => {
+      const chat = s.chats?.[s.currentChatIndex];
+      return chat?.config?.modelSource;
+    });
+    const isLocalModel = modelSource === 'local';
+    const { isBusy: isLocalBusy, busyReason: localBusyReason } = useLocalModelBusy(isLocalModel ? model : null);
+    const isGenerateDisabled = isCurrentChatGenerating || (isLocalModel && isLocalBusy);
     const noModel = !modelValid;
     const lastMessageIndex = useStore((state) =>
       state.chats?.[state.currentChatIndex]?.messages.length
@@ -201,13 +209,14 @@ const EditViewButtons = memo(
             {sticky && (
               <button
                 className={`btn btn-small btn-primary ${
-                  isCurrentChatGenerating || noModel || !canSubmitDraft
+                  isGenerateDisabled || noModel || !canSubmitDraft
                     ? 'cursor-not-allowed opacity-40'
                     : ''
                 }`}
                 onClick={handleGenerate}
-                disabled={isCurrentChatGenerating || noModel || !canSubmitDraft}
+                disabled={isGenerateDisabled || noModel || !canSubmitDraft}
                 aria-label={t('generate') as string}
+                title={isLocalBusy && localBusyReason ? t(`localModel.busy.${localBusyReason}`) as string : undefined}
               >
                 {t('generate')}
               </button>
@@ -233,13 +242,13 @@ const EditViewButtons = memo(
                 <div className='relative flex items-stretch' ref={branchMenuRef}>
                   <button
                     className={`btn btn-small btn-primary rounded-r-none border-r-0 ${
-                      isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
+                      isGenerateDisabled || noModel ? 'cursor-not-allowed opacity-40' : ''
                     }`}
                     onClick={() => {
-                      !isCurrentChatGenerating && !noModel && handleBranchGenerate();
+                      !isGenerateDisabled && !noModel && handleBranchGenerate();
                     }}
-                    disabled={isCurrentChatGenerating || noModel}
-                    title={t('generateBranchTooltip') as string}
+                    disabled={isGenerateDisabled || noModel}
+                    title={isLocalBusy && localBusyReason ? t(`localModel.busy.${localBusyReason}`) as string : t('generateBranchTooltip') as string}
                   >
                     {t('generate')}
                   </button>
@@ -271,13 +280,13 @@ const EditViewButtons = memo(
                 <div className='relative flex items-stretch' ref={generateMenuRef}>
                   <button
                     className={`btn btn-small btn-danger rounded-r-none border-r-0 ${
-                      isCurrentChatGenerating || noModel ? 'cursor-not-allowed opacity-40' : ''
+                      isGenerateDisabled || noModel ? 'cursor-not-allowed opacity-40' : ''
                     }`}
                     onClick={() => {
-                      !isCurrentChatGenerating && !noModel && (isNotLast ? handleGenerateNextOnly() : handleGenerate());
+                      !isGenerateDisabled && !noModel && (isNotLast ? handleGenerateNextOnly() : handleGenerate());
                     }}
-                    disabled={isCurrentChatGenerating || noModel}
-                    title={(isNotLast ? t('regenerateNextTooltip') : t('regenerateTooltip')) as string}
+                    disabled={isGenerateDisabled || noModel}
+                    title={isLocalBusy && localBusyReason ? t(`localModel.busy.${localBusyReason}`) as string : (isNotLast ? t('regenerateNextTooltip') : t('regenerateTooltip')) as string}
                   >
                     {t('regenerate')}
                   </button>
@@ -296,16 +305,16 @@ const EditViewButtons = memo(
                     {isNotLast && (
                       <button
                         className={`block w-full rounded-md px-3 py-2 text-left text-sm ${
-                          isCurrentChatGenerating || noModel || generateBelowDisabled
+                          isGenerateDisabled || noModel || generateBelowDisabled
                             ? 'cursor-not-allowed opacity-40'
                             : 'hover:bg-gray-100 dark:hover:bg-gray-700'
                         }`}
                         onClick={() => {
-                          if (isCurrentChatGenerating || noModel || generateBelowDisabled) return;
+                          if (isGenerateDisabled || noModel || generateBelowDisabled) return;
                           setGenerateMenuOpen(false);
                           setIsModalOpen(true);
                         }}
-                        disabled={isCurrentChatGenerating || noModel || generateBelowDisabled}
+                        disabled={isGenerateDisabled || noModel || generateBelowDisabled}
                       >
                         {t('regenerateBelow')}
                       </button>

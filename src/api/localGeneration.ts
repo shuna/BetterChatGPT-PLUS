@@ -6,7 +6,7 @@
  */
 
 import { localModelRuntime } from '@src/local-llm/runtime';
-import type { LocalModelTask } from '@src/local-llm/types';
+import type { LocalModelTask, LocalModelBusyReason } from '@src/local-llm/types';
 import useStore from '@store/store';
 
 // ---------------------------------------------------------------------------
@@ -61,6 +61,7 @@ export async function* localGenerate(
         resolve = null;
       }
     },
+    'chat',
   ).then(() => {
     done = true;
     if (resolve) {
@@ -109,7 +110,7 @@ Analysis:`;
  * Analyze text with a custom instruction using the local model.
  * Returns the full generated analysis text.
  */
-export async function localAnalyze(text: string, instruction: string): Promise<string> {
+export async function localAnalyze(text: string, instruction: string, reason?: LocalModelBusyReason): Promise<string> {
   const engine = getWllamaEngine('analysis') ?? getWllamaEngine('generation');
   if (!engine) throw new Error('No local analysis/generation model loaded');
 
@@ -121,6 +122,7 @@ export async function localAnalyze(text: string, instruction: string): Promise<s
     prompt,
     { maxTokens: 512, temperature: 0.3 },
     () => {},
+    reason ?? 'chat',
   );
   return result;
 }
@@ -152,7 +154,7 @@ Bullet points:`,
 /**
  * Format text using a preset template.
  */
-export async function localFormat(text: string, format: FormatPreset): Promise<string> {
+export async function localFormat(text: string, format: FormatPreset, reason?: LocalModelBusyReason): Promise<string> {
   const engine = getWllamaEngine('analysis') ?? getWllamaEngine('generation');
   if (!engine) throw new Error('No local analysis/generation model loaded');
 
@@ -163,6 +165,7 @@ export async function localFormat(text: string, format: FormatPreset): Promise<s
     prompt,
     { maxTokens: 512, temperature: 0.3 },
     () => {},
+    reason ?? 'chat',
   );
   return result;
 }

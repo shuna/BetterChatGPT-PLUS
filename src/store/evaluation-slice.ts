@@ -11,6 +11,7 @@ import type {
   ModerationCategories,
   SafetyCategoryThreshold,
   SafetyEngineMode,
+  AxisProgressMap,
 } from '@type/evaluation';
 import { defaultQualityThresholds, defaultSafetyThresholds } from '@type/evaluation';
 
@@ -21,6 +22,8 @@ export interface EvaluationSlice {
   evaluationResults: EvaluationResultMap;
   /** Currently running evaluation keys (for loading indicators) */
   evaluationPending: Record<string, boolean>;
+  /** Per-axis progress for local quality evaluation (keyed same as evaluationPending) */
+  evaluationAxisProgress: Record<string, AxisProgressMap>;
   setEvaluationSetting: (
     key: keyof EvaluationSettings,
     mode: EvaluationTriggerMode
@@ -38,6 +41,8 @@ export interface EvaluationSlice {
   setEvaluationPending: (key: string, pending: boolean) => void;
   setSafetyEngine: (mode: SafetyEngineMode) => void;
   setHybridRemoteOnSafe: (enabled: boolean) => void;
+  setEvaluationAxisProgress: (key: string, progress: AxisProgressMap) => void;
+  clearEvaluationAxisProgress: (key: string) => void;
 }
 
 const defaultSettings: EvaluationSettings = {
@@ -55,6 +60,7 @@ export const createEvaluationSlice: StoreSlice<EvaluationSlice> = (set, get) => 
   qualityThresholds: defaultQualityThresholds,
   evaluationResults: {},
   evaluationPending: {},
+  evaluationAxisProgress: {},
 
   setSafetyThreshold: (category, threshold) => {
     set((prev: EvaluationSlice) => ({
@@ -108,5 +114,22 @@ export const createEvaluationSlice: StoreSlice<EvaluationSlice> = (set, get) => 
     set((prev: EvaluationSlice) => ({
       evaluationSettings: { ...prev.evaluationSettings, hybridRemoteOnSafe: enabled },
     }));
+  },
+
+  setEvaluationAxisProgress: (key, progress) => {
+    set((prev: EvaluationSlice) => ({
+      evaluationAxisProgress: {
+        ...prev.evaluationAxisProgress,
+        [key]: { ...(prev.evaluationAxisProgress[key] ?? {}), ...progress },
+      },
+    }));
+  },
+
+  clearEvaluationAxisProgress: (key) => {
+    set((prev: EvaluationSlice) => {
+      const next = { ...prev.evaluationAxisProgress };
+      delete next[key];
+      return { evaluationAxisProgress: next };
+    });
   },
 });

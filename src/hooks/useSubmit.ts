@@ -137,7 +137,7 @@ const useSubmit = () => {
       if (isLocalModelConfig(chats[chatIndex].config)) {
         // Gather all models for this execution unit (gen + eval)
         const genModelId = chats[chatIndex].config.model;
-        const evalModelIds = getEvaluationModelIds();
+        const evalModelIds = await getEvaluationModelIds();
         const allRequired = [genModelId, ...evalModelIds].filter(Boolean);
         await prepareModelsForExecution(allRequired);
 
@@ -297,9 +297,10 @@ const useSubmit = () => {
   const runSubmitWithConfirmation = async (
     action: () => Promise<void>,
     model: string,
-    providerId?: string
+    providerId?: string,
+    modelSource?: 'remote' | 'local'
   ) => {
-    const { isFallback } = getModelContextInfo(model, providerId as never);
+    const { isFallback } = getModelContextInfo(model, providerId as never, modelSource);
     if (!isFallback) {
       await action();
       return;
@@ -336,7 +337,8 @@ const useSubmit = () => {
     await runSubmitWithConfirmation(
       () => runSubmit('append'),
       config.model,
-      config.providerId
+      config.providerId,
+      config.modelSource
     );
   };
 
@@ -348,7 +350,8 @@ const useSubmit = () => {
     await runSubmitWithConfirmation(
       () => runSubmit('midchat', insertIndex),
       config.model,
-      config.providerId
+      config.providerId,
+      config.modelSource
     );
   };
 

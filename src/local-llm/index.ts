@@ -11,6 +11,7 @@ export {
   rehydrateSavedModels,
   deleteModel,
   getTempFileSize,
+  hasGgufMagic,
 } from './storage';
 export type { SavedModelMeta, StorageVerifyResult, RehydrationEntry } from './storage';
 export { downloadCatalogModel, downloadModelFiles, buildHfUrl } from './download';
