@@ -469,6 +469,8 @@
     "output": "Output",
     "generating": "Generating...",
     "downloadedModels": "Downloaded Models",
+    "downloadingModels": "Downloading",
+    "downloadInterrupted": "Interrupted",
     "noDownloadedModels": "No models downloaded yet. Download a recommended model or search Hugging Face.",
     "noModelLoaded": "No model loaded. Select a recommended model or a GGUF file to get started.",
     "loadError": "Failed to load model",

@@ -30,6 +30,11 @@ import {
   resolveSearchCandidate,
   generateSearchModelId,
 } from '@src/local-llm/hfSearch';
+import {
+  saveSearchSession,
+  loadSearchSession,
+  clearSearchSession,
+} from './localModelSearchSession';
 
 // ---------------------------------------------------------------------------
 // Status badge
@@ -432,6 +437,131 @@ const DownloadedModelRow = ({
         {fileSize != null && (
           <span className='text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap'>
             {formatBytes(fileSize)}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Downloading / partial model row
+// ---------------------------------------------------------------------------
+
+const DownloadingModelRow = ({
+  modelId,
+  label,
+  tasks,
+  fileSize,
+  progress,
+  meta,
+  isFavorite,
+  onToggleFavorite,
+  onCancel,
+  onResume,
+  onRetry,
+  onDelete,
+}: {
+  modelId: string;
+  label: string;
+  tasks: string[];
+  fileSize?: number;
+  progress: DownloadProgress | null;
+  meta: SavedModelMeta;
+  isFavorite: boolean;
+  onToggleFavorite: () => void;
+  onCancel: (modelId: string) => void;
+  onResume: (modelId: string) => void;
+  onRetry: (modelId: string) => void;
+  onDelete: (modelId: string) => void;
+}) => {
+  const { t } = useTranslation('main');
+  const isActivelyDownloading = meta.storageState === 'downloading' && progress != null;
+  const hasError = meta.storageState === 'partial' && !!meta.lastError;
+  const isInterrupted = meta.storageState === 'partial' || (meta.storageState === 'downloading' && !progress);
+
+  return (
+    <div className='px-4 py-2.5 flex flex-col gap-1'>
+      {/* Row 1: model name + actions */}
+      <div className='flex items-center gap-3'>
+        <div className='flex-shrink-0 w-5 flex justify-center'>
+          {isActivelyDownloading && (
+            <span className='inline-block w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse' />
+          )}
+          {isInterrupted && !hasError && (
+            <span className='inline-block w-2.5 h-2.5 rounded-full bg-yellow-400' />
+          )}
+          {hasError && (
+            <span className='inline-block w-2.5 h-2.5 rounded-full bg-red-500' />
+          )}
+        </div>
+        <span className='flex-1 min-w-0 text-sm font-medium text-gray-900 dark:text-gray-100 break-words'>
+          {label}
+        </span>
+
+        {/* Favorite star */}
+        <button
+          onClick={onToggleFavorite}
+          className={`flex-shrink-0 p-0.5 rounded transition-colors ${
+            isFavorite
+              ? 'text-yellow-500 hover:text-yellow-600'
+              : 'text-gray-300 dark:text-gray-600 hover:text-gray-400 dark:hover:text-gray-500'
+          }`}
+          title={isFavorite ? t('localModel.unfavorite') as string : t('localModel.favorite') as string}
+        >
+          <svg className='w-4 h-4' viewBox='0 0 20 20' fill='currentColor'>
+            <path d='M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z' />
+          </svg>
+        </button>
+
+        {/* Cancel (active download) */}
+        {isActivelyDownloading && (
+          <button
+            className='flex-shrink-0 text-xs px-2 py-0.5 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+            onClick={() => onCancel(modelId)}
+          >
+            {t('localModel.cancel')}
+          </button>
+        )}
+
+        {/* Resume / Retry + Delete (interrupted / error) */}
+        {isInterrupted && (
+          <>
+            <button
+              className='flex-shrink-0 text-xs px-2 py-0.5 rounded border border-blue-300 dark:border-blue-600 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30'
+              onClick={() => (hasError ? onRetry(modelId) : onResume(modelId))}
+            >
+              {hasError ? t('localModel.retry') : t('localModel.resume')}
+            </button>
+            <button
+              className='flex-shrink-0 text-xs px-2 py-0.5 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+              onClick={() => onDelete(modelId)}
+            >
+              {t('localModel.delete')}
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Row 2: badges + size + progress or error */}
+      <div className='flex flex-col gap-1 pl-8'>
+        <div className='flex items-center gap-2 flex-wrap'>
+          <TaskBadges tasks={tasks} />
+          {fileSize != null && (
+            <span className='text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap'>
+              {formatBytes(fileSize)}
+            </span>
+          )}
+          {isInterrupted && !hasError && (
+            <span className='text-xs text-amber-600 dark:text-amber-400'>
+              {t('localModel.downloadInterrupted')}
+            </span>
+          )}
+        </div>
+        {isActivelyDownloading && <ProgressBar progress={progress} />}
+        {hasError && (
+          <span className='text-xs text-red-600 dark:text-red-400 break-words'>
+            {meta.lastError}
           </span>
         )}
       </div>
@@ -903,6 +1033,13 @@ const LocalModelSettings = () => {
   const [searchNextUrl, setSearchNextUrl] = useState<string | null>(null);
   const [searchHasMore, setSearchHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+
+  // Search session persistence helpers
+  const pagesLoadedRef = useRef(1);
+  /** Target page count for restoration after page reload; null = not restoring */
+  const pendingRestoreRef = useRef<number | null>(null);
+  /** Set to true once the initial restore has been applied (prevents re-restore) */
+  const restoredRef = useRef(false);
 
   // Runtime statuses for all known models (catalog + ephemeral)
   const [runtimeStatuses, setRuntimeStatuses] = useState<Record<string, LocalModelStatus>>(() => {
@@ -1461,6 +1598,7 @@ const LocalModelSettings = () => {
     setSelectedVariants({});
     setSearchNextUrl(null);
     setSearchHasMore(false);
+    pagesLoadedRef.current = 1;
 
     try {
       // size sort is client-side only; API uses downloads as fallback
@@ -1515,6 +1653,13 @@ const LocalModelSettings = () => {
         });
         resolveVariantsForResults(results);
       }
+      pagesLoadedRef.current += 1;
+      // Persist updated page count
+      saveSearchSession({
+        query: searchQuery, engine: searchEngine,
+        sort: searchSort, sortDir: searchSortDir,
+        pagesLoaded: pagesLoadedRef.current,
+      });
     } catch {
       setSearchHasMore(false);
     } finally {
@@ -1561,6 +1706,50 @@ const LocalModelSettings = () => {
     }, 400);
     return () => clearTimeout(timer);
   }, [searchQuery, searchEngine, searchSort, searchSortDir]);
+
+  // Persist search params to sessionStorage whenever they change
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      clearSearchSession();
+      return;
+    }
+    saveSearchSession({
+      query: searchQuery,
+      engine: searchEngine,
+      sort: searchSort,
+      sortDir: searchSortDir,
+      pagesLoaded: pagesLoadedRef.current,
+    });
+  }, [searchQuery, searchEngine, searchSort, searchSortDir]);
+
+  // Restore search state from sessionStorage on mount (after rehydration)
+  useEffect(() => {
+    if (!rehydrated || restoredRef.current) return;
+    restoredRef.current = true;
+    const saved = loadSearchSession();
+    if (!saved) return;
+    setSearchQuery(saved.query);
+    setSearchEngine(saved.engine);
+    setSearchSort(saved.sort);
+    setSearchSortDir(saved.sortDir);
+    if (saved.pagesLoaded > 1) {
+      pendingRestoreRef.current = saved.pagesLoaded;
+    }
+    // The debounced search effect above will auto-fire handleSearch
+  }, [rehydrated]);
+
+  // Auto-load additional pages to restore pagination depth
+  useEffect(() => {
+    if (pendingRestoreRef.current === null) return;
+    if (searching || loadingMore) return; // wait for current fetch
+    if (pagesLoadedRef.current >= pendingRestoreRef.current || !searchHasMore) {
+      pendingRestoreRef.current = null; // done restoring
+      return;
+    }
+    handleLoadMore();
+    // searchResults.length changes after each loadMore, re-triggering this effect
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchResults.length, searching, loadingMore, searchHasMore]);
 
   /**
    * Check if a search variant matches an already-downloaded model (catalog or store).
@@ -1938,6 +2127,109 @@ const LocalModelSettings = () => {
     }
   }, [rehydrated]);
 
+  // --- Downloading section handlers (for persisted partial/downloading models) ---
+
+  /** Resume a downloading/partial model using only its persisted model definition. */
+  const handleResumeDownloadingModel = useCallback(async (modelId: string) => {
+    const model = localModels.find((m) => m.id === modelId);
+    // Check catalog models too
+    const catalogModel = CURATED_MODELS.find((c) => c.id === modelId);
+    if (catalogModel) {
+      // Delegate to catalog resume handler
+      handleResumeCatalog(catalogModel);
+      return;
+    }
+    if (!model?.origin) return;
+    const fileName = model.manifest?.kind === 'single-file' ? model.manifest.entrypoint : model.manifest?.requiredFiles?.[0];
+    if (!fileName) return;
+
+    try {
+      const resolution = await resolveGgufFiles(model.origin);
+      if (!resolution) return;
+      const variant = resolution.variants.find((v) => v.fileName === fileName);
+      if (!variant) return;
+      // Build a minimal HfSearchResult from the persisted model data
+      const fakeResult: HfSearchResult = {
+        repoId: model.origin,
+        repoUrl: `https://huggingface.co/${model.origin}`,
+        description: '',
+        tags: [],
+        downloads: 0,
+        lastModified: '',
+        bestCandidateSize: variant.size,
+        supportStatus: 'supported',
+        supportReason: '',
+        engine: model.engine,
+      };
+      handleResumeSearchModel(fakeResult, variant);
+    } catch {
+      // Resolution failed — try direct retry
+      handleRetryDownloadingModel(modelId);
+    }
+  }, [localModels, handleResumeSearchModel]);
+
+  /** Retry a failed download from scratch using persisted model definition. */
+  const handleRetryDownloadingModel = useCallback(async (modelId: string) => {
+    const model = localModels.find((m) => m.id === modelId);
+    const catalogModel = CURATED_MODELS.find((c) => c.id === modelId);
+    if (catalogModel) {
+      handleDownload(catalogModel);
+      return;
+    }
+    if (!model?.origin) return;
+    const fileName = model.manifest?.kind === 'single-file' ? model.manifest.entrypoint : model.manifest?.requiredFiles?.[0];
+    if (!fileName) return;
+
+    try {
+      const resolution = await resolveGgufFiles(model.origin);
+      if (!resolution) return;
+      const variant = resolution.variants.find((v) => v.fileName === fileName);
+      if (!variant) return;
+      const fakeResult: HfSearchResult = {
+        repoId: model.origin,
+        repoUrl: `https://huggingface.co/${model.origin}`,
+        description: '',
+        tags: [],
+        downloads: 0,
+        lastModified: '',
+        bestCandidateSize: variant.size,
+        supportStatus: 'supported',
+        supportReason: '',
+        engine: model.engine,
+      };
+      handleDownloadSearchResult(fakeResult, variant);
+    } catch {
+      // Can't resolve — show error
+      useStore.getState().updateSavedModelMeta(modelId, {
+        storageState: 'partial',
+        lastError: 'Failed to resolve model files for retry',
+      });
+    }
+  }, [localModels, handleDownloadSearchResult]);
+
+  /** Delete a downloading/partial model (both catalog and search). */
+  const handleDeleteDownloadingModel = useCallback(async (modelId: string) => {
+    if (!window.confirm(t('localModel.confirmDelete') as string)) return;
+    abortControllers.current[modelId]?.abort();
+    delete abortControllers.current[modelId];
+    setDownloadProgresses((prev) => {
+      const { [modelId]: _, ...rest } = prev;
+      return rest;
+    });
+    await deleteModel(modelId);
+    useStore.getState().removeSavedModelMeta(modelId);
+    useStore.getState().removeLocalModel(modelId);
+    setActiveSearchDownloads((prev) => {
+      const { [modelId]: _, ...rest } = prev;
+      return rest;
+    });
+  }, [t]);
+
+  /** Cancel an active download for the downloading section. */
+  const handleCancelDownloadingModel = useCallback((modelId: string) => {
+    handleCancelSearchDownload(modelId);
+  }, [handleCancelSearchDownload]);
+
   const isEphemeralReady = ephemeralStatus === 'ready' || ephemeralStatus === 'busy';
 
   // Whether test area should show: need at least one assignment that is loaded
@@ -2204,6 +2496,61 @@ const LocalModelSettings = () => {
                     onToggleFavorite={() => toggleFavoriteLocalModel(model.id)}
                     onUnload={handleUnloadSearchModel}
                     onDelete={handleDeleteSearchModel}
+                  />
+                ))}
+              </SettingsGroup>
+            );
+          })()}
+
+          {/* 2.5. Downloading / partial models */}
+          {(() => {
+            const catalogIds = new Set(CURATED_MODELS.map((m) => m.id));
+            const downloadingCatalog = CURATED_MODELS.filter((m) =>
+              savedModelMeta[m.id]?.storageState === 'downloading' || savedModelMeta[m.id]?.storageState === 'partial',
+            );
+            const downloadingSearch = localModels.filter((m) =>
+              m.source === 'opfs'
+              && !catalogIds.has(m.id)
+              && (savedModelMeta[m.id]?.storageState === 'downloading' || savedModelMeta[m.id]?.storageState === 'partial'),
+            );
+            const hasAnyDownloading = downloadingCatalog.length > 0 || downloadingSearch.length > 0;
+
+            if (!hasAnyDownloading) return null;
+
+            return (
+              <SettingsGroup label={t('localModel.downloadingModels')}>
+                {downloadingCatalog.map((model) => (
+                  <DownloadingModelRow
+                    key={model.id}
+                    modelId={model.id}
+                    label={model.label}
+                    tasks={model.tasks}
+                    fileSize={model.expectedDownloadSize}
+                    progress={downloadProgresses[model.id] ?? null}
+                    meta={savedModelMeta[model.id]}
+                    isFavorite={favoriteLocalModelIds.includes(model.id)}
+                    onToggleFavorite={() => toggleFavoriteLocalModel(model.id)}
+                    onCancel={handleCancelDownloadingModel}
+                    onResume={handleResumeDownloadingModel}
+                    onRetry={handleRetryDownloadingModel}
+                    onDelete={handleDeleteDownloadingModel}
+                  />
+                ))}
+                {downloadingSearch.map((model) => (
+                  <DownloadingModelRow
+                    key={model.id}
+                    modelId={model.id}
+                    label={model.label}
+                    tasks={model.tasks}
+                    fileSize={model.fileSize}
+                    progress={downloadProgresses[model.id] ?? null}
+                    meta={savedModelMeta[model.id]}
+                    isFavorite={favoriteLocalModelIds.includes(model.id)}
+                    onToggleFavorite={() => toggleFavoriteLocalModel(model.id)}
+                    onCancel={handleCancelDownloadingModel}
+                    onResume={handleResumeDownloadingModel}
+                    onRetry={handleRetryDownloadingModel}
+                    onDelete={handleDeleteDownloadingModel}
                   />
                 ))}
               </SettingsGroup>

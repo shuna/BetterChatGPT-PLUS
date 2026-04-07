@@ -464,6 +464,8 @@
     "output": "出力",
     "generating": "生成中...",
     "downloadedModels": "ダウンロード済モデル",
+    "downloadingModels": "ダウンロード中",
+    "downloadInterrupted": "中断されました",
     "noDownloadedModels": "ダウンロード済モデルはありません。推奨モデルの一覧またはHugging Faceの検索からダウンロードしてください。",
     "noModelLoaded": "モデルが読み込まれていません。推奨モデルまたはGGUFファイルを選択して開始してください。",
     "loadError": "モデルの読み込みに失敗しました",
