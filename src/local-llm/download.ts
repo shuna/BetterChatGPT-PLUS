@@ -14,6 +14,7 @@ import {
   commitTempFile,
   removeTempFile,
   getTempFileSize,
+  hasTempFile,
   readFile,
 } from './storage';
 
@@ -75,12 +76,18 @@ function parseContentRange(header: string | null): { start: number; end: number;
 }
 
 /**
- * Check if a final file exists and has non-zero size.
+ * Check if a final file is fully committed (exists, non-zero, no .part marker).
+ *
+ * A .part marker signals the download is still in progress (data is written
+ * directly to the final name but the download hasn't been committed yet).
  */
 async function finalFileReady(modelId: string, fileName: string): Promise<boolean> {
   try {
     const file = await readFile(modelId, fileName);
-    return file.size > 0;
+    if (file.size === 0) return false;
+    // If .part marker exists, the file is still being downloaded
+    const downloading = await hasTempFile(modelId, fileName);
+    return !downloading;
   } catch {
     return false;
   }
