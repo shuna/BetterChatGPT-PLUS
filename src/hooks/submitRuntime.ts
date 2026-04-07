@@ -646,8 +646,19 @@ export const executeLocalSubmit = async ({
     };
   });
 
+  // Wire up the abort signal so that stopping the session also stops the
+  // wllama worker.  Without this the worker keeps generating tokens (wasting
+  // CPU) and the model stays in 'busy' status, blocking subsequent requests.
+  const onAbort = () => engine.abort();
+  abortController.signal.addEventListener('abort', onAbort);
+
   let fullText = '';
   try {
+    // If already aborted before generation starts, bail out immediately.
+    if (abortController.signal.aborted) {
+      return {};
+    }
+
     await engine.generate(
       prompt,
       {
@@ -670,6 +681,8 @@ export const executeLocalSubmit = async ({
     } else {
       throw e;
     }
+  } finally {
+    abortController.signal.removeEventListener('abort', onAbort);
   }
 
   // Do NOT call finalizeStreamingBuffer here — the session cleanup

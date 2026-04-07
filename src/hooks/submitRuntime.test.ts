@@ -3,6 +3,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import {
   queueChunkToStore,
   executeSubmitStream,
+  executeLocalSubmit,
   createSubmitAbortController,
   clearSubmitSessionRuntime,
   stopSubmitSession,
@@ -59,6 +60,33 @@ vi.mock('@utils/swBridge', () => ({
   waitForController: vi.fn(async () => false),
   startStream: vi.fn(),
 }));
+
+// ---------------------------------------------------------------------------
+// Mock local-llm/runtime for executeLocalSubmit tests
+// ---------------------------------------------------------------------------
+const mockAbort = vi.fn();
+let mockGenerateImpl: ((prompt: string, opts: any, onChunk: (text: string) => void) => Promise<string>) | null = null;
+
+vi.mock('@src/local-llm/runtime', () => ({
+  localModelRuntime: {
+    ensureLoaded: vi.fn(async () => {}),
+    getWllamaEngine: vi.fn(() => ({
+      generate: async (prompt: string, opts: any, onChunk: (text: string) => void) => {
+        if (mockGenerateImpl) return mockGenerateImpl(prompt, opts, onChunk);
+        return '';
+      },
+      abort: mockAbort,
+    })),
+  },
+}));
+
+vi.mock('./submitHelpers', async () => {
+  const actual = await vi.importActual<typeof import('./submitHelpers')>('./submitHelpers');
+  return {
+    ...actual,
+    buildLocalPromptFromContext: vi.fn(() => 'test prompt'),
+  };
+});
 
 beforeEach(() => {
   mockRemoveSession.mockClear();
@@ -733,5 +761,138 @@ describe('stream end status via SW path', () => {
       { type: 'reasoning', text: 'First think' },
       { type: 'text', text: 'Final answer' },
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// executeLocalSubmit — abort handling
+// ---------------------------------------------------------------------------
+describe('executeLocalSubmit abort handling', () => {
+  const makeLocalMockState = () => ({
+    generatingSessions: {},
+    chats: [
+      {
+        id: 'chat-local',
+        config: { model: 'local-model', max_tokens: 256, temperature: 0.7, presence_penalty: 0, top_p: 1, frequency_penalty: 0 },
+        branchTree: {
+          rootId: 'node-user',
+          activePath: ['node-user', 'node-assistant'],
+          nodes: {
+            'node-user': { id: 'node-user', parentId: null, role: 'user', contentHash: 'user-hash', createdAt: 1 },
+            'node-assistant': { id: 'node-assistant', parentId: 'node-user', role: 'assistant', contentHash: 'asst-hash', createdAt: 2 },
+          },
+        },
+        messages: [
+          { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+          { role: 'assistant', content: [{ type: 'text', text: '' }] },
+        ],
+      },
+    ],
+    contentStore: {
+      'user-hash': { content: [{ type: 'text', text: 'hi' }], refCount: 1 },
+      'asst-hash': { content: [{ type: 'text', text: '' }], refCount: 1 },
+    },
+  });
+
+  beforeEach(() => {
+    mockAbort.mockClear();
+    mockGenerateImpl = null;
+  });
+
+  it('calls engine.abort() when the abort controller is triggered during generation', async () => {
+    mockState = makeLocalMockState();
+
+    // Use a callback to synchronize: the test waits until generate is running
+    // before triggering abort.
+    let resolveGeneration: ((v: string) => void) | null = null;
+    let generateStarted: (() => void) | null = null;
+    const generateStartedPromise = new Promise<void>((r) => { generateStarted = r; });
+
+    mockGenerateImpl = (_prompt, _opts, onChunk) => {
+      return new Promise<string>((resolve) => {
+        onChunk('Hello');
+        resolveGeneration = resolve;
+        generateStarted!();
+      });
+    };
+
+    const abortController = createSubmitAbortController('sess-local-abort');
+
+    const submitPromise = executeLocalSubmit({
+      sessionId: 'sess-local-abort',
+      chatId: 'chat-local',
+      chatIndex: 0,
+      messageIndex: 1,
+      targetNodeId: 'node-assistant',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      config: { model: 'local-model', max_tokens: 256, temperature: 0.7, presence_penalty: 0, top_p: 1, frequency_penalty: 0 } as any,
+      mode: 'append',
+      abortController,
+      t: (key) => key,
+    });
+
+    // Wait for generation to actually start before aborting
+    await generateStartedPromise;
+
+    // Abort mid-generation — the abort listener should call engine.abort()
+    abortController.abort();
+
+    // Let generation resolve so the promise settles
+    resolveGeneration!('Hello');
+
+    await submitPromise;
+
+    expect(mockAbort).toHaveBeenCalled();
+  });
+
+  it('returns immediately when abort controller is already aborted', async () => {
+    mockState = makeLocalMockState();
+    mockGenerateImpl = vi.fn(async () => 'should not run');
+
+    const abortController = createSubmitAbortController('sess-local-pre-aborted');
+    abortController.abort();
+
+    const result = await executeLocalSubmit({
+      sessionId: 'sess-local-pre-aborted',
+      chatId: 'chat-local',
+      chatIndex: 0,
+      messageIndex: 1,
+      targetNodeId: 'node-assistant',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      config: { model: 'local-model', max_tokens: 256, temperature: 0.7, presence_penalty: 0, top_p: 1, frequency_penalty: 0 } as any,
+      mode: 'append',
+      abortController,
+      t: (key) => key,
+    });
+
+    expect(result).toEqual({});
+    expect(mockGenerateImpl).not.toHaveBeenCalled();
+  });
+
+  it('cleans up abort listener after normal completion', async () => {
+    mockState = makeLocalMockState();
+    mockGenerateImpl = async (_prompt, _opts, onChunk) => {
+      onChunk('Done');
+      return 'Done';
+    };
+
+    const abortController = createSubmitAbortController('sess-local-normal');
+    const removeListenerSpy = vi.spyOn(abortController.signal, 'removeEventListener');
+
+    await executeLocalSubmit({
+      sessionId: 'sess-local-normal',
+      chatId: 'chat-local',
+      chatIndex: 0,
+      messageIndex: 1,
+      targetNodeId: 'node-assistant',
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'hi' }] }],
+      config: { model: 'local-model', max_tokens: 256, temperature: 0.7, presence_penalty: 0, top_p: 1, frequency_penalty: 0 } as any,
+      mode: 'append',
+      abortController,
+      t: (key) => key,
+    });
+
+    expect(removeListenerSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+    expect(mockAbort).not.toHaveBeenCalled();
   });
 });

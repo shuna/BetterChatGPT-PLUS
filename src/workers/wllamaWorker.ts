@@ -216,6 +216,10 @@ async function handleGenerate(req: GenerateRequest) {
 
   currentAbortController = new AbortController();
 
+  // Track generated text outside try/catch so we can return partial text on abort
+  let fullText = '';
+  let tokensGenerated = 0;
+
   try {
     // wllama only supports stopTokens (token IDs), not string stop sequences.
     // Multi-token stop strings cannot be reliably mapped to single token IDs,
@@ -231,8 +235,6 @@ async function handleGenerate(req: GenerateRequest) {
       stream: true,
     });
 
-    let fullText = '';
-    let tokensGenerated = 0;
     let stopped = false;
 
     console.info('[wllamaWorker] generate start, prompt length:', req.prompt.length, 'maxTokens:', req.maxTokens);
@@ -266,7 +268,8 @@ async function handleGenerate(req: GenerateRequest) {
   } catch (e) {
     const err = e as Error;
     if (err.name === 'AbortError') {
-      respond(req.id, 'done', { fullText: '', tokensGenerated: 0, aborted: true });
+      // Return partial text generated so far instead of empty string
+      respond(req.id, 'done', { fullText, tokensGenerated, aborted: true });
     } else {
       const nativeDetail = recentNativeLogs.length > 0
         ? '\n\n[llama.cpp ログ]\n' + recentNativeLogs.join('\n')
