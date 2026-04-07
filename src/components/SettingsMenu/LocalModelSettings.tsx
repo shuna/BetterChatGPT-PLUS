@@ -1014,6 +1014,10 @@ const LocalModelSettings = () => {
   const abortControllers = useRef<Record<string, AbortController>>({});
   const [resumeFallbacks, setResumeFallbacks] = useState<Record<string, string>>({});
 
+  // OPFS browser refresh trigger — incremented on every storage mutation
+  const [opfsBrowserRefresh, setOpfsBrowserRefresh] = useState(0);
+  const bumpOpfsBrowser = useCallback(() => setOpfsBrowserRefresh((n) => n + 1), []);
+
   // HF Search state
   const [searchQuery, setSearchQuery] = useState('');
   const [searchEngine, setSearchEngine] = useState<HfSearchQuery['engine']>('all');
@@ -1176,6 +1180,7 @@ const LocalModelSettings = () => {
       downloadRevision: model.revision,
     });
 
+    bumpOpfsBrowser();
     downloadCatalogModel(model, {
       onProgress: (p) => {
         setDownloadProgresses((prev) => ({ ...prev, [model.id]: p }));
@@ -1186,6 +1191,7 @@ const LocalModelSettings = () => {
           storedBytes: (currentMeta?.storedBytes ?? 0) + fileSize,
           storedFiles: [...(currentMeta?.storedFiles ?? []), _fileName],
         });
+        bumpOpfsBrowser();
       },
       onComplete: (totalBytes) => {
         const store = useStore.getState();
@@ -1212,6 +1218,7 @@ const LocalModelSettings = () => {
           return rest;
         });
         delete abortControllers.current[model.id];
+        bumpOpfsBrowser();
       },
       onError: (error, _modelId, _fileName) => {
         useStore.getState().updateSavedModelMeta(model.id, {
@@ -1223,9 +1230,10 @@ const LocalModelSettings = () => {
           return rest;
         });
         delete abortControllers.current[model.id];
+        bumpOpfsBrowser();
       },
     }, controller.signal);
-  }, []);
+  }, [bumpOpfsBrowser]);
 
   const handleCancelDownload = useCallback((modelId: string) => {
     abortControllers.current[modelId]?.abort();
@@ -1238,7 +1246,8 @@ const LocalModelSettings = () => {
       storageState: 'partial',
       lastError: undefined,
     });
-  }, []);
+    bumpOpfsBrowser();
+  }, [bumpOpfsBrowser]);
 
   const handleRetry = useCallback((model: CatalogModel) => {
     handleDownload(model);
@@ -1262,6 +1271,7 @@ const LocalModelSettings = () => {
       return rest;
     });
 
+    bumpOpfsBrowser();
     downloadCatalogModel(model, {
       onProgress: (p) => {
         setDownloadProgresses((prev) => ({ ...prev, [model.id]: p }));
@@ -1272,6 +1282,7 @@ const LocalModelSettings = () => {
           storedBytes: (currentMeta?.storedBytes ?? 0) + fileSize,
           storedFiles: [...(currentMeta?.storedFiles ?? []), _fileName],
         });
+        bumpOpfsBrowser();
       },
       onComplete: (totalBytes) => {
         useStore.getState().updateSavedModelMeta(model.id, {
@@ -1285,6 +1296,7 @@ const LocalModelSettings = () => {
           return rest;
         });
         delete abortControllers.current[model.id];
+        bumpOpfsBrowser();
       },
       onError: (error, _modelId, _fileName) => {
         useStore.getState().updateSavedModelMeta(model.id, {
@@ -1296,6 +1308,7 @@ const LocalModelSettings = () => {
           return rest;
         });
         delete abortControllers.current[model.id];
+        bumpOpfsBrowser();
       },
       onResumeFallback: (fileName) => {
         setResumeFallbacks((prev) => ({
@@ -1304,7 +1317,7 @@ const LocalModelSettings = () => {
         }));
       },
     }, controller.signal, true /* resume */);
-  }, [t]);
+  }, [t, bumpOpfsBrowser]);
 
   const handleDeleteCatalogModel = useCallback(async (modelId: string) => {
     if (!window.confirm(t('localModel.confirmDelete') as string)) return;
@@ -1324,7 +1337,8 @@ const LocalModelSettings = () => {
     await deleteModel(modelId);
     store.removeSavedModelMeta(modelId);
     store.removeLocalModel(modelId);
-  }, [t]);
+    bumpOpfsBrowser();
+  }, [t, bumpOpfsBrowser]);
 
   const handleLoadCatalogModel = useCallback(async (model: CatalogModel) => {
     const provider = new OpfsFileProvider(model.id, model.manifest);
@@ -1827,6 +1841,7 @@ const LocalModelSettings = () => {
     const controller = new AbortController();
     abortControllers.current[modelId] = controller;
 
+    bumpOpfsBrowser();
     downloadModelFiles(
       {
         modelId,
@@ -1844,6 +1859,7 @@ const LocalModelSettings = () => {
             storedBytes: (currentMeta?.storedBytes ?? 0) + fileSize,
             storedFiles: [...(currentMeta?.storedFiles ?? []), _fileName],
           });
+          bumpOpfsBrowser();
         },
         onComplete: (totalBytes) => {
           useStore.getState().updateSavedModelMeta(modelId, {
@@ -1862,6 +1878,7 @@ const LocalModelSettings = () => {
             return rest;
           });
           delete abortControllers.current[modelId];
+          bumpOpfsBrowser();
         },
         onError: (error) => {
           useStore.getState().updateSavedModelMeta(modelId, {
@@ -1874,11 +1891,12 @@ const LocalModelSettings = () => {
           });
           // Keep in activeSearchDownloads — user needs to see error/retry
           delete abortControllers.current[modelId];
+          bumpOpfsBrowser();
         },
       },
       controller.signal,
     );
-  }, []);
+  }, [bumpOpfsBrowser]);
 
   const handleResumeSearchModel = useCallback((result: HfSearchResult, variant: GgufVariant) => {
     const candidate = resolveSearchCandidate(result, variant);
@@ -1906,6 +1924,7 @@ const LocalModelSettings = () => {
     const controller = new AbortController();
     abortControllers.current[modelId] = controller;
 
+    bumpOpfsBrowser();
     downloadModelFiles(
       {
         modelId,
@@ -1924,6 +1943,7 @@ const LocalModelSettings = () => {
             storedBytes: (currentMeta?.storedBytes ?? 0) + fileSize,
             storedFiles: [...(currentMeta?.storedFiles ?? []), _fileName],
           });
+          bumpOpfsBrowser();
         },
         onComplete: (totalBytes) => {
           useStore.getState().updateSavedModelMeta(modelId, {
@@ -1941,6 +1961,7 @@ const LocalModelSettings = () => {
             return rest;
           });
           delete abortControllers.current[modelId];
+          bumpOpfsBrowser();
         },
         onError: (error) => {
           useStore.getState().updateSavedModelMeta(modelId, {
@@ -1952,6 +1973,7 @@ const LocalModelSettings = () => {
             return rest;
           });
           delete abortControllers.current[modelId];
+          bumpOpfsBrowser();
         },
         onResumeFallback: () => {
           setResumeFallbacks((prev) => ({
@@ -1962,7 +1984,7 @@ const LocalModelSettings = () => {
       },
       controller.signal,
     );
-  }, [t]);
+  }, [t, bumpOpfsBrowser]);
 
   const handleRetrySearchModel = useCallback((result: HfSearchResult, variant: GgufVariant) => {
     // Retry = fresh download (no resume)
@@ -1980,7 +2002,8 @@ const LocalModelSettings = () => {
       storageState: 'partial',
       lastError: undefined,
     });
-  }, []);
+    bumpOpfsBrowser();
+  }, [bumpOpfsBrowser]);
 
   const handleLoadSearchModel = useCallback(async (result: HfSearchResult, variant: GgufVariant) => {
     const candidate = resolveSearchCandidate(result, variant);
@@ -2103,7 +2126,8 @@ const LocalModelSettings = () => {
       const { [modelId]: _, ...rest } = prev;
       return rest;
     });
-  }, [t]);
+    bumpOpfsBrowser();
+  }, [t, bumpOpfsBrowser]);
 
   // Sync partial model storedBytes on section mount
   useEffect(() => {
@@ -2224,7 +2248,8 @@ const LocalModelSettings = () => {
       const { [modelId]: _, ...rest } = prev;
       return rest;
     });
-  }, [t]);
+    bumpOpfsBrowser();
+  }, [t, bumpOpfsBrowser]);
 
   /** Cancel an active download for the downloading section. */
   const handleCancelDownloadingModel = useCallback((modelId: string) => {
@@ -2645,9 +2670,11 @@ const LocalModelSettings = () => {
               {t('localModel.opfsBrowser.description')}
             </div>
             <OpfsFileBrowser
+              refreshTrigger={opfsBrowserRefresh}
               onStorageChanged={() => {
                 // Trigger rehydration refresh after storage changes
                 rehydratedRef.current = false;
+                bumpOpfsBrowser();
               }}
             />
           </SettingsGroup>

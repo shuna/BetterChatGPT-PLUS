@@ -18,9 +18,12 @@ import useStore from '@store/store';
 
 const OpfsFileBrowser = ({
   onStorageChanged,
+  refreshTrigger,
 }: {
   /** Called after any deletion so the parent can refresh metadata */
   onStorageChanged?: () => void;
+  /** Increment this counter to trigger a refresh from parent events (download start/stop/complete, load, etc.) */
+  refreshTrigger?: number;
 }) => {
   const { t } = useTranslation('main');
   const [entries, setEntries] = useState<OpfsModelEntry[]>([]);
@@ -49,6 +52,13 @@ const OpfsFileBrowser = ({
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // Re-scan OPFS when the parent signals a storage mutation
+  useEffect(() => {
+    if (refreshTrigger != null && refreshTrigger > 0) {
+      refresh();
+    }
+  }, [refreshTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleExpand = useCallback((modelId: string) => {
     setExpandedModels((prev) => {
