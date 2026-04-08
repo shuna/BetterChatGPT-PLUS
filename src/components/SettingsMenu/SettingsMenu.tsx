@@ -7,16 +7,11 @@ import SettingIcon from '@icon/SettingIcon';
 import { languageCodeToName, selectableLanguages } from '@constants/language';
 import { Theme } from '@type/theme';
 import AutoTitleToggle from './AutoTitleToggle';
-import AdvancedModeToggle from './AdvencedModeToggle';
-import InlineLatexToggle from './InlineLatexToggle';
-import EnterToSubmitToggle from './EnterToSubmitToggle';
-import AnimateBubbleNavigationToggle from './AnimateBubbleNavigationToggle';
+import StoreToggle from './StoreToggle';
 import StreamingMarkdownPolicySelect from './StreamingMarkdownPolicySelect';
 
 import TotalTokenCost, { TotalTokenCostToggle } from './TotalTokenCost';
 import ClearConversation from '@components/Menu/MenuOptions/ClearConversation';
-import DisplayChatSizeToggle from './DisplayChatSizeToggle';
-import ShowDebugPanelToggle from './ShowDebugPanelToggle';
 import ProviderMenuInline from '@components/ProviderMenu/ProviderMenuInline';
 import { ProxySettingsInline } from './ProxySettings';
 import { ChatConfigInline } from '@components/ChatConfigMenu/ChatConfigMenu';
@@ -353,25 +348,25 @@ const GeneralTab = () => {
       </SettingsGroup>
 
       <SettingsGroup label={t('settingsSection.input')}>
-        <EnterToSubmitToggle />
+        <StoreToggle stateKey='enterToSubmit' setterKey='setEnterToSubmit' i18nKey='enterToSubmit' />
       </SettingsGroup>
 
       <SettingsGroup label={t('settingsSection.display')}>
-        <AnimateBubbleNavigationToggle />
-        <DisplayChatSizeToggle />
+        <StoreToggle stateKey='animateBubbleNavigation' setterKey='setAnimateBubbleNavigation' i18nKey='animateBubbleNavigation' />
+        <StoreToggle stateKey='displayChatSize' setterKey='setDisplayChatSize' i18nKey='displayChatSize' i18nNs='main' />
         <TotalTokenCostToggle />
-        <ShowDebugPanelToggle />
+        <StoreToggle stateKey='showDebugPanel' setterKey='setShowDebugPanel' i18nKey='showDebugPanel' i18nNs='main' />
       </SettingsGroup>
       <TotalTokenCost />
 
       <SettingsGroup label={t('settingsSection.rendering')}>
-        <InlineLatexToggle />
+        <StoreToggle stateKey='inlineLatex' setterKey='setInlineLatex' i18nKey='inlineLatex' />
         <StreamingMarkdownPolicySelect />
       </SettingsGroup>
 
       <SettingsGroup label={t('settingsSection.features')}>
         <AutoTitleToggle />
-        <AdvancedModeToggle />
+        <StoreToggle stateKey='advancedMode' setterKey='setAdvancedMode' i18nKey='advancedMode' />
       </SettingsGroup>
     </div>
   );
