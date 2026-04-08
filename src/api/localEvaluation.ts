@@ -126,10 +126,16 @@ function getAxisLabels(): Record<keyof QualityScores, { name: string; question: 
 /**
  * Build a per-axis evaluation prompt.
  */
-function buildAxisPrompt(text: string, axisQuestion: string): string {
+function buildAxisPrompt(text: string, axisQuestion: string, assistantResponse?: string): string {
   const lang = i18next.language;
   if (lang.startsWith('ja')) {
+    if (assistantResponse) {
+      return `以下の会話コンテキストとアシスタントの応答について答えてください。\n\nコンテキスト: ${text}\n\nアシスタントの応答: ${assistantResponse}\n\n質問: ${axisQuestion}\n\n回答:`;
+    }
     return `以下のテキストについて答えてください。\n\nテキスト: ${text}\n\n質問: ${axisQuestion}\n\n回答:`;
+  }
+  if (assistantResponse) {
+    return `Answer about this conversation context and assistant response.\n\nContext: ${text}\n\nAssistant response: ${assistantResponse}\n\nQuestion: ${axisQuestion}\n\nAnswer:`;
   }
   return `Answer about this text.\n\nText: ${text}\n\nQuestion: ${axisQuestion}\n\nAnswer:`;
 }
@@ -335,6 +341,7 @@ function parseLocalQualityResponse(raw: string): StandardQualityEvaluationResult
  */
 export async function runLocalQualityEvaluation(
   text: string,
+  assistantResponse: string | undefined,
   onAxisProgress?: (axis: keyof QualityScores, state: AxisProgressState) => void,
 ): Promise<StandardQualityEvaluationResult> {
   const modelId = getActiveModelId('analysis') ?? getActiveModelId('quality') ?? getActiveModelId('generation');
@@ -351,6 +358,7 @@ export async function runLocalQualityEvaluation(
 
   // Keep input short for small models with limited context windows
   const inputText = text.slice(0, 400);
+  const inputAssistant = assistantResponse?.slice(0, 400);
   const axisLabels = getAxisLabels();
 
   const scores: QualityScores = {
@@ -371,7 +379,7 @@ export async function runLocalQualityEvaluation(
   for (const axis of qualityAxisKeys) {
     onAxisProgress?.(axis, 'generating');
     const label = axisLabels[axis];
-    const prompt = buildAxisPrompt(inputText, label.question);
+    const prompt = buildAxisPrompt(inputText, label.question, inputAssistant);
 
     console.info(`[evaluation] local quality: evaluating axis "${axis}"...`);
 

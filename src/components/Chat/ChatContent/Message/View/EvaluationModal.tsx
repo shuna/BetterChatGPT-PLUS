@@ -754,11 +754,14 @@ const EvaluationModal: React.FC<EvaluationModalProps> = ({
       if (analysisModelId) {
         // Use local analysis (evaluation) model
         await prepareModelsForExecution([analysisModelId]);
-        const qualityText = phase === 'post-receive' ? (ctx.assistantText ?? promptText) : promptText;
         const axisProgress = (axis: keyof QualityScores, state: AxisProgressState) => {
           useStore.getState().setEvaluationAxisProgress(key, { [axis]: state });
         };
-        const quality = await runLocalQualityEvaluation(qualityText, axisProgress);
+        const quality = await runLocalQualityEvaluation(
+          promptText,
+          phase === 'post-receive' ? ctx.assistantText : undefined,
+          axisProgress,
+        );
         const existing = store.evaluationResults[key];
         store.setEvaluationResult(key, {
           ...existing,

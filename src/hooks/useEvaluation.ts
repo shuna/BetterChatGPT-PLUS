@@ -109,13 +109,16 @@ async function runEvaluationForPhase(
 
       if (analysisModelId) {
         // Use local quality evaluation as the primary evaluator
-        const qualityText = phase === 'post-receive' ? (assistantText ?? '') : userText;
-        if (qualityText) {
+        if (userText) {
           try {
             const axisProgress = (axis: keyof QualityScores, state: AxisProgressState) => {
               useStore.getState().setEvaluationAxisProgress(key, { [axis]: state });
             };
-            result.quality = await runLocalQualityEvaluation(qualityText, axisProgress);
+            result.quality = await runLocalQualityEvaluation(
+              userText,
+              phase === 'post-receive' ? assistantText : undefined,
+              axisProgress,
+            );
           } catch (e) {
             console.warn('[evaluation] local quality evaluation failed:', e);
           }
@@ -229,11 +232,10 @@ export function useEvaluation() {
           if (store.localModelEnabled) {
             await prepareModelsForExecution([analysisModelId]);
           }
-          const qualityText = assistantText ?? userText;
           const axisProgress = (axis: keyof QualityScores, state: AxisProgressState) => {
             useStore.getState().setEvaluationAxisProgress(key, { [axis]: state });
           };
-          const quality = await runLocalQualityEvaluation(qualityText, axisProgress);
+          const quality = await runLocalQualityEvaluation(userText, assistantText, axisProgress);
           const existing = store.evaluationResults[key];
           store.setEvaluationResult(key, {
             ...existing,
