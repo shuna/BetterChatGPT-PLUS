@@ -267,21 +267,45 @@ export const ModelSelector = ({
 
   // Local model options (composite key: "local:::modelId")
   // Include both store-registered models and curated catalog models that are saved & favorited
+  // When a 1-bit converted version exists, show it instead of the original
+  const onebitByOrigin = new Map<string, typeof localModels[number]>();
+  for (const m of localModels) {
+    if (m.displayMeta?.quantization === 'onebit' && savedMeta[m.id]?.storageState === 'saved') {
+      onebitByOrigin.set(m.origin, m);
+    }
+  }
+
   const localOptionMap = new Map<string, { value: string; label: string }>();
   for (const m of localModels) {
     if (favoriteLocalIds.includes(m.id) && savedMeta[m.id]?.storageState === 'saved') {
-      localOptionMap.set(m.id, {
-        value: `local:::${m.id}`,
-        label: `${m.label} (Local${m.displayMeta?.quantization ? ' · ' + m.displayMeta.quantization : ''})`,
-      });
+      const ob = onebitByOrigin.get(m.id);
+      if (ob && ob.id !== m.id) {
+        localOptionMap.set(ob.id, {
+          value: `local:::${ob.id}`,
+          label: `${ob.label} (Local${ob.displayMeta?.quantization ? ' · ' + ob.displayMeta.quantization : ''})`,
+        });
+      } else {
+        localOptionMap.set(m.id, {
+          value: `local:::${m.id}`,
+          label: `${m.label} (Local${m.displayMeta?.quantization ? ' · ' + m.displayMeta.quantization : ''})`,
+        });
+      }
     }
   }
   for (const cm of CURATED_MODELS) {
     if (!localOptionMap.has(cm.id) && favoriteLocalIds.includes(cm.id) && savedMeta[cm.id]?.storageState === 'saved') {
-      localOptionMap.set(cm.id, {
-        value: `local:::${cm.id}`,
-        label: `${cm.label} (Local)`,
-      });
+      const ob = onebitByOrigin.get(cm.id);
+      if (ob && !localOptionMap.has(ob.id)) {
+        localOptionMap.set(ob.id, {
+          value: `local:::${ob.id}`,
+          label: `${ob.label} (Local${ob.displayMeta?.quantization ? ' · ' + ob.displayMeta.quantization : ''})`,
+        });
+      } else {
+        localOptionMap.set(cm.id, {
+          value: `local:::${cm.id}`,
+          label: `${cm.label} (Local)`,
+        });
+      }
     }
   }
   const localOptions = Array.from(localOptionMap.values());

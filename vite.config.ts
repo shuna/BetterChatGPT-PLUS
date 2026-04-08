@@ -23,6 +23,13 @@ export default defineConfig({
       '@src/': new URL('./src/', import.meta.url).pathname,
     },
   },
+  server: {
+    fs: {
+      // Allow serving files from the main repo's node_modules when running
+      // in a git worktree (where node_modules is a symlink).
+      allow: ['..', '/Users/suzuki/weavelet-canvas'],
+    },
+  },
   base: './',
   build: {
     chunkSizeWarningLimit: 1200,

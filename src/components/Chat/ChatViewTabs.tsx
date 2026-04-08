@@ -142,9 +142,15 @@ const ChatViewTabs = ({
   const getModelDisplayName = (modelId: string, modelSource?: 'remote' | 'local') => {
     if (modelSource === 'local') {
       const storeDef = localModels.find((m) => m.id === modelId);
-      if (storeDef) return `${storeDef.label} (Local)`;
+      if (storeDef) {
+        const q = storeDef.displayMeta?.quantization;
+        return `${storeDef.label} (Local${q ? ' · ' + q : ''})`;
+      }
       const catalogModel = CURATED_MODELS.find((cm) => cm.id === modelId);
-      if (catalogModel) return `${catalogModel.label} (Local)`;
+      if (catalogModel) {
+        const q = catalogModel.displayMeta?.quantization;
+        return `${catalogModel.label} (Local${q ? ' · ' + q : ''})`;
+      }
       return `${modelId} (Local)`;
     }
     const fav = favoriteModels.find(f => f.modelId === modelId);
@@ -233,17 +239,39 @@ const ChatViewTabs = ({
                 </svg>
               </div>
               {isModelDropdownOpen && (() => {
-                const localCandidates: { id: string; label: string }[] = [];
+                // Build a lookup of onebit models keyed by their source model ID
+                const onebitByOrigin = new Map<string, typeof localModels[number]>();
+                for (const m of localModels) {
+                  if (m.displayMeta?.quantization === 'onebit' && savedMeta[m.id]?.storageState === 'saved') {
+                    onebitByOrigin.set(m.origin, m);
+                  }
+                }
+
+                const localCandidates: { id: string; label: string; quantization?: string }[] = [];
                 const seenLocal = new Set<string>();
                 for (const m of localModels) {
                   if (favoriteLocalIds.includes(m.id) && savedMeta[m.id]?.storageState === 'saved') {
                     seenLocal.add(m.id);
-                    localCandidates.push({ id: m.id, label: m.label });
+                    // If a 1-bit version exists for this model, show it instead
+                    const ob = onebitByOrigin.get(m.id);
+                    if (ob && ob.id !== m.id) {
+                      seenLocal.add(ob.id);
+                      localCandidates.push({ id: ob.id, label: ob.label, quantization: ob.displayMeta?.quantization });
+                    } else {
+                      localCandidates.push({ id: m.id, label: m.label, quantization: m.displayMeta?.quantization });
+                    }
                   }
                 }
                 for (const cm of CURATED_MODELS) {
                   if (!seenLocal.has(cm.id) && favoriteLocalIds.includes(cm.id) && savedMeta[cm.id]?.storageState === 'saved') {
-                    localCandidates.push({ id: cm.id, label: cm.label });
+                    // Check if a 1-bit version exists for this catalog model
+                    const ob = onebitByOrigin.get(cm.id);
+                    if (ob && !seenLocal.has(ob.id)) {
+                      seenLocal.add(ob.id);
+                      localCandidates.push({ id: ob.id, label: ob.label, quantization: ob.displayMeta?.quantization });
+                    } else {
+                      localCandidates.push({ id: cm.id, label: cm.label, quantization: cm.displayMeta?.quantization });
+                    }
                   }
                 }
                 const hasAny = favoriteModels.length > 0 || localCandidates.length > 0;
@@ -286,7 +314,7 @@ const ChatViewTabs = ({
                         }`}
                         onClick={() => handleModelChange(lm.id, undefined, 'local')}
                       >
-                        <span className='truncate flex-1'>{lm.label} (Local)</span>
+                        <span className='truncate flex-1'>{lm.label} (Local{lm.quantization ? ' · ' + lm.quantization : ''})</span>
                       </div>
                     ))}
                     </>

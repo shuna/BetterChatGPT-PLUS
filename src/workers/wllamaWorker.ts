@@ -21,7 +21,7 @@ if (typeof document === 'undefined') {
   };
 }
 
-import { Wllama } from '@wllama/wllama';
+import { Wllama, type AssetsPathConfig } from '@wllama/wllama';
 
 // ---------------------------------------------------------------------------
 // State
@@ -35,31 +35,68 @@ let currentAbortController: AbortController | null = null;
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve WASM binary paths relative to the worker's location.
- * In Vite, `new URL(path, import.meta.url)` resolves correctly for both
- * dev and production builds.
+ * Check if the current environment supports multi-threaded WASM.
+ * Requires SharedArrayBuffer + crossOriginIsolated (COOP/COEP headers).
  */
-function getWasmPaths() {
-  // wllama requires an AssetsPathConfig with at least single-thread WASM.
-  // The WASM files are in @wllama/wllama/esm/{single,multi}-thread/wllama.wasm
-  // Vite resolves these at build time via import.meta.url.
-  return {
+function canUseMultiThread(): boolean {
+  try {
+    return (
+      typeof SharedArrayBuffer !== 'undefined' &&
+      (self as unknown as { crossOriginIsolated: boolean }).crossOriginIsolated === true
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resolve WASM binary paths relative to the worker's location.
+ *
+ * - Only includes multi-thread WASM when the environment supports it,
+ *   avoiding unnecessary downloads on single-thread-only browsers.
+ * - When `useOnebit` is true, uses the custom-built WASM from vendor/wllama/
+ *   which includes the onebit matmul kernel.
+ */
+function getWasmPaths(useOnebit = false) {
+  const multiThread = canUseMultiThread();
+
+  if (useOnebit) {
+    const paths: AssetsPathConfig = {
+      'single-thread/wllama.wasm': new URL(
+        '../../vendor/wllama/single-thread.wasm',
+        import.meta.url,
+      ).href,
+    };
+    if (multiThread) {
+      paths['multi-thread/wllama.wasm'] = new URL(
+        '../../vendor/wllama/multi-thread.wasm',
+        import.meta.url,
+      ).href;
+    }
+    console.info('[wllamaWorker] Using onebit WASM paths:', paths);
+    return paths;
+  }
+
+  const paths: AssetsPathConfig = {
     'single-thread/wllama.wasm': new URL(
       '@wllama/wllama/esm/single-thread/wllama.wasm',
       import.meta.url,
     ).href,
-    'multi-thread/wllama.wasm': new URL(
+  };
+  if (multiThread) {
+    paths['multi-thread/wllama.wasm'] = new URL(
       '@wllama/wllama/esm/multi-thread/wllama.wasm',
       import.meta.url,
-    ).href,
-  };
+    ).href;
+  }
+  return paths;
 }
 
 // ---------------------------------------------------------------------------
 // Message types
 // ---------------------------------------------------------------------------
 
-interface InitRequest { id: number; type: 'init' }
+interface InitRequest { id: number; type: 'init'; isOnebit?: boolean }
 interface LoadRequest { id: number; type: 'load'; file: File }
 interface GenerateRequest {
   id: number;
@@ -114,8 +151,9 @@ const workerLogger = {
 
 async function handleInit(req: InitRequest) {
   try {
-    const paths = getWasmPaths();
-    console.info('[wllamaWorker] init, WASM paths:', paths);
+    const useOnebit = req.isOnebit ?? false;
+    const paths = getWasmPaths(useOnebit);
+    console.info('[wllamaWorker] init, isOnebit:', useOnebit, 'WASM paths:', paths);
     wllama = new Wllama(paths, {
       suppressNativeLog: false,
       logger: workerLogger,
@@ -176,34 +214,34 @@ async function handleLoad(req: LoadRequest) {
   } catch (e) {
     const err = e as Error;
     const msg = err.message;
-    // Forward stack trace to main thread for debugging
-    self.postMessage({ id: req.id, type: '__log', level: 'error', text: `[wllamaWorker] loadModel error: ${msg}\nStack: ${err.stack}` });
+    const stack = err.stack ?? '(no stack)';
 
-    // Build diagnostic detail from native llama.cpp logs
+    // Forward full stack trace to main thread console
+    forwardLog('error', `loadModel error: ${msg}\nStack: ${stack}`);
+
+    // Build diagnostic detail from native llama.cpp logs + JS stack
     const nativeDetail = recentNativeLogs.length > 0
       ? '\n\n[llama.cpp ログ]\n' + recentNativeLogs.join('\n')
       : '';
+    const stackDetail = `\n\n[Stack Trace]\n${stack}`;
 
     if (msg.includes('Invalid magic number')) {
-      // wllama Glue protocol error — llama.cpp returned non-Glue response (typically after a native load failure)
       const hasUnsupportedType = recentNativeLogs.some(l => l.includes('invalid ggml type'));
       const typeMatch = recentNativeLogs.find(l => l.includes('invalid ggml type'))?.match(/ggml type (\d+)/);
       if (hasUnsupportedType) {
         respondError(req.id,
           `モデルの読み込みに失敗しました: このGGUFファイルに含まれるテンソルの量子化形式（ggml type ${typeMatch?.[1] ?? '不明'}）は、` +
           `現在のwllamaランタイム（@wllama/wllama v2.3.7 同梱のllama.cpp）でサポートされていません。` +
-          'このモデルは、より新しいバージョンのllama.cppで導入された量子化形式を使用しています。' +
-          nativeDetail);
+          nativeDetail + stackDetail);
       } else {
         respondError(req.id,
           'モデルの読み込みに失敗しました: llama.cppがモデルを処理できませんでした（wllama Glueプロトコルエラー: Invalid magic number）。' +
-          'モデルファイルとwllamaランタイムの互換性に問題がある可能性があります。' +
-          nativeDetail);
+          nativeDetail + stackDetail);
       }
     } else {
       respondError(req.id,
         `モデルの読み込みに失敗しました: ${msg}` +
-        nativeDetail);
+        nativeDetail + stackDetail);
     }
   }
 }
@@ -299,6 +337,24 @@ async function handleUnload(req: UnloadRequest) {
     respondError(req.id, `モデルのアンロードに失敗しました: ${(e as Error).message}`);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Global error handlers — catch WASM traps & unhandled rejections
+// ---------------------------------------------------------------------------
+
+self.onerror = (event) => {
+  const msg = typeof event === 'string' ? event :
+    (event as ErrorEvent).message ?? 'unknown error';
+  const stack = (event as ErrorEvent).error?.stack ?? '';
+  forwardLog('error', `[GLOBAL onerror] ${msg}\n${stack}`);
+};
+
+self.onunhandledrejection = (event: PromiseRejectionEvent) => {
+  const reason = event.reason;
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  const stack = reason instanceof Error ? reason.stack ?? '' : '';
+  forwardLog('error', `[GLOBAL unhandledrejection] ${msg}\n${stack}`);
+};
 
 // ---------------------------------------------------------------------------
 // Message router

@@ -22,6 +22,7 @@ import type {
 } from './types';
 import type { ModelFileProvider } from './fileProvider';
 import { CURATED_MODELS } from './catalog';
+import { isOnebitModelId } from './onebit/onebitManager';
 
 // ---------------------------------------------------------------------------
 // Worker proxy interfaces (engine-specific facades)
@@ -130,9 +131,10 @@ export class LocalModelRuntime {
     };
 
     try {
-      // Init worker
-      console.info('[LocalModelRuntime] init worker for', def.id, 'engine:', def.engine);
-      await this.sendRequest(def.id, { type: 'init' });
+      // Init worker — pass isOnebit flag so the worker can select the right WASM
+      const isOnebit = def.engine === 'wllama' && isOnebitModelId(def.id);
+      console.info('[LocalModelRuntime] init worker for', def.id, 'engine:', def.engine, 'isOnebit:', isOnebit);
+      await this.sendRequest(def.id, { type: 'init', isOnebit });
       console.info('[LocalModelRuntime] init done for', def.id);
 
       // Load model — engine-specific

@@ -36,6 +36,13 @@ import {
   clearSearchSession,
 } from './localModelSearchSession';
 import OpfsFileBrowser from './OpfsFileBrowser';
+import {
+  OnebitConversionManager,
+  isOnebitModelId,
+  hasOnebitVersion,
+  generateOnebitModelId,
+} from '@src/local-llm/onebit/onebitManager';
+import type { ConversionProgress } from '@src/local-llm/onebit/types';
 
 // ---------------------------------------------------------------------------
 // Status badge
@@ -341,6 +348,10 @@ const DownloadedModelRow = ({
   onToggleFavorite,
   onUnload,
   onDelete,
+  onebitConvertProgress,
+  hasOnebit,
+  onConvertOnebit,
+  quantization,
 }: {
   modelId: string;
   label: string;
@@ -354,12 +365,23 @@ const DownloadedModelRow = ({
   onToggleFavorite: () => void;
   onUnload: (modelId: string) => void;
   onDelete: (modelId: string) => void;
+  /** If non-null, a onebit conversion is in progress for this model */
+  onebitConvertProgress?: ConversionProgress | null;
+  /** Whether a onebit-converted version already exists */
+  hasOnebit?: boolean;
+  /** Trigger onebit conversion for this model */
+  onConvertOnebit?: (modelId: string) => void;
+  /** Source quantization format (e.g. "Q8_0", "Q4_K_M") for gating onebit conversion */
+  quantization?: string;
 }) => {
   const { t } = useTranslation('main');
   const isLoaded = runtimeStatus === 'ready' || runtimeStatus === 'busy';
   const isLoading = runtimeStatus === 'loading';
 
   const canSelect = !isLoaded && !isLoading;
+
+  // Onebit conversion only supports F32, F16, Q8_0, Q4_0
+  const onebitSupported = !quantization || /^(F32|F16|Q8[_-]0|Q4[_-]0)$/i.test(quantization);
 
   return (
     <div
@@ -424,12 +446,48 @@ const DownloadedModelRow = ({
           </button>
         )}
 
+        {/* 1-bit conversion button (non-onebit, saved, not loaded, no existing onebit, supported quant) */}
+        {canSelect && onebitSupported && !isOnebitModelId(modelId) && !hasOnebit && !onebitConvertProgress && onConvertOnebit && (
+          <button
+            className='flex-shrink-0 text-xs px-2 py-0.5 rounded border border-purple-300 dark:border-purple-600 text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/30'
+            onClick={(e) => { e.stopPropagation(); onConvertOnebit(modelId); }}
+            title='1-bit量子化に変換（サイズ削減、実験的機能）'
+          >
+            1-bitに変換
+          </button>
+        )}
+
+        {/* 1-bit conversion already exists indicator */}
+        {!isOnebitModelId(modelId) && hasOnebit && (
+          <span className='flex-shrink-0 text-xs px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'>
+            1-bit済
+          </span>
+        )}
+
         {isLoading && (
           <span className='flex-shrink-0 text-xs text-gray-500 dark:text-gray-400 animate-pulse'>
             {t('localModel.modelStatus.loading')}
           </span>
         )}
       </div>
+
+      {/* Onebit conversion progress bar */}
+      {onebitConvertProgress && (
+        <div className='flex items-center gap-2 pl-8'>
+          <div className='flex-1 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden'>
+            <div
+              className='h-full bg-purple-500 transition-all duration-300'
+              style={{ width: `${onebitConvertProgress.percent}%` }}
+            />
+          </div>
+          <span className='flex-shrink-0 text-xs text-purple-600 dark:text-purple-400 whitespace-nowrap'>
+            {onebitConvertProgress.stage === 'parsing' ? '解析中...' :
+             onebitConvertProgress.stage === 'converting' ? `変換中 ${onebitConvertProgress.currentTensor}/${onebitConvertProgress.totalTensors}` :
+             onebitConvertProgress.stage === 'writing' ? '書き込み中...' :
+             '完了'}
+          </span>
+        </div>
+      )}
 
       {/* Row 2: badges + size — indented to align with label */}
       <div className='flex items-center gap-2 pl-8 flex-wrap'>
@@ -1013,6 +1071,11 @@ const LocalModelSettings = () => {
   const [downloadProgresses, setDownloadProgresses] = useState<Record<string, DownloadProgress>>({});
   const abortControllers = useRef<Record<string, AbortController>>({});
   const [resumeFallbacks, setResumeFallbacks] = useState<Record<string, string>>({});
+
+  // Onebit conversion state
+  const [onebitConverting, setOnebitConverting] = useState<Record<string, ConversionProgress | null>>({});
+  const [onebitExisting, setOnebitExisting] = useState<Record<string, boolean>>({});
+  const onebitManagerRef = useRef<OnebitConversionManager | null>(null);
 
   // HF Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -2105,6 +2168,86 @@ const LocalModelSettings = () => {
     });
   }, [t]);
 
+  // ----- Onebit conversion -----
+
+  /** Check which saved models already have a onebit version in OPFS */
+  useEffect(() => {
+    if (!rehydrated) return;
+    const metas = useStore.getState().savedModelMeta;
+    const checkExisting = async () => {
+      const result: Record<string, boolean> = {};
+      for (const id of Object.keys(metas)) {
+        if (isOnebitModelId(id)) continue; // skip onebit models themselves
+        if (metas[id]?.storageState !== 'saved') continue;
+        try {
+          result[id] = await hasOnebitVersion(id);
+        } catch {
+          result[id] = false;
+        }
+      }
+      setOnebitExisting(result);
+    };
+    checkExisting();
+    // Also check localModels in the store
+    const localModels = useStore.getState().localModels;
+    for (const m of localModels) {
+      if (isOnebitModelId(m.id)) {
+        // Mark the source model as having a onebit version
+        const sourceId = m.id.replace(/--onebit$/, '');
+        setOnebitExisting((prev) => ({ ...prev, [sourceId]: true }));
+      }
+    }
+  }, [rehydrated]);
+
+  const handleConvertOnebit = useCallback(async (modelId: string, label: string, fileName: string) => {
+    // Guard: don't start conversion if already converting
+    if (onebitConverting[modelId]) return;
+
+    const manager = new OnebitConversionManager();
+    onebitManagerRef.current = manager;
+
+    setOnebitConverting((prev) => ({ ...prev, [modelId]: { stage: 'parsing', currentTensor: 0, totalTensors: 0, currentTensorName: '', percent: 0 } }));
+
+    try {
+      const result = await manager.convertFromOpfs(modelId, fileName, label, {
+        onProgress: (progress) => {
+          setOnebitConverting((prev) => ({ ...prev, [modelId]: progress }));
+        },
+        onError: (err) => {
+          setLoadError(`1-bit変換エラー: ${err}`);
+          setOnebitConverting((prev) => {
+            const { [modelId]: _, ...rest } = prev;
+            return rest;
+          });
+        },
+      });
+
+      // Add the converted model to the store
+      const store = useStore.getState();
+      store.addLocalModel(result.modelDef);
+      store.updateSavedModelMeta(result.modelDef.id, {
+        storageState: 'saved',
+        storedBytes: result.convertedSize,
+        storedFiles: [result.modelDef.manifest.kind === 'single-file' ? result.modelDef.manifest.entrypoint : ''],
+      });
+
+      // Mark source as having onebit version
+      setOnebitExisting((prev) => ({ ...prev, [modelId]: true }));
+      setOnebitConverting((prev) => {
+        const { [modelId]: _, ...rest } = prev;
+        return rest;
+      });
+    } catch (err) {
+      setLoadError(`1-bit変換に失敗しました: ${(err as Error).message}`);
+      setOnebitConverting((prev) => {
+        const { [modelId]: _, ...rest } = prev;
+        return rest;
+      });
+    } finally {
+      onebitManagerRef.current = null;
+    }
+  }, [onebitConverting]);
+
   // Sync partial model storedBytes on section mount
   useEffect(() => {
     if (!rehydrated) return;
@@ -2481,6 +2624,13 @@ const LocalModelSettings = () => {
                     onToggleFavorite={() => toggleFavoriteLocalModel(model.id)}
                     onUnload={handleUnloadCatalogModel}
                     onDelete={handleDeleteCatalogModel}
+                    onebitConvertProgress={onebitConverting[model.id]}
+                    hasOnebit={onebitExisting[model.id]}
+                    onConvertOnebit={(id) => {
+                      const entrypoint = model.manifest.kind === 'single-file' ? model.manifest.entrypoint : '';
+                      handleConvertOnebit(id, model.label, entrypoint);
+                    }}
+                    quantization={model.displayMeta?.quantization}
                   />
                 ))}
                 {completedSearch.map((model) => (
@@ -2497,6 +2647,13 @@ const LocalModelSettings = () => {
                     onToggleFavorite={() => toggleFavoriteLocalModel(model.id)}
                     onUnload={handleUnloadSearchModel}
                     onDelete={handleDeleteSearchModel}
+                    onebitConvertProgress={onebitConverting[model.id]}
+                    hasOnebit={onebitExisting[model.id]}
+                    onConvertOnebit={(id) => {
+                      const entrypoint = model.manifest.kind === 'single-file' ? model.manifest.entrypoint : '';
+                      handleConvertOnebit(id, model.label, entrypoint || model.lastFileName || '');
+                    }}
+                    quantization={model.displayMeta?.quantization}
                   />
                 ))}
               </SettingsGroup>
