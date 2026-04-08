@@ -152,24 +152,21 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
       ? state.chats[state.currentChatIndex].config.model
       : defaultModel
   );
-  const [messagesLimited, setMessagesLimited] = React.useState(messages);
-
-  // Synchronously reset messagesLimited when conversation changes or when
-  // messages are inserted/removed so that activePath and messagesLimited
-  // stay in sync (avoids stale content in edit state after mid-chat insert).
-  const prevChatIndexRef = useRef(currentChatIndex);
-  const prevMessagesRef = useRef(messages);
-  if (prevChatIndexRef.current !== currentChatIndex || prevMessagesRef.current !== messages) {
-    prevChatIndexRef.current = currentChatIndex;
-    prevMessagesRef.current = messages;
-    setMessagesLimited(messages);
-  }
+  // Track async token-limited messages. When `messages` changes, the derived
+  // `messagesLimited` falls back to `messages` immediately (no render-time
+  // setState needed), then updates once the async limiting completes.
+  const [asyncLimited, setAsyncLimited] = React.useState<{
+    source: MessageInterface[];
+    limited: MessageInterface[];
+  }>({ source: messages, limited: messages });
+  const messagesLimited =
+    asyncLimited.source === messages ? asyncLimited.limited : messages;
 
   useEffect(() => {
     let cancelled = false;
 
     limitMessageTokens(messages, reduceMessagesToTotalToken, model).then((nextMessages) => {
-      if (!cancelled) setMessagesLimited(nextMessages);
+      if (!cancelled) setAsyncLimited({ source: messages, limited: nextMessages });
     });
 
     return () => {

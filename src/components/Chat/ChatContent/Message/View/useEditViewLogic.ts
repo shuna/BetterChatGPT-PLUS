@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import useStore from '@store/store';
 import useSubmit from '@hooks/useSubmit';
 import {
@@ -95,25 +95,17 @@ export function useEditViewLogic({
   sticky?: boolean;
   editSessionKey: string;
 }) {
-  const setCurrentChatIndex = useStore((state) => state.setCurrentChatIndex);
   const inputRole = useStore((state) => state.inputRole);
   const appendNodeToActivePath = useStore((state) => state.appendNodeToActivePath);
   const replaceMessageAndPruneFollowing = useStore((state) => state.replaceMessageAndPruneFollowing);
   const upsertWithAutoBranch = useStore((state) => state.upsertWithAutoBranch);
-  var currentChatIndex = useStore((state) => state.currentChatIndex);
+  const currentChatIndex = useStore((state) => state.currentChatIndex);
   const { model, providerId } = useStore((state) => {
-    const isInitialised =
-      state.chats &&
-      state.chats.length > 0 &&
-      state.currentChatIndex >= 0 &&
-      state.currentChatIndex < state.chats.length;
-    if (!isInitialised) {
-      currentChatIndex = 0;
-      setCurrentChatIndex(0);
-    }
-    const config = isInitialised
-      ? state.chats![state.currentChatIndex].config
-      : undefined;
+    const { chats, currentChatIndex: idx } = state;
+    const config =
+      chats && chats.length > 0 && idx >= 0 && idx < chats.length
+        ? chats[idx].config
+        : undefined;
     return {
       model: config?.model ?? defaultModel,
       providerId: config?.providerId,
@@ -144,13 +136,11 @@ export function useEditViewLogic({
   // Sync _content with content prop when it changes and no draft exists.
   // This handles desync when a mid-chat insert causes activePath and
   // messagesLimited to temporarily diverge during async token limiting.
-  const prevContentRef = useRef(content);
-  if (prevContentRef.current !== content) {
-    prevContentRef.current = content;
+  useEffect(() => {
     if (!editDraftCache.has(editSessionKey)) {
       setContentState(cloneContent(content));
     }
-  }
+  }, [content, editSessionKey]);
   const _setContent = React.useCallback<React.Dispatch<React.SetStateAction<ContentInterface[]>>>(
     (value) => {
       setContentState((previous) => {
@@ -407,13 +397,6 @@ export function useEditViewLogic({
     }
   }, [(_content[0] as TextContentInterface)?.text]);
 
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-    }
-  }, []);
-
   const handleUploadButtonClick = () => {
     (fileInputRef.current as HTMLInputElement)?.click();
   };
@@ -423,8 +406,7 @@ export function useEditViewLogic({
     setIsEdit(false);
   };
 
-  const contentChanged = (() => {
-    // Normalize: filter out empty text items for comparison
+  const contentChanged = useMemo(() => {
     const normalize = (c: ContentInterface[]) =>
       c.filter((item) => !(item.type === 'text' && (item as TextContentInterface).text === ''));
     const a = normalize(_content);
@@ -439,7 +421,7 @@ export function useEditViewLogic({
         (ai as ImageContentInterface).image_url.url !== (bi as ImageContentInterface).image_url.url) return true;
     }
     return false;
-  })();
+  }, [_content, content]);
 
   return {
     model,
