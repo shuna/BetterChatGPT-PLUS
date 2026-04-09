@@ -239,11 +239,11 @@ const ChatViewTabs = ({
                 </svg>
               </div>
               {isModelDropdownOpen && (() => {
-                // Build a lookup of onebit models keyed by their source model ID
-                const onebitByOrigin = new Map<string, typeof localModels[number]>();
+                // Build a lookup of lowbit-Q models keyed by their source model ID
+                const lowbitQByOrigin = new Map<string, typeof localModels[number]>();
                 for (const m of localModels) {
-                  if (m.displayMeta?.quantization === 'onebit' && savedMeta[m.id]?.storageState === 'saved') {
-                    onebitByOrigin.set(m.origin, m);
+                  if ((m.displayMeta?.quantization === 'lowbit-q' || m.displayMeta?.quantization === 'onebit') && savedMeta[m.id]?.storageState === 'saved') {
+                    lowbitQByOrigin.set(m.origin, m);
                   }
                 }
 
@@ -252,8 +252,8 @@ const ChatViewTabs = ({
                 for (const m of localModels) {
                   if (favoriteLocalIds.includes(m.id) && savedMeta[m.id]?.storageState === 'saved') {
                     seenLocal.add(m.id);
-                    // If a 1-bit version exists for this model, show it instead
-                    const ob = onebitByOrigin.get(m.id);
+                    // If a lowbit-Q version exists for this model, show it instead
+                    const ob = lowbitQByOrigin.get(m.id);
                     if (ob && ob.id !== m.id) {
                       seenLocal.add(ob.id);
                       localCandidates.push({ id: ob.id, label: ob.label, quantization: ob.displayMeta?.quantization });
@@ -264,8 +264,8 @@ const ChatViewTabs = ({
                 }
                 for (const cm of CURATED_MODELS) {
                   if (!seenLocal.has(cm.id) && favoriteLocalIds.includes(cm.id) && savedMeta[cm.id]?.storageState === 'saved') {
-                    // Check if a 1-bit version exists for this catalog model
-                    const ob = onebitByOrigin.get(cm.id);
+                    // Check if a lowbit-Q version exists for this catalog model
+                    const ob = lowbitQByOrigin.get(cm.id);
                     if (ob && !seenLocal.has(ob.id)) {
                       seenLocal.add(ob.id);
                       localCandidates.push({ id: ob.id, label: ob.label, quantization: ob.displayMeta?.quantization });

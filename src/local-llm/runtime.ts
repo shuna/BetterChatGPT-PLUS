@@ -22,7 +22,7 @@ import type {
 } from './types';
 import type { ModelFileProvider } from './fileProvider';
 import { CURATED_MODELS } from './catalog';
-import { isOnebitModelId } from './onebit/onebitManager';
+import { isLowbitQModelId } from './lowbit-q/lowbitQManager';
 
 // ---------------------------------------------------------------------------
 // Worker proxy interfaces (engine-specific facades)
@@ -147,19 +147,19 @@ export class LocalModelRuntime {
     };
 
     try {
-      // Init worker — pass isOnebit flag so the worker can select the right WASM
-      const isOnebit = def.engine === 'wllama' && isOnebitModelId(def.id);
+      // Init worker — pass isLowbitQ flag so the worker can select the right WASM
+      const isLowbitQ = def.engine === 'wllama' && isLowbitQModelId(def.id);
       this.emitDiagnostic({
         modelId: def.id,
         phase: 'runtime-init-request',
         timestamp: Date.now(),
         payload: {
           engine: def.engine,
-          isOnebit,
+          isLowbitQ,
         },
       });
-      console.info('[LocalModelRuntime] init worker for', def.id, 'engine:', def.engine, 'isOnebit:', isOnebit);
-      await this.sendRequest(def.id, { type: 'init', isOnebit });
+      console.info('[LocalModelRuntime] init worker for', def.id, 'engine:', def.engine, 'isLowbitQ:', isLowbitQ);
+      await this.sendRequest(def.id, { type: 'init', isLowbitQ });
       console.info('[LocalModelRuntime] init done for', def.id);
 
       // Load model — engine-specific

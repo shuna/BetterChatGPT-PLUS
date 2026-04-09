@@ -267,18 +267,18 @@ export const ModelSelector = ({
 
   // Local model options (composite key: "local:::modelId")
   // Include both store-registered models and curated catalog models that are saved & favorited
-  // When a 1-bit converted version exists, show it instead of the original
-  const onebitByOrigin = new Map<string, typeof localModels[number]>();
+  // When a lowbit-Q converted version exists, show it instead of the original
+  const lowbitQByOrigin = new Map<string, typeof localModels[number]>();
   for (const m of localModels) {
-    if (m.displayMeta?.quantization === 'onebit' && savedMeta[m.id]?.storageState === 'saved') {
-      onebitByOrigin.set(m.origin, m);
+    if ((m.displayMeta?.quantization === 'lowbit-q' || m.displayMeta?.quantization === 'onebit') && savedMeta[m.id]?.storageState === 'saved') {
+      lowbitQByOrigin.set(m.origin, m);
     }
   }
 
   const localOptionMap = new Map<string, { value: string; label: string }>();
   for (const m of localModels) {
     if (favoriteLocalIds.includes(m.id) && savedMeta[m.id]?.storageState === 'saved') {
-      const ob = onebitByOrigin.get(m.id);
+      const ob = lowbitQByOrigin.get(m.id);
       if (ob && ob.id !== m.id) {
         localOptionMap.set(ob.id, {
           value: `local:::${ob.id}`,
@@ -294,7 +294,7 @@ export const ModelSelector = ({
   }
   for (const cm of CURATED_MODELS) {
     if (!localOptionMap.has(cm.id) && favoriteLocalIds.includes(cm.id) && savedMeta[cm.id]?.storageState === 'saved') {
-      const ob = onebitByOrigin.get(cm.id);
+      const ob = lowbitQByOrigin.get(cm.id);
       if (ob && !localOptionMap.has(ob.id)) {
         localOptionMap.set(ob.id, {
           value: `local:::${ob.id}`,

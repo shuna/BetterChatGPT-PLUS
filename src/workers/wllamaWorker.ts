@@ -57,7 +57,7 @@ function canUseMultiThread(): boolean {
  * - The project always uses the custom-built WASM from vendor/wllama/.
  * - Rebuilding vendor/wllama/*.wasm is therefore required for any runtime changes.
  */
-function getWasmPaths(useOnebit = false) {
+function getWasmPaths(useLowbitQ = false) {
   const multiThread = canUseMultiThread();
 
   const paths: AssetsPathConfig = {
@@ -72,7 +72,7 @@ function getWasmPaths(useOnebit = false) {
       import.meta.url,
     ).href;
   }
-  console.info('[wllamaWorker] Using vendored WASM paths:', paths, 'isOnebit:', useOnebit);
+  console.info('[wllamaWorker] Using vendored WASM paths:', paths, 'isLowbitQ:', useLowbitQ);
   return paths;
 }
 
@@ -80,7 +80,7 @@ function getWasmPaths(useOnebit = false) {
 // Message types
 // ---------------------------------------------------------------------------
 
-interface InitRequest { id: number; type: 'init'; isOnebit?: boolean }
+interface InitRequest { id: number; type: 'init'; isLowbitQ?: boolean }
 interface LoadRequest { id: number; type: 'load'; file: File }
 interface GenerateRequest {
   id: number;
@@ -139,14 +139,14 @@ const workerLogger = {
 
 async function handleInit(req: InitRequest) {
   try {
-    const useOnebit = req.isOnebit ?? false;
-    const paths = getWasmPaths(useOnebit);
+    const useLowbitQ = req.isLowbitQ ?? false;
+    const paths = getWasmPaths(useLowbitQ);
     postDiagnostic('worker-init', {
-      isOnebit: useOnebit,
+      isLowbitQ: useLowbitQ,
       wasmPaths: paths,
       multiThreadCapable: canUseMultiThread(),
     });
-    console.info('[wllamaWorker] init, isOnebit:', useOnebit, 'WASM paths:', paths);
+    console.info('[wllamaWorker] init, isLowbitQ:', useLowbitQ, 'WASM paths:', paths);
     wllama = new Wllama(paths, {
       suppressNativeLog: false,
       logger: workerLogger,

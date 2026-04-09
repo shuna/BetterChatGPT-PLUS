@@ -12,14 +12,14 @@ import Toast from '@components/Toast';
 import LegacyCustomModelsBanner from '@components/LegacyCustomModelsBanner';
 import MigrationProgressBanner from '@components/MigrationProgressBanner';
 import OnboardingModal from '@components/Onboarding/OnboardingModal';
-import OnebitValidationPage from '@components/OnebitValidation/OnebitValidationPage';
+import LowbitQValidationPage from '@components/LowbitQValidation/LowbitQValidationPage';
 
-function isOnebitValidationRoute(): boolean {
+function isLowbitQValidationRoute(): boolean {
   const params = new URLSearchParams(window.location.search);
   return (
-    window.location.pathname === '/onebit-validation' ||
-    window.location.hash === '#onebit-validation' ||
-    params.get('onebit-validation') === '1'
+    window.location.pathname === '/lowbit-q-validation' ||
+    window.location.hash === '#lowbit-q-validation' ||
+    params.get('lowbit-q-validation') === '1'
   );
 }
 
@@ -36,8 +36,8 @@ function App() {
   // Remove boot status indicator once app is ready
   document.getElementById('boot-status')?.remove();
 
-  if (isOnebitValidationRoute()) {
-    return <OnebitValidationPage />;
+  if (isLowbitQValidationRoute()) {
+    return <LowbitQValidationPage />;
   }
 
   return (
