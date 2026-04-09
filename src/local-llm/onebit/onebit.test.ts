@@ -22,6 +22,7 @@ import { writeOnebitGGUF, type OnebitTensorGroup } from './ggufWriter';
 import { GGMLType, GGUFValueType, ONEBIT_VERSION_KEY, ONEBIT_LAYERS_KEY, ONEBIT_PACKING_KEY, ONEBIT_SUFFIX_A, ONEBIT_SUFFIX_B, ONEBIT_SUFFIX_SIGN } from './types';
 import type { GGUFTensorInfo } from './types';
 import { buildToyModelGGUF, buildSyntheticGGUF, encodeQ8_0, encodeF32 } from './testHelpers';
+import { createTensorFilter } from './tensorFilter';
 
 // ---------------------------------------------------------------------------
 // 1. FP16 ↔ FP32 conversion
@@ -634,5 +635,121 @@ describe('edge cases', () => {
     const b = new Float32Array([0.5, 0.5, 0.5]);
     const nmse = computeNMSE(a, b);
     expect(nmse).toBe(Infinity);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 12. Tensor filter integration
+// ---------------------------------------------------------------------------
+
+describe('convertToOnebit with tensorFilter', () => {
+  it('respects attention-only filter: only attn tensors converted', () => {
+    // Build a model with both attention and FFN weight tensors
+    const tensors: import('./testHelpers').SyntheticTensor[] = [
+      {
+        name: 'token_embd.weight',
+        type: GGMLType.F32,
+        dims: [16, 4],
+        values: new Float32Array(64).fill(0.1),
+      },
+      {
+        name: 'model.layers.0.self_attn.q_proj.weight',
+        type: GGMLType.F32,
+        dims: [16, 8],
+        values: Float32Array.from({ length: 128 }, (_, i) => ((i % 17) - 8) * 0.1),
+      },
+      {
+        name: 'model.layers.0.ffn_up.weight',
+        type: GGMLType.F32,
+        dims: [16, 8],
+        values: Float32Array.from({ length: 128 }, (_, i) => ((i % 13) - 6) * 0.05),
+      },
+      {
+        name: 'model.layers.0.input_layernorm.weight',
+        type: GGMLType.F32,
+        dims: [16],
+        values: new Float32Array(16).fill(1.0),
+      },
+    ];
+
+    const simpleMetadata = new Map<string, { type: GGUFValueType; value: string | number }>([
+      ['general.architecture', { type: GGUFValueType.STRING, value: 'llama' }],
+      ['general.name', { type: GGUFValueType.STRING, value: 'test-filter' }],
+    ]);
+    const buffer = buildSyntheticGGUF({ metadata: simpleMetadata, tensors });
+
+    // Use attention-only filter from tensorFilter module
+    const attnFilter = createTensorFilter('attention-only');
+
+    const result = convertToOnebit(buffer, {
+      tensorFilter: attnFilter,
+      computeQuality: true,
+    });
+
+    // Only q_proj should be converted (attention); ffn_up should pass through
+    expect(result.convertedTensorCount).toBe(1);
+    // embd + layernorm + ffn_up = 3 passthrough
+    expect(result.passthroughTensorCount).toBe(3);
+
+    // Verify the output GGUF still contains ffn_up.weight as-is
+    const outHeader = parseGGUFHeader(result.data.buffer);
+    const tensorNames = outHeader.tensors.map(t => t.name);
+    expect(tensorNames).toContain('model.layers.0.ffn_up.weight');
+    expect(tensorNames).not.toContain('model.layers.0.self_attn.q_proj.weight');
+    expect(tensorNames).toContain('model.layers.0.self_attn.q_proj.onebit_a');
+  });
+
+  it('populates tensorRecords with correct fields', () => {
+    const tensors: import('./testHelpers').SyntheticTensor[] = [
+      {
+        name: 'token_embd.weight',
+        type: GGMLType.F32,
+        dims: [16, 4],
+        values: new Float32Array(64).fill(0.1),
+      },
+      {
+        name: 'model.layers.0.self_attn.q_proj.weight',
+        type: GGMLType.F32,
+        dims: [16, 8],
+        values: Float32Array.from({ length: 128 }, (_, i) => ((i % 17) - 8) * 0.1),
+      },
+      {
+        name: 'model.layers.0.input_layernorm.weight',
+        type: GGMLType.F32,
+        dims: [16],
+        values: new Float32Array(16).fill(1.0),
+      },
+    ];
+
+    const simpleMetadata = new Map<string, { type: GGUFValueType; value: string | number }>([
+      ['general.architecture', { type: GGUFValueType.STRING, value: 'llama' }],
+      ['general.name', { type: GGUFValueType.STRING, value: 'test-records' }],
+    ]);
+    const buffer = buildSyntheticGGUF({ metadata: simpleMetadata, tensors });
+
+    const result = convertToOnebit(buffer, { computeQuality: true });
+
+    expect(result.tensorRecords.length).toBeGreaterThan(0);
+
+    // Find the converted tensor record
+    const qProjRecord = result.tensorRecords.find(
+      r => r.name === 'model.layers.0.self_attn.q_proj.weight',
+    );
+    expect(qProjRecord).toBeDefined();
+    expect(qProjRecord!.converted).toBe(true);
+    expect(qProjRecord!.family).toBe('attn-q');
+    expect(qProjRecord!.layerIndex).toBe(0);
+    expect(qProjRecord!.nmse).toBeGreaterThan(0);
+    expect(qProjRecord!.originalSizeBytes).toBeGreaterThan(0);
+    expect(qProjRecord!.onebitSizeBytes).toBeGreaterThan(0);
+    expect(qProjRecord!.dims).toEqual([16, 8]);
+
+    // Non-weight tensors should not appear in tensorRecords (only weight tensors are recorded)
+    // Or if they do, they should be marked as not converted
+    const embdRecord = result.tensorRecords.find(r => r.name === 'token_embd.weight');
+    if (embdRecord) {
+      expect(embdRecord.converted).toBe(false);
+      expect(embdRecord.nmse).toBeNull();
+    }
   });
 });

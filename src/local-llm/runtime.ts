@@ -37,6 +37,20 @@ export interface TransformersWorkerProxy {
   classify(text: string, reason?: LocalModelBusyReason): Promise<ClassificationLabel[]>;
 }
 
+export interface RuntimeLogEvent {
+  modelId: string;
+  level: string;
+  text: string;
+  timestamp: number;
+}
+
+export interface RuntimeDiagnosticEvent {
+  modelId: string;
+  phase: string;
+  timestamp: number;
+  payload: Record<string, unknown>;
+}
+
 // ---------------------------------------------------------------------------
 // Internal engine entry
 // ---------------------------------------------------------------------------
@@ -68,6 +82,8 @@ interface EngineEntry {
 export class LocalModelRuntime {
   private engines = new Map<string, EngineEntry>();
   private listeners = new Set<() => void>();
+  private logListeners = new Set<(event: RuntimeLogEvent) => void>();
+  private diagnosticListeners = new Set<(event: RuntimeDiagnosticEvent) => void>();
 
   // -------------------------------------------------------------------------
   // Status queries
@@ -133,6 +149,15 @@ export class LocalModelRuntime {
     try {
       // Init worker — pass isOnebit flag so the worker can select the right WASM
       const isOnebit = def.engine === 'wllama' && isOnebitModelId(def.id);
+      this.emitDiagnostic({
+        modelId: def.id,
+        phase: 'runtime-init-request',
+        timestamp: Date.now(),
+        payload: {
+          engine: def.engine,
+          isOnebit,
+        },
+      });
       console.info('[LocalModelRuntime] init worker for', def.id, 'engine:', def.engine, 'isOnebit:', isOnebit);
       await this.sendRequest(def.id, { type: 'init', isOnebit });
       console.info('[LocalModelRuntime] init done for', def.id);
@@ -311,6 +336,16 @@ export class LocalModelRuntime {
     return () => this.listeners.delete(listener);
   }
 
+  subscribeLogs(listener: (event: RuntimeLogEvent) => void): () => void {
+    this.logListeners.add(listener);
+    return () => this.logListeners.delete(listener);
+  }
+
+  subscribeDiagnostics(listener: (event: RuntimeDiagnosticEvent) => void): () => void {
+    this.diagnosticListeners.add(listener);
+    return () => this.diagnosticListeners.delete(listener);
+  }
+
   /** Snapshot of all model statuses for useSyncExternalStore */
   getSnapshot(): ReadonlyMap<string, LocalModelStatus> {
     const snapshot = new Map<string, LocalModelStatus>();
@@ -352,6 +387,18 @@ export class LocalModelRuntime {
     }
   }
 
+  private emitLog(event: RuntimeLogEvent): void {
+    for (const listener of this.logListeners) {
+      listener(event);
+    }
+  }
+
+  private emitDiagnostic(event: RuntimeDiagnosticEvent): void {
+    for (const listener of this.diagnosticListeners) {
+      listener(event);
+    }
+  }
+
   private sendRequest(modelId: string, payload: Record<string, unknown>): Promise<unknown> {
     const entry = this.engines.get(modelId);
     if (!entry) return Promise.reject(new Error(`No engine for model ${modelId}`));
@@ -376,6 +423,22 @@ export class LocalModelRuntime {
       const text = data.text as string;
       if (level === 'error') console.error(text);
       else console.info(text);
+      this.emitLog({
+        modelId,
+        level,
+        text,
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    if (type === '__diagnostic') {
+      this.emitDiagnostic({
+        modelId,
+        phase: String(data.phase ?? 'unknown'),
+        timestamp: Date.now(),
+        payload: (data.payload as Record<string, unknown> | undefined) ?? {},
+      });
       return;
     }
 

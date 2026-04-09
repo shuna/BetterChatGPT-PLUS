@@ -41,12 +41,27 @@ export interface OnebitConversionResult {
   convertedSize: number;
   /** Compression ratio (convertedSize / originalSize) */
   compressionRatio: number;
+  /** Per-tensor conversion records (if computeQuality was requested) */
+  tensorRecords?: Array<{
+    name: string;
+    layerIndex: number | null;
+    family: string;
+    converted: boolean;
+    nmse: number | null;
+    originalSizeBytes: number;
+    onebitSizeBytes: number | null;
+    dims: number[];
+  }>;
 }
 
 export interface OnebitConversionCallbacks {
   onProgress?: (progress: ConversionProgress) => void;
   onComplete?: (result: OnebitConversionResult) => void;
   onError?: (error: string) => void;
+  /** Onebit conversion mode (which tensors to convert). Default: 'all' */
+  convertMode?: string;
+  /** Whether to compute per-tensor quality metrics (NMSE). Default: false */
+  computeQuality?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -154,6 +169,8 @@ export class OnebitConversionManager {
         id: 1,
         type: 'start',
         sourceFile,
+        convertMode: callbacks.convertMode,
+        computeQuality: callbacks.computeQuality,
       });
     });
   }
@@ -232,6 +249,7 @@ export class OnebitConversionManager {
             originalSize: msg.originalSize,
             convertedSize: msg.convertedSize,
             compressionRatio: msg.convertedSize / msg.originalSize,
+            tensorRecords: msg.tensorRecords,
           };
 
           this.callbacks.onProgress?.({

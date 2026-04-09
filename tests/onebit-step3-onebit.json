@@ -1,0 +1,47 @@
+[
+  {
+    "label": "Greeting",
+    "status": "pass",
+    "chars": 1686
+  },
+  {
+    "label": "Structured",
+    "status": "pass",
+    "chars": 748
+  },
+  {
+    "label": "Tiny reasoning",
+    "status": "pass",
+    "chars": 1562
+  },
+  {
+    "label": "Short QA (JA)",
+    "status": "pass",
+    "chars": 1782
+  },
+  {
+    "label": "Short QA (EN)",
+    "status": "pass",
+    "chars": 1161
+  },
+  {
+    "label": "List generation",
+    "status": "pass",
+    "chars": 1612
+  },
+  {
+    "label": "Summary",
+    "status": "pass",
+    "chars": 506
+  },
+  {
+    "label": "Continuation",
+    "status": "pass",
+    "chars": 697
+  },
+  {
+    "label": "Collapse probe",
+    "status": "pass",
+    "chars": 934
+  }
+]

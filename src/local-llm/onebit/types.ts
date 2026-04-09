@@ -181,6 +181,10 @@ export interface ConversionStartRequest {
   type: 'start';
   /** Source GGUF file (Q8_0 or similar) */
   sourceFile: File;
+  /** Onebit conversion mode (which tensors to convert). Default: 'all' */
+  convertMode?: string;
+  /** Whether to compute per-tensor quality metrics (NMSE). Default: false */
+  computeQuality?: boolean;
 }
 
 export interface ConversionProgressMessage {
@@ -198,6 +202,17 @@ export interface ConversionDoneMessage {
   originalSize: number;
   /** Converted size in bytes */
   convertedSize: number;
+  /** Per-tensor conversion records (populated when computeQuality is true) */
+  tensorRecords?: Array<{
+    name: string;
+    layerIndex: number | null;
+    family: string;
+    converted: boolean;
+    nmse: number | null;
+    originalSizeBytes: number;
+    onebitSizeBytes: number | null;
+    dims: number[];
+  }>;
 }
 
 export interface ConversionErrorMessage {

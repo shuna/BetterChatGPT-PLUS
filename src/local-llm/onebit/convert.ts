@@ -19,17 +19,7 @@ import { dequantize } from './dequantize';
 import { decompose, reconstruct, computeNMSE } from './onebitDecompose';
 import { writeOnebitGGUF, type OnebitTensorGroup } from './ggufWriter';
 import type { GGUFTensorInfo, GGUFHeader, ConversionProgress } from './types';
-
-// ---------------------------------------------------------------------------
-// Layer index extraction
-// ---------------------------------------------------------------------------
-
-const LAYER_PATTERN = /layers\.(\d+)\./;
-
-function extractLayerIndex(tensorName: string): number | null {
-  const match = tensorName.match(LAYER_PATTERN);
-  return match ? parseInt(match[1], 10) : null;
-}
+import { extractLayerIndex, classifyTensorFamily, type TensorConvertRecord } from './tensorFilter';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -40,6 +30,12 @@ export interface ConvertOptions {
   onProgress?: (progress: ConversionProgress) => void;
   /** Whether to compute NMSE for quality verification (slower) */
   computeQuality?: boolean;
+  /**
+   * Custom tensor filter predicate. If provided, only tensors for which
+   * this returns true will be onebit-converted. Non-matching weight tensors
+   * are passed through unchanged. If not provided, defaults to `isWeightTensor`.
+   */
+  tensorFilter?: (name: string) => boolean;
 }
 
 export interface ConvertResult {
@@ -55,6 +51,8 @@ export interface ConvertResult {
   passthroughTensorCount: number;
   /** Per-tensor NMSE values (for quality assessment) */
   tensorNMSE: Map<string, number>;
+  /** Per-tensor conversion records (populated when computeQuality is true) */
+  tensorRecords: TensorConvertRecord[];
 }
 
 // ---------------------------------------------------------------------------
@@ -128,7 +126,8 @@ export async function convertToOnebitStreaming(
   source: File | Blob,
   options: ConvertOptions = {},
 ): Promise<ConvertResult> {
-  const { onProgress, computeQuality = false } = options;
+  const { onProgress, computeQuality = false, tensorFilter } = options;
+  const shouldConvert = tensorFilter ?? isWeightTensor;
 
   // --- Phase 1: Parse header ---
   onProgress?.({
@@ -147,6 +146,7 @@ export async function convertToOnebitStreaming(
   const passthroughTensors = new Map<string, { info: GGUFTensorInfo; data: Uint8Array }>();
   const onebitLayerIndices = new Set<number>();
   const tensorNMSE = new Map<string, number>();
+  const tensorRecords: TensorConvertRecord[] = [];
 
   for (let t = 0; t < totalTensors; t++) {
     const tensor = header.tensors[t];
@@ -161,8 +161,9 @@ export async function convertToOnebitStreaming(
 
     // Read this tensor's data from the file (not the full file)
     const rawData = await readTensorFromBlob(source, header, tensor);
+    const tensorDataSize = rawData.byteLength;
 
-    if (isWeightTensor(tensor.name)) {
+    if (shouldConvert(tensor.name)) {
       const totalElements = Number(tensor.dims.reduce((acc, d) => acc * d, 1n));
       const fp32Weights = dequantize(rawData, tensor.type, totalElements);
       // rawData can now be GC'd — we only hold fp32Weights
@@ -180,13 +181,44 @@ export async function convertToOnebitStreaming(
       const baseName = tensor.name.replace(/\.weight$/, '');
       onebitTensors.set(tensor.name, { baseName, decomposition });
 
+      let nmse: number | null = null;
       if (computeQuality && totalElements <= 4_000_000) {
         const reconstructed = reconstruct(decomposition);
-        tensorNMSE.set(tensor.name, computeNMSE(fp32Weights, reconstructed));
+        nmse = computeNMSE(fp32Weights, reconstructed);
+        tensorNMSE.set(tensor.name, nmse);
       }
+
+      // Compute onebit triplet size: a(fp16) + b(fp16) + sign(packed)
+      const onebitSizeBytes =
+        decomposition.outFeatures * 2 +
+        decomposition.inFeatures * 2 +
+        decomposition.sign.byteLength;
+
+      tensorRecords.push({
+        name: tensor.name,
+        layerIndex: layerIdx,
+        family: classifyTensorFamily(tensor.name),
+        converted: true,
+        nmse,
+        originalSizeBytes: tensorDataSize,
+        onebitSizeBytes,
+        dims: tensor.dims.map(Number),
+      });
+
       // fp32Weights can now be GC'd
     } else {
       passthroughTensors.set(tensor.name, { info: tensor, data: rawData });
+
+      tensorRecords.push({
+        name: tensor.name,
+        layerIndex: extractLayerIndex(tensor.name),
+        family: classifyTensorFamily(tensor.name),
+        converted: false,
+        nmse: null,
+        originalSizeBytes: tensorDataSize,
+        onebitSizeBytes: null,
+        dims: tensor.dims.map(Number),
+      });
     }
   }
 
@@ -223,6 +255,7 @@ export async function convertToOnebitStreaming(
     convertedTensorCount: onebitTensors.size,
     passthroughTensorCount: passthroughTensors.size,
     tensorNMSE,
+    tensorRecords,
   };
 }
 
@@ -241,7 +274,8 @@ export function convertToOnebit(
   sourceBuffer: ArrayBuffer,
   options: ConvertOptions = {},
 ): ConvertResult {
-  const { onProgress, computeQuality = false } = options;
+  const { onProgress, computeQuality = false, tensorFilter } = options;
+  const shouldConvert = tensorFilter ?? isWeightTensor;
 
   onProgress?.({
     stage: 'parsing',
@@ -258,6 +292,7 @@ export function convertToOnebit(
   const passthroughTensors = new Map<string, { info: GGUFTensorInfo; data: Uint8Array }>();
   const onebitLayerIndices = new Set<number>();
   const tensorNMSE = new Map<string, number>();
+  const tensorRecords: TensorConvertRecord[] = [];
 
   for (let t = 0; t < totalTensors; t++) {
     const tensor = header.tensors[t];
@@ -270,8 +305,9 @@ export function convertToOnebit(
       percent: Math.round((t / totalTensors) * 90),
     });
 
-    if (isWeightTensor(tensor.name)) {
+    if (shouldConvert(tensor.name)) {
       const rawData = readTensorData(sourceBuffer, header, tensor);
+      const tensorDataSize = rawData.byteLength;
       const totalElements = Number(tensor.dims.reduce((acc, d) => acc * d, 1n));
       const fp32Weights = dequantize(rawData, tensor.type, totalElements);
 
@@ -288,13 +324,42 @@ export function convertToOnebit(
       const baseName = tensor.name.replace(/\.weight$/, '');
       onebitTensors.set(tensor.name, { baseName, decomposition });
 
+      let nmse: number | null = null;
       if (computeQuality && totalElements <= 4_000_000) {
         const reconstructed = reconstruct(decomposition);
-        tensorNMSE.set(tensor.name, computeNMSE(fp32Weights, reconstructed));
+        nmse = computeNMSE(fp32Weights, reconstructed);
+        tensorNMSE.set(tensor.name, nmse);
       }
+
+      const onebitSizeBytes =
+        decomposition.outFeatures * 2 +
+        decomposition.inFeatures * 2 +
+        decomposition.sign.byteLength;
+
+      tensorRecords.push({
+        name: tensor.name,
+        layerIndex: layerIdx,
+        family: classifyTensorFamily(tensor.name),
+        converted: true,
+        nmse,
+        originalSizeBytes: tensorDataSize,
+        onebitSizeBytes,
+        dims: tensor.dims.map(Number),
+      });
     } else {
       const rawData = readTensorData(sourceBuffer, header, tensor);
       passthroughTensors.set(tensor.name, { info: tensor, data: rawData });
+
+      tensorRecords.push({
+        name: tensor.name,
+        layerIndex: extractLayerIndex(tensor.name),
+        family: classifyTensorFamily(tensor.name),
+        converted: false,
+        nmse: null,
+        originalSizeBytes: rawData.byteLength,
+        onebitSizeBytes: null,
+        dims: tensor.dims.map(Number),
+      });
     }
   }
 
@@ -330,5 +395,6 @@ export function convertToOnebit(
     convertedTensorCount: onebitTensors.size,
     passthroughTensorCount: passthroughTensors.size,
     tensorNMSE,
+    tensorRecords,
   };
 }

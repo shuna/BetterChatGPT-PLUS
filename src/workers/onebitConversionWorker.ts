@@ -6,13 +6,14 @@
  * keeping peak memory to roughly one tensor's worth of fp32 data.
  *
  * Message protocol:
- *   Main → Worker: { id, type: 'start', sourceFile: File }
+ *   Main → Worker: { id, type: 'start', sourceFile: File, convertMode?, computeQuality? }
  *   Worker → Main: { id, type: 'progress', progress: ConversionProgress }
- *   Worker → Main: { id, type: 'done', result: Blob, originalSize, convertedSize }
+ *   Worker → Main: { id, type: 'done', result: Blob, originalSize, convertedSize, tensorRecords? }
  *   Worker → Main: { id, type: 'error', message: string }
  */
 
 import { convertToOnebitStreaming } from '../local-llm/onebit/convert';
+import { createTensorFilter, type OnebitConvertMode } from '../local-llm/onebit/tensorFilter';
 import type {
   ConversionStartRequest,
   ConversionProgressMessage,
@@ -44,6 +45,11 @@ async function handleStart(req: ConversionStartRequest) {
       return;
     }
 
+    // Build tensor filter from convert mode
+    const convertMode = (req.convertMode ?? 'all') as OnebitConvertMode;
+    const tensorFilter = createTensorFilter(convertMode);
+    const computeQuality = req.computeQuality ?? false;
+
     // Run streaming conversion — does NOT load entire file into memory.
     // Each tensor is read via File.slice() on demand.
     const result = await convertToOnebitStreaming(file, {
@@ -55,7 +61,8 @@ async function handleStart(req: ConversionStartRequest) {
         };
         self.postMessage(msg);
       },
-      computeQuality: false,
+      computeQuality,
+      tensorFilter,
     });
 
     // Return result as Blob
@@ -66,6 +73,7 @@ async function handleStart(req: ConversionStartRequest) {
       result: blob,
       originalSize: result.originalSize,
       convertedSize: result.convertedSize,
+      tensorRecords: result.tensorRecords,
     };
     self.postMessage(msg);
   } catch (e) {

@@ -13,7 +13,7 @@
 // ---------------------------------------------------------------------------
 // Worker environment shim
 // ---------------------------------------------------------------------------
-// @wllama/wllama internally calls absoluteUrl() which uses `document.baseURI`.
+// The vendored wllama runtime internally calls absoluteUrl() which uses `document.baseURI`.
 // Workers have no `document`, so we provide a minimal shim.
 if (typeof document === 'undefined') {
   (globalThis as unknown as Record<string, unknown>).document = {
@@ -21,7 +21,7 @@ if (typeof document === 'undefined') {
   };
 }
 
-import { Wllama, type AssetsPathConfig } from '@wllama/wllama';
+import { Wllama, type AssetsPathConfig } from '../vendor/wllama';
 
 // ---------------------------------------------------------------------------
 // State
@@ -54,41 +54,25 @@ function canUseMultiThread(): boolean {
  *
  * - Only includes multi-thread WASM when the environment supports it,
  *   avoiding unnecessary downloads on single-thread-only browsers.
- * - When `useOnebit` is true, uses the custom-built WASM from vendor/wllama/
- *   which includes the onebit matmul kernel.
+ * - The project always uses the custom-built WASM from vendor/wllama/.
+ * - Rebuilding vendor/wllama/*.wasm is therefore required for any runtime changes.
  */
 function getWasmPaths(useOnebit = false) {
   const multiThread = canUseMultiThread();
 
-  if (useOnebit) {
-    const paths: AssetsPathConfig = {
-      'single-thread/wllama.wasm': new URL(
-        '../../vendor/wllama/single-thread.wasm',
-        import.meta.url,
-      ).href,
-    };
-    if (multiThread) {
-      paths['multi-thread/wllama.wasm'] = new URL(
-        '../../vendor/wllama/multi-thread.wasm',
-        import.meta.url,
-      ).href;
-    }
-    console.info('[wllamaWorker] Using onebit WASM paths:', paths);
-    return paths;
-  }
-
   const paths: AssetsPathConfig = {
     'single-thread/wllama.wasm': new URL(
-      '@wllama/wllama/esm/single-thread/wllama.wasm',
+      '../../vendor/wllama/single-thread.wasm',
       import.meta.url,
     ).href,
   };
   if (multiThread) {
     paths['multi-thread/wllama.wasm'] = new URL(
-      '@wllama/wllama/esm/multi-thread/wllama.wasm',
+      '../../vendor/wllama/multi-thread.wasm',
       import.meta.url,
     ).href;
   }
+  console.info('[wllamaWorker] Using vendored WASM paths:', paths, 'isOnebit:', useOnebit);
   return paths;
 }
 
@@ -123,6 +107,10 @@ function respondError(id: number, message: string) {
   self.postMessage({ id, type: 'error', message });
 }
 
+function postDiagnostic(phase: string, payload: Record<string, unknown>) {
+  self.postMessage({ id: 0, type: '__diagnostic', phase, payload });
+}
+
 /** Forward logs to main thread since worker console is not visible in preview tools */
 function forwardLog(level: string, ...args: unknown[]) {
   const text = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
@@ -153,6 +141,11 @@ async function handleInit(req: InitRequest) {
   try {
     const useOnebit = req.isOnebit ?? false;
     const paths = getWasmPaths(useOnebit);
+    postDiagnostic('worker-init', {
+      isOnebit: useOnebit,
+      wasmPaths: paths,
+      multiThreadCapable: canUseMultiThread(),
+    });
     console.info('[wllamaWorker] init, isOnebit:', useOnebit, 'WASM paths:', paths);
     wllama = new Wllama(paths, {
       suppressNativeLog: false,
@@ -180,6 +173,10 @@ async function handleLoad(req: LoadRequest) {
 
   try {
     console.info('[wllamaWorker] handleLoad start, file:', req.file.name, 'size:', req.file.size);
+    postDiagnostic('worker-load-start', {
+      fileName: req.file.name,
+      fileSize: req.file.size,
+    });
 
     // Validate GGUF magic header before passing to wllama
     if (req.file.size < 4) {
@@ -201,11 +198,16 @@ async function handleLoad(req: LoadRequest) {
     console.info('[wllamaWorker] GGUF magic valid, calling wllama.loadModel...');
     // wllama.loadModel accepts Blob[] — wrap the single File in an array
     await wllama.loadModel([req.file], {
-      n_ctx: 2048,
+      n_ctx: 512,
       n_threads: 1,  // Single-thread until COOP/COEP is configured (Phase 8)
     });
 
     const info = wllama.getLoadedContextInfo();
+    postDiagnostic('worker-load-success', {
+      contextLength: info.n_ctx,
+      nVocab: info.n_vocab,
+      nLayer: info.n_layer,
+    });
     respond(req.id, 'loaded', {
       contextLength: info.n_ctx,
       nVocab: info.n_vocab,
@@ -231,7 +233,7 @@ async function handleLoad(req: LoadRequest) {
       if (hasUnsupportedType) {
         respondError(req.id,
           `モデルの読み込みに失敗しました: このGGUFファイルに含まれるテンソルの量子化形式（ggml type ${typeMatch?.[1] ?? '不明'}）は、` +
-          `現在のwllamaランタイム（@wllama/wllama v2.3.7 同梱のllama.cpp）でサポートされていません。` +
+          '現在の独自ビルド wllama ランタイムでサポートされていません。' +
           nativeDetail + stackDetail);
       } else {
         respondError(req.id,

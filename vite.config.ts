@@ -91,7 +91,7 @@ export default defineConfig({
             return 'vendor-tiktoken';
           }
 
-          if (id.includes('node_modules/@wllama/')) {
+          if (id.includes('/src/vendor/wllama/')) {
             return 'vendor-wllama';
           }
 

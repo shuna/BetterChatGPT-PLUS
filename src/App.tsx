@@ -12,6 +12,16 @@ import Toast from '@components/Toast';
 import LegacyCustomModelsBanner from '@components/LegacyCustomModelsBanner';
 import MigrationProgressBanner from '@components/MigrationProgressBanner';
 import OnboardingModal from '@components/Onboarding/OnboardingModal';
+import OnebitValidationPage from '@components/OnebitValidation/OnebitValidationPage';
+
+function isOnebitValidationRoute(): boolean {
+  const params = new URLSearchParams(window.location.search);
+  return (
+    window.location.pathname === '/onebit-validation' ||
+    window.location.hash === '#onebit-validation' ||
+    params.get('onebit-validation') === '1'
+  );
+}
 
 function App() {
   const isBootstrapped = useAppBootstrap();
@@ -25,6 +35,10 @@ function App() {
 
   // Remove boot status indicator once app is ready
   document.getElementById('boot-status')?.remove();
+
+  if (isOnebitValidationRoute()) {
+    return <OnebitValidationPage />;
+  }
 
   return (
     <div className='overflow-hidden w-full h-full relative'>

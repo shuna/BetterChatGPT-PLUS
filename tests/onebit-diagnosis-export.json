@@ -1,0 +1,200 @@
+[
+  {
+    "id": "onebit-1775700355804",
+    "promptId": "repeat-collapse-probe",
+    "prompt": "Count from 1 to 20, separated by commas.",
+    "variant": "onebit",
+    "modelId": "onebit-validation-tinyllama-1.1b-q8--onebit",
+    "maxTokens": 200,
+    "temperature": 0.2,
+    "output": "argothanthanthanthannesargo mij mij mijargoargoirthargoirthargoirthirthirthirthargo mijirthirthargoirthirth mijirthargoirth mij mijirth Conc <-irthirthрак mij mijargo mij mij mij mij mij mijirthirthiddleACKiddleiddleiddleiddleiddleiddleракiddleiddleiddle mij mij mijiddleiddle mijiddleiddleракракiddleiddleiddleiddleagyariddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleракiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddleiddle",
+    "createdAt": "2026-04-09T02:05:55.804Z"
+  },
+  {
+    "id": "onebit-1775700155255",
+    "promptId": "continuation",
+    "prompt": "昔々あるところに、おじいさんとおばあさんがいました。ある日おじいさんは山へ",
+    "variant": "onebit",
+    "modelId": "onebit-validation-tinyllama-1.1b-q8--onebit",
+    "maxTokens": 200,
+    "temperature": 0.2,
+    "output": "orrorrorrorrorrorrorrorrorrorrorrorrorrorrorrorrorrorrorrorrorrorr◄orr райorrorrorrorrorrorr райorrorrorrorr рай райorr райorr райorrстоян райorrorr райстоянorrстоян рай рай mijorrorrorrorrorrorr рай рай рай райorr образ рай райorr рай райorr рай рай рай рай рай рай рай рай рай рай райстоян рай рай райorr рай рай рай рай рай рай рай рай рай рай рай рай рай рай рай рай райorr рай рай рай райib рай рай рай рай рай рай рай рай рай рай рай рай рай рай райib рай рай рай райib рай рай райib рай рай рай рай рай рай рай рай рай райib рай рай рай райibib рай райib рай рай рай рай рай рай рай рай рай рай рай райibibib райibib райib рай рай райibibibibibibib рай рай райib рай райibibibibib райib рай",
+    "createdAt": "2026-04-09T02:02:35.255Z"
+  },
+  {
+    "id": "onebit-1775699930358",
+    "promptId": "summary",
+    "prompt": "次の文を1文で要約してください: 人工知能は医療、金融、製造業など多くの分野で活用が進んでおり、特に画像認識と自然言語処理の精度が大幅に向上している。",
+    "variant": "onebit",
+    "modelId": "onebit-validation-tinyllama-1.1b-q8--onebit",
+    "maxTokens": 200,
+    "temperature": 0.2,
+    "output": "◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄ León◄◄◄◄◄◄◄◄◄◄◄◄ dates◄◄◄◄◄◄ León◄◄ León◄ León◄ dates dates◄nen◄◄ dates◄oires◄◄◄ dates dates◄nen Leónnen◄ León◄ León◄ dates dates datesoires León◄◄ dates dates León◄ Leónnen León dates dates dates dates dates dates dates datesnen dates León Leónoires León dates dates dates dates dates dates dates dates dates dates dates dates dates dates◄ León dates dates León dates◄ dates dates dates dates dates dates dates",
+    "createdAt": "2026-04-09T01:58:50.358Z"
+  },
+  {
+    "id": "onebit-1775699653841",
+    "promptId": "list-generation",
+    "prompt": "日本の四季の名前を箇条書きで4つ挙げてください。",
+    "variant": "onebit",
+    "modelId": "onebit-validation-tinyllama-1.1b-q8--onebit",
+    "maxTokens": 200,
+    "temperature": 0.2,
+    "output": " mij mij mij mij mij mij mij mij mij mijдного mij mij mij mij mij mij mij mij mij mij mij mij mij subjects mij mijommen mij subjects subjects subjectseperдного subjects mijдного mijдного subjects subjects subjectsiebiebieb subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects Cro subjects",
+    "createdAt": "2026-04-09T01:54:13.841Z"
+  },
+  {
+    "id": "onebit-1775699436464",
+    "promptId": "short-qa-en",
+    "prompt": "What is the capital of France? Answer in one word.",
+    "variant": "onebit",
+    "modelId": "onebit-validation-tinyllama-1.1b-q8--onebit",
+    "maxTokens": 200,
+    "temperature": 0.2,
+    "output": " instruments Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Kommordnet Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Kommordnetordnetordnetordnetordnetordnetordnet Kommordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnet",
+    "createdAt": "2026-04-09T01:50:36.464Z"
+  },
+  {
+    "id": "onebit-1775699236380",
+    "promptId": "short-qa-ja",
+    "prompt": "東京タワーの高さは何メートルですか？答えだけ書いてください。",
+    "variant": "onebit",
+    "modelId": "onebit-validation-tinyllama-1.1b-q8--onebit",
+    "maxTokens": 200,
+    "temperature": 0.2,
+    "output": "argoargoargoargoargoargoargo instruments instruments instruments Kommargo instruments subjects instruments subjectsargo sé instruments instruments instruments instruments instruments instruments instruments instruments subjects subjects subjects subjects subjects instruments instruments subjects subjects subjectsommen subjectsommen subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects",
+    "createdAt": "2026-04-09T01:47:16.380Z"
+  },
+  {
+    "id": "onebit-1775699016574",
+    "promptId": "tiny-reasoning",
+    "prompt": "Q: りんごが3個あり、2個もらいました。合計はいくつですか？ A:",
+    "variant": "onebit",
+    "modelId": "onebit-validation-tinyllama-1.1b-q8--onebit",
+    "maxTokens": 200,
+    "temperature": 0.2,
+    "output": " longest longest longest longer longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest seasons longest longest longest longest longest longest longest longest longest longest longest longest longest longer longest longest longest passenger longest longest longest longest longest longer longest passenger longest longest seasons seasonsorr longest longest longest longest subjectorrargoorrorr seasonsorrorr subject seasonsorrorr subjects subjectsorrsubjectorrorrorr passenger subjects subjects subjects subjects subjectsorrorr subjects subjects subjectsorr subjectsorrorrbrand subjectorroires subjectsorr subjects subjects subjects subjects subjectsorrorrcm subjects subjectsorr subjects subjects subjects subjectsorr subjects subjectsorr subjects subjects subjects subjects subjects subjects subjects subjectsorr subjects subjects subjects subjects subjects subjects subjects subjects subjectsince subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjectssubject subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjectssubject subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects",
+    "createdAt": "2026-04-09T01:43:36.574Z"
+  },
+  {
+    "id": "onebit-1775698794111",
+    "promptId": "extract-steps",
+    "prompt": "次の依頼を3つの短い手順に要約してください: 旅行前にパスポート、充電器、常備薬を確認する。",
+    "variant": "onebit",
+    "modelId": "onebit-validation-tinyllama-1.1b-q8--onebit",
+    "maxTokens": 200,
+    "temperature": 0.2,
+    "output": "◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄ León◄◄◄◄ León◄◄◄◄ León◄◄ León◄ León◄◄ León León◄◄ León León◄ León León León León◄ León León◄ León León León León León León León León León León León◄ León León León León León León León León León◄ León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León León",
+    "createdAt": "2026-04-09T01:39:54.111Z"
+  },
+  {
+    "id": "onebit-1775698541756",
+    "promptId": "hello-ja",
+    "prompt": "日本語で2文だけ自己紹介してください。簡潔で自然な文章にしてください。",
+    "variant": "onebit",
+    "modelId": "onebit-validation-tinyllama-1.1b-q8--onebit",
+    "maxTokens": 200,
+    "temperature": 0.2,
+    "output": " mij mij mij mij mij mij mij mij mij mij mij mij mij mij mij mij mijдного subjects mijдногоieb mij mij subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects",
+    "createdAt": "2026-04-09T01:35:41.756Z"
+  },
+  {
+    "id": "original-1775698312750",
+    "promptId": "repeat-collapse-probe",
+    "prompt": "Count from 1 to 20, separated by commas.",
+    "variant": "original",
+    "modelId": "onebit-validation-tinyllama-1.1b-q8",
+    "maxTokens": 200,
+    "temperature": 0.2,
+    "output": "\n2. Add a new line after each completed task.\n3. Use a color scheme that is easy to read and understand.\n4. Use bullet points or numbered lists to break up the text and make it easier to read.\n5. Use a font size that is large enough to be easily read, but not so large that it becomes difficult to read.\n6. Use a font that is easy to read, such as Arial or Times New Roman.\n7. Use a font that is legible, such as Times New Roman or Arial.\n8. Use a font that is easy to read, such as Arial or Times New Roman.\n9. Use a font that is easy to read, such as Arial or Times New Roman.\n10. Use a font that is easy to read, such as Arial or Times New Roman.\n11. Use a font that is easy to read, such as Arial or Times",
+    "createdAt": "2026-04-09T01:31:52.750Z"
+  },
+  {
+    "id": "original-1775698276601",
+    "promptId": "continuation",
+    "prompt": "昔々あるところに、おじいさんとおばあさんがいました。ある日おじいさんは山へ",
+    "variant": "original",
+    "modelId": "onebit-validation-tinyllama-1.1b-q8",
+    "maxTokens": 200,
+    "temperature": 0.2,
+    "output": "行ってきました。\n\nおばあさんは、山に行ってきたところ、おじいさんがいたところに、おばあさんがいました。\n\nおばあさんは、山に行ってきたところ、おじいさんがいたところに、おばあさんがいました。\n\nおばあさんは、山に行ってきたところ、おじいさんがいたところに、おばあさんがいました。\n\nおばあさんは、山に行ってきたところ、おじいさんがいたところに、おばあさんがいました。\n\nおばあさんは、山に行ってきた",
+    "createdAt": "2026-04-09T01:31:16.601Z"
+  },
+  {
+    "id": "original-1775698236136",
+    "promptId": "summary",
+    "prompt": "次の文を1文で要約してください: 人工知能は医療、金融、製造業など多くの分野で活用が進んでおり、特に画像認識と自然言語処理の精度が大幅に向上している。",
+    "variant": "original",
+    "modelId": "onebit-validation-tinyllama-1.1b-q8",
+    "maxTokens": 200,
+    "temperature": 0.2,
+    "output": " \n\n- 読み上げ: \n\n- 次の文を読み上げてください: 人工知能は医療、金融、製造業など多くの分野で活用が進んでおり、特に画像認識と自然言語処理の精度が大幅に向上している。 \n\n- 次の文を読み上げてください: \n\n- 次の文を読み上げてください: \n\n- 次の文を読み上げてください: \n\n- 次の文を読み上げてください: \n\n- 次",
+    "createdAt": "2026-04-09T01:30:36.136Z"
+  },
+  {
+    "id": "original-1775698186677",
+    "promptId": "list-generation",
+    "prompt": "日本の四季の名前を箇条書きで4つ挙げてください。",
+    "variant": "original",
+    "modelId": "onebit-validation-tinyllama-1.1b-q8",
+    "maxTokens": 200,
+    "temperature": 0.2,
+    "output": "\n- 日本の四季の名前は、春、夏、秋、冬です。\n\n2. 日本の春の名前を箇条書きで4つ挙げてください。\n- 日本の春の名前は、春日。\n\n3. 日本の夏の名前を箇条書きで4つ挙げてください。\n- 日本の夏の名前は、秋日。\n\n4. 日本の秋の名前を箇条書きで4つ挙げてください。\n- 日本の秋の名前は、冬日。\n\n5. 日本の冬の名前を箇条書きで4つ挙げてく",
+    "createdAt": "2026-04-09T01:29:46.677Z"
+  },
+  {
+    "id": "original-1775698146903",
+    "promptId": "short-qa-en",
+    "prompt": "What is the capital of France? Answer in one word.",
+    "variant": "original",
+    "modelId": "onebit-validation-tinyllama-1.1b-q8",
+    "maxTokens": 200,
+    "temperature": 0.2,
+    "output": "",
+    "createdAt": "2026-04-09T01:29:06.903Z"
+  },
+  {
+    "id": "original-1775698143440",
+    "promptId": "short-qa-ja",
+    "prompt": "東京タワーの高さは何メートルですか？答えだけ書いてください。",
+    "variant": "original",
+    "modelId": "onebit-validation-tinyllama-1.1b-q8",
+    "maxTokens": 200,
+    "temperature": 0.2,
+    "output": "",
+    "createdAt": "2026-04-09T01:29:03.440Z"
+  },
+  {
+    "id": "original-1775698136696",
+    "promptId": "tiny-reasoning",
+    "prompt": "Q: りんごが3個あり、2個もらいました。合計はいくつですか？ A:",
+    "variant": "original",
+    "modelId": "onebit-validation-tinyllama-1.1b-q8",
+    "maxTokens": 200,
+    "temperature": 0.2,
+    "output": " 3 人がいました。合計は 6 人です。",
+    "createdAt": "2026-04-09T01:28:56.696Z"
+  },
+  {
+    "id": "original-1775698127679",
+    "promptId": "extract-steps",
+    "prompt": "次の依頼を3つの短い手順に要約してください: 旅行前にパスポート、充電器、常備薬を確認する。",
+    "variant": "original",
+    "modelId": "onebit-validation-tinyllama-1.1b-q8",
+    "maxTokens": 200,
+    "temperature": 0.2,
+    "output": " 1. 旅行前にパスポートを確認する: 旅行前にパスポートを確認することは、旅行に必要な情報を確認することにより、お客様の旅行に役立つ情報を提供することになります。 2. 充電器を確認する: 充電器を確認することは、旅行に必要な電力を確認することにより、お客様の旅行に役立つ情報を提供することにな",
+    "createdAt": "2026-04-09T01:28:47.679Z"
+  },
+  {
+    "id": "original-1775698083043",
+    "promptId": "hello-ja",
+    "prompt": "日本語で2文だけ自己紹介してください。簡潔で自然な文章にしてください。",
+    "variant": "original",
+    "modelId": "onebit-validation-tinyllama-1.1b-q8",
+    "maxTokens": 200,
+    "temperature": 0.2,
+    "output": "\n\n1. 名前\n- 名前は、私の姓と名字をまとめてください。\n- 私の姓は「[姓]」、私の名字は「[名字]」です。\n\n2. 年齢\n- 私の年齢は、私の年齢をまとめてください。\n- 私の年齢は「[年齢]」です。\n\n3. 性別\n- 私の性別は、私の性別をまとめてください。\n- 私の性別は「[性別]」です。\n\n4. 性别\n- 私",
+    "createdAt": "2026-04-09T01:28:03.043Z"
+  }
+]
