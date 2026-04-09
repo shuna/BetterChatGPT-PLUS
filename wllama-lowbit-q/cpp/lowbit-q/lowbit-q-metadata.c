@@ -248,12 +248,12 @@ int lowbit_q_is_svid_layer(
     if (qt == LOWBIT_Q_QUANT_SVID_1BIT) return 1;
     if (qt != LOWBIT_Q_QUANT_UNKNOWN)   return 0; /* Q4_0 / passthrough */
 
-    /* Fallback: metadata absent — check for .lowbit_q_sign tensor existence */
-    char sign_name[280];
-    snprintf(sign_name, sizeof(sign_name), "%s.lowbit_q_sign", prefix);
-    struct ggml_tensor * t = llama_get_model_tensor(
-        (struct llama_model *)model, sign_name);
-    return (t != NULL) ? 1 : 0;
+    /* Fallback: metadata absent — cannot check tensor existence without
+     * llama_get_model_tensor() (not available as public API in this fork).
+     * In the struct-field approach, SVID dispatch is handled via
+     * model.layers[il].lowbit_q_wq_a etc., so this fallback is not needed
+     * during normal operation. Return 0 (unknown). */
+    return 0;
 }
 
 void lowbit_q_log_model_info(

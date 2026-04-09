@@ -75,34 +75,53 @@ echo "[3/5] Patching CMakeLists.txt (patch 0001)..."
 
 cd "$FORK_DIR"
 if ! grep -q 'LOWBIT_Q_SRC' CMakeLists.txt; then
-  # Insert lowbit-Q sources before the include_directories block
-  sed -i.bak '/^include_directories.*cpp)/i\
-# lowbit-Q quantization kernel (independent from ggml core)\
-set(LOWBIT_Q_SRC\
-    cpp/lowbit-q/lowbit-q-mul-mat.c\
-    cpp/lowbit-q/lowbit-q-model-builder.c\
-    cpp/lowbit-q/lowbit-q-metadata.c)\
-' CMakeLists.txt
+  # Write the new CMakeLists.txt from scratch using the canonical template
+  cat > CMakeLists.txt << 'CMAKEOF'
+cmake_minimum_required(VERSION 3.14)
+project("wllama")
 
-  # Add lowbit-Q include directory
-  sed -i.bak '/include_directories.*llama\.cpp\/include/a\
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/cpp/lowbit-q)\
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/llama.cpp/ggml/include)' CMakeLists.txt
+# lowbit-Q C sources (compiled into the llama library so symbols are available
+# to models/llama.cpp and llama-model.cpp which reference lowbit_q_* functions)
+set(LOWBIT_Q_SRC
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lowbit-q/lowbit-q-mul-mat.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lowbit-q/lowbit-q-model-builder.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lowbit-q/lowbit-q-metadata.c)
 
-  # Add LOWBIT_Q_SRC to the executable
-  sed -i.bak 's/add_executable(wllama ${WLLAMA_SRC})/add_executable(wllama ${WLLAMA_SRC} ${LOWBIT_Q_SRC})/' CMakeLists.txt
+add_subdirectory(llama.cpp)
 
-  rm -f CMakeLists.txt.bak
-  echo "    CMakeLists.txt patched successfully"
+# Expose lowbit-Q headers to llama.cpp subdirectory (models/llama.cpp includes lowbit-q-mul-mat.h)
+target_include_directories(llama PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/cpp/lowbit-q)
+
+# Add lowbit-Q C sources to the llama library (not wllama executable)
+# This resolves lowbit_q_build_mul_mat / lowbit_q_log_model_info link errors
+target_sources(llama PRIVATE ${LOWBIT_Q_SRC})
+
+set(CMAKE_THREAD_LIBS_INIT "-lpthread")
+set(CMAKE_HAVE_THREADS_LIBRARY 1)
+set(CMAKE_USE_WIN32_THREADS_INIT 0)
+set(CMAKE_USE_PTHREADS_INIT 1)
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+
+set(WLLAMA_SRC cpp/wllama.cpp
+    cpp/actions.hpp
+    cpp/glue.hpp
+    cpp/helpers/wlog.cpp
+    cpp/helpers/wcommon.cpp
+    cpp/helpers/wsampling.cpp
+    llama.cpp/include/llama.h)
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/cpp)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/cpp/helpers)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/llama.cpp/include)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/cpp/lowbit-q)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/llama.cpp/ggml/include)
+
+add_executable(wllama ${WLLAMA_SRC})
+target_link_libraries(wllama PRIVATE ggml llama ${CMAKE_THREAD_LIBS_INIT})
+CMAKEOF
+  echo "    CMakeLists.txt patched successfully (full rewrite)"
 else
-  # Ensure lowbit-q-metadata.c is in LOWBIT_Q_SRC (added in Phase 1a)
-  if ! grep -q 'lowbit-q-metadata.c' CMakeLists.txt; then
-    sed -i.bak 's|cpp/lowbit-q/lowbit-q-model-builder.c)|cpp/lowbit-q/lowbit-q-model-builder.c\n    cpp/lowbit-q/lowbit-q-metadata.c)|' CMakeLists.txt
-    rm -f CMakeLists.txt.bak
-    echo "    CMakeLists.txt: added lowbit-q-metadata.c to LOWBIT_Q_SRC"
-  else
-    echo "    CMakeLists.txt already patched (skipping)"
-  fi
+  echo "    CMakeLists.txt already patched (skipping)"
 fi
 
 # Verify patch
@@ -121,11 +140,12 @@ fi
 echo "[4/5] Patching llama.cpp (patch 0002 — optional weights)..."
 
 LLAMA_MODEL_CPP="$FORK_DIR/llama.cpp/src/llama-model.cpp"
+LLAMA_MODEL_H="$FORK_DIR/llama.cpp/src/llama-model.h"
 if [ ! -f "$LLAMA_MODEL_CPP" ]; then
   echo "    WARNING: $LLAMA_MODEL_CPP not found — skipping patch 0002"
   echo "    (llama.cpp submodule may not be initialized)"
 else
-  python3 "$SCRIPT_DIR/patches/0002-llama-loader-optional-weights.py" "$LLAMA_MODEL_CPP"
+  python3 "$SCRIPT_DIR/patches/0002-llama-loader-optional-weights.py" "$LLAMA_MODEL_CPP" "$LLAMA_MODEL_H"
   echo "    Patch 0002 applied"
 fi
 

@@ -285,23 +285,54 @@ prefix.weight (GGML type = Q4_0) → Q4_0 再量子化 (ggml native kernel)
 prefix.weight (GGML type = F16 等) → PASSTHROUGH (元の型そのまま)
 ```
 
-*C++ ディスパッチ (model builder):*
+*C++ ディスパッチ (Phase 2 実装済み: struct-field アプローチ):*
 
-```c
-lowbit_q_layer_tensors ob = lowbit_q_lookup(ctx, prefix);
-if (ob.valid) {
-    // SVID 独自名が見つかった → 独自カーネル
-    cur = lowbit_q_build_mul_mat(ctx0, ob.a, ob.b, ob.sign, cur);
+ローダー (`llama-model.cpp`, patch 0002) が各レイヤーのロード時に SVID テンソルを
+`llama_layer` struct の専用フィールドに先読みする:
+
+```cpp
+// llama_layer struct に追加済み (llama-model.h, patch 0002)
+struct ggml_tensor * lowbit_q_wq_a    = nullptr;
+struct ggml_tensor * lowbit_q_wq_b    = nullptr;
+struct ggml_tensor * lowbit_q_wq_sign = nullptr;
+// ... (wk, wv, wo, ffn_gate, ffn_down, ffn_up の分も同様)
+
+// llama-model.cpp ローダー: SVID テンソルが GGUF に存在すれば field に格納
+layer.lowbit_q_wq_a = create_tensor(tn(LLM_TENSOR_ATTN_Q, "lowbit_q_a", i), ..., TENSOR_NOT_REQUIRED);
+```
+
+グラフビルダー (`models/llama.cpp`, patch 0003) は field の null チェックのみでディスパッチ:
+
+```cpp
+// models/llama.cpp (llm_build_llama)
+ggml_tensor * Qcur;
+if (model.layers[il].lowbit_q_wq_a) {
+    // SVID テンソルがロード済み → 独自カーネル
+    Qcur = lowbit_q_build_mul_mat(ctx0,
+        model.layers[il].lowbit_q_wq_a,
+        model.layers[il].lowbit_q_wq_b,
+        model.layers[il].lowbit_q_wq_sign, cur);
 } else {
-    // SVID がない → .weight を引き、GGML type に応じて native kernel
-    cur = ggml_mul_mat(ctx0, model.layers[il].wq, cur);
+    // SVID テンソルなし → native ggml パス
+    Qcur = build_lora_mm(model.layers[il].wq, cur);
 }
 ```
+
+**なぜ struct-field アプローチか:**
+
+当初設計では `lowbit_q_lookup(model, prefix)` が実行時に
+`llama_get_model_tensor()` を呼んで動的に SVID テンソルを検索する予定だったが、
+wllama v2.3.7 が pin している llama.cpp のバージョンには
+`llama_get_model_tensor()` が公開 API として存在しない。
+そのため OneCompression の旧実装が採用していた struct-field 方式を踏襲した。
+
+`lowbit_q_lookup()` は現在も API として存在するが、常に `{valid=0}` を返す
+スタブ実装になっており、実際のディスパッチ判断は行っていない。
 
 この設計により:
 - 重要レイヤー (第1/最終層、attention Q/K) を低ビット化せず保護する mixed format を自然に扱える
 - ggml の既存グラフビルダー・カーネルをそのまま活用できる
-- C++ 側は SVID 独自名の lookup のみが独自実装、残りは llama.cpp 標準パスに委ねる
+- ディスパッチ判断のコストがゼロ (ポインタの null チェックのみ)
 
 **カーネル (WASM + WebGPU):**
 
