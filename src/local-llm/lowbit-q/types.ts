@@ -69,6 +69,8 @@ export const GGML_BLOCK_SIZES: Partial<Record<GGMLType, number>> = {
   [GGMLType.Q8_0]: 32,
   [GGMLType.Q4_0]: 32,
   [GGMLType.Q4_1]: 32,
+  [GGMLType.Q2_K]: 256,  // K-quant super-block
+  [GGMLType.Q3_K]: 256,  // K-quant super-block
   [GGMLType.Q4_K]: 256,
   [GGMLType.Q5_K]: 256,
   [GGMLType.Q6_K]: 256,
@@ -82,6 +84,8 @@ export const GGML_TYPE_SIZES: Partial<Record<GGMLType, number>> = {
   [GGMLType.Q8_0]: 34,   // 2 (scale fp16) + 32 (int8 values)
   [GGMLType.Q4_0]: 18,   // 2 (scale fp16) + 16 (4-bit values)
   [GGMLType.Q4_1]: 20,   // 2 + 2 (scale, min fp16) + 16
+  [GGMLType.Q2_K]: 84,   // 2+2 (d,dmin fp16) + 16 (scales) + 64 (qs 2-bit packed)
+  [GGMLType.Q3_K]: 110,  // 32 (hmask) + 64 (qs low-2bit) + 12 (6-bit scales) + 2 (d fp16)
   [GGMLType.Q4_K]: 144,  // super-block: 256 elements
   [GGMLType.Q5_K]: 176,
   [GGMLType.Q6_K]: 210,
@@ -198,6 +202,10 @@ export enum LowbitQQuantType {
   Q8_0 = 'q8_0',
   /** OneBit (arXiv:2402.11295) SVID 1-bit decomposition into (a, sign, b) triplet */
   SVID_1BIT = 'svid_1bit',
+  /** K-quant 3-bit block quantization (ggml Q3_K native format, 256 elements/block, ~110 bytes) */
+  Q3_K = 'q3_k',
+  /** K-quant 2-bit block quantization (ggml Q2_K native format, 256 elements/block, ~84 bytes) */
+  Q2_K = 'q2_k',
 }
 
 /** KV cache quantization method for runtime use */

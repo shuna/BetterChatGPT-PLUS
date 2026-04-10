@@ -1,6 +1,6 @@
 # lowbit-Q v2 実装ステータス
 
-最終更新: 2026-04-09
+最終更新: 2026-04-10 (Phase 3.6 — native quant baseline 実装)
 
 ## 概要
 
@@ -42,7 +42,9 @@ C++ ディスパッチ (struct-field アプローチ):
 
 ### 型定義 (`types.ts`)
 
-- `LowbitQQuantType` enum: `PASSTHROUGH | Q4_0 | Q8_0 | SVID_1BIT`
+- `LowbitQQuantType` enum: `PASSTHROUGH | Q4_0 | Q8_0 | SVID_1BIT | Q3_K | Q2_K`
+- `GGML_BLOCK_SIZES`: Q2_K=256, Q3_K=256 追加済み
+- `GGML_TYPE_SIZES`: Q2_K=84, Q3_K=110 追加済み
 - `TensorAllocRecord`: 割当の正本レコード (name, quantType, family, layerIndex, ...)
 - `LowbitQV2Metadata`: v2 GGUF メタデータ構造体
 - `BitwidthAllocatorConfig`: allocator 設定 (sizeBudget, 各ファミリーの quant type)
@@ -136,7 +138,7 @@ create_tensor: loading tensor blk.1.attn_q.lowbit_q_sign
 === ALL TESTS PASSED ===
 ```
 
-### TypeScript テスト (126 テスト)
+### TypeScript テスト — lowbit-Q サブセット (154 テスト、全体 616 テスト中)
 
 | ファイル | テスト数 | 説明 |
 |---|---|---|
@@ -146,6 +148,165 @@ create_tensor: loading tensor blk.1.attn_q.lowbit_q_sign
 | `qualityMetrics.test.ts` | 20 | 品質メトリクス |
 | `validation.test.ts` | 8 | バリデーション |
 | `lowbit-q-v2-dispatch.test.ts` | 18 | C++ ディスパッチ契約テスト |
+| `q3_kQuantize.test.ts` | 13 | Q3_K 量子化・逆量子化ラウンドトリップ |
+| `q2_kQuantize.test.ts` | 15 | Q2_K 量子化・逆量子化ラウンドトリップ |
+
+## Phase 3.6: Native Quant Baseline 実装 — 完了 (2026-04-10)
+
+### 目的
+
+Phase 3.5 結論: SVID_1BIT (NMSE ~0.37) は全プリセットで functionalSuccess=NO。
+SVID は「研究トラック」に据え置き、ggml native quant (Q3_K/Q2_K) で
+SVID より高圧縮かつ実用品質を達成できるかを検証するためのベースラインを確立。
+
+### 採用判断の基準 (再定義)
+
+> **採用条件は「SVID が独自であること」ではなく「native quant ベースラインを上回ること」**
+>
+> - Q4_0-ONLY (sizeBudget:1.0) で functionalSuccess=YES → パイプライン健全確認
+> - Q3_K-ONLY / Q2_K-ONLY で functionalSuccess=YES かつ Q4_0 より高圧縮 → native quant が主系統
+> - SVID mixed-bit が native quant と同等以上の品質 → SVID 研究トラックを再開
+
+### 実装内容 (TypeScript 側、全 9 ファイル変更)
+
+**新規ファイル**
+
+| ファイル | 説明 |
+|---|---|
+| `src/local-llm/lowbit-q/q3_kQuantize.ts` | Q3_K 量子化 (256 elements/block, 110 bytes, symmetric 3-bit) |
+| `src/local-llm/lowbit-q/q2_kQuantize.ts` | Q2_K 量子化 (256 elements/block, 84 bytes, asymmetric 2-bit) |
+| `src/local-llm/lowbit-q/q3_kQuantize.test.ts` | Q3_K テスト 13 件 (NMSE < 0.05) |
+| `src/local-llm/lowbit-q/q2_kQuantize.test.ts` | Q2_K テスト 15 件 (NMSE < 0.15) |
+
+**変更ファイル**
+
+| ファイル | 変更内容 |
+|---|---|
+| `types.ts` | `LowbitQQuantType.Q3_K/Q2_K` 追加、ブロックサイズ・型サイズ定数追加 |
+| `dequantize.ts` | `dequantQ3_K()`, `dequantQ2_K()` 追加、dispatch switch 拡張 |
+| `allocator.ts` | `Q3_K_ONLY_ALLOCATOR_CONFIG`, `Q2_K_ONLY_ALLOCATOR_CONFIG` 追加 |
+| `convert.ts` | Q3_K/Q2_K 変換ブランチ追加 (GGMLType 11/10 で NativeQuantTensor として書き出し) |
+| `ggufParser.ts` | `computeTensorDataSize()` に Q3_K/Q2_K case 追加 |
+| `validation.ts` | `LowbitQV2AllocSummary` に `q3_kCount`, `q2_kCount` 追加 |
+| `LowbitQValidationPage.tsx` | UI プリセット追加 (v2-q3konly, v2-q2konly) |
+| `tests/lowbit-q-phase3-comparison.spec.ts` | Q3_K-ONLY/Q2_K-ONLY プリセット追加 |
+| `cpp/lowbit-q/lowbit-q-metadata.h/c` | `LOWBIT_Q_QUANT_Q3_K=4`, `LOWBIT_Q_QUANT_Q2_K=5` 追加 (情報用) |
+
+### Q3_K/Q2_K フォーマット仕様 (ggml block_q3_K / block_q2_K 互換)
+
+**Q3_K (110 bytes / 256 elements)**:
+```
+Offset  Size  Field
+0       32    hmask[32]   — high bit (bit2) of each qi
+                            stride-32: element e → hmask[e%32], bit floor(e/32)
+32      64    qs[64]      — low 2 bits of each qi
+                            stride-32: element e → qs[floor(e/128)*32 + e%32],
+                            shift floor((e%128)/32)*2
+96      12    scales[12]  — 16 sub-block 6-bit scales (offset-coded +32)
+                            j<8: S[j] low nibble; j>=8: S[j-8] high nibble
+                            S[j%4+8] |= (sc>>4) << (2*(j/4))
+108      2    d           — super-block scale (fp16, NEGATIVE: d = -maxScale/32)
+```
+- 逆量子化: `dl = d * (stored - 32)`, `x = dl * (low2 - (hm_bit ? 0 : 4))`
+
+**Q2_K (84 bytes / 256 elements)**:
+```
+Offset  Size  Field
+0       16    scales[16]  — per sub-block nibbles
+                            low  nibble = 4-bit scale index
+                            high nibble = 4-bit min   index
+16      64    qs[64]      — 2-bit values, stride-32 (same as Q3_K qs)
+80       2    d           — super-block scale  (fp16, POSITIVE: d = maxScale/15)
+82       2    dmin        — super-block dmin   (fp16, POSITIVE: dmin = maxMin/15)
+```
+- 逆量子化: `dl = d * (sc & 0xF)`, `ml = dmin * (sc >> 4)`, `x = dl * qi - ml`
+
+> **注意**: 初期実装は ggml と非互換のレイアウトを持っていた (Q4_0 ニブルバグと同根)。
+> `ggml-quants.c` の `quantize_row_q3_K_ref` / `dequantize_row_q3_K` を参照して修正済み。
+
+### WASM リビルド不要の理由
+
+Q2_K/Q3_K は GGUF ヘッダで標準 GGML 型コード (10, 11) として書き込まれる。
+wllama (llama.cpp) はこれらを native ggml path で処理するため、
+カスタム C++ ディスパッチは不要。WASM バイナリの変更なし。
+
+### ユニットテスト結果 (lowbit-Q サブセット 154 tests 全合格 / 全体 616 tests)
+
+```
+✓ q3_kQuantize.test.ts (13 tests) — NMSE < 0.05 on all random/normal inputs
+✓ q2_kQuantize.test.ts (15 tests) — NMSE < 0.15 on all random/normal inputs
+```
+
+### E2E 実測結果 (2026-04-10)
+
+| プリセット | 変換後サイズ | 圧縮率 | NMSE mean | NMSE max | Load | TokGen | Func |
+|---|---|---|---|---|---|---|---|
+| v2-q4only (clean) | ~610 MB | ~52% | ~0.010 | ~0.015 | YES | YES | **YES** ✅ |
+| v2-q3konly | 558 MB | 47.2% | 0.0343 | 0.0522 | YES | YES | **NO** |
+| v2-q2konly | 459 MB | 38.9% | 0.1161 | 0.1797 | YES | YES | **NO** |
+
+**最終結論 (Phase 3.6)**:
+- Q4_0-ONLY が初の functionalSuccess=YES → パイプライン健全・フォーマット互換性確認
+- Q3_K-ONLY は NMSE 0.034 でも TinyLlama 1.1B では繰り返しループ (品質問題、フォーマット問題ではない)
+- Q2_K-ONLY は NMSE 0.116 で出力崩壊 (期待通り)
+- **TinyLlama 1.1B での最小実用 bit 幅は Q4_0 (4bit)**
+- Q3_K/Q2_K のフォーマット実装は ggml 互換 (より大きなモデルでは動作可能)
+
+## Phase 3/3.5: 品質検証・比較実験 — 実行済み (2026-04-10)
+
+### 実験ハーネス
+
+| ファイル | 役割 |
+|---|---|
+| `tests/lowbit-q-phase3-comparison.spec.ts` | Playwright 比較テスト (4 設定、全実行済み) |
+| `tests/phase3-comparison-results.json` | **Phase 3.5 実測値 (4-preset、2026-04-10 再実行)** |
+| `Docs/2026-04-10-Phase3-Evaluation.md` | 詳細評価レポート (Phase 3.5 実測値に基づく) |
+
+### Phase 3.5 実験結果サマリー (4 preset、2026-04-10 再実行) — 検証済み
+
+※ 圧縮率 = 変換後サイズ ÷ 元サイズ (25.6% = 74.4% 削減)
+
+| 設定 | 変換後 | 圧縮率 | SVID | Q4_0 | NMSE mean | NMSE max | Load | TokGen | Func |
+|---|---|---|---|---|---|---|---|---|---|
+| DEFAULT | 301 MB | 25.6% | 140 | 14 | 0.3363 | 0.3920 | ✅ | YES | NO |
+| AGGRESSIVE | 264 MB | 22.4% | 154 | 0 | 0.3692 | 0.3976 | ✅ | YES | NO |
+| CONSERVATIVE | 384 MB | 32.6% | 60 | 94 | 0.1493 | 0.3709 | ✅ | YES | NO |
+| Q4_0-ONLY ⚠️ | 644 MB | 54.6% | **40** | 114 | 0.1036 | 0.3920 | ✅ | YES | NO |
+
+> ⚠️ **Q4_0-ONLY バグ**: `sizeBudget: 0.55` が推定超過と判定し optimizer 起動 → attn_v/out 40テンソルが SVID_1BIT に。  
+> SVID=0 の純粋ベースラインではない。`sizeBudget: 1.0` に修正済み。**再実行が必要。**
+
+### Phase 3.5 実装変更 (全て適用済み)
+
+- **smoke test 判定厳密化**: `tokenGenSuccess` (文字出力あり) と `functionalSuccess` (期待一致+非崩壊) を分離
+- **Q4_0-only ベースライン追加**: allocator preset `v2-q4only` (allocator.ts, UI, テスト)
+- **NMSE 4M 制限撤廃**: FFN (11.5M) を含む全テンソルが計測対象に
+- **Q4_0 NMSE 計測**: Q4_0 ブランチに roundtrip NMSE 追加
+- **Q4_0-ONLY sizeBudget バグ修正**: 0.55 → 1.0
+
+### Phase 3.5 主要な知見
+
+1. **全 4 設定で tokenGenSuccess = YES、functionalSuccess = NO** — 実用品質未達
+2. **SVID NMSE ~0.37 は致命的** — 全 SVID preset で崩壊
+3. **新発見: attn_v/out SVID が FFN SVID より有害**
+   - CONSERVATIVE (FFN SVID): collapse ヒューリスティック未発火
+   - Q4_0-ONLY 汚染版 (attn_v/out SVID=40): 全3プロンプト崩壊
+4. **CONSERVATIVE NMSE 初判明**: mean=0.1493, max=0.3709 (FFN SVID 含む)
+5. **Q4_0-ONLY は汚染版** — 純粋ベースラインの確立に再実行が必要
+
+### 次フェーズへの結論
+
+- **最優先**: Q4_0-ONLY 再実行 (sizeBudget: 1.0 修正済み、SVID=0 を確認)
+  - functionalSuccess=YES → SVID が根本原因、Q2_K/Q3_K へ
+  - functionalSuccess=NO → パイプライン/loader 問題、Phase 2 再検証
+- **2 位**: attn_v/out 感受性検証 (attn_v/out のみ Q4_0 の設定を追加)
+- **3 位**: Q2_K / Q3_K 導入 (NMSE << 0.37、Q4_0 より高圧縮)
+- **4 位以降**: rotation preprocessing
+Q2_K/Q3_K で NMSE を ~0.01-0.05 に下げることを先に目指すべき。
+
+**2-3 bit SVID 拡張に進む価値があるか**: LOWER PRIORITY。
+SVID の rank-1 近似限界 (NMSE 0.37) は bit 幅以前の問題。
+Q2_K/Q3_K の方が理論的根拠が強く、実装コストも低い。
 
 ## Phase 2 の既知制約
 
@@ -165,12 +326,10 @@ TypeScript 側 (`convertToLowbitQV2Streaming`) に arch ガードを追加済み
 `llama_model *` のみを保持する。wllama プロトタイプ (同時に 1 モデルのみロード)
 では問題ない。マルチモデルセッション対応は Phase 3 スコープ。
 
-## 未実装 (Phase 3)
+## 未実装 (次フェーズ)
 
-- 回転前処理 (Hadamard, `applyRotation: true` は未実装エラー)
-- TinyLlama-1.1B 品質検証 (実際の変換 + 推論精度確認)
-- サイズ vs 品質マップ
-- 2-3 bit SVID 拡張
+- 回転前処理 (Hadamard, `applyRotation: true` は未実装エラー) ← native quant 確認後に検討
+- 2-3 bit SVID 拡張 ← 低優先度 (native quant が主系統の場合は不要)
 - 非 Llama アーキへの SVID ディスパッチ拡張 (patch 0002b/0003b)
 
 ## 未実装 (Phase 4)

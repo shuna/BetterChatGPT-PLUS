@@ -15,7 +15,7 @@
  */
 
 import { parseGGUFHeader, readTensorData, isWeightTensor, computeTensorDataSize } from './ggufParser';
-import { dequantize } from './dequantize';
+import { dequantize, dequantQ4_0, dequantQ3_K, dequantQ2_K } from './dequantize';
 import { decompose, reconstruct, computeNMSE } from './lowbitQDecompose';
 import {
   writeLowbitQGGUF,
@@ -36,6 +36,8 @@ import { LowbitQQuantType, KVCacheQuantMethod } from './types';
 import { extractLayerIndex, classifyTensorFamily, type TensorConvertRecord } from './tensorFilter';
 import { allocateBitwidths, DEFAULT_ALLOCATOR_CONFIG } from './allocator';
 import { quantizeQ4_0 } from './q4_0Quantize';
+import { quantizeQ3_K } from './q3_kQuantize';
+import { quantizeQ2_K } from './q2_kQuantize';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -198,7 +200,7 @@ export async function convertToLowbitQStreaming(
       lowbitQTensors.set(tensor.name, { baseName, decomposition });
 
       let nmse: number | null = null;
-      if (computeQuality && totalElements <= 4_000_000) {
+      if (computeQuality) {
         const reconstructed = reconstruct(decomposition);
         nmse = computeNMSE(fp32Weights, reconstructed);
         tensorNMSE.set(tensor.name, nmse);
@@ -341,7 +343,7 @@ export function convertToLowbitQ(
       lowbitQTensors.set(tensor.name, { baseName, decomposition });
 
       let nmse: number | null = null;
-      if (computeQuality && totalElements <= 4_000_000) {
+      if (computeQuality) {
         const reconstructed = reconstruct(decomposition);
         nmse = computeNMSE(fp32Weights, reconstructed);
         tensorNMSE.set(tensor.name, nmse);
@@ -537,7 +539,11 @@ export async function convertToLowbitQV2Streaming(
       convertedCount++;
 
       let nmse: number | null = null;
-      if (computeQuality && totalElements <= 4_000_000) {
+      if (computeQuality) {
+        // Threshold removed: reconstruct() already allocates the full Float32Array
+        // regardless; the NMSE loop is O(n) with no additional allocation.
+        // For TinyLlama's largest tensors (11.5M elements) this is ~46 MB and
+        // completes in well under 1 second in the worker.
         const reconstructed = reconstruct(decomposition);
         nmse = computeNMSE(fp32Weights, reconstructed);
         tensorNMSE.set(tensor.name, nmse);
@@ -579,14 +585,85 @@ export async function convertToLowbitQV2Streaming(
       });
       convertedCount++;
 
+      // Roundtrip NMSE: measure quantization error of Q4_0 (fp32 → Q4_0 → fp32)
+      let nmse: number | null = null;
+      if (computeQuality) {
+        const dequantized = dequantQ4_0(q4Data, totalElements);
+        nmse = computeNMSE(fp32Weights, dequantized);
+        tensorNMSE.set(tensor.name, nmse);
+        if (alloc) alloc.nmse = nmse;
+      }
+
       tensorRecords.push({
         name: tensor.name,
         layerIndex: extractLayerIndex(tensor.name),
         family: classifyTensorFamily(tensor.name),
         converted: true,
-        nmse: null,
+        nmse,
         originalSizeBytes: tensorDataSize,
         lowbitQSizeBytes: q4Data.byteLength,
+        dims: tensor.dims.map(Number),
+      });
+    } else if (quantType === LowbitQQuantType.Q3_K) {
+      const totalElements = Number(tensor.dims.reduce((acc, d) => acc * d, 1n));
+      const fp32Weights = dequantize(rawData, tensor.type, totalElements);
+      const q3kData = quantizeQ3_K(fp32Weights);
+
+      nativeQuantTensors.push({
+        name: tensor.name,
+        type: 11, // GGMLType.Q3_K = 11
+        dims: tensor.dims,
+        data: q3kData,
+      });
+      convertedCount++;
+
+      let nmse: number | null = null;
+      if (computeQuality) {
+        const dequantized = dequantQ3_K(q3kData, totalElements);
+        nmse = computeNMSE(fp32Weights, dequantized);
+        tensorNMSE.set(tensor.name, nmse);
+        if (alloc) alloc.nmse = nmse;
+      }
+
+      tensorRecords.push({
+        name: tensor.name,
+        layerIndex: extractLayerIndex(tensor.name),
+        family: classifyTensorFamily(tensor.name),
+        converted: true,
+        nmse,
+        originalSizeBytes: tensorDataSize,
+        lowbitQSizeBytes: q3kData.byteLength,
+        dims: tensor.dims.map(Number),
+      });
+    } else if (quantType === LowbitQQuantType.Q2_K) {
+      const totalElements = Number(tensor.dims.reduce((acc, d) => acc * d, 1n));
+      const fp32Weights = dequantize(rawData, tensor.type, totalElements);
+      const q2kData = quantizeQ2_K(fp32Weights);
+
+      nativeQuantTensors.push({
+        name: tensor.name,
+        type: 10, // GGMLType.Q2_K = 10
+        dims: tensor.dims,
+        data: q2kData,
+      });
+      convertedCount++;
+
+      let nmse: number | null = null;
+      if (computeQuality) {
+        const dequantized = dequantQ2_K(q2kData, totalElements);
+        nmse = computeNMSE(fp32Weights, dequantized);
+        tensorNMSE.set(tensor.name, nmse);
+        if (alloc) alloc.nmse = nmse;
+      }
+
+      tensorRecords.push({
+        name: tensor.name,
+        layerIndex: extractLayerIndex(tensor.name),
+        family: classifyTensorFamily(tensor.name),
+        converted: true,
+        nmse,
+        originalSizeBytes: tensorDataSize,
+        lowbitQSizeBytes: q2kData.byteLength,
         dims: tensor.dims.map(Number),
       });
     } else {

@@ -1,6 +1,6 @@
 # wllama-lowbit-q 実装方針
 
-最終更新: 2026-04-09
+最終更新: 2026-04-10
 
 ## この文書の位置づけ
 
@@ -132,6 +132,17 @@ SVID パラメータ精緻化 (ALS)。
 **精度低下が大きすぎて実用に耐えない**
 (`2026-04-09-SVID-Test-result.md` 参照: 全プロンプトで出力崩壊、NMSE 0.37 全テンソル均一)。
 
+さらに Phase 3/3.5 の TinyLlama 検証では、
+mixed-bit allocator を導入しても `functionalSuccess = NO` のままであり、
+現状の SVID_1BIT を主たる圧縮手段として採用する方針は成立していないことが確認された。
+
+このため、今後の lowbit-Q は
+**「独自圧縮を直接主系統に載せる」のではなく、
+まず ggml ネイティブ量子化 (`Q4_0`, `Q3_K`, `Q2_K` など) を基準線として確立し、
+その基準線に対して OneCompression / TurboQuant / KV cache + Model 統合最適化が
+どこで上回れるかを検証する」**
+方針に切り替える。
+
 また、`.wllama-fork/llama.cpp/ggml/src/ggml-webgpu/` に **WebGPU 推論バックエンド**が
 存在するがビルド未有効化であり、削減後モデルの GPU 推論が即座に利用可能な状態にある。
 
@@ -140,11 +151,22 @@ SVID パラメータ精緻化 (ALS)。
 
 ## 採用方針
 
-### 1. SVID 1-bit は基準線として維持する
+### 1. SVID 1-bit は研究トラックとして維持する
 
 - 現在の 1-bit 変換・ロード・推論経路は残す
 - 最大圧縮率 (77%) の基準線として継続的に価値がある
+- ただし現時点では**実用品質の主系統候補ではない**
 - 新規方式は常に「サイズ」「速度」「品質」を 1-bit 基準線と比較する
+
+### 1.5. ggml ネイティブ量子化を実用基準線として先に確立する
+
+- `Q4_0` は最終到達点ではなく、**切り分け用かつ品質基準線**として扱う
+- `Q3_K` / `Q2_K` は「サイズ削減と品質維持の現実的候補」として優先検証する
+- lowbit-Q 独自方式 (OneCompression 由来の独自表現、TurboQuant、KV cache + Model 連携最適化) は、
+  このネイティブ量子化基準線に対して
+  **サイズ・品質・総メモリのいずれかで優位が示せる場合にのみ主系統へ採用**する
+- したがって `Q4_0-only` / `Q3_K-only` / `Q2_K-only` は
+  「単なる量子化」ではなく、独自手法導入の妥当性を測るための必須ベンチマークである
 
 ### 2. OneCompression は拡張方針の参照元として使う
 
@@ -162,6 +184,11 @@ OneCompression の取り込み方は次の通りとする。
 目的は、OneCompression に寄せることではなく、
 **ブラウザ向け独自変換器と WASM カーネルを維持したまま、
 限られたリソース内でモデルを動かすためのサイズ削減と精度補償を進めること** である。
+
+ただし採用判断は、必ず ggml ネイティブ量子化基準線との比較で行う。
+「独自であること」は採用理由にならず、
+**ブラウザ制約下での総メモリ削減・品質維持・実装複雑性のバランス**
+で勝てることを条件とする。
 
 ### 3. WebGPU はサイズ削減されたモデルの実行省力化として導入する
 
@@ -348,17 +375,52 @@ wllama v2.3.7 が pin している llama.cpp のバージョンには
 - lowbit-Q 全ビット幅: 専用 WGSL シェーダを新規作成 (bitnet.js 参照)
 - KV cache: attention カーネル内で量子化/復元
 
-### Phase 3: 品質検証とチューニング
+### Phase 3: 品質検証と基準線確立
 
 統一パイプラインの動作確認と、サイズ vs 品質のトレードオフ調整。
 
 - TinyLlama-1.1B で各 allocator 設定を検証
+- `Q4_0-only` を純粋条件で再実行し、runtime / loader / conversion path の健全性を切り分ける
+- `Q3_K-only` / `Q2_K-only` を追加し、native quant のサイズ・品質基準線を作る
 - サイズ予算ごとの品質マップ作成 (30%/40%/50%/60% of original)
-- 回転前処理の有無による品質差の計測
-- KV cache 量子化のコンテキスト長 vs 品質の検証
 - allocator の経験則を検証結果に基づきチューニング
 
-### Phase 4: Activation quantization (条件付き)
+**Phase 3 の判断基準:**
+- `Q4_0-only` でも崩れるなら、独自手法以前に変換経路または loader/runtime を再点検する
+- `Q4_0-only` は成立し `SVID` 系のみ崩れるなら、問題は SVID 表現品質にあると判断する
+- `Q3_K` / `Q2_K` が実用品質を維持できるなら、短中期の主系統は native quant ベースとする
+- 独自方式 (OneCompression 派生, TurboQuant, KV cache + Model 最適化) は、
+  native quant 基準線を超える候補に絞って検討する
+
+### Phase 3.5: 独自技術の採用条件を明確化
+
+- OneCompression 由来 mixed-bit / TurboQuant / KV cache + Model を
+  **即採用前提ではなく評価対象**として扱う
+- 比較対象:
+  - `Q8_0` 原本
+  - `Q4_0-only`
+  - `Q3_K-only`
+  - `Q2_K-only`
+  - `lowbit-Q mixed-bit (SVID 含む)`
+- 採用条件:
+  - 同等品質でより小さい
+  - 同等サイズでより高品質
+  - モデル本体 + KV cache の総メモリで優位
+  - ブラウザ内実装コストが許容範囲
+- この条件を満たさない独自方式は研究トラックに残し、主系統には載せない
+
+### Phase 4: 独自圧縮の再導入判断 (条件付き)
+
+- Phase 3.5 までに native quant 基準線が確立していることが前提
+- OneCompression / TurboQuant / KV cache + Model の各要素を、
+  「native quant を超えられる箇所」から順に再導入する
+- 優先度は次の通り:
+  1. KV cache + Model の総メモリ最適化
+  2. TurboQuant 的な高効率 PTQ
+  3. SVID / 2-3bit 独自表現の再挑戦
+  4. rotation preprocessing
+
+### Phase 5: Activation quantization (条件付き)
 
 - Phase 2 のカーネルと Phase 1 の metadata が安定してから検討する
 - W4A8 → W4A4 の段階的導入
@@ -393,10 +455,11 @@ wllama v2.3.7 が pin している llama.cpp のバージョンには
 - 新しい量子化方式を入れる前に、表現できる metadata 形式を先に決める
 - フォーマットが曖昧なまま個別実装を増やさない
 
-### 1-bit を基準線として残す
+### 1-bit は研究基準線、native quant は実用基準線
 
 - OneBit/SVID 経路は比較対象として残す
 - 新規方式は常に「サイズ」「速度」「品質」を 1-bit 基準線と比較する
+- ただし採用判断の主基準は `Q4_0` / `Q3_K` / `Q2_K` の native quant 基準線とする
 
 ### WebGPU はオプショナル加速
 

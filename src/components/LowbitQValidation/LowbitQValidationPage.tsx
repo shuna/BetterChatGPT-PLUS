@@ -24,6 +24,15 @@ import {
   isLowbitQModelId,
 } from '@src/local-llm/lowbit-q';
 import { LOWBIT_Q_CONVERT_MODES, type LowbitQConvertMode, type TensorConvertRecord } from '@src/local-llm/lowbit-q/tensorFilter';
+import {
+  DEFAULT_ALLOCATOR_CONFIG,
+  AGGRESSIVE_ALLOCATOR_CONFIG,
+  CONSERVATIVE_ALLOCATOR_CONFIG,
+  Q4_0_ONLY_ALLOCATOR_CONFIG,
+  Q3_K_ONLY_ALLOCATOR_CONFIG,
+  Q2_K_ONLY_ALLOCATOR_CONFIG,
+} from '@src/local-llm/lowbit-q/allocator';
+import type { BitwidthAllocatorConfig } from '@src/local-llm/lowbit-q/types';
 import { computeOutputQuality, type OutputQualityMetrics } from '@src/local-llm/lowbit-q/qualityMetrics';
 import { buildDiagnosisExport, summarizeTensorRecords, type DiagnosisRunExport } from '@src/local-llm/lowbit-q/diagnosisExport';
 
@@ -90,6 +99,7 @@ function LowbitQValidationPage() {
 
   // --- Diagnosis state ---
   const [selectedConvertMode, setSelectedConvertMode] = useState<LowbitQConvertMode>('all');
+  const [selectedAllocatorPreset, setSelectedAllocatorPreset] = useState<'v2-default' | 'v2-aggressive' | 'v2-conservative' | 'v2-q4only' | 'v2-q3konly' | 'v2-q2konly'>('v2-default');
   const [tensorRecords, setTensorRecords] = useState<TensorConvertRecord[]>([]);
   const [batchResults, setBatchResults] = useState<BatchRunResult[]>([]);
   const [batchRunning, setBatchRunning] = useState(false);
@@ -214,7 +224,16 @@ function LowbitQValidationPage() {
   };
 
   const handleConvertLowbitQ = async () => {
-    updateStep('convert-lowbit-q', 'running', `lowbit-Q 変換中 (mode: ${selectedConvertMode})`);
+    const allocatorConfigMap: Record<string, BitwidthAllocatorConfig> = {
+      'v2-default': DEFAULT_ALLOCATOR_CONFIG,
+      'v2-aggressive': AGGRESSIVE_ALLOCATOR_CONFIG,
+      'v2-conservative': CONSERVATIVE_ALLOCATOR_CONFIG,
+      'v2-q4only': Q4_0_ONLY_ALLOCATOR_CONFIG,
+      'v2-q3konly': Q3_K_ONLY_ALLOCATOR_CONFIG,
+      'v2-q2konly': Q2_K_ONLY_ALLOCATOR_CONFIG,
+    };
+    const allocatorConfig = allocatorConfigMap[selectedAllocatorPreset];
+    updateStep('convert-lowbit-q', 'running', `lowbit-Q 変換中 (preset: ${selectedAllocatorPreset})`);
     updateStep('save-opfs', 'running', 'OPFS 書き込み待機');
     updateStep('detect-lowbit-q-metadata', 'running', 'GGUF metadata 確認待機');
     setConversionProgressText('');
@@ -231,7 +250,8 @@ function LowbitQValidationPage() {
             `${progress.stage} ${progress.percent}% ${progress.currentTensorName}`.trim(),
           );
         },
-        convertMode: selectedConvertMode,
+        allocatorConfig,
+        sourceModelName: FIXED_VALIDATION_MODEL.sourceLabel,
         computeQuality: true,
       },
     );
@@ -596,7 +616,7 @@ function LowbitQValidationPage() {
                 </button>
               </div>
 
-              <div className='mt-4 grid gap-4 md:grid-cols-[1fr_1fr_0.6fr_0.6fr]'>
+              <div className='mt-4 grid gap-4 md:grid-cols-[1fr_1fr_1fr_0.6fr_0.6fr]'>
                 <label className='flex flex-col gap-2 text-sm'>
                   <span className='font-medium'>固定プロンプト</span>
                   <select
@@ -610,7 +630,23 @@ function LowbitQValidationPage() {
                   </select>
                 </label>
                 <label className='flex flex-col gap-2 text-sm'>
-                  <span className='font-medium'>変換モード</span>
+                  <span className='font-medium'>Allocator Preset (v2)</span>
+                  <select
+                    className='rounded-xl border border-indigo-300 bg-indigo-50 px-3 py-2 text-indigo-900'
+                    data-testid='allocator-preset-select'
+                    value={selectedAllocatorPreset}
+                    onChange={(event) => setSelectedAllocatorPreset(event.target.value as typeof selectedAllocatorPreset)}
+                  >
+                    <option value='v2-default'>DEFAULT (attnQK=Q4, VO+FFN=SVID)</option>
+                    <option value='v2-aggressive'>AGGRESSIVE (all=SVID exc 1st/last)</option>
+                    <option value='v2-conservative'>CONSERVATIVE (attn=Q4, FFN=SVID)</option>
+                    <option value='v2-q4only'>Q4_0-ONLY (native baseline, ~53%)</option>
+                    <option value='v2-q3konly'>Q3_K-ONLY (native 3-bit baseline, ~40%)</option>
+                    <option value='v2-q2konly'>Q2_K-ONLY (native 2-bit baseline, ~31%)</option>
+                  </select>
+                </label>
+                <label className='flex flex-col gap-2 text-sm'>
+                  <span className='font-medium'>変換モード (v1 legacy)</span>
                   <select
                     className='rounded-xl border border-slate-300 bg-white px-3 py-2'
                     value={selectedConvertMode}
@@ -891,6 +927,25 @@ function LowbitQValidationPage() {
                       ? `version=${metadataSummary.lowbitQVersion ?? '-'} sign=${metadataSummary.signPacking ?? '-'} lowbit-Q tensors=${metadataSummary.lowbitQTensorCount}`
                       : '未検査'}
                   </div>
+                  {metadataSummary?.v2 && (
+                    <div className='mt-2 grid grid-cols-2 gap-1 text-xs text-slate-600'>
+                      <div>SVID_1BIT: <span className='font-medium text-indigo-700'>{metadataSummary.v2.svidCount}</span></div>
+                      <div>Q4_0: <span className='font-medium text-slate-800'>{metadataSummary.v2.q4_0Count}</span></div>
+                      <div>Q3_K: <span className='font-medium text-emerald-700'>{metadataSummary.v2.q3_kCount}</span></div>
+                      <div>Q2_K: <span className='font-medium text-teal-700'>{metadataSummary.v2.q2_kCount}</span></div>
+                      <div>passthrough: <span className='font-medium'>{metadataSummary.v2.passthroughCount}</span></div>
+                      <div>total: <span className='font-medium'>{metadataSummary.v2.totalCount}</span></div>
+                      {metadataSummary.v2.nmseMean !== undefined && (
+                        <div>NMSE mean: <span className='font-medium'>{metadataSummary.v2.nmseMean.toFixed(4)}</span></div>
+                      )}
+                      {metadataSummary.v2.nmseMax !== undefined && (
+                        <div>NMSE max: <span className='font-medium'>{metadataSummary.v2.nmseMax.toFixed(4)}</span></div>
+                      )}
+                      {metadataSummary.v2.sizeBudget !== undefined && (
+                        <div>size budget: <span className='font-medium'>{(metadataSummary.v2.sizeBudget * 100).toFixed(0)}%</span></div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className={`rounded-xl border p-4 ${nativeDetectedLowbitQ ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
                   <div className='text-sm font-medium'>native log に `detected lowbit-Q format` が出たか</div>

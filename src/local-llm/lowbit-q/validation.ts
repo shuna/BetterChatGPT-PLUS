@@ -5,10 +5,17 @@ import {
   LOWBIT_Q_LAYERS_KEY,
   LOWBIT_Q_PACKING_KEY,
   LOWBIT_Q_VERSION_KEY,
+  LOWBIT_Q_TENSOR_ALLOC_KEY,
+  LOWBIT_Q_QUALITY_NMSE_MEAN_KEY,
+  LOWBIT_Q_QUALITY_NMSE_MAX_KEY,
+  LOWBIT_Q_SIZE_BUDGET_KEY,
+  LOWBIT_Q_SOURCE_MODEL_KEY,
   LEGACY_ONEBIT_VERSION_KEY,
   LEGACY_ONEBIT_LAYERS_KEY,
   LEGACY_ONEBIT_PACKING_KEY,
+  LowbitQQuantType,
   type GGUFMetadataEntry,
+  type TensorAllocRecord,
 } from './types';
 import { generateLowbitQModelId, generateLowbitQFilename } from './lowbitQManager';
 import type { OutputQualityMetrics } from './qualityMetrics';
@@ -41,6 +48,20 @@ export interface OutputComparisonSummary {
   lengthDelta: number;
 }
 
+export interface LowbitQV2AllocSummary {
+  sourceModel?: string;
+  sizeBudget?: number;
+  nmseMean?: number;
+  nmseMax?: number;
+  svidCount: number;
+  q4_0Count: number;
+  q3_kCount: number;
+  q2_kCount: number;
+  passthroughCount: number;
+  otherCount: number;
+  totalCount: number;
+}
+
 export interface LowbitQMetadataSummary {
   hasLowbitQVersion: boolean;
   lowbitQVersion: number | null;
@@ -48,6 +69,8 @@ export interface LowbitQMetadataSummary {
   layers: number[];
   tensorCount: number;
   lowbitQTensorCount: number;
+  /** v2-specific allocation summary (null for v1 GGUF) */
+  v2?: LowbitQV2AllocSummary;
 }
 
 export interface ValidationStepState {
@@ -224,13 +247,65 @@ export async function inspectLowbitQMetadata(file: Blob): Promise<LowbitQMetadat
     tensor.name.endsWith('.onebit_sign'),
   ).length;
 
+  const version = typeof versionEntry?.value === 'number' ? versionEntry.value : null;
+
+  // Parse v2-specific metadata
+  let v2: LowbitQV2AllocSummary | undefined;
+  if (version === 2) {
+    const allocEntry = header.metadata.get(LOWBIT_Q_TENSOR_ALLOC_KEY);
+    const nmseMeanEntry = header.metadata.get(LOWBIT_Q_QUALITY_NMSE_MEAN_KEY);
+    const nmseMaxEntry = header.metadata.get(LOWBIT_Q_QUALITY_NMSE_MAX_KEY);
+    const sizeBudgetEntry = header.metadata.get(LOWBIT_Q_SIZE_BUDGET_KEY);
+    const sourceModelEntry = header.metadata.get(LOWBIT_Q_SOURCE_MODEL_KEY);
+
+    let svidCount = 0;
+    let q4_0Count = 0;
+    let q3_kCount = 0;
+    let q2_kCount = 0;
+    let passthroughCount = 0;
+    let otherCount = 0;
+    let totalCount = 0;
+
+    if (allocEntry && typeof allocEntry.value === 'string') {
+      try {
+        const allocs = JSON.parse(allocEntry.value) as TensorAllocRecord[];
+        totalCount = allocs.length;
+        for (const alloc of allocs) {
+          if (alloc.quantType === LowbitQQuantType.SVID_1BIT) svidCount++;
+          else if (alloc.quantType === LowbitQQuantType.Q4_0) q4_0Count++;
+          else if (alloc.quantType === LowbitQQuantType.Q3_K) q3_kCount++;
+          else if (alloc.quantType === LowbitQQuantType.Q2_K) q2_kCount++;
+          else if (alloc.quantType === LowbitQQuantType.PASSTHROUGH) passthroughCount++;
+          else otherCount++;
+        }
+      } catch {
+        // Malformed JSON — leave counts at 0
+      }
+    }
+
+    v2 = {
+      sourceModel: typeof sourceModelEntry?.value === 'string' ? sourceModelEntry.value : undefined,
+      sizeBudget: typeof sizeBudgetEntry?.value === 'number' ? sizeBudgetEntry.value : undefined,
+      nmseMean: typeof nmseMeanEntry?.value === 'number' ? nmseMeanEntry.value : undefined,
+      nmseMax: typeof nmseMaxEntry?.value === 'number' ? nmseMaxEntry.value : undefined,
+      svidCount,
+      q4_0Count,
+      q3_kCount,
+      q2_kCount,
+      passthroughCount,
+      otherCount,
+      totalCount,
+    };
+  }
+
   return {
-    hasLowbitQVersion: typeof versionEntry?.value === 'number',
-    lowbitQVersion: typeof versionEntry?.value === 'number' ? versionEntry.value : null,
+    hasLowbitQVersion: version !== null,
+    lowbitQVersion: version,
     signPacking: typeof signPackingEntry?.value === 'string' ? signPackingEntry.value : null,
     layers: parseArrayNumbers(layersEntry),
     tensorCount: header.tensors.length,
     lowbitQTensorCount,
+    v2,
   };
 }
 

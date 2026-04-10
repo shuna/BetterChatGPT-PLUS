@@ -73,6 +73,56 @@ export const CONSERVATIVE_ALLOCATOR_CONFIG: BitwidthAllocatorConfig = {
   applyRotation: false,
 };
 
+/**
+ * Q4_0-only allocator config — baseline with no SVID decomposition.
+ * All weight tensors → native Q4_0 (ggml RTN quantization).
+ * Purpose: establishes quality baseline to isolate SVID decomposition as the
+ * root cause of output collapse. If this preset also collapses, the issue is in
+ * the runtime/loader pipeline rather than SVID quality.
+ * Estimated size ratio: ~50–55% of original Q8_0.
+ */
+export const Q4_0_ONLY_ALLOCATOR_CONFIG: BitwidthAllocatorConfig = {
+  sizeBudget: 1.0,  // No budget ceiling — disables optimizer; Q4_0-only must not trigger SVID fallback
+  firstLayerQuant: LowbitQQuantType.Q4_0,
+  lastLayerQuant: LowbitQQuantType.Q4_0,
+  attnQKQuant: LowbitQQuantType.Q4_0,
+  attnVOQuant: LowbitQQuantType.Q4_0,
+  ffnQuant: LowbitQQuantType.Q4_0,
+  applyRotation: false,
+};
+
+/**
+ * Q3_K-ONLY allocator config — native K-quant 3-bit baseline.
+ * All weight tensors → Q3_K (ggml native, NMSE ~0.01–0.03, ~40% of Q8_0).
+ * Purpose: establish Q3_K as the native quant baseline against SVID mixed-bit.
+ * Estimated size ratio: ~40% of original Q8_0.
+ */
+export const Q3_K_ONLY_ALLOCATOR_CONFIG: BitwidthAllocatorConfig = {
+  sizeBudget: 1.0,  // No budget ceiling — disables optimizer
+  firstLayerQuant: LowbitQQuantType.Q3_K,
+  lastLayerQuant: LowbitQQuantType.Q3_K,
+  attnQKQuant: LowbitQQuantType.Q3_K,
+  attnVOQuant: LowbitQQuantType.Q3_K,
+  ffnQuant: LowbitQQuantType.Q3_K,
+  applyRotation: false,
+};
+
+/**
+ * Q2_K-ONLY allocator config — native K-quant 2-bit baseline.
+ * All weight tensors → Q2_K (ggml native, NMSE ~0.05–0.15, ~31% of Q8_0).
+ * Purpose: test if Q2_K can match SVID mixed-bit compression with better quality.
+ * Estimated size ratio: ~31% of original Q8_0.
+ */
+export const Q2_K_ONLY_ALLOCATOR_CONFIG: BitwidthAllocatorConfig = {
+  sizeBudget: 1.0,  // No budget ceiling — disables optimizer
+  firstLayerQuant: LowbitQQuantType.Q2_K,
+  lastLayerQuant: LowbitQQuantType.Q2_K,
+  attnQKQuant: LowbitQQuantType.Q2_K,
+  attnVOQuant: LowbitQQuantType.Q2_K,
+  ffnQuant: LowbitQQuantType.Q2_K,
+  applyRotation: false,
+};
+
 // ---------------------------------------------------------------------------
 // Core allocator
 // ---------------------------------------------------------------------------
@@ -292,6 +342,16 @@ function estimateQuantizedSize(
     case LowbitQQuantType.Q8_0: {
       const nBlocks = Math.ceil(elements / 32);
       return nBlocks * 34; // 2 bytes fp16 scale + 32 bytes int8
+    }
+
+    case LowbitQQuantType.Q3_K: {
+      const nBlocks = Math.ceil(elements / 256);
+      return nBlocks * 110; // 32 (hmask) + 64 (qs) + 12 (scales) + 2 (d fp16)
+    }
+
+    case LowbitQQuantType.Q2_K: {
+      const nBlocks = Math.ceil(elements / 256);
+      return nBlocks * 84; // 2+2 (d,dmin) + 16 (scales) + 64 (qs)
     }
 
     case LowbitQQuantType.PASSTHROUGH:

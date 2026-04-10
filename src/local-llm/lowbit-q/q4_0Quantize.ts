@@ -56,25 +56,26 @@ export function quantizeQ4_0(weights: Float32Array): Uint8Array {
     // Write fp16 scale
     view.setUint16(blockOffset, fp32ToFp16(delta), true);
 
-    // Pack 32 quantized values into 16 bytes (2 nibbles per byte, low nibble first)
-    for (let i = 0; i < 16; i++) {
-      const baseIdx = blockStart + i * 2;
+    // Pack 32 quantized values into 16 bytes.
+    // ggml Q4_0 layout: byte j → low nibble = element j, high nibble = element j+16.
+    // (first half of block in low nibbles, second half in high nibbles)
+    for (let j = 0; j < 16; j++) {
+      const idx0 = blockStart + j;       // first-half element
+      const idx1 = blockStart + j + 16;  // second-half element
 
-      // Low nibble: even element index within block
-      let q0 = 8; // default for padding elements
-      if (baseIdx < blockEnd) {
-        const qi = Math.round(weights[baseIdx] * invDelta) + 8;
+      let q0 = 8; // default for padding (maps to 0 after dequant)
+      if (idx0 < blockEnd) {
+        const qi = Math.round(weights[idx0] * invDelta) + 8;
         q0 = Math.max(0, Math.min(15, qi));
       }
 
-      // High nibble: odd element index within block
-      let q1 = 8; // default for padding elements
-      if (baseIdx + 1 < blockEnd) {
-        const qi = Math.round(weights[baseIdx + 1] * invDelta) + 8;
+      let q1 = 8; // default for padding
+      if (idx1 < blockEnd) {
+        const qi = Math.round(weights[idx1] * invDelta) + 8;
         q1 = Math.max(0, Math.min(15, qi));
       }
 
-      out[blockOffset + 2 + i] = (q1 << 4) | q0;
+      out[blockOffset + 2 + j] = q0 | (q1 << 4);
     }
   }
 

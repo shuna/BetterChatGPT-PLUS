@@ -104,6 +104,8 @@ static int parse_quant_type(const char * s)
     if (strncmp(s, "svid_1bit",   9) == 0) return LOWBIT_Q_QUANT_SVID_1BIT;
     if (strncmp(s, "q4_0",       4) == 0) return LOWBIT_Q_QUANT_Q4_0;
     if (strncmp(s, "q8_0",       4) == 0) return LOWBIT_Q_QUANT_Q8_0;
+    if (strncmp(s, "q3_k",       4) == 0) return LOWBIT_Q_QUANT_Q3_K;
+    if (strncmp(s, "q2_k",       4) == 0) return LOWBIT_Q_QUANT_Q2_K;
     if (strncmp(s, "passthrough",11) == 0) return LOWBIT_Q_QUANT_PASSTHROUGH;
     return LOWBIT_Q_QUANT_UNKNOWN;
 }

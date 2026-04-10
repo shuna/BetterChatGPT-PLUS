@@ -17,6 +17,7 @@ import type {
   ConversionProgressMessage,
   ConversionDoneMessage,
   ConversionErrorMessage,
+  BitwidthAllocatorConfig,
 } from './types';
 import type {
   LocalModelDefinition,
@@ -58,10 +59,21 @@ export interface LowbitQConversionCallbacks {
   onProgress?: (progress: ConversionProgress) => void;
   onComplete?: (result: LowbitQConversionResult) => void;
   onError?: (error: string) => void;
-  /** lowbit-Q conversion mode (which tensors to convert). Default: 'all' */
+  /**
+   * v2: Bitwidth allocator configuration.
+   * When provided, the v2 mixed-bit pipeline is used.
+   * Takes precedence over convertMode.
+   */
+  allocatorConfig?: BitwidthAllocatorConfig;
+  /**
+   * @deprecated Use allocatorConfig instead.
+   * v1: lowbit-Q conversion mode (which tensors to convert). Default: 'all'
+   */
   convertMode?: string;
   /** Whether to compute per-tensor quality metrics (NMSE). Default: false */
   computeQuality?: boolean;
+  /** Optional source model name stored in v2 GGUF metadata */
+  sourceModelName?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -166,12 +178,16 @@ export class LowbitQConversionManager {
         this.cleanup();
       };
 
+      // When allocatorConfig is provided, use the v2 pipeline.
+      // Pass convertMode only when falling back to the legacy v1 path.
       this.worker.postMessage({
         id: 1,
         type: 'start',
         sourceFile,
-        convertMode: callbacks.convertMode,
+        allocatorConfig: callbacks.allocatorConfig,
+        convertMode: callbacks.allocatorConfig ? undefined : callbacks.convertMode,
         computeQuality: callbacks.computeQuality,
+        sourceModelName: callbacks.sourceModelName,
       });
     });
   }

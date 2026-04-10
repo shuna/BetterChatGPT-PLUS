@@ -296,6 +296,14 @@ export function computeTensorDataSize(tensor: GGUFTensorInfo): number {
       const nBlocks = Math.ceil(Number(totalElements) / 32);
       return nBlocks * 18;
     }
+    case GGMLType.Q3_K: {
+      const nBlocks = Math.ceil(Number(totalElements) / 256);
+      return nBlocks * 110; // 32 (hmask) + 64 (qs) + 12 (scales) + 2 (d fp16)
+    }
+    case GGMLType.Q2_K: {
+      const nBlocks = Math.ceil(Number(totalElements) / 256);
+      return nBlocks * 84; // 2+2 (d,dmin) + 16 (scales) + 64 (qs)
+    }
     case GGMLType.Q4_K: {
       const nBlocks = Math.ceil(Number(totalElements) / 256);
       return nBlocks * 144;
