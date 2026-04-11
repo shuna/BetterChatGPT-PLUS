@@ -42,11 +42,22 @@ export interface CompletionOptions {
   stream?: boolean;
 }
 
+export interface ChatMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
 export class Wllama {
   constructor(pathConfig: AssetsPathConfig, config?: WllamaConfig);
   loadModel(files: Blob[], config?: LoadModelConfig): Promise<void>;
   getLoadedContextInfo(): LoadedContextInfo;
   isModelLoaded(): boolean;
+  getChatTemplate(): string | null;
+  formatChat(
+    messages: ChatMessage[],
+    addAssistant?: boolean,
+    template?: string,
+  ): Promise<string>;
   createCompletion(
     prompt: string,
     options?: CompletionOptions,

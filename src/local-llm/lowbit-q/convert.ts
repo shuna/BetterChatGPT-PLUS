@@ -51,7 +51,8 @@ import { allocateBitwidths, DEFAULT_ALLOCATOR_CONFIG, validateAllocations } from
 import { quantizeQ4_0 } from './q4_0Quantize';
 import { quantizeQ3_K } from './q3_kQuantize';
 import { quantizeQ2_K } from './q2_kQuantize';
-import { writeTempChunk, removeTempFile, createOPFSWritable, getOPFSFileSize } from '../storage';
+import { writeTempChunk, removeTempFile, createOPFSWritable, createOPFSSyncWriter, getOPFSFileSize, deleteModelFile } from '../storage';
+import type { OPFSWriter } from '../storage';
 import { fp32ToFp16 } from './dequantize';
 
 const GGUF_ALIGNMENT = 32;
@@ -109,24 +110,41 @@ const TENSOR_STREAM_CHUNK_SIZE = 4 * 1024 * 1024;
 async function parseHeaderFromBlob(
   source: File | Blob,
 ): Promise<{ header: GGUFHeader; fullBuffer: ArrayBuffer }> {
-  // Try parsing with the initial read size
-  const initialSize = Math.min(source.size, HEADER_INITIAL_READ);
-  const initialBuffer = await source.slice(0, initialSize).arrayBuffer();
+  // Try progressively larger reads until the header parses.
+  // Models with many tensors (e.g., Gemma 4 with ~500 tensors) can have
+  // headers exceeding 256KB. We avoid source.arrayBuffer() (full file) as
+  // it would OOM for multi-GB files in Worker contexts.
+  const readSizes = [
+    HEADER_INITIAL_READ,    // 256 KB — covers most models
+    1 * 1024 * 1024,        //   1 MB
+    4 * 1024 * 1024,        //   4 MB
+    16 * 1024 * 1024,       //  16 MB — covers extremely large headers
+  ];
 
-  try {
-    const header = parseGGUFHeader(initialBuffer);
-    // Verify all tensor data starts within the file
-    if (header.dataOffset <= source.size) {
-      return { header, fullBuffer: initialBuffer };
+  for (const readSize of readSizes) {
+    const size = Math.min(source.size, readSize);
+    const buffer = await source.slice(0, size).arrayBuffer();
+    try {
+      const header = parseGGUFHeader(buffer);
+      if (header.dataOffset <= source.size) {
+        return { header, fullBuffer: buffer };
+      }
+    } catch {
+      // Header doesn't fit in this read size — try larger
     }
-  } catch {
-    // Header doesn't fit in initial read — fall through
   }
 
-  // Fall back to full file read (large header / many tensors)
-  const fullBuffer = await source.arrayBuffer();
-  const header = parseGGUFHeader(fullBuffer);
-  return { header, fullBuffer };
+  // Final fallback: read full file (only safe for small files)
+  if (source.size <= 64 * 1024 * 1024) {
+    const fullBuffer = await source.arrayBuffer();
+    const header = parseGGUFHeader(fullBuffer);
+    return { header, fullBuffer };
+  }
+
+  throw new Error(
+    `GGUF ヘッダーの解析に失敗しました: 16 MB を超えるヘッダーサイズです。` +
+    `ファイルが破損している可能性があります。`,
+  );
 }
 
 /**
@@ -712,16 +730,21 @@ async function writePaddingChunk(target: OPFSTarget, payloadLength: number): Pro
 }
 
 /**
- * Convert a source GGUF File/Blob to lowbit-Q v2 GGUF format.
+ * Convert a source GGUF File/Blob to lowbit-Q v2 GGUF format (in-memory).
  *
  * Uses the bitwidth allocator to assign per-tensor quantization types:
  *   - SVID_1BIT → OneBit (arXiv:2402.11295) SVID decomposition (a, sign, b triplet)
  *   - Q4_0      → RTN 4-bit re-quantization (ggml native, no custom kernel)
  *   - PASSTHROUGH → unchanged (embedding, norm, first/last layer override)
  *
- * Memory model: input parsing is streaming and fp32 intermediates are processed
- * one tensor at a time, but the final output is still buffered in memory.
- * PASSTHROUGH-heavy conversions therefore are not constant-memory.
+ * **WARNING — full-buffer allocation**: The final output is buffered entirely in
+ * memory via {@link writeLowbitQV2GGUF}. For models >200 MB this risks OOM in the
+ * browser. Production callers must use {@link convertToLowbitQV2StreamingToOPFS}
+ * which streams directly to OPFS with ~1 MB peak overhead per tensor.
+ *
+ * @deprecated Use {@link convertToLowbitQV2StreamingToOPFS} for production.
+ * This function is retained only for unit/snapshot tests that need a byte-exact
+ * in-memory GGUF buffer.
  */
 export async function convertToLowbitQV2Streaming(
   source: File | Blob,
@@ -1016,6 +1039,10 @@ export async function convertToLowbitQV2StreamingToOPFS(
     allocatorConfig?: BitwidthAllocatorConfig;
     totalLayers?: number;
     sourceModelName?: string;
+    /** When provided, the source file is deleted from OPFS before writing
+     *  the output to free quota for large models (>2 GB). The Blob/File
+     *  reference remains valid because OPFS getFile() returns a snapshot. */
+    sourceOpfsInfo?: { modelId: string; fileName: string };
   } = {},
 ): Promise<ConvertV2PersistResult> {
   const {
@@ -1249,19 +1276,43 @@ export async function convertToLowbitQV2StreamingToOPFS(
     layout.outputTensors as OutputTensorPlan[],
   );
 
-  // Remove any existing file before starting a fresh write.
+  // Remove any existing output file before starting a fresh write.
   await removeTempFile(target.modelId, target.fileName);
 
-  // Open a SINGLE writable stream for the entire conversion output.
-  // Using one stream eliminates the seek-after-getFile() pattern used by
-  // writeTempChunk, which can misalign writes on some Chrome builds and
-  // produce a file larger than expected (manifests as "Invalid typed array
-  // length" when wllama tries to allocate blob.size bytes in WASM heap).
-  const writable = await createOPFSWritable(target.modelId, target.fileName);
+  // For large models, delete the source file from OPFS to free quota before
+  // writing the output. The source Blob remains valid because OPFS getFile()
+  // returns a snapshot per the File System Access spec.
+  if (options.sourceOpfsInfo) {
+    const { modelId: srcModelId, fileName: srcFileName } = options.sourceOpfsInfo;
+    console.info(`[lowbit-q] Deleting source from OPFS to free quota: ${srcModelId}/${srcFileName}`);
+    try {
+      await deleteModelFile(srcModelId, srcFileName);
+    } catch (e) {
+      console.warn('[lowbit-q] Failed to delete source (may not exist):', (e as Error).message);
+    }
+  }
 
-  // Inner helpers that write directly to the single stream.
+  // Use SyncAccessHandle (direct write, no swap file) when available (Worker
+  // context). Falls back to createWritable() on main thread.  SyncAccessHandle
+  // avoids the ~2x storage overhead of the swap-file mechanism, which is
+  // critical for large models (>2 GB) that would otherwise exceed OPFS quota.
+  let writable: OPFSWriter;
+  try {
+    writable = await createOPFSSyncWriter(target.modelId, target.fileName);
+    console.info('[lowbit-q] Using SyncAccessHandle writer (no swap overhead)');
+  } catch {
+    console.info('[lowbit-q] SyncAccessHandle unavailable, falling back to createWritable');
+    const ws = await createOPFSWritable(target.modelId, target.fileName);
+    writable = {
+      write: (d: Uint8Array) => (ws as unknown as { write(d: Uint8Array): Promise<void> }).write(d),
+      close: () => (ws as unknown as { close(): Promise<void> }).close(),
+      abort: () => (ws as unknown as { abort(): Promise<void> }).abort(),
+    };
+  }
+
+  // Inner helpers that write directly to the writer.
   const writeToStream = async (data: Uint8Array): Promise<void> => {
-    await (writable as unknown as { write(d: Uint8Array): Promise<void> }).write(data);
+    await writable.write(data);
   };
   const writePaddingToStream = async (payloadLength: number): Promise<void> => {
     const rem = payloadLength % GGUF_ALIGNMENT;
@@ -1378,7 +1429,7 @@ export async function convertToLowbitQV2StreamingToOPFS(
       }
     }
 
-    await (writable as unknown as { close(): Promise<void> }).close();
+    await writable.close();
     console.info(
       `[lowbit-q] ✓ Streaming write complete.` +
       ` expected=${convertedSize}` +
@@ -1387,7 +1438,7 @@ export async function convertToLowbitQV2StreamingToOPFS(
   } catch (error) {
     // Abort the writable (discards partial write) then clean up.
     try {
-      await (writable as unknown as { abort(): Promise<void> }).abort();
+      await writable.abort();
     } catch {
       // ignore abort errors
     }

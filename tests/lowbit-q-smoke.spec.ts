@@ -8,7 +8,8 @@
  *   npx playwright test tests/lowbit-q-smoke.spec.ts --headed
  */
 
-import { test, expect, type Page, type BrowserContext } from '@playwright/test';
+import { test, expect } from './helpers/persistent-chrome';
+import type { Page, BrowserContext } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -69,14 +70,15 @@ test.describe.serial('lowbit-Q Smoke Test (Memory64 WASM)', () => {
   let capture: ErrorCapture;
   const allResults: TestResult[] = [];
 
-  test.beforeAll(async ({ browser }) => {
-    sharedContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
-    sharedPage = await sharedContext.newPage();
+  test.beforeAll(async ({ persistentContext, persistentPage }) => {
+    sharedContext = persistentContext;
+    sharedPage = persistentPage;
     capture = new ErrorCapture(sharedPage);
     capture.install();
   });
 
   test.afterAll(async () => {
+    capture.dispose();
     fs.writeFileSync(RESULTS_FILE, JSON.stringify(allResults, null, 2));
     console.log('\n========== Smoke Test Results ==========');
     console.log('| Model | Size | Import | Convert | Load | Func |');
@@ -103,7 +105,7 @@ test.describe.serial('lowbit-Q Smoke Test (Memory64 WASM)', () => {
 
   for (const model of MODELS) {
     test(`${model.name}: import → convert → load → infer`, async () => {
-      test.setTimeout(20 * 60_000);
+      test.setTimeout(30 * 60_000);
 
       const result: TestResult = {
         model: model.name,
@@ -136,20 +138,117 @@ test.describe.serial('lowbit-Q Smoke Test (Memory64 WASM)', () => {
       await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 30_000 });
       await expect(page.locator('text=wllama lowbit-Q 品質診断UI')).toBeVisible();
 
+      // Clear OPFS and check quota before importing large files
+      const storageInfo = await page.evaluate(async () => {
+        const root = await navigator.storage.getDirectory();
+        const names: string[] = [];
+        // @ts-ignore — entries() is available in Chrome
+        for await (const [name] of root.entries()) {
+          names.push(name);
+          await root.removeEntry(name, { recursive: true });
+        }
+        const est = await navigator.storage.estimate();
+        return {
+          cleared: names,
+          quotaMB: Math.round((est.quota ?? 0) / 1024 / 1024),
+          usageMB: Math.round((est.usage ?? 0) / 1024 / 1024),
+        };
+      });
+      console.log(`[${model.name}] OPFS cleared: ${storageInfo.cleared.length} entries (${storageInfo.cleared.join(', ') || 'none'})`);
+      console.log(`[${model.name}] Storage: quota=${storageInfo.quotaMB} MB, usage=${storageInfo.usageMB} MB, available=${storageInfo.quotaMB - storageInfo.usageMB} MB`);
+
       // --- Step 1: Import ---
-      console.log(`[${model.name}] Importing...`);
+      //
+      // Large-file handling is browser-launch dependent. Ephemeral Playwright
+      // Chromium builds may fail around ~2 GB, while persistent system Chrome
+      // can import larger GGUFs successfully. By default we now attempt the
+      // full E2E path and only fall back to header-parse mode when explicitly
+      // requested for constrained environments.
+      const OPFS_PER_FILE_LIMIT = 2 * 1024 * 1024 * 1024;
+      const fileSizeBytes = result.fileSizeMB! * 1024 * 1024;
+      const isLargeFile = fileSizeBytes > OPFS_PER_FILE_LIMIT;
+      const forceHeaderParseOnly = process.env.PLAYWRIGHT_HEADER_PARSE_ONLY === '1';
+
+      if (isLargeFile && forceHeaderParseOnly) {
+        // ---------------------------------------------------------------
+        // LARGE FILE PATH: GGUF header parse test only
+        // ---------------------------------------------------------------
+        console.log(`[${model.name}] File > 2 GB — OPFS per-file limit prevents full E2E.`);
+        console.log(`[${model.name}] Running GGUF header parse validation...`);
+
+        const http = await import('http');
+        const servePort = 9876;
+        const server = http.createServer((req, res) => {
+          // Serve first 16 MB for header parsing (Gemma 4 has ~500 tensors → large header)
+          const HEADER_SIZE = 16 * 1024 * 1024;
+          const stat = fs.statSync(model.ggufPath);
+          const end = Math.min(stat.size, HEADER_SIZE);
+          res.writeHead(200, {
+            'Content-Type': 'application/octet-stream',
+            'Content-Length': end,
+            'Access-Control-Allow-Origin': '*',
+          });
+          fs.createReadStream(model.ggufPath, { start: 0, end: end - 1 }).pipe(res);
+        });
+        await new Promise<void>((resolve) => server.listen(servePort, resolve));
+
+        const parseResult = await page.evaluate(async ({ fetchUrl }) => {
+          try {
+            const response = await fetch(fetchUrl);
+            const buffer = await response.arrayBuffer();
+            const { parseGGUFHeader } = await import('/src/local-llm/lowbit-q/ggufParser.ts');
+            const header = parseGGUFHeader(buffer);
+
+            const arch = header.metadata.get('general.architecture') ?? 'unknown';
+            const tensorCount = header.tensors.length;
+            const tensorTypes = new Set<number>();
+            for (const t of header.tensors) tensorTypes.add(t.type);
+            const hasBF16 = tensorTypes.has(30); // GGMLType.BF16
+
+            return {
+              success: true,
+              arch: String(arch),
+              tensorCount,
+              tensorTypes: Array.from(tensorTypes).sort((a, b) => a - b),
+              hasBF16,
+              dataOffset: Number(header.dataOffset),
+            };
+          } catch (e: any) {
+            return { success: false, error: e.message ?? String(e) };
+          }
+        }, { fetchUrl: `http://localhost:${servePort}/header` });
+
+        server.close();
+
+        if (parseResult.success) {
+          console.log(`[${model.name}] GGUF Parse OK: arch=${parseResult.arch}, tensors=${parseResult.tensorCount}, types=${JSON.stringify(parseResult.tensorTypes)}, BF16=${parseResult.hasBF16}`);
+          result.importSuccess = true;
+          result.errors.push('Header-parse-only mode: conversion/load/infer skipped');
+        } else {
+          console.log(`[${model.name}] GGUF Parse FAILED: ${parseResult.error}`);
+          result.errors.push(`Parse failed: ${(parseResult as { error: string }).error}`);
+        }
+
+        allResults.push(result);
+        return;
+      }
+
+      // ---------------------------------------------------------------
+      // NORMAL PATH: full E2E pipeline
+      // ---------------------------------------------------------------
+      console.log(`[${model.name}] Importing (setFiles)...`);
       try {
         const [fileChooser] = await Promise.all([
           page.waitForEvent('filechooser', { timeout: 30_000 }),
           clickButton(page, 'ローカルGGUFを読込'),
         ]);
         await fileChooser.setFiles(model.ggufPath);
-        const importResult = await waitForStepStatus(page, '元GGUFダウンロード', 5 * 60_000, capture);
+        const importResult = await waitForStepStatus(page, '元GGUFダウンロード', 10 * 60_000, capture);
         result.importSuccess = importResult.status === 'pass';
         console.log(`[${model.name}] Import: ${importResult.status} — ${importResult.detail}`);
       } catch (err) {
         result.errors.push(`Import failed: ${(err as Error).message.slice(0, 200)}`);
-        console.log(`[${model.name}] Import FAILED`);
+        console.log(`[${model.name}] Import FAILED: ${(err as Error).message.slice(0, 200)}`);
         allResults.push(result);
         return;
       }
@@ -166,6 +265,15 @@ test.describe.serial('lowbit-Q Smoke Test (Memory64 WASM)', () => {
       await page.waitForTimeout(300);
 
       // --- Step 3: Convert ---
+      const preConvertStorage = await page.evaluate(async () => {
+        const est = await navigator.storage.estimate();
+        return {
+          quotaMB: Math.round((est.quota ?? 0) / 1024 / 1024),
+          usageMB: Math.round((est.usage ?? 0) / 1024 / 1024),
+        };
+      });
+      console.log(`[${model.name}] Pre-convert storage: usage=${preConvertStorage.usageMB} MB / quota=${preConvertStorage.quotaMB} MB`);
+
       console.log(`[${model.name}] Converting (PASSTHROUGH)...`);
       try {
         await clickButton(page, 'lowbit-Q変換', 30_000);

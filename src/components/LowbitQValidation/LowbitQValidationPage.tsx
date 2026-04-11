@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { downloadModelFiles, type DownloadProgress } from '@src/local-llm/download';
 import { localModelRuntime, type RuntimeDiagnosticEvent, type RuntimeLogEvent, type RuntimeLoadProgressEvent } from '@src/local-llm/runtime';
-import { OpfsFileProvider, readFile, saveFile, verifyStoredModel } from '@src/local-llm/storage';
+import { OpfsFileProvider, readFile, saveFile, createOPFSWritable, verifyStoredModel, deleteModelFile } from '@src/local-llm/storage';
 import {
   FIXED_VALIDATION_MODEL,
   VALIDATION_PROMPTS,
@@ -156,6 +156,7 @@ function LowbitQValidationPage() {
       await fn();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      console.error(`[LowbitQValidation] action "${name}" failed:`, message);
       setActionError(message);
     } finally {
       setRunningAction(null);
@@ -220,7 +221,45 @@ function LowbitQValidationPage() {
     if (!file) return;
 
     updateStep('download-original', 'running', `ローカルファイル ${file.name} をOPFSに保存中`);
-    await saveFile(originalDef.id, FIXED_VALIDATION_MODEL.fileName, file);
+
+    // Stream large files in chunks to avoid memory pressure.
+    // saveFile(blob) buffers the entire file; for files >500 MB we use
+    // createOPFSWritable and write in 16 MB chunks with progress updates.
+    // Each chunk write has a 30s timeout to detect OPFS stalls (e.g. quota).
+    const CHUNK_SIZE = 16 * 1024 * 1024; // 16 MB
+    const CHUNK_WRITE_TIMEOUT = 30_000;
+    if (file.size > 500 * 1024 * 1024) {
+      console.info(`[LowbitQValidation] streaming ${formatBytes(file.size)} to OPFS in ${Math.ceil(file.size / CHUNK_SIZE)} chunks`);
+      const writable = await createOPFSWritable(originalDef.id, FIXED_VALIDATION_MODEL.fileName);
+      let written = 0;
+      try {
+        for (let offset = 0; offset < file.size; offset += CHUNK_SIZE) {
+          const chunk = file.slice(offset, Math.min(offset + CHUNK_SIZE, file.size));
+          const buf = await chunk.arrayBuffer();
+          const writePromise = writable.write(buf);
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(
+              `OPFS write timed out after ${CHUNK_WRITE_TIMEOUT / 1000}s at offset ${formatBytes(offset)}. ` +
+              `Written so far: ${formatBytes(written)}/${formatBytes(file.size)}. ` +
+              'Possible storage quota exceeded or OPFS stall.',
+            )), CHUNK_WRITE_TIMEOUT),
+          );
+          await Promise.race([writePromise, timeoutPromise]);
+          written += chunk.size;
+          const pct = Math.round((written / file.size) * 100);
+          updateStep('download-original', 'running', `OPFSに保存中... ${formatBytes(written)} / ${formatBytes(file.size)} (${pct}%)`);
+        }
+        await writable.close();
+        console.info(`[LowbitQValidation] OPFS write complete: ${formatBytes(written)}`);
+      } catch (e) {
+        console.error('[LowbitQValidation] OPFS write failed:', (e as Error).message);
+        await writable.abort().catch(() => {});
+        throw e;
+      }
+    } else {
+      await saveFile(originalDef.id, FIXED_VALIDATION_MODEL.fileName, file);
+    }
+
     setDownloadedOriginalBytes(file.size);
     const verify = await verifyStoredModel(originalDef.id, originalDef.manifest);
     if (verify !== 'saved') {
@@ -247,13 +286,51 @@ function LowbitQValidationPage() {
     setConversionProgressText('');
     setTensorRecords([]);
 
+    let result;
     const manager = new LowbitQConversionManager();
-    const result = await manager.convertFromOpfs(
-      originalDef.id,
-      FIXED_VALIDATION_MODEL.fileName,
-      FIXED_VALIDATION_MODEL.sourceLabel,
-      {
-        onProgress: (progress) => {
+
+    // Source resolution: check for test-injected URL first (for files > 2 GB
+    // that can't be stored in OPFS due to Chromium per-file limit), then try
+    // OPFS with large-file memory-copy strategy.
+    let useFileDirectly: File | null = null;
+    let sourceUrl: string | undefined;
+
+    // Test hook: window.__testSourceUrl is set by Playwright for files > 2 GB.
+    // The Worker fetches directly from this URL, avoiding OPFS and postMessage limits.
+    const testUrl = (window as any).__testSourceUrl as string | undefined;
+    if (testUrl) {
+      console.info(`[LowbitQValidation] Using test source URL: ${testUrl}`);
+      sourceUrl = testUrl;
+      delete (window as any).__testSourceUrl;
+      // Create a minimal dummy File for the manager API (actual data comes from URL)
+      useFileDirectly = new File([], FIXED_VALIDATION_MODEL.fileName, { type: 'application/octet-stream' });
+    } else {
+      // For large source files (>2 GB), read into memory chunks then delete
+      // OPFS entry to free quota.
+      const LARGE_FILE_THRESHOLD = 2 * 1024 * 1024 * 1024;
+      try {
+        const srcFile = await readFile(originalDef.id, FIXED_VALIDATION_MODEL.fileName);
+        if (srcFile.size > LARGE_FILE_THRESHOLD) {
+          console.info(`[LowbitQValidation] Large source (${formatBytes(srcFile.size)}) — reading into memory...`);
+          const chunks: Uint8Array[] = [];
+          const reader = srcFile.stream().getReader();
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+          }
+          useFileDirectly = new File(chunks, srcFile.name, { type: srcFile.type });
+          await deleteModelFile(originalDef.id, FIXED_VALIDATION_MODEL.fileName);
+          console.info('[LowbitQValidation] OPFS source deleted — quota freed');
+        }
+      } catch {
+        // Source not in OPFS or already deleted; proceed via convertFromOpfs
+      }
+    }
+
+    try {
+      const conversionCallbacks = {
+        onProgress: (progress: { stage: string; percent: number; currentTensorName: string }) => {
           setConversionProgressText(
             `${progress.stage} ${progress.percent}% ${progress.currentTensorName}`.trim(),
           );
@@ -261,8 +338,31 @@ function LowbitQValidationPage() {
         allocatorConfig,
         sourceModelName: FIXED_VALIDATION_MODEL.sourceLabel,
         computeQuality: true,
-      },
-    );
+        sourceUrl,
+      };
+
+      if (useFileDirectly) {
+        result = await manager.convertFromFile(
+          useFileDirectly,
+          originalDef.id,
+          FIXED_VALIDATION_MODEL.sourceLabel,
+          conversionCallbacks,
+        );
+      } else {
+        result = await manager.convertFromOpfs(
+          originalDef.id,
+          FIXED_VALIDATION_MODEL.fileName,
+          FIXED_VALIDATION_MODEL.sourceLabel,
+          conversionCallbacks,
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      updateStep('convert-lowbit-q', 'fail', msg);
+      updateStep('save-opfs', 'fail', '変換失敗のためスキップ');
+      updateStep('detect-lowbit-q-metadata', 'fail', '変換失敗のためスキップ');
+      throw err;
+    }
 
     updateStep(
       'convert-lowbit-q',
@@ -348,6 +448,10 @@ function LowbitQValidationPage() {
       });
       updateStep(stepKey, 'pass', `${finalOutput.length} chars`);
       return finalOutput;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      updateStep(stepKey, 'fail', msg);
+      throw err;
     } finally {
       if (localModelRuntime.isLoaded(def.id)) {
         await localModelRuntime.unloadModel(def.id);

@@ -27,6 +27,7 @@ import {
   saveFile,
   readFile,
   verifyStoredModel,
+  deleteModelFile,
 } from '../storage';
 
 // ---------------------------------------------------------------------------
@@ -74,6 +75,14 @@ export interface LowbitQConversionCallbacks {
   computeQuality?: boolean;
   /** Optional source model name stored in v2 GGUF metadata */
   sourceModelName?: string;
+  /** Internal: OPFS location of the source file, used to free quota for large models */
+  sourceOpfsInfo?: { modelId: string; fileName: string };
+  /**
+   * When set, the Worker fetches the source from this URL instead of using
+   * the File passed via postMessage. Avoids the Chromium ~2 GB OPFS per-file
+   * limit and structured-clone size limits.
+   */
+  sourceUrl?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -137,8 +146,39 @@ export class LowbitQConversionManager {
     sourceLabel: string,
     callbacks: LowbitQConversionCallbacks = {},
   ): Promise<LowbitQConversionResult> {
-    // Step 1: Read source file from OPFS
-    const sourceFile = await readFile(sourceModelId, sourceFileName);
+    // Step 1: Read source file from OPFS.
+    const opfsFile = await readFile(sourceModelId, sourceFileName);
+
+    // For large files (>2 GB), read into memory chunks to break the OPFS
+    // storage reference, then delete the OPFS entry. A File from getFile()
+    // holds a reference to the underlying OPFS storage — deleting the
+    // directory entry alone won't free space while the File is alive.
+    const LARGE_FILE_THRESHOLD = 2 * 1024 * 1024 * 1024; // 2 GB
+    let sourceFile: File = opfsFile;
+    if (opfsFile.size > LARGE_FILE_THRESHOLD) {
+      console.info(
+        `[LowbitQConversionManager] Large source (${(opfsFile.size / 1024 / 1024).toFixed(0)} MB), ` +
+        `reading into memory to break OPFS reference...`,
+      );
+      const chunks: Uint8Array[] = [];
+      const reader = opfsFile.stream().getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+      sourceFile = new File(chunks, opfsFile.name, { type: opfsFile.type });
+      console.info(
+        `[LowbitQConversionManager] In-memory File created, deleting OPFS entry...`,
+      );
+      try {
+        await deleteModelFile(sourceModelId, sourceFileName);
+        console.info('[LowbitQConversionManager] OPFS source deleted');
+      } catch (e) {
+        console.warn('[LowbitQConversionManager] Failed to delete source:', (e as Error).message);
+      }
+    }
+
     return this.convertFromFile(sourceFile, sourceModelId, sourceLabel, callbacks);
   }
 
@@ -184,6 +224,7 @@ export class LowbitQConversionManager {
         id: 1,
         type: 'start',
         sourceFile,
+        sourceUrl: callbacks.sourceUrl,
         opfsTarget: callbacks.allocatorConfig
           ? {
               modelId: generateLowbitQModelId(sourceModelId),
@@ -194,6 +235,7 @@ export class LowbitQConversionManager {
         convertMode: callbacks.allocatorConfig ? undefined : callbacks.convertMode,
         computeQuality: callbacks.computeQuality,
         sourceModelName: callbacks.sourceModelName,
+        sourceOpfsInfo: callbacks.sourceOpfsInfo,
       });
     });
   }

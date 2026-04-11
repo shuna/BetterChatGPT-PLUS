@@ -1,6 +1,6 @@
 # wllama-lowbit-q 実装方針
 
-最終更新: 2026-04-10
+最終更新: 2026-04-12
 
 ## この文書の位置づけ
 
@@ -125,25 +125,53 @@ SVID パラメータ精緻化 (ALS)。
 
 ## 現在位置
 
-現時点の `src/local-llm/lowbit-q/` と `wllama-lowbit-q/cpp/lowbit-q/` は、
-ブラウザ内変換および WASM 推論で **SVID 1-bit 経路を E2E で動かす最小構成** として成立している。
+### Phase 4 完了時点 (2026-04-12)
 
-ただし、全層一律 1-bit ではサイズ削減は達成できるものの (1.1 GB → 252 MB, 77% 圧縮)、
+**ggml ネイティブ量子化 (PASSTHROUGH 変換) を軸とした multi-model baseline が確立した。**
+
+確認済み E2E パイプライン (import → PASSTHROUGH convert → load → infer):
+
+| モデル | アーキテクチャ | サイズ | Func | 備考 |
+|---|---|---|---|---|
+| TinyLlama 1.1B Q4_0 | llama | ~610 MB | **YES** | Phase 3.6 確認 |
+| SmolLM2 1.7B Q3_K_S | llama | 741 MB | **YES** | Phase 4 確認 |
+| SmolLM2 1.7B Q2_K | llama | 643 MB | **YES** | Phase 4 確認 |
+| Qwen 3.5 2B Q4_K_M | qwen35 | 1222 MB | **YES** | Phase 4 確認 |
+| **Gemma 4 E2B Q4_K_M** | gemma4 | 2963 MB | **YES** | Phase 4 完了 (2026-04-12) |
+
+**SVID_1BIT の評価:**
+
+全層一律 1-bit ではサイズ削減は達成できるものの (1.1 GB → 252 MB, 77% 圧縮)、
 **精度低下が大きすぎて実用に耐えない**
 (`2026-04-09-SVID-Test-result.md` 参照: 全プロンプトで出力崩壊、NMSE 0.37 全テンソル均一)。
 
-さらに Phase 3/3.5 の TinyLlama 検証では、
-mixed-bit allocator を導入しても `functionalSuccess = NO` のままであり、
-現状の SVID_1BIT を主たる圧縮手段として採用する方針は成立していないことが確認された。
+Phase 3/3.5 の TinyLlama 検証では、mixed-bit allocator を導入しても
+`functionalSuccess = NO` のままであり、現状の SVID_1BIT を主たる圧縮手段として
+採用する方針は成立していないことが確認済み。
 
-このため、今後の lowbit-Q は
+**ネイティブ量子化の評価:**
+
+- Q4_0: TinyLlama 1.1B でも functionalSuccess=YES → 実用の下限
+- Q3_K/Q2_K: TinyLlama (1.1B) では失敗、SmolLM2 (1.7B) では成功
+  → **品質はモデルサイズに依存、1.7B 以上であれば実用水準**
+
+**主要な実装知見 (Phase 4):**
+
+- GGUF `readString()` での `TextDecoder` BOM stripping バグを修正 (`ignoreBOM: true`)
+  → Gemma 4 のような BOM 付きトークン変種を含む語彙でも byte-exact roundtrip が保証される
+- Memory64 WASM ビルド: Chrome 147+ で 4 GB 超メモリ空間が利用可能
+- Emscripten JS glue と WASM バイナリは常に同一ビルドのものをペアで更新する必要がある
+
+**次のフェーズへの結論:**
+
+今後の lowbit-Q は
 **「独自圧縮を直接主系統に載せる」のではなく、
 まず ggml ネイティブ量子化 (`Q4_0`, `Q3_K`, `Q2_K` など) を基準線として確立し、
 その基準線に対して OneCompression / TurboQuant / KV cache + Model 統合最適化が
-どこで上回れるかを検証する」**
-方針に切り替える。
+どこで上回れるかを検証する**
+方針を維持する。
 
-また、`.wllama-fork/llama.cpp/ggml/src/ggml-webgpu/` に **WebGPU 推論バックエンド**が
+`.wllama-fork/llama.cpp/ggml/src/ggml-webgpu/` に **WebGPU 推論バックエンド**が
 存在するがビルド未有効化であり、削減後モデルの GPU 推論が即座に利用可能な状態にある。
 
 今後は `OneCompression をそのまま移植する` のではなく、

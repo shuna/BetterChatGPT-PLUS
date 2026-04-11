@@ -300,12 +300,30 @@ async function handleGenerate(req: GenerateRequest) {
   let tokensGenerated = 0;
 
   try {
+    // Apply chat template if the model has one. Instruct-tuned models (SmolLM2,
+    // Qwen, Gemma, etc.) expect prompts wrapped in their chat template — passing
+    // raw text causes immediate EOS or garbage output.
+    let prompt = req.prompt;
+    const chatTemplate = wllama.getChatTemplate();
+    if (chatTemplate) {
+      try {
+        prompt = await wllama.formatChat(
+          [{ role: 'user', content: req.prompt }],
+          true, // addAssistant: append assistant turn start
+        );
+        console.info('[wllamaWorker] chat template applied, prompt length:', req.prompt.length, '->', prompt.length);
+      } catch (e) {
+        // Fall back to raw prompt if template formatting fails
+        console.warn('[wllamaWorker] chat template formatting failed, using raw prompt:', (e as Error).message);
+      }
+    }
+
     // wllama only supports stopTokens (token IDs), not string stop sequences.
     // Multi-token stop strings cannot be reliably mapped to single token IDs,
     // so we handle string stops via post-processing on the streamed text.
     const stopStrings = req.stop ?? [];
 
-    const stream = await wllama.createCompletion(req.prompt, {
+    const stream = await wllama.createCompletion(prompt, {
       nPredict: req.maxTokens,
       sampling: {
         temp: req.temperature,

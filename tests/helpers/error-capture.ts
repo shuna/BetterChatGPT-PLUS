@@ -1,16 +1,24 @@
 /**
  * Playwright error capture helper for lowbit-Q E2E tests.
  *
- * Captures browser console messages, page errors, and WASM failures in real-time.
- * On timeout or assertion failure, dumps a structured error summary so root causes
- * are immediately visible in the test output (no more silent timeouts).
+ * Design principle: **every browser event is printed to stdout immediately**.
+ * This ensures that background test runners (and Claude monitoring via
+ * TaskOutput) can see errors, progress, and stalls in real-time — not just
+ * after a timeout.
+ *
+ * Captured sources:
+ *   - console.*  (all levels, all messages)
+ *   - pageerror  (uncaught exceptions)
+ *   - requestfailed (network errors)
+ *   - page crash (tab OOM / renderer crash)
+ *   - page close (unexpected tab close)
+ *   - progress stall detection (no events for N seconds)
  *
  * Usage:
  *   const capture = new ErrorCapture(page);
  *   capture.install();
  *   // ... run test steps ...
- *   await capture.waitForStepStatus(page, 'lowbit-Q変換', 15 * 60_000);
- *   // On failure, the captured error context is included in the assertion message.
+ *   await waitForStepStatus(page, 'lowbit-Q変換', 15 * 60_000, capture);
  */
 
 import type { Page } from '@playwright/test';
@@ -18,8 +26,8 @@ import { expect } from '@playwright/test';
 
 interface CapturedEvent {
   ts: number;
-  type: 'console' | 'pageerror' | 'wasm-error' | 'network-error';
-  level: 'info' | 'warn' | 'error';
+  type: 'console' | 'pageerror' | 'crash' | 'close' | 'network-error';
+  level: 'info' | 'warn' | 'error' | 'fatal';
   message: string;
 }
 
@@ -27,6 +35,11 @@ export class ErrorCapture {
   private events: CapturedEvent[] = [];
   private page: Page;
   private installed = false;
+  private startTs = Date.now();
+  private stallTimer: ReturnType<typeof setInterval> | null = null;
+  private lastEventTs = Date.now();
+  /** Seconds of silence before a stall warning is printed. */
+  private stallThresholdMs = 60_000;
 
   constructor(page: Page) {
     this.page = page;
@@ -35,66 +48,80 @@ export class ErrorCapture {
   install(): void {
     if (this.installed) return;
     this.installed = true;
+    this.startTs = Date.now();
+    this.lastEventTs = Date.now();
 
-    // Capture ALL console messages (not just filtered ones)
+    // -----------------------------------------------------------------------
+    // 1. ALL console messages → stdout immediately
+    // -----------------------------------------------------------------------
     this.page.on('console', (msg) => {
       const text = msg.text();
       const level = msg.type() === 'error' ? 'error' : msg.type() === 'warning' ? 'warn' : 'info';
 
-      this.events.push({
-        ts: Date.now(),
-        type: 'console',
-        level,
-        message: text.slice(0, 1000),
-      });
+      this.push('console', level, text.slice(0, 1000));
 
-      // Always print errors and important messages immediately
-      if (level === 'error') {
-        console.log(`[CAPTURE:ERROR] ${text.slice(0, 500)}`);
-      } else if (
-        text.includes('@@INFO[lowbit-q]') ||
-        text.includes('generate done') ||
-        text.includes('[wllama-error]') ||
-        text.includes('model loaded') ||
-        text.includes('detected lowbit-Q') ||
-        text.includes('PASS') ||
-        text.includes('FAIL') ||
-        text.includes('ftell') ||
-        text.includes('RangeError') ||
-        text.includes('Invalid')
-      ) {
-        console.log(`[CAPTURE:INFO] ${text.slice(0, 300)}`);
-      }
+      const tag = level === 'error' ? 'ERROR' : level === 'warn' ? 'WARN' : 'LOG';
+      console.log(`[CAPTURE:${tag}] ${this.elapsed()} ${text.slice(0, 500)}`);
     });
 
-    // Capture uncaught page errors
+    // -----------------------------------------------------------------------
+    // 2. Uncaught page errors
+    // -----------------------------------------------------------------------
     this.page.on('pageerror', (err) => {
       const msg = `${err.name}: ${err.message}`;
-      this.events.push({
-        ts: Date.now(),
-        type: 'pageerror',
-        level: 'error',
-        message: msg.slice(0, 1000),
-      });
-      console.log(`[CAPTURE:PAGE_ERROR] ${msg.slice(0, 500)}`);
+      this.push('pageerror', 'error', msg.slice(0, 1000));
+      console.log(`[CAPTURE:PAGE_ERROR] ${this.elapsed()} ${msg.slice(0, 500)}`);
     });
 
-    // Capture failed network requests (useful for WASM fetch failures)
+    // -----------------------------------------------------------------------
+    // 3. Network failures
+    // -----------------------------------------------------------------------
     this.page.on('requestfailed', (req) => {
       const msg = `${req.method()} ${req.url()} — ${req.failure()?.errorText ?? 'unknown'}`;
-      this.events.push({
-        ts: Date.now(),
-        type: 'network-error',
-        level: 'error',
-        message: msg,
-      });
-      console.log(`[CAPTURE:NET_FAIL] ${msg}`);
+      this.push('network-error', 'error', msg);
+      console.log(`[CAPTURE:NET_FAIL] ${this.elapsed()} ${msg}`);
     });
+
+    // -----------------------------------------------------------------------
+    // 4. Page crash (renderer OOM, WASM abort, etc.)
+    // -----------------------------------------------------------------------
+    this.page.on('crash', () => {
+      this.push('crash', 'fatal', 'Page crashed (renderer process died — likely OOM or WASM abort)');
+      console.log(`[CAPTURE:CRASH] ${this.elapsed()} *** PAGE CRASHED — renderer process died ***`);
+    });
+
+    // -----------------------------------------------------------------------
+    // 5. Unexpected page close
+    // -----------------------------------------------------------------------
+    this.page.on('close', () => {
+      this.push('close', 'fatal', 'Page closed unexpectedly');
+      console.log(`[CAPTURE:CLOSE] ${this.elapsed()} *** PAGE CLOSED ***`);
+    });
+
+    // -----------------------------------------------------------------------
+    // 6. Progress stall detection — warn if no events for stallThresholdMs
+    // -----------------------------------------------------------------------
+    this.stallTimer = setInterval(() => {
+      const silenceMs = Date.now() - this.lastEventTs;
+      if (silenceMs >= this.stallThresholdMs) {
+        console.log(
+          `[CAPTURE:STALL] ${this.elapsed()} *** No browser events for ${(silenceMs / 1000).toFixed(0)}s — possible stall ***`,
+        );
+      }
+    }, 30_000); // check every 30s
   }
 
-  /** Get all captured errors (level=error only) */
+  /** Uninstall the stall timer. Call in afterAll. */
+  dispose(): void {
+    if (this.stallTimer) {
+      clearInterval(this.stallTimer);
+      this.stallTimer = null;
+    }
+  }
+
+  /** Get all captured errors (level=error or fatal) */
   getErrors(): CapturedEvent[] {
-    return this.events.filter((e) => e.level === 'error');
+    return this.events.filter((e) => e.level === 'error' || e.level === 'fatal');
   }
 
   /** Get all captured events */
@@ -110,7 +137,7 @@ export class ErrorCapture {
     const recent = errors.slice(-maxErrors);
     return recent
       .map((e) => {
-        const elapsed = ((e.ts - (this.events[0]?.ts ?? e.ts)) / 1000).toFixed(1);
+        const elapsed = ((e.ts - this.startTs) / 1000).toFixed(1);
         return `  [+${elapsed}s ${e.type}] ${e.message.slice(0, 200)}`;
       })
       .join('\n');
@@ -121,7 +148,7 @@ export class ErrorCapture {
     const recent = this.events.slice(-maxLines);
     return recent
       .map((e) => {
-        const elapsed = ((e.ts - (this.events[0]?.ts ?? e.ts)) / 1000).toFixed(1);
+        const elapsed = ((e.ts - this.startTs) / 1000).toFixed(1);
         return `  [+${elapsed}s ${e.level}] ${e.message.slice(0, 150)}`;
       })
       .join('\n');
@@ -130,6 +157,22 @@ export class ErrorCapture {
   /** Clear captured events */
   clear(): void {
     this.events = [];
+    this.startTs = Date.now();
+    this.lastEventTs = Date.now();
+  }
+
+  // -------------------------------------------------------------------------
+  // Internals
+  // -------------------------------------------------------------------------
+
+  private push(type: CapturedEvent['type'], level: CapturedEvent['level'], message: string): void {
+    const now = Date.now();
+    this.events.push({ ts: now, type, level, message });
+    this.lastEventTs = now;
+  }
+
+  private elapsed(): string {
+    return `+${((Date.now() - this.startTs) / 1000).toFixed(1)}s`;
   }
 }
 
@@ -146,10 +189,8 @@ export function getStepCard(page: Page, stepLabel: string) {
 /**
  * Wait for a validation step to reach PASS or FAIL, with error context on timeout.
  *
- * Unlike the original `waitForStepStatus`, on timeout this includes:
- * - All captured browser errors
- * - Recent console context
- * - The step card's current HTML state
+ * On each poll interval, prints the current card state to stdout so progress
+ * is visible in real-time (not just on timeout).
  */
 export async function waitForStepStatus(
   page: Page,
@@ -158,19 +199,29 @@ export async function waitForStepStatus(
   capture?: ErrorCapture,
 ): Promise<{ status: string; detail: string }> {
   const card = getStepCard(page, stepLabel);
+  const startTs = Date.now();
 
   try {
     await expect(async () => {
+      // Print current card state on each poll for real-time visibility
+      try {
+        const statusText = await card.locator('.uppercase.tracking-wide').textContent({ timeout: 2000 });
+        const detailText = await card.locator('.opacity-80').textContent({ timeout: 2000 }).catch(() => '');
+        const elapsed = ((Date.now() - startTs) / 1000).toFixed(0);
+        console.log(`[STEP:${stepLabel}] +${elapsed}s status="${statusText}" detail="${detailText}"`);
+      } catch {
+        // card not visible yet
+      }
+
       const statusEl = card.locator('.uppercase.tracking-wide');
       const text = await statusEl.textContent();
       expect(text?.toLowerCase()).toMatch(/pass|fail/);
-    }).toPass({ timeout, intervals: [3_000] });
+    }).toPass({ timeout, intervals: [5_000] });
   } catch (err) {
     // On timeout, build a detailed error report
     const errorContext = capture ? capture.getErrorSummary() : '(no capture installed)';
     const recentContext = capture ? capture.getRecentContext() : '';
 
-    // Try to get current state of the step card
     let cardState = '(could not read)';
     try {
       const statusText = await card.locator('.uppercase.tracking-wide').textContent({ timeout: 2000 });
@@ -205,10 +256,6 @@ export async function waitForStepStatus(
 // Quick WASM smoke test — load a GGUF directly via wllama
 // ---------------------------------------------------------------------------
 
-/**
- * Injects a script into the page that loads a GGUF via wllama and returns the result.
- * Captures detailed error info including WASM-level failures.
- */
 export async function quickWllamaLoadTest(
   page: Page,
   ggufUrl: string,
@@ -236,7 +283,6 @@ export async function quickWllamaLoadTest(
       const meta = await wllama.getModelMetadata?.() ?? {};
       const arch = meta['general.architecture'] ?? 'unknown';
 
-      // Quick inference test
       const output = await wllama.createCompletion('Hello', { nPredict: 5 });
       await wllama.exit();
 

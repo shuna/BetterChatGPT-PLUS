@@ -25,7 +25,8 @@
  *   npx playwright test tests/lowbit-q-phase4-qwen3.spec.ts --headed
  */
 
-import { test, expect, type Page, type BrowserContext } from '@playwright/test';
+import { test, expect } from './helpers/persistent-chrome';
+import type { Page, BrowserContext } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
@@ -151,9 +152,9 @@ test.describe.serial('Phase 4: Qwen 3.5 2B Native Quant Baseline', () => {
   let sharedContext: BrowserContext;
   let sharedPage: Page;
 
-  test.beforeAll(async ({ browser }) => {
-    sharedContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
-    sharedPage = await sharedContext.newPage();
+  test.beforeAll(async ({ persistentContext, persistentPage }) => {
+    sharedContext = persistentContext;
+    sharedPage = persistentPage;
     logBrowserEvents(sharedPage);
   });
 

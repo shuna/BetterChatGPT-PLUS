@@ -16,7 +16,8 @@
  *   npx playwright test tests/lowbit-q-phase3-comparison.spec.ts --headed
  */
 
-import { test, expect, type Page, type BrowserContext } from '@playwright/test';
+import { test, expect } from './helpers/persistent-chrome';
+import type { Page, BrowserContext } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -214,11 +215,9 @@ let sharedContext: BrowserContext;
 let sharedPage: Page;
 
 test.describe.serial('Phase 3: Allocator Comparison', () => {
-  test.beforeAll(async ({ browser }) => {
-    sharedContext = await browser.newContext({
-      viewport: { width: 1440, height: 1000 },
-    });
-    sharedPage = await sharedContext.newPage();
+  test.beforeAll(async ({ persistentContext, persistentPage }) => {
+    sharedContext = persistentContext;
+    sharedPage = persistentPage;
     logBrowserEvents(sharedPage);
   });
 
