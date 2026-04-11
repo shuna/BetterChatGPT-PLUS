@@ -54,7 +54,7 @@ echo ""
 # ---------------------------------------------------------------------------
 # Shared compiler flags (matches docker-compose.yml from upstream)
 # ---------------------------------------------------------------------------
-SHARED_EMCC_CFLAGS="--no-entry -O3 -msimd128 -DNDEBUG -flto=full -frtti -fwasm-exceptions -sEXPORT_ALL=1 -sEXPORT_ES6=0 -sMODULARIZE=0 -sINITIAL_MEMORY=128MB -sMAXIMUM_MEMORY=4096MB -sALLOW_MEMORY_GROWTH=1 -sFORCE_FILESYSTEM=1 -sEXPORTED_FUNCTIONS=_main,_wllama_malloc,_wllama_start,_wllama_action,_wllama_exit,_wllama_debug -sEXPORTED_RUNTIME_METHODS=ccall,cwrap -sNO_EXIT_RUNTIME=1"
+SHARED_EMCC_CFLAGS="--no-entry -O3 -msimd128 -DNDEBUG -flto=full -frtti -fwasm-exceptions -sMEMORY64=1 -sEXPORT_ALL=1 -sEXPORT_ES6=0 -sMODULARIZE=0 -sINITIAL_MEMORY=128MB -sMAXIMUM_MEMORY=4096MB -sALLOW_MEMORY_GROWTH=1 -sFORCE_FILESYSTEM=1 -sEXPORTED_FUNCTIONS=_main,_wllama_malloc,_wllama_start,_wllama_action,_wllama_exit,_wllama_debug -sEXPORTED_RUNTIME_METHODS=ccall,cwrap -sNO_EXIT_RUNTIME=1"
 
 cd "$FORK_DIR"
 
@@ -66,7 +66,7 @@ rm -rf wasm/single-thread
 mkdir -p wasm/single-thread
 cd wasm/single-thread
 
-emcmake cmake ../.. 2>&1 | tail -3
+emcmake cmake ../.. -DLLAMA_WASM_MEM64=ON 2>&1 | tail -3
 export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS"
 emmake make wllama -j$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4) 2>&1
 
@@ -82,7 +82,7 @@ mkdir -p wasm/multi-thread
 cd wasm/multi-thread
 
 export EMCC_CFLAGS=""
-emcmake cmake ../.. 2>&1 | tail -3
+emcmake cmake ../.. -DLLAMA_WASM_MEM64=ON 2>&1 | tail -3
 export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS -pthread -sUSE_PTHREADS=1 -sPTHREAD_POOL_SIZE=Module[\"pthreadPoolSize\"]"
 emmake make wllama -j$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4) 2>&1
 

@@ -55,6 +55,10 @@ extern "C" {
 #define LOWBIT_Q_QUANT_Q8_0          2
 /** OneBit SVID 1-bit decomposition into (a, b, sign) triplet */
 #define LOWBIT_Q_QUANT_SVID_1BIT     3
+/** K-quant 3-bit native format (ggml Q3_K, 256 elements/block) — uses native ggml path */
+#define LOWBIT_Q_QUANT_Q3_K          4
+/** K-quant 2-bit native format (ggml Q2_K, 256 elements/block) — uses native ggml path */
+#define LOWBIT_Q_QUANT_Q2_K          5
 /** Not found in metadata */
 #define LOWBIT_Q_QUANT_UNKNOWN      -1
 

@@ -1,0 +1,159 @@
+{
+  "date": "2026-04-10T02:59:21.045Z",
+  "model": "TinyLlama-1.1B-Chat-v1.0.Q8_0",
+  "originalSizeMB": 1117,
+  "maxTokens": 150,
+  "_artifactStatus": "partial-reconstruction",
+  "_artifactNote": "All three presets have at least one incomplete smoke-test output. v2-q4only: short-qa-en output is '(not run yet)' — the Playwright run read the UI <pre> before it updated, so no real model output was captured for that prompt (the two other smoke tests ARE raw captures). v2-q3konly and v2-q2konly: metrics (NMSE, compression, tensor counts, loadSuccess, tokenGenSuccess, functionalSuccess) are from actual Playwright runs; smoke-test output strings are reconstructed from session log — Reasoning/Short-QA outputs are approximate documented patterns, list-generation outputs were not recovered. All functionalSuccess values are reliable. To obtain a fully intact artifact, re-run: npx playwright test tests/lowbit-q-phase3-comparison.spec.ts",
+  "presets": [
+    {
+      "preset": "v2-q4only",
+      "label": "Q4_0-ONLY",
+      "description": "all weights Q4_0 — native quant baseline (no SVID)",
+      "conversionSuccess": true,
+      "metrics": {
+        "originalBytes": 1181116006,
+        "convertedBytes": 686817280,
+        "compressionRatio": 0.5814985797423865,
+        "svidCount": 0,
+        "q4_0Count": 154,
+        "q3_kCount": 0,
+        "q2_kCount": 0,
+        "passthroughCount": 47,
+        "totalAllocCount": 201,
+        "nmseMean": 0.01005601603537798,
+        "nmseMax": 0.020736288279294968,
+        "loadSuccess": true
+      },
+      "smokeTests": [
+        {
+          "promptId": "tiny-reasoning",
+          "label": "Reasoning",
+          "output": " 3 人です。",
+          "charCount": 7,
+          "matchedExpected": true,
+          "collapsed": false
+        },
+        {
+          "promptId": "short-qa-en",
+          "label": "Short QA",
+          "output": "(not run yet)",
+          "_outputNote": "Raw Playwright capture: UI <pre> still showed the default placeholder when the test read it. The prompt was submitted but no model output was captured for this entry.",
+          "charCount": 13,
+          "matchedExpected": false,
+          "collapsed": false
+        },
+        {
+          "promptId": "list-generation",
+          "label": "List",
+          "output": "\n\n1. 春 (春)\n2. 夏 (夏)\n3. 秋 (秋)\n4. 冬 (冬)\n\n4. 春 (春)\n5. 夏 (夏)\n6. 秋 (秋)\n7. 冬 (冬)\n\nこれらの名前は、日本の春、夏、秋、冬の四季の名前です。",
+          "charCount": 103,
+          "matchedExpected": true,
+          "collapsed": false
+        }
+      ],
+      "tokenGenSuccess": true,
+      "functionalSuccess": true
+    },
+    {
+      "preset": "v2-q3konly",
+      "label": "Q3_K-ONLY",
+      "description": "all weights Q3_K — native K-quant 3-bit baseline",
+      "_smokeTestsReconstructed": true,
+      "_smokeTestsNote": "Outputs reconstructed from session log after Q4_0-ONLY re-run overwrote the artifact. Reasoning/Short QA outputs approximate documented patterns; list-generation output was not recovered. Metrics and outcome fields (functionalSuccess, tokenGenSuccess, loadSuccess, NMSE, compression) are from the actual run.",
+      "conversionSuccess": true,
+      "metrics": {
+        "originalBytes": 1181116006,
+        "convertedBytes": 557842432,
+        "compressionRatio": 0.47231695,
+        "svidCount": 0,
+        "q4_0Count": 0,
+        "q3_kCount": 154,
+        "q2_kCount": 0,
+        "passthroughCount": 47,
+        "totalAllocCount": 201,
+        "nmseMean": 0.0343,
+        "nmseMax": 0.0522,
+        "loadSuccess": true
+      },
+      "smokeTests": [
+        {
+          "promptId": "tiny-reasoning",
+          "label": "Reasoning",
+          "output": "agyilletilletilletilletilletilletilletilletilletilletilletilletilletilletilletilletilletilletilletilletilletilletilletilletilletilletillet",
+          "charCount": 133,
+          "matchedExpected": false,
+          "collapsed": false
+        },
+        {
+          "promptId": "short-qa-en",
+          "label": "Short QA",
+          "output": "2. What is the capital of France? 3. What is the capital of France? 4. What is the capital of France? 5. What is the capital of France? 6. What is the capital of France?",
+          "charCount": 163,
+          "matchedExpected": false,
+          "collapsed": false
+        },
+        {
+          "promptId": "list-generation",
+          "label": "List",
+          "output": "(output not recorded — run artifact overwritten during Q4_0-ONLY re-run)",
+          "charCount": 68,
+          "matchedExpected": false,
+          "collapsed": false
+        }
+      ],
+      "tokenGenSuccess": true,
+      "functionalSuccess": false
+    },
+    {
+      "preset": "v2-q2konly",
+      "label": "Q2_K-ONLY",
+      "description": "all weights Q2_K — native K-quant 2-bit baseline",
+      "_smokeTestsReconstructed": true,
+      "_smokeTestsNote": "Outputs reconstructed from session log after Q4_0-ONLY re-run overwrote the artifact. Reasoning output approximates documented pattern; Short QA and List outputs were not recovered. Metrics and outcome fields (functionalSuccess, tokenGenSuccess, loadSuccess, NMSE, compression) are from the actual run.",
+      "conversionSuccess": true,
+      "metrics": {
+        "originalBytes": 1181116006,
+        "convertedBytes": 459276288,
+        "compressionRatio": 0.38882943,
+        "svidCount": 0,
+        "q4_0Count": 0,
+        "q3_kCount": 0,
+        "q2_kCount": 154,
+        "passthroughCount": 47,
+        "totalAllocCount": 201,
+        "nmseMean": 0.1161,
+        "nmseMax": 0.1797,
+        "loadSuccess": true
+      },
+      "smokeTests": [
+        {
+          "promptId": "tiny-reasoning",
+          "label": "Reasoning",
+          "output": "}@a}@a}@a}@a}@a}@a}@a}@a}@a}@a}@a}@a}@a}@a}@a}@a}@a}@a}@a}",
+          "charCount": 60,
+          "matchedExpected": false,
+          "collapsed": false
+        },
+        {
+          "promptId": "short-qa-en",
+          "label": "Short QA",
+          "output": "(output not recorded — run artifact overwritten during Q4_0-ONLY re-run)",
+          "charCount": 68,
+          "matchedExpected": false,
+          "collapsed": true
+        },
+        {
+          "promptId": "list-generation",
+          "label": "List",
+          "output": "(output not recorded — run artifact overwritten during Q4_0-ONLY re-run)",
+          "charCount": 68,
+          "matchedExpected": false,
+          "collapsed": false
+        }
+      ],
+      "tokenGenSuccess": true,
+      "functionalSuccess": false
+    }
+  ]
+}

@@ -56,6 +56,13 @@ interface OutputTensor {
   data: Uint8Array;
 }
 
+export interface OutputTensorPlan {
+  name: string;
+  type: GGMLType;
+  dims: bigint[];
+  dataSize: number;
+}
+
 // ---------------------------------------------------------------------------
 // Binary writer helper
 // ---------------------------------------------------------------------------
@@ -241,6 +248,58 @@ function float32ArrayToFp16Bytes(values: Float32Array): Uint8Array {
   return result;
 }
 
+function computeTensorOffsets(outputTensors: OutputTensorPlan[]): bigint[] {
+  let dataOffset = 0;
+  const tensorOffsets: bigint[] = [];
+  for (const tensor of outputTensors) {
+    tensorOffsets.push(BigInt(dataOffset));
+    dataOffset += tensor.dataSize;
+    const rem = dataOffset % ALIGNMENT;
+    if (rem !== 0) dataOffset += ALIGNMENT - rem;
+  }
+  return tensorOffsets;
+}
+
+export function computeAlignedDataSize(outputTensors: OutputTensorPlan[]): number {
+  let totalDataSize = 0;
+  for (const tensor of outputTensors) {
+    totalDataSize += tensor.dataSize;
+    const rem = totalDataSize % ALIGNMENT;
+    if (rem !== 0) totalDataSize += ALIGNMENT - rem;
+  }
+  return totalDataSize;
+}
+
+export function buildGGUFHeaderBytes(
+  metadata: Map<string, GGUFMetadataEntry>,
+  outputTensors: OutputTensorPlan[],
+): Uint8Array {
+  const headerWriter = new GGUFBinaryWriter();
+  headerWriter.writeUint32(GGUF_MAGIC);
+  headerWriter.writeUint32(GGUF_VERSION);
+  headerWriter.writeUint64(BigInt(outputTensors.length));
+  headerWriter.writeUint64(BigInt(metadata.size));
+
+  for (const [key, entry] of metadata) {
+    writeMetadataEntry(headerWriter, key, entry);
+  }
+
+  const tensorOffsets = computeTensorOffsets(outputTensors);
+  for (let t = 0; t < outputTensors.length; t++) {
+    const tensor = outputTensors[t];
+    headerWriter.writeString(tensor.name);
+    headerWriter.writeUint32(tensor.dims.length);
+    for (const dim of tensor.dims) {
+      headerWriter.writeUint64(dim);
+    }
+    headerWriter.writeUint32(tensor.type);
+    headerWriter.writeUint64(tensorOffsets[t]);
+  }
+
+  headerWriter.writePadding(ALIGNMENT);
+  return headerWriter.toUint8Array();
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -353,58 +412,24 @@ export function writeLowbitQGGUF(options: WriteLowbitQGGUFOptions): Uint8Array {
   });
 
   // --- Phase 1: Write header + metadata + tensor info ---
-  const headerWriter = new GGUFBinaryWriter();
+  const headerBytes = buildGGUFHeaderBytes(
+    metadata,
+    outputTensors.map((tensor) => ({
+      name: tensor.name,
+      type: tensor.type,
+      dims: tensor.dims,
+      dataSize: tensor.data.length,
+    })),
+  );
 
-  // Magic + version
-  headerWriter.writeUint32(GGUF_MAGIC);
-  headerWriter.writeUint32(GGUF_VERSION);
-
-  // Tensor count + metadata count
-  headerWriter.writeUint64(BigInt(outputTensors.length));
-  headerWriter.writeUint64(BigInt(metadata.size));
-
-  // Metadata KV pairs
-  for (const [key, entry] of metadata) {
-    writeMetadataEntry(headerWriter, key, entry);
-  }
-
-  // Tensor info (name, dims, type, offset — offset computed in phase 2)
-  // First pass: compute offsets
-  let dataOffset = 0;
-  const tensorOffsets: bigint[] = [];
-  for (const tensor of outputTensors) {
-    tensorOffsets.push(BigInt(dataOffset));
-    dataOffset += tensor.data.length;
-    // Align each tensor's data
-    const remainder = dataOffset % ALIGNMENT;
-    if (remainder !== 0) dataOffset += ALIGNMENT - remainder;
-  }
-
-  // Write tensor info
-  for (let t = 0; t < outputTensors.length; t++) {
-    const tensor = outputTensors[t];
-    headerWriter.writeString(tensor.name);
-    headerWriter.writeUint32(tensor.dims.length);
-    for (const dim of tensor.dims) {
-      headerWriter.writeUint64(dim);
-    }
-    headerWriter.writeUint32(tensor.type);
-    headerWriter.writeUint64(tensorOffsets[t]);
-  }
-
-  // Pad header to alignment
-  headerWriter.writePadding(ALIGNMENT);
-
-  // --- Phase 2: Assemble final buffer ---
-  const headerBytes = headerWriter.toUint8Array();
-
-  // Compute total size
-  let totalDataSize = 0;
-  for (const tensor of outputTensors) {
-    totalDataSize += tensor.data.length;
-    const remainder = (totalDataSize) % ALIGNMENT;
-    if (remainder !== 0) totalDataSize += ALIGNMENT - remainder;
-  }
+  const totalDataSize = computeAlignedDataSize(
+    outputTensors.map((tensor) => ({
+      name: tensor.name,
+      type: tensor.type,
+      dims: tensor.dims,
+      dataSize: tensor.data.length,
+    })),
+  );
 
   const totalSize = headerBytes.length + totalDataSize;
   const result = new Uint8Array(totalSize);
@@ -454,60 +479,11 @@ export interface WriteLowbitQV2GGUFOptions {
   v2Metadata: LowbitQV2Metadata;
 }
 
-/**
- * Write a lowbit-Q v2 GGUF file.
- *
- * The v2 format extends v1 with:
- * - Mixed-bit allocation: SVID 1-bit triplets, native Q4_0/Q8_0, or passthrough
- * - Rich metadata: allocator decisions, KV cache params, quality metrics
- * - Format version key set to 2 (readable by C++ code checking version > 0)
- */
-export function writeLowbitQV2GGUF(options: WriteLowbitQV2GGUFOptions): Uint8Array {
-  const {
-    sourceHeader,
-    passthroughTensors,
-    svid1bitTensors,
-    nativeQuantTensors,
-    v2Metadata,
-  } = options;
-
-  const outputTensors: OutputTensor[] = [];
-
-  // 1. Passthrough tensors (embedding, norm, PASSTHROUGH weight)
-  for (const [name, { info, data }] of passthroughTensors) {
-    outputTensors.push({ name, type: info.type, dims: info.dims, data });
-  }
-
-  // 2. SVID 1-bit triplets (a, b, sign)
-  for (const [originalName, group] of svid1bitTensors) {
-    const { decomposition } = group;
-    const baseName = originalName.replace(/\.weight$/, '');
-    outputTensors.push({
-      name: baseName + LOWBIT_Q_SUFFIX_A,
-      type: GGMLType.F16,
-      dims: [BigInt(decomposition.outFeatures)],
-      data: float32ArrayToFp16Bytes(decomposition.a),
-    });
-    outputTensors.push({
-      name: baseName + LOWBIT_Q_SUFFIX_B,
-      type: GGMLType.F16,
-      dims: [BigInt(decomposition.inFeatures)],
-      data: float32ArrayToFp16Bytes(decomposition.b),
-    });
-    outputTensors.push({
-      name: baseName + LOWBIT_Q_SUFFIX_SIGN,
-      type: GGMLType.I8,
-      dims: [BigInt(decomposition.sign.length)],
-      data: decomposition.sign,
-    });
-  }
-
-  // 3. Natively re-quantized tensors (Q4_0, Q8_0)
-  for (const t of nativeQuantTensors) {
-    outputTensors.push({ name: t.name, type: t.type, dims: t.dims, data: t.data });
-  }
-
-  // Build v2 metadata map
+export function buildLowbitQV2Metadata(
+  sourceHeader: GGUFHeader,
+  svid1bitTensorNames: Iterable<string>,
+  v2Metadata: LowbitQV2Metadata,
+): Map<string, GGUFMetadataEntry> {
   const metadata = new Map<string, GGUFMetadataEntry>(sourceHeader.metadata);
 
   metadata.set(LOWBIT_Q_VERSION_KEY, {
@@ -522,10 +498,9 @@ export function writeLowbitQV2GGUF(options: WriteLowbitQV2GGUFOptions): Uint8Arr
     value: LOWBIT_Q_SIGN_PACKING,
   });
 
-  // SVID layer indices (v1 compat key, lists layers that have SVID tensors)
   const svid1bitLayers = Array.from(
     new Set(
-      Array.from(svid1bitTensors.keys())
+      Array.from(svid1bitTensorNames)
         .map((name) => {
           const m = name.match(/(?:layers|blk)\.(\d+)\./);
           return m ? parseInt(m[1], 10) : null;
@@ -604,46 +579,96 @@ export function writeLowbitQV2GGUF(options: WriteLowbitQV2GGUFOptions): Uint8Arr
     });
   }
 
+  return metadata;
+}
+
+/**
+ * Write a lowbit-Q v2 GGUF file **into a single in-memory buffer**.
+ *
+ * The v2 format extends v1 with:
+ * - Mixed-bit allocation: SVID 1-bit triplets, native Q4_0/Q8_0, or passthrough
+ * - Rich metadata: allocator decisions, KV cache params, quality metrics
+ * - Format version key set to 2 (readable by C++ code checking version > 0)
+ *
+ * **WARNING — full-buffer allocation**: This function allocates a single
+ * `Uint8Array` covering the entire output file and copies every tensor
+ * payload into it.  For large models (>1 GB) this will likely exceed
+ * browser memory limits or cause severe GC pressure.
+ *
+ * For production use, prefer {@link convertToLowbitQV2StreamingToOPFS} in
+ * `convert.ts`, which streams tensor data directly to OPFS via a
+ * `FileSystemWritableFileStream` with ~1 MB peak overhead per tensor.
+ *
+ * This in-memory writer is retained for:
+ * - Unit / snapshot tests that need a byte-exact GGUF buffer
+ * - Small models (< ~200 MB) where simplicity outweighs memory cost
+ */
+export function writeLowbitQV2GGUF(options: WriteLowbitQV2GGUFOptions): Uint8Array {
+  const {
+    sourceHeader,
+    passthroughTensors,
+    svid1bitTensors,
+    nativeQuantTensors,
+    v2Metadata,
+  } = options;
+
+  const outputTensors: OutputTensor[] = [];
+
+  // 1. Passthrough tensors (embedding, norm, PASSTHROUGH weight)
+  for (const [name, { info, data }] of passthroughTensors) {
+    outputTensors.push({ name, type: info.type, dims: info.dims, data });
+  }
+
+  // 2. SVID 1-bit triplets (a, b, sign)
+  for (const [originalName, group] of svid1bitTensors) {
+    const { decomposition } = group;
+    const baseName = originalName.replace(/\.weight$/, '');
+    outputTensors.push({
+      name: baseName + LOWBIT_Q_SUFFIX_A,
+      type: GGMLType.F16,
+      dims: [BigInt(decomposition.outFeatures)],
+      data: float32ArrayToFp16Bytes(decomposition.a),
+    });
+    outputTensors.push({
+      name: baseName + LOWBIT_Q_SUFFIX_B,
+      type: GGMLType.F16,
+      dims: [BigInt(decomposition.inFeatures)],
+      data: float32ArrayToFp16Bytes(decomposition.b),
+    });
+    outputTensors.push({
+      name: baseName + LOWBIT_Q_SUFFIX_SIGN,
+      type: GGMLType.I8,
+      dims: [BigInt(decomposition.sign.length)],
+      data: decomposition.sign,
+    });
+  }
+
+  // 3. Natively re-quantized tensors (Q4_0, Q8_0)
+  for (const t of nativeQuantTensors) {
+    outputTensors.push({ name: t.name, type: t.type, dims: t.dims, data: t.data });
+  }
+
+  const metadata = buildLowbitQV2Metadata(sourceHeader, svid1bitTensors.keys(), v2Metadata);
+
   // Binary layout (identical structure to v1)
-  const headerWriter = new GGUFBinaryWriter();
-  headerWriter.writeUint32(GGUF_MAGIC);
-  headerWriter.writeUint32(GGUF_VERSION);
-  headerWriter.writeUint64(BigInt(outputTensors.length));
-  headerWriter.writeUint64(BigInt(metadata.size));
+  const headerBytes = buildGGUFHeaderBytes(
+    metadata,
+    outputTensors.map((tensor) => ({
+      name: tensor.name,
+      type: tensor.type,
+      dims: tensor.dims,
+      dataSize: tensor.data.length,
+    })),
+  );
 
-  for (const [key, entry] of metadata) {
-    writeMetadataEntry(headerWriter, key, entry);
-  }
-
-  let dataOffset = 0;
-  const tensorOffsets: bigint[] = [];
-  for (const tensor of outputTensors) {
-    tensorOffsets.push(BigInt(dataOffset));
-    dataOffset += tensor.data.length;
-    const rem = dataOffset % ALIGNMENT;
-    if (rem !== 0) dataOffset += ALIGNMENT - rem;
-  }
-
-  for (let t = 0; t < outputTensors.length; t++) {
-    const tensor = outputTensors[t];
-    headerWriter.writeString(tensor.name);
-    headerWriter.writeUint32(tensor.dims.length);
-    for (const dim of tensor.dims) {
-      headerWriter.writeUint64(dim);
-    }
-    headerWriter.writeUint32(tensor.type);
-    headerWriter.writeUint64(tensorOffsets[t]);
-  }
-
-  headerWriter.writePadding(ALIGNMENT);
-  const headerBytes = headerWriter.toUint8Array();
-
-  let totalDataSize = 0;
-  for (const tensor of outputTensors) {
-    totalDataSize += tensor.data.length;
-    const rem = totalDataSize % ALIGNMENT;
-    if (rem !== 0) totalDataSize += ALIGNMENT - rem;
-  }
+  const totalDataSize = computeAlignedDataSize(
+    outputTensors.map((tensor) => ({
+      name: tensor.name,
+      type: tensor.type,
+      dims: tensor.dims,
+      dataSize: tensor.data.length,
+    })),
+  );
 
   const v2Result = new Uint8Array(headerBytes.length + totalDataSize);
   v2Result.set(headerBytes, 0);

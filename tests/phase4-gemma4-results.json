@@ -1,0 +1,50 @@
+[
+  {
+    "label": "Q8_0 (reference)",
+    "quantType": "Q8_0",
+    "ggufPath": "/tmp/gemma-4-e2b-it.Q8_0.gguf",
+    "available": false,
+    "conversionSuccess": false,
+    "loadSuccess": false,
+    "smokeTests": [],
+    "tokenGenSuccess": false,
+    "functionalSuccess": false,
+    "fileSizeBytes": null
+  },
+  {
+    "label": "Q4_0",
+    "quantType": "Q4_0",
+    "ggufPath": "/tmp/gemma-4-e2b-it.Q4_0.gguf",
+    "available": false,
+    "conversionSuccess": false,
+    "loadSuccess": false,
+    "smokeTests": [],
+    "tokenGenSuccess": false,
+    "functionalSuccess": false,
+    "fileSizeBytes": null
+  },
+  {
+    "label": "Q3_K",
+    "quantType": "Q3_K_S",
+    "ggufPath": "/tmp/gemma-4-e2b-it.Q3_K_S.gguf",
+    "available": false,
+    "conversionSuccess": false,
+    "loadSuccess": false,
+    "smokeTests": [],
+    "tokenGenSuccess": false,
+    "functionalSuccess": false,
+    "fileSizeBytes": null
+  },
+  {
+    "label": "Q2_K",
+    "quantType": "Q2_K",
+    "ggufPath": "/tmp/gemma-4-e2b-it.Q2_K.gguf",
+    "available": false,
+    "conversionSuccess": false,
+    "loadSuccess": false,
+    "smokeTests": [],
+    "tokenGenSuccess": false,
+    "functionalSuccess": false,
+    "fileSizeBytes": null
+  }
+]

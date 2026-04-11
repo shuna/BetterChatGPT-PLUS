@@ -1,0 +1,192 @@
+{
+  "date": "2026-04-10T00:21:07.295Z",
+  "model": "TinyLlama-1.1B-Chat-v1.0.Q8_0",
+  "originalSizeMB": 1117,
+  "maxTokens": 150,
+  "presets": [
+    {
+      "preset": "v2-default",
+      "label": "DEFAULT",
+      "description": "attnQK=Q4_0, attnVO+FFN=SVID_1BIT",
+      "conversionSuccess": true,
+      "metrics": {
+        "originalBytes": 1181116006,
+        "convertedBytes": 301989888,
+        "compressionRatio": 0.2556818182684081,
+        "svidCount": 140,
+        "q4_0Count": 14,
+        "passthroughCount": 47,
+        "totalAllocCount": 201,
+        "nmseMean": 0.33634164929389954,
+        "nmseMax": 0.3920466899871826,
+        "loadSuccess": true
+      },
+      "smokeTests": [
+        {
+          "promptId": "tiny-reasoning",
+          "label": "Reasoning",
+          "output": "mitt Ducmittmitt Ducetonetonetonmitt Ducetonmitt Duceton Duc Ducetonetonetonmitt Duc Duc Duc Duc Ducetonmitt Ducetoneton Duc Ducetonięmittetoneton Duc Duc Duc Duc Ducmitt Ducmitt Duc Ducmittmittmitt Ducetoneton Duc Duc Duceton Duc Duc Duc Ducetonetonmitt Duc Duceton Duc Duc Duc Duceton Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc Duc D",
+          "charCount": 598,
+          "matchedExpected": false,
+          "collapsed": true
+        },
+        {
+          "promptId": "short-qa-en",
+          "label": "Short QA",
+          "output": "ischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofischofmiss◄ischofischofischofischofischofischof◄ischof◄ischofischof◄ischofischof◄◄◄◄◄◄ischof◄◄◄◄◄◄◄◄◄◄emeinischofmitt◄◄◄◄◄◄◄◄◄◄◄◄ hina◄◄◄◄◄◄ischof◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄◄emein",
+          "charCount": 513,
+          "matchedExpected": false,
+          "collapsed": false
+        },
+        {
+          "promptId": "list-generation",
+          "label": "List",
+          "output": " ExternaŤ◄ŤŤŤ◄ischofischofischof Externa Externa✿✿◄ Externa Externa Externa Externa Externaischof✿◄ jun Externa Externa Externa Externa Externa jun jun◄öff Externa Externa Externa Externa Externa Externaewnętrz Externa Externa Externa Externa Externa jun◄ Externa Externa Externa Externa jun◄◄ Externa Externa Externa Ligações Externa Externa Externa jun jun Externa Externa Externa Externa Externa Externa Externa Externa Externa Externa Externa Externa Externa jun Yang Yang Yang jun Yang jun Exter",
+          "charCount": 861,
+          "matchedExpected": false,
+          "collapsed": true
+        }
+      ],
+      "tokenGenSuccess": true,
+      "functionalSuccess": false
+    },
+    {
+      "preset": "v2-aggressive",
+      "label": "AGGRESSIVE",
+      "description": "all=SVID_1BIT except first/last layers",
+      "conversionSuccess": true,
+      "metrics": {
+        "originalBytes": 1181116006,
+        "convertedBytes": 264241152,
+        "compressionRatio": 0.22372159098485708,
+        "svidCount": 154,
+        "q4_0Count": 0,
+        "passthroughCount": 47,
+        "totalAllocCount": 201,
+        "nmseMean": 0.36920857429504395,
+        "nmseMax": 0.39764827489852905,
+        "loadSuccess": true
+      },
+      "smokeTests": [
+        {
+          "promptId": "tiny-reasoning",
+          "label": "Reasoning",
+          "output": " longer longest longest longer longest longest longer longer longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest longest passengerorr longest longest longest longest longest seasonsorr subjects subject seasons seasonsorr longest longest longest seasons subjects longest se",
+          "charCount": 1116,
+          "matchedExpected": false,
+          "collapsed": true
+        },
+        {
+          "promptId": "short-qa-en",
+          "label": "Short QA",
+          "output": " brit Komm instruments Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm instruments Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm Komm!\" Komm Kommordnetordnet Kommordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetordnetord",
+          "charCount": 863,
+          "matchedExpected": false,
+          "collapsed": true
+        },
+        {
+          "promptId": "list-generation",
+          "label": "List",
+          "output": " mij mij longer mij mij mij mij mij mij Komm mij mij mij mij mij mij mij mij mij интер mij mij mij mij mij mij mijдного mijieb mijдногодногоiebiebдногоiebдного mij mij mij mijдногоiebдного subjects subjects subjects subjects subjects subjectsiebiebieb subjects subjects subjectsessen seasons subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects subjects s",
+          "charCount": 1110,
+          "matchedExpected": false,
+          "collapsed": true
+        }
+      ],
+      "tokenGenSuccess": true,
+      "functionalSuccess": false
+    },
+    {
+      "preset": "v2-conservative",
+      "label": "CONSERVATIVE",
+      "description": "attn=Q4_0, FFN=SVID_1BIT",
+      "conversionSuccess": true,
+      "metrics": {
+        "originalBytes": 1181116006,
+        "convertedBytes": 384827392,
+        "compressionRatio": 0.32581676147397837,
+        "svidCount": 60,
+        "q4_0Count": 94,
+        "passthroughCount": 47,
+        "totalAllocCount": 201,
+        "nmseMean": 0.14928385615348816,
+        "nmseMax": 0.37089279294013977,
+        "loadSuccess": true
+      },
+      "smokeTests": [
+        {
+          "promptId": "tiny-reasoning",
+          "label": "Reasoning",
+          "output": "éső�teraovátera breminaaisonminateratera breminateraminaminateramina hersmina hers�minateraminaminamina hers hersminamina�minamina hersminaminaminaminaminamina� hersmina��minaminaminamina��terariftminamina hersminaminariftmina持minaminaminaminaminamina hersminamina hersminariftminariftmina hersmina hersminamina� hers hersminaminaminamina�minamina hers hersmina hers hersminamina hersminaminamina hers�mina hersminamina�minaminamina� hers hersminaminamina hersminamina� hersmina hers hersminamina�min",
+          "charCount": 577,
+          "matchedExpected": false,
+          "collapsed": false
+        },
+        {
+          "promptId": "short-qa-en",
+          "label": "Short QA",
+          "output": "terateraterateraterateraterateraterateraterateraterateraterateraterateraterateraterateratera hersteraterateraterateraterateraterateraterateraterateraterateratera hersterateraterateraterateraminatera herstera hersterateraminateraminatera hersteraminateraterateraminatera hersteraminaterateraminateratera hersmina hersminaterateraminatera hersminateratera hersmina hersminamina hersmina herstera hersmina hersmina hersminamina hersmina hersminaminateraminaminateratera hers herstera hersmina hers hers ",
+          "charCount": 635,
+          "matchedExpected": false,
+          "collapsed": false
+        },
+        {
+          "promptId": "list-generation",
+          "label": "List",
+          "output": "teraterateraterateraminaterateraminaminateraterateraterateraminaterateraterateraminateraterateraterateraterateraterateraterateraterateraminateraminateraterateraminateraminaminateraminaterateraminateraminaminaminaminaminaminaminaterateraminaminateraminaminateraminateraminaminaminateraminaminateraminateraminateraterateraminateraminaminaminaminateraminaminaminaminaminaminateramina hersminaminateraminaminaminaminateraminateraminaminaminateraminaminateraminaminaminateraminatera hersminaminateraminami",
+          "charCount": 602,
+          "matchedExpected": false,
+          "collapsed": false
+        }
+      ],
+      "tokenGenSuccess": true,
+      "functionalSuccess": false
+    },
+    {
+      "preset": "v2-q4only",
+      "label": "Q4_0-ONLY",
+      "description": "all weights Q4_0 — SVID baseline (no SVID decomposition)",
+      "conversionSuccess": true,
+      "metrics": {
+        "originalBytes": 1181116006,
+        "convertedBytes": 644874240,
+        "compressionRatio": 0.5459872160939965,
+        "svidCount": 40,
+        "q4_0Count": 114,
+        "passthroughCount": 47,
+        "totalAllocCount": 201,
+        "nmseMean": 0.10358878970146179,
+        "nmseMax": 0.3920466899871826,
+        "loadSuccess": true
+      },
+      "smokeTests": [
+        {
+          "promptId": "tiny-reasoning",
+          "label": "Reasoning",
+          "output": " racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc raccitan raccitanitan racc racc racc racc racc raccitan racc raccitanitan racc racc racc racc racc raccitanitanitan racc raccitanitanitanitan racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc racc raccitanycz raccitan racc raccitan racc racc racc racc raccitan rac",
+          "charCount": 710,
+          "matchedExpected": false,
+          "collapsed": true
+        },
+        {
+          "promptId": "short-qa-en",
+          "label": "Short QA",
+          "output": "`;wo`;`;`;`;`;wo`;wouo)`,`,)`,)`,)`,uo)`,)`,)`,uouo)`,)`,)`,)`,)`,)`,)`,)`,)`,)`,)`,)`,)`,)`,)`,)`,)`,)`,oi)`,atifoi)`,)`,)`,)`,)`,)`,)`,溪usztetonatif)`,)`,oistwoatifetonoiusztetonatifetoneton溪usztetonarca溪ética)`,stwostwostwostwostwostwostwostwostwostwostwostwostwostwostwostwostwo Ligações Ligações Ligações Ligações Ligações Ligações Ligações Ligações Ligações Ligaçõesarca溪ética Ligações Ligações Ligações Ligações Ligações Ligações Ligações Ligações Ligações Ligações Ligações Ligações Ligações ",
+          "charCount": 796,
+          "matchedExpected": false,
+          "collapsed": true
+        },
+        {
+          "promptId": "list-generation",
+          "label": "List",
+          "output": " racc banda`; Mad releases作`, Mad raccMadxl MajMad`, Mad racc Maj/``;amaramaramaramaramaramaramaramaramaramaramaramaramar Maj recentamar,]amar entramaramaramaramar,] sib racc recentamar,]rm Maj,] entr entr entr entr entr entr,] entr entr entr entr,] entr,] entr,] entr entr entr entr entr,] entr entr entr,] entr entr entr,] entr entr entr,] entr,] entr,] entr,] entr entr entr entr entr entr entr entr entr entr,] entr entr entr entr,] entr,] entr entr entr entr entr,] entr entr,] entr entr entr en",
+          "charCount": 621,
+          "matchedExpected": false,
+          "collapsed": true
+        }
+      ],
+      "tokenGenSuccess": true,
+      "functionalSuccess": false
+    }
+  ]
+}

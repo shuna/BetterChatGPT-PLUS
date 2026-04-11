@@ -1,20 +1,42 @@
 /**
- * lowbit-q-model-builder.h — lowbit-Q model graph construction.
+ * lowbit-q-model-builder.h — lowbit-Q model graph construction helpers.
  *
- * Provides helpers that intercept the llama.cpp model graph builder
- * to substitute build_lora_mm with lowbit_q_build_mul_mat for layers
- * that have lowbit-Q SVID tensor triplets (a, b, sign).
+ * Provides the lowbit_q_layer_tensors struct and lowbit_q_lookup() stub
+ * used by the patched llama.cpp graph builder.
  *
- * Integration with wllama's action_load:
- *   After llama_model_load completes, call lowbit_q_detect_format()
- *   to check if the model is lowbit-Q (returns version > 0).
+ * == Dispatch architecture (Phase 2: struct-field approach) ==
  *
- * Since llama.cpp does not expose a graph-builder hook, the integration
- * strategy is to patch the model's build function (llama.cpp/src/models/
- * llama.cpp, llm_build_llama constructor) and add lowbit-Q dispatch there.
- * This file provides the helper functions that the patched builder calls.
+ * The actual dispatch decision is NOT made via lowbit_q_lookup() at
+ * inference time. Instead, the patch 0002 loader pre-populates dedicated
+ * fields in llama_layer (llama-model.h) during model load:
  *
- * See patches/0003-llama-build-lowbit-q-dispatch.patch for the exact changes.
+ *   layer.lowbit_q_wq_a    = create_tensor("blk.N.attn_q.lowbit_q_a", ...)
+ *   layer.lowbit_q_wq_b    = create_tensor("blk.N.attn_q.lowbit_q_b", ...)
+ *   layer.lowbit_q_wq_sign = create_tensor("blk.N.attn_q.lowbit_q_sign", ...)
+ *   // ... (wk, wv, wo, ffn_gate, ffn_down, ffn_up)
+ *
+ * The patch 0003 graph builder (models/llama.cpp) checks those fields:
+ *
+ *   if (model.layers[il].lowbit_q_wq_a) {
+ *       Qcur = lowbit_q_build_mul_mat(ctx0,
+ *           model.layers[il].lowbit_q_wq_a,
+ *           model.layers[il].lowbit_q_wq_b,
+ *           model.layers[il].lowbit_q_wq_sign, cur);
+ *   } else {
+ *       Qcur = build_lora_mm(model.layers[il].wq, cur);
+ *   }
+ *
+ * == Why not lowbit_q_lookup()? ==
+ *
+ * The original design had lowbit_q_lookup() call llama_get_model_tensor()
+ * at inference time to search for SVID tensors by name. However,
+ * llama_get_model_tensor() is not available in the public C API of the
+ * wllama v2.3.7 pinned llama.cpp version. The struct-field approach used
+ * here mirrors the pattern from FujitsuResearch/OneCompression's onebit
+ * implementation and resolves the same symbols at load time instead.
+ *
+ * lowbit_q_lookup() remains in the API as a stub that always returns
+ * {valid=0}. It is not called by the shipped dispatch code.
  */
 
 #ifndef LOWBIT_Q_MODEL_BUILDER_H
@@ -46,42 +68,32 @@ extern "C" {
 
 /**
  * Per-layer lowbit-Q SVID tensor triplet.
- * Resolved from the model during graph construction via lowbit_q_lookup().
+ *
+ * NOTE: In the Phase 2 implementation, dispatch decisions are made via
+ * the llama_layer struct fields (lowbit_q_wq_a etc.) set at load time,
+ * NOT by calling lowbit_q_lookup() at inference time. This struct is
+ * kept for API compatibility; lowbit_q_lookup() always returns valid=0.
  */
 struct lowbit_q_layer_tensors {
     struct ggml_tensor * a;    /* fp16, (out_features,) — row scales */
     struct ggml_tensor * b;    /* fp16, (in_features,)  — column scales */
     struct ggml_tensor * sign; /* uint8, packed bits MSB-first, (ceil(out*in/8),) */
-    int valid;                 /* 1 if all three tensors were found */
+    int valid;                 /* 1 if all three tensors were found; always 0 in stub */
 };
 
 /**
  * Look up lowbit-Q SVID tensors for a given layer projection.
  *
- * Uses llama_get_model_tensor() which searches across all model weight
- * contexts — safe for split models and multiple ggml contexts.
+ * STUB IMPLEMENTATION: always returns {valid=0}.
  *
- * @param model   The loaded llama_model (read-only)
- * @param prefix  Tensor name prefix, e.g. "blk.0.attn_q"
- * @return        Struct with the three tensors, or valid=0 if not found
+ * The original design called llama_get_model_tensor() here, but that
+ * function is not available in the public API of the wllama-pinned
+ * llama.cpp. Dispatch instead uses the llama_layer struct fields
+ * (lowbit_q_wq_a etc.) populated by the patch 0002 loader.
  *
- * v2 dispatch pattern (patched model builder):
- *
- *   // Q projection: try SVID, fall back to standard
- *   struct lowbit_q_layer_tensors lq;
- *   {
- *       char pfx[64];
- *       snprintf(pfx, sizeof(pfx), "blk.%d.attn_q", il);
- *       lq = lowbit_q_lookup(&model, pfx);
- *   }
- *   ggml_tensor * Qcur = lq.valid
- *       ? lowbit_q_build_mul_mat(ctx0, lq.a, lq.b, lq.sign, cur)
- *       : build_lora_mm(model.layers[il].wq, cur);
- *
- * Identification rules (from "lowbit-q.tensor_alloc" metadata):
- *   .lowbit_q_sign exists       → SVID_1BIT (this function returns valid=1)
- *   .weight exists, type=Q4_0   → Q4_0 re-quantized (ggml native kernel)
- *   .weight exists, other type  → PASSTHROUGH (ggml native kernel)
+ * @param model   The loaded llama_model (read-only) — unused in stub
+ * @param prefix  Tensor name prefix, e.g. "blk.0.attn_q" — unused in stub
+ * @return        {valid=0} always
  */
 struct lowbit_q_layer_tensors lowbit_q_lookup(
     const struct llama_model * model,
@@ -89,7 +101,7 @@ struct lowbit_q_layer_tensors lowbit_q_lookup(
 
 /**
  * Log all lowbit-Q SVID tensors found in the model to stderr.
- * Format: "@@INFO[lowbit-q] blk.N.proj_name: SVID / Q4_0 / not found"
+ * Delegates to lowbit_q_log_model_info() in lowbit-q-metadata.h.
  * No-op if model has no lowbit-Q metadata.
  *
  * @param model   The loaded llama_model
@@ -103,7 +115,7 @@ void lowbit_q_log_model_tensors(
 }
 #endif
 
-/* C++ convenience overloads using std::string prefix */
+/* C++ convenience overload using std::string prefix */
 #ifdef __cplusplus
 inline struct lowbit_q_layer_tensors lowbit_q_lookup(
     const struct llama_model * model,

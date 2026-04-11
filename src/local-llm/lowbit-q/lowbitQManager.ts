@@ -17,6 +17,7 @@ import type {
   ConversionProgressMessage,
   ConversionDoneMessage,
   ConversionErrorMessage,
+  BitwidthAllocatorConfig,
 } from './types';
 import type {
   LocalModelDefinition,
@@ -26,6 +27,7 @@ import {
   saveFile,
   readFile,
   verifyStoredModel,
+  deleteModelFile,
 } from '../storage';
 
 // ---------------------------------------------------------------------------
@@ -58,10 +60,29 @@ export interface LowbitQConversionCallbacks {
   onProgress?: (progress: ConversionProgress) => void;
   onComplete?: (result: LowbitQConversionResult) => void;
   onError?: (error: string) => void;
-  /** lowbit-Q conversion mode (which tensors to convert). Default: 'all' */
+  /**
+   * v2: Bitwidth allocator configuration.
+   * When provided, the v2 mixed-bit pipeline is used.
+   * Takes precedence over convertMode.
+   */
+  allocatorConfig?: BitwidthAllocatorConfig;
+  /**
+   * @deprecated Use allocatorConfig instead.
+   * v1: lowbit-Q conversion mode (which tensors to convert). Default: 'all'
+   */
   convertMode?: string;
   /** Whether to compute per-tensor quality metrics (NMSE). Default: false */
   computeQuality?: boolean;
+  /** Optional source model name stored in v2 GGUF metadata */
+  sourceModelName?: string;
+  /** Internal: OPFS location of the source file, used to free quota for large models */
+  sourceOpfsInfo?: { modelId: string; fileName: string };
+  /**
+   * When set, the Worker fetches the source from this URL instead of using
+   * the File passed via postMessage. Avoids the Chromium ~2 GB OPFS per-file
+   * limit and structured-clone size limits.
+   */
+  sourceUrl?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -125,8 +146,39 @@ export class LowbitQConversionManager {
     sourceLabel: string,
     callbacks: LowbitQConversionCallbacks = {},
   ): Promise<LowbitQConversionResult> {
-    // Step 1: Read source file from OPFS
-    const sourceFile = await readFile(sourceModelId, sourceFileName);
+    // Step 1: Read source file from OPFS.
+    const opfsFile = await readFile(sourceModelId, sourceFileName);
+
+    // For large files (>2 GB), read into memory chunks to break the OPFS
+    // storage reference, then delete the OPFS entry. A File from getFile()
+    // holds a reference to the underlying OPFS storage — deleting the
+    // directory entry alone won't free space while the File is alive.
+    const LARGE_FILE_THRESHOLD = 2 * 1024 * 1024 * 1024; // 2 GB
+    let sourceFile: File = opfsFile;
+    if (opfsFile.size > LARGE_FILE_THRESHOLD) {
+      console.info(
+        `[LowbitQConversionManager] Large source (${(opfsFile.size / 1024 / 1024).toFixed(0)} MB), ` +
+        `reading into memory to break OPFS reference...`,
+      );
+      const chunks: Uint8Array[] = [];
+      const reader = opfsFile.stream().getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+      sourceFile = new File(chunks, opfsFile.name, { type: opfsFile.type });
+      console.info(
+        `[LowbitQConversionManager] In-memory File created, deleting OPFS entry...`,
+      );
+      try {
+        await deleteModelFile(sourceModelId, sourceFileName);
+        console.info('[LowbitQConversionManager] OPFS source deleted');
+      } catch (e) {
+        console.warn('[LowbitQConversionManager] Failed to delete source:', (e as Error).message);
+      }
+    }
+
     return this.convertFromFile(sourceFile, sourceModelId, sourceLabel, callbacks);
   }
 
@@ -166,12 +218,24 @@ export class LowbitQConversionManager {
         this.cleanup();
       };
 
+      // When allocatorConfig is provided, use the v2 pipeline.
+      // Pass convertMode only when falling back to the legacy v1 path.
       this.worker.postMessage({
         id: 1,
         type: 'start',
         sourceFile,
-        convertMode: callbacks.convertMode,
+        sourceUrl: callbacks.sourceUrl,
+        opfsTarget: callbacks.allocatorConfig
+          ? {
+              modelId: generateLowbitQModelId(sourceModelId),
+              fileName: generateLowbitQFilename(sourceFile.name),
+            }
+          : undefined,
+        allocatorConfig: callbacks.allocatorConfig,
+        convertMode: callbacks.allocatorConfig ? undefined : callbacks.convertMode,
         computeQuality: callbacks.computeQuality,
+        sourceModelName: callbacks.sourceModelName,
+        sourceOpfsInfo: callbacks.sourceOpfsInfo,
       });
     });
   }
@@ -212,7 +276,12 @@ export class LowbitQConversionManager {
             percent: 95,
           });
 
-          await saveFile(lowbitQModelId, lowbitQFileName, msg.result);
+          if (!msg.persistedToOpfs) {
+            if (!msg.result) {
+              throw new Error('変換結果 Blob がありません。');
+            }
+            await saveFile(lowbitQModelId, lowbitQFileName, msg.result);
+          }
 
           // Step 4: Build model definition
           const displayMeta: LocalModelDisplayMeta = {

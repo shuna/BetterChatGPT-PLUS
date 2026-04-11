@@ -104,6 +104,8 @@ static int parse_quant_type(const char * s)
     if (strncmp(s, "svid_1bit",   9) == 0) return LOWBIT_Q_QUANT_SVID_1BIT;
     if (strncmp(s, "q4_0",       4) == 0) return LOWBIT_Q_QUANT_Q4_0;
     if (strncmp(s, "q8_0",       4) == 0) return LOWBIT_Q_QUANT_Q8_0;
+    if (strncmp(s, "q3_k",       4) == 0) return LOWBIT_Q_QUANT_Q3_K;
+    if (strncmp(s, "q2_k",       4) == 0) return LOWBIT_Q_QUANT_Q2_K;
     if (strncmp(s, "passthrough",11) == 0) return LOWBIT_Q_QUANT_PASSTHROUGH;
     return LOWBIT_Q_QUANT_UNKNOWN;
 }
@@ -248,12 +250,12 @@ int lowbit_q_is_svid_layer(
     if (qt == LOWBIT_Q_QUANT_SVID_1BIT) return 1;
     if (qt != LOWBIT_Q_QUANT_UNKNOWN)   return 0; /* Q4_0 / passthrough */
 
-    /* Fallback: metadata absent — check for .lowbit_q_sign tensor existence */
-    char sign_name[280];
-    snprintf(sign_name, sizeof(sign_name), "%s.lowbit_q_sign", prefix);
-    struct ggml_tensor * t = llama_get_model_tensor(
-        (struct llama_model *)model, sign_name);
-    return (t != NULL) ? 1 : 0;
+    /* Fallback: metadata absent — cannot check tensor existence without
+     * llama_get_model_tensor() (not available as public API in this fork).
+     * In the struct-field approach, SVID dispatch is handled via
+     * model.layers[il].lowbit_q_wq_a etc., so this fallback is not needed
+     * during normal operation. Return 0 (unknown). */
+    return 0;
 }
 
 void lowbit_q_log_model_info(

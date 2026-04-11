@@ -483,3 +483,96 @@ Phase 4: Activation 量子化 (条件付き)
 5. **統一フォーマット先行** — mixed-bit / KV cache / 回転前処理を個別に段階拡張するのではなく、
    包含する統一フォーマットを先に設計し、カーネルは一度だけ実装する
 6. 別アーキテクチャ系は当面保留 (RWKV の WebGPU 動向はウォッチ)
+
+---
+
+## E. KIVI 2-bit KV Cache 量子化 PoC (Phase 4、2026-04-10)
+
+### E1. KIVI 論文概要
+
+**KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache** (ICML 2024)
+arXiv: [2402.02750](https://arxiv.org/abs/2402.02750)
+
+- **手法**: KV cache をトークン生成ごとに非対称 2-bit 量子化
+  - **Keys (K)**: per-channel (per-column) 量子化 — チャネルごとに scale/zero_point を共有
+  - **Values (V)**: per-token (per-row) 量子化 — トークンごとに scale/zero_point を独立設定
+- **残差トークン**: 先頭 128 トークンは FP16 で保持 (attention sink 現象への対応)
+- **学習不要**: PTQ-only、calibration データ不要
+- **対象**: LLaMA 7B/13B での MMLU/GSM8K/HumanEval 品質維持を確認
+
+### E2. Phase 4 PoC 実装
+
+**実装ファイル**: `src/local-llm/lowbit-q/kiviQuantize.ts`  
+**テストファイル**: `src/local-llm/lowbit-q/kiviQuantize.test.ts` (14 テスト全パス)
+
+**アルゴリズム** (per-token, attn_v 向け):
+```typescript
+function quantizeRow2bit(row: Float32Array): { scale, zeroPoint, packed }
+// 1. min/max を計算
+// 2. scale = (max - min) / 3  (4レベル: 0, 1, 2, 3)
+//    zero_point = min
+// 3. q = clamp(round((x - zero_point) / scale), 0, 3)
+// 4. 4要素/byte にパック (MSB-first, 2bit × 4)
+// ストレージ: scale (fp16, 2B) + zero_point (fp16, 2B) + ceil(N/4) bytes
+```
+
+**ストレージ形式** (TypeScript PoC、GGUF 埋め込みは Phase 5):
+```
+Kivi2BitResult {
+  rows, cols: number
+  scales: Float32Array      // per-row scale (rows entries)
+  zeroPoints: Float32Array  // per-row zero_point (rows entries)
+  packedData: Uint8Array    // rows × ceil(cols/4) bytes
+  totalBytes: number        // = rows*2 + rows*2 + packedData.length
+}
+```
+
+### E3. 実測 NMSE (Phase 4、2026-04-10)
+
+SmolLM2-1.7B attn_v 次元 (64 rows × 2048 cols) でのランダムテンソル計測:
+
+| 入力分布 | NMSE | 備考 |
+|---------|------|------|
+| Gaussian N(0,1) | **0.653** | 純粋 2-bit (4レベル) の理論値と一致 |
+| Uniform [-1, 1] | **0.333** | レンジ量子化にとって最良のケース |
+| Outlier (2%×8x) | **2.604** | 外れ値が scale を支配 → 通常値が単一レベルに集中 |
+| Gaussian (per-channel) | **0.449** | 64要素/チャネル (小サンプル数) |
+
+**サイズ計測** (SmolLM2 512×2048 attn_v):
+- KIVI 2-bit: **0.252 bytes/elem** (Large: 0.252, Small 8×64: 0.313)
+- Q2_K: 0.328 bytes/elem → KIVI は 23% 小さい
+- Q4_0: 0.5625 bytes/elem → KIVI は 55% 小さい
+
+### E4. Phase 4 の結論
+
+| 比較軸 | KIVI 2-bit | Q2_K | 優位 |
+|--------|-----------|------|------|
+| bytes/elem | 0.252 | 0.328 | **KIVI** (サイズ 23% 小) |
+| Gaussian NMSE | 0.653 | ~0.116 | **Q2_K** (品質 5.6x 良好) |
+| 外れ値耐性 | 低 (NMSE 2.6) | 高 (super-block) | **Q2_K** |
+| 学習要否 | 不要 | 不要 | 同等 |
+| KV cache 適合 | ◎ (per-token/channel) | △ (weight 向け block) | **KIVI** |
+
+**結論**:
+- **KIVI は KV cache 専用**。weight テンソルに適用しても Q2_K に対する品質優位はない
+- **size 優位はある**: KV cache の場合、NMSE が高くても attention 演算で平均化されるため問題ない
+- Q2_K の品質優位は **super-block 構造** による。純粋 2-bit vs Q2_K の比較は「ビット数」ではなく「ブロック構造」の差
+- 外れ値が多い tensors (ffn_down など) への KIVI 適用は FORBIDDEN (NMSE > 2.0)
+
+### E5. Phase 5 への統合パス
+
+```
+Phase 5 (C++ 実装予定):
+  LowbitQQuantType.KIVI_2BIT_VALUE  // attn_v: per-token 2-bit
+  LowbitQQuantType.KIVI_2BIT_KEY    // attn_k: per-channel 2-bit
+
+KV cache 量子化の実装場所:
+  llama.cpp attention カーネル内
+  GGUF metadata: lowbit-q.kv_cache.key_method = "per_channel_2bit"
+                 lowbit-q.kv_cache.value_method = "per_token_2bit"
+                 lowbit-q.kv_cache.residual_tokens = 128
+
+C++ prototype path:
+  cpp/lowbit-q/kivi-kv-cache.h  // 量子化/逆量子化 inline 関数
+  (build_attn フックで KV 書込み時に呼び出し)
+```

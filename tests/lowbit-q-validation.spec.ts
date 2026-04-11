@@ -9,7 +9,8 @@
  *   npx playwright test tests/lowbit-q-validation.spec.ts --headed
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect } from './helpers/persistent-chrome';
+import type { Page } from '@playwright/test';
 
 const GGUF_PATH = '/tmp/tinyllama-1.1b-chat-v1.0.Q8_0.gguf';
 const CONVERSION_TIMEOUT = 10 * 60_000;
@@ -67,7 +68,7 @@ async function dumpDiagnostics(page: Page, label: string) {
 test.describe('lowbit-Q Validation', () => {
   test.setTimeout(30 * 60_000);
 
-  test('full validation flow: import, convert, infer, compare', async ({ page }) => {
+  test('full validation flow: import, convert, infer, compare', async ({ persistentPage: page }) => {
     // Stream ALL browser console to stdout in real time
     page.on('console', (msg) => {
       const text = msg.text();

@@ -407,7 +407,7 @@ describe('mixed-format GGUF structural invariants', () => {
     const sourceFile = new File([ggufBuf], 'test.gguf');
 
     const { data } = await convertToLowbitQV2Streaming(sourceFile, {
-      allocatorConfig: TEST_DEFAULT_CONFIG,
+      allocatorConfig: TEST_CONSERVATIVE_CONFIG,
       totalLayers: 4,
     });
 
@@ -436,7 +436,7 @@ describe('mixed-format GGUF structural invariants', () => {
     const sourceFile = new File([ggufBuf], 'test.gguf');
 
     const { data } = await convertToLowbitQV2Streaming(sourceFile, {
-      allocatorConfig: TEST_DEFAULT_CONFIG,
+      allocatorConfig: TEST_CONSERVATIVE_CONFIG,
       totalLayers: 4,
     });
 
@@ -456,18 +456,18 @@ describe('mixed-format GGUF structural invariants', () => {
     }
   }, 60_000);
 
-  it('middle layers have SVID tensors for SVID_1BIT projections (DEFAULT config)', async () => {
+  it('middle layers have SVID tensors for SVID_1BIT projections (CONSERVATIVE config)', async () => {
     const ggufBuf = buildMixedModelGGUF(4);
     const sourceFile = new File([ggufBuf], 'test.gguf');
 
     const { data } = await convertToLowbitQV2Streaming(sourceFile, {
-      allocatorConfig: TEST_DEFAULT_CONFIG,
+      allocatorConfig: TEST_CONSERVATIVE_CONFIG,
       totalLayers: 4,
     });
 
     const header = parseGGUFHeader(data.buffer as ArrayBuffer);
 
-    // DEFAULT config: middle layers, ffn_gate → SVID_1BIT
+    // CONSERVATIVE config: middle layers, ffn_gate → SVID_1BIT (attn_v stays Q4_0)
     // blk.1.ffn_gate and blk.2.ffn_gate should have SVID triplets
     for (const il of [1, 2]) {
       const sign = header.tensors.find(t => t.name === `blk.${il}.ffn_gate.lowbit_q_sign`);
@@ -489,7 +489,7 @@ describe('mixed-format GGUF structural invariants', () => {
     const sourceFile = new File([ggufBuf], 'test.gguf');
 
     const { data } = await convertToLowbitQV2Streaming(sourceFile, {
-      allocatorConfig: TEST_DEFAULT_CONFIG,
+      allocatorConfig: TEST_CONSERVATIVE_CONFIG,
       totalLayers: 4,
     });
 
@@ -515,8 +515,22 @@ describe('mixed-format GGUF structural invariants', () => {
       expect(['svid_1bit', 'q4_0', 'q8_0', 'passthrough']).toContain(rec.quantType);
     }
 
-    // Verify specific known mappings (blk.0.attn_q → Q4_0 per DEFAULT config)
+    // Verify specific known mappings (blk.0.attn_q → Q4_0 per CONSERVATIVE config)
     const attnQ0 = records.find(r => r.name === 'blk.0.attn_q.weight');
     expect(attnQ0?.quantType).toBe('q4_0');
+  }, 60_000);
+});
+
+describe('validateAllocations enforcement', () => {
+  it('DEFAULT config (SVID_1BIT on attn_v) throws FORBIDDEN error during conversion', async () => {
+    const ggufBuf = buildMixedModelGGUF(4);
+    const sourceFile = new File([ggufBuf], 'test.gguf');
+
+    await expect(
+      convertToLowbitQV2Streaming(sourceFile, {
+        allocatorConfig: TEST_DEFAULT_CONFIG,
+        totalLayers: 4,
+      }),
+    ).rejects.toThrow(/FORBIDDEN/);
   }, 60_000);
 });

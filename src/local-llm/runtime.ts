@@ -51,6 +51,14 @@ export interface RuntimeDiagnosticEvent {
   payload: Record<string, unknown>;
 }
 
+export interface RuntimeLoadProgressEvent {
+  modelId: string;
+  phase: string;
+  percent: number;
+  detail: string;
+  timestamp: number;
+}
+
 // ---------------------------------------------------------------------------
 // Internal engine entry
 // ---------------------------------------------------------------------------
@@ -84,6 +92,7 @@ export class LocalModelRuntime {
   private listeners = new Set<() => void>();
   private logListeners = new Set<(event: RuntimeLogEvent) => void>();
   private diagnosticListeners = new Set<(event: RuntimeDiagnosticEvent) => void>();
+  private loadProgressListeners = new Set<(event: RuntimeLoadProgressEvent) => void>();
 
   // -------------------------------------------------------------------------
   // Status queries
@@ -346,6 +355,11 @@ export class LocalModelRuntime {
     return () => this.diagnosticListeners.delete(listener);
   }
 
+  subscribeLoadProgress(listener: (event: RuntimeLoadProgressEvent) => void): () => void {
+    this.loadProgressListeners.add(listener);
+    return () => this.loadProgressListeners.delete(listener);
+  }
+
   /** Snapshot of all model statuses for useSyncExternalStore */
   getSnapshot(): ReadonlyMap<string, LocalModelStatus> {
     const snapshot = new Map<string, LocalModelStatus>();
@@ -399,6 +413,12 @@ export class LocalModelRuntime {
     }
   }
 
+  private emitLoadProgress(event: RuntimeLoadProgressEvent): void {
+    for (const listener of this.loadProgressListeners) {
+      listener(event);
+    }
+  }
+
   private sendRequest(modelId: string, payload: Record<string, unknown>): Promise<unknown> {
     const entry = this.engines.get(modelId);
     if (!entry) return Promise.reject(new Error(`No engine for model ${modelId}`));
@@ -438,6 +458,17 @@ export class LocalModelRuntime {
         phase: String(data.phase ?? 'unknown'),
         timestamp: Date.now(),
         payload: (data.payload as Record<string, unknown> | undefined) ?? {},
+      });
+      return;
+    }
+
+    if (type === '__load_progress') {
+      this.emitLoadProgress({
+        modelId,
+        phase: String(data.phase ?? 'unknown'),
+        percent: (data.percent as number) ?? 0,
+        detail: String(data.detail ?? ''),
+        timestamp: Date.now(),
       });
       return;
     }

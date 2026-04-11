@@ -1,0 +1,107 @@
+[
+  {
+    "label": "Q8_0 (reference)",
+    "quantType": "Q8_0",
+    "ggufPath": "/tmp/smollm2-1.7b-instruct.Q8_0.gguf",
+    "available": false,
+    "conversionSuccess": false,
+    "loadSuccess": false,
+    "smokeTests": [],
+    "tokenGenSuccess": false,
+    "functionalSuccess": false,
+    "fileSizeBytes": null
+  },
+  {
+    "label": "Q4_0",
+    "quantType": "Q4_0",
+    "ggufPath": "/tmp/smollm2-1.7b-instruct.Q4_0.gguf",
+    "available": true,
+    "conversionSuccess": true,
+    "loadSuccess": true,
+    "smokeTests": [
+      {
+        "promptId": "short-qa-en",
+        "output": "(not run yet)",
+        "matchedExpected": false,
+        "collapsed": false
+      },
+      {
+        "promptId": "list-generation",
+        "output": "\n\nA:",
+        "matchedExpected": false,
+        "collapsed": false
+      },
+      {
+        "promptId": "tiny-reasoning",
+        "output": "(not run yet)",
+        "matchedExpected": false,
+        "collapsed": false
+      }
+    ],
+    "tokenGenSuccess": true,
+    "functionalSuccess": false,
+    "fileSizeBytes": 1055609824
+  },
+  {
+    "label": "Q3_K",
+    "quantType": "Q3_K_S",
+    "ggufPath": "/tmp/smollm2-1.7b-instruct.Q3_K_S.gguf",
+    "available": true,
+    "conversionSuccess": true,
+    "loadSuccess": true,
+    "smokeTests": [
+      {
+        "promptId": "short-qa-en",
+        "output": "(not run yet)",
+        "matchedExpected": false,
+        "collapsed": false
+      },
+      {
+        "promptId": "list-generation",
+        "output": "それらは、ローズリストがなかっただけです。それは、ローズリストがなかったからこのようにしていると思うからね。それではなく、ローズリストがあってて、それであってて、それ",
+        "matchedExpected": false,
+        "collapsed": false
+      },
+      {
+        "promptId": "tiny-reasoning",
+        "output": " りんごが3個あり、2個もらいました。合計はいくつですか？",
+        "matchedExpected": true,
+        "collapsed": false
+      }
+    ],
+    "tokenGenSuccess": true,
+    "functionalSuccess": true,
+    "fileSizeBytes": 776819680
+  },
+  {
+    "label": "Q2_K",
+    "quantType": "Q2_K",
+    "ggufPath": "/tmp/smollm2-1.7b-instruct.Q2_K.gguf",
+    "available": true,
+    "conversionSuccess": true,
+    "loadSuccess": true,
+    "smokeTests": [
+      {
+        "promptId": "short-qa-en",
+        "output": "(not run yet)",
+        "matchedExpected": false,
+        "collapsed": false
+      },
+      {
+        "promptId": "list-generation",
+        "output": "\n\nこれはなんだけどきできてくださいです\n\nこれはなんだけどきできてくださいです\n\nこれはなんだけどきできてくださいです\n\nこれはなんだけどきできてくださいです\n\nこれ",
+        "matchedExpected": false,
+        "collapsed": false
+      },
+      {
+        "promptId": "tiny-reasoning",
+        "output": " りんごが3個あり、2個もらいました。合計はいくつですか？\nQ: りんごが3個あり、2個もらいました。合計はいくつですか？ A: りんごが3個あり、2個もらいました。合計はいくつですか",
+        "matchedExpected": true,
+        "collapsed": false
+      }
+    ],
+    "tokenGenSuccess": true,
+    "functionalSuccess": true,
+    "fileSizeBytes": 674583520
+  }
+]

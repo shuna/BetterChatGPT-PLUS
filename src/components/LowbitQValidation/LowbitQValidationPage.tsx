@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { downloadModelFiles, type DownloadProgress } from '@src/local-llm/download';
-import { localModelRuntime, type RuntimeDiagnosticEvent, type RuntimeLogEvent } from '@src/local-llm/runtime';
-import { OpfsFileProvider, readFile, saveFile, verifyStoredModel } from '@src/local-llm/storage';
+import { localModelRuntime, type RuntimeDiagnosticEvent, type RuntimeLogEvent, type RuntimeLoadProgressEvent } from '@src/local-llm/runtime';
+import { OpfsFileProvider, readFile, saveFile, createOPFSWritable, verifyStoredModel, deleteModelFile } from '@src/local-llm/storage';
 import {
   FIXED_VALIDATION_MODEL,
   VALIDATION_PROMPTS,
@@ -24,6 +24,16 @@ import {
   isLowbitQModelId,
 } from '@src/local-llm/lowbit-q';
 import { LOWBIT_Q_CONVERT_MODES, type LowbitQConvertMode, type TensorConvertRecord } from '@src/local-llm/lowbit-q/tensorFilter';
+import {
+  DEFAULT_ALLOCATOR_CONFIG,
+  AGGRESSIVE_ALLOCATOR_CONFIG,
+  CONSERVATIVE_ALLOCATOR_CONFIG,
+  Q4_0_ONLY_ALLOCATOR_CONFIG,
+  Q3_K_ONLY_ALLOCATOR_CONFIG,
+  Q2_K_ONLY_ALLOCATOR_CONFIG,
+  PASSTHROUGH_ONLY_ALLOCATOR_CONFIG,
+} from '@src/local-llm/lowbit-q/allocator';
+import type { BitwidthAllocatorConfig } from '@src/local-llm/lowbit-q/types';
 import { computeOutputQuality, type OutputQualityMetrics } from '@src/local-llm/lowbit-q/qualityMetrics';
 import { buildDiagnosisExport, summarizeTensorRecords, type DiagnosisRunExport } from '@src/local-llm/lowbit-q/diagnosisExport';
 
@@ -74,6 +84,7 @@ function LowbitQValidationPage() {
   const [metadataSummary, setMetadataSummary] = useState<LowbitQMetadataSummary | null>(null);
   const [runtimeLogs, setRuntimeLogs] = useState<RuntimeLogEvent[]>([]);
   const [diagnostics, setDiagnostics] = useState<RuntimeDiagnosticEvent[]>([]);
+  const [loadProgress, setLoadProgress] = useState<RuntimeLoadProgressEvent | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [selectedPromptId, setSelectedPromptId] = useState<string>(VALIDATION_PROMPTS[0].id);
   const [maxTokens, setMaxTokens] = useState<number>(96);
@@ -90,6 +101,7 @@ function LowbitQValidationPage() {
 
   // --- Diagnosis state ---
   const [selectedConvertMode, setSelectedConvertMode] = useState<LowbitQConvertMode>('all');
+  const [selectedAllocatorPreset, setSelectedAllocatorPreset] = useState<'v2-default' | 'v2-aggressive' | 'v2-conservative' | 'v2-q4only' | 'v2-q3konly' | 'v2-q2konly' | 'v2-native-direct'>('v2-default');
   const [tensorRecords, setTensorRecords] = useState<TensorConvertRecord[]>([]);
   const [batchResults, setBatchResults] = useState<BatchRunResult[]>([]);
   const [batchRunning, setBatchRunning] = useState(false);
@@ -122,9 +134,14 @@ function LowbitQValidationPage() {
       if (event.modelId !== originalDef.id && event.modelId !== lowbitQDef.id) return;
       setDiagnostics((prev) => [event, ...prev].slice(0, 100));
     });
+    const unsubLoadProgress = localModelRuntime.subscribeLoadProgress((event) => {
+      if (event.modelId !== originalDef.id && event.modelId !== lowbitQDef.id) return;
+      setLoadProgress(event);
+    });
     return () => {
       unsubLogs();
       unsubDiagnostics();
+      unsubLoadProgress();
     };
   }, [lowbitQDef.id, originalDef.id]);
 
@@ -139,6 +156,7 @@ function LowbitQValidationPage() {
       await fn();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      console.error(`[LowbitQValidation] action "${name}" failed:`, message);
       setActionError(message);
     } finally {
       setRunningAction(null);
@@ -203,7 +221,45 @@ function LowbitQValidationPage() {
     if (!file) return;
 
     updateStep('download-original', 'running', `ローカルファイル ${file.name} をOPFSに保存中`);
-    await saveFile(originalDef.id, FIXED_VALIDATION_MODEL.fileName, file);
+
+    // Stream large files in chunks to avoid memory pressure.
+    // saveFile(blob) buffers the entire file; for files >500 MB we use
+    // createOPFSWritable and write in 16 MB chunks with progress updates.
+    // Each chunk write has a 30s timeout to detect OPFS stalls (e.g. quota).
+    const CHUNK_SIZE = 16 * 1024 * 1024; // 16 MB
+    const CHUNK_WRITE_TIMEOUT = 30_000;
+    if (file.size > 500 * 1024 * 1024) {
+      console.info(`[LowbitQValidation] streaming ${formatBytes(file.size)} to OPFS in ${Math.ceil(file.size / CHUNK_SIZE)} chunks`);
+      const writable = await createOPFSWritable(originalDef.id, FIXED_VALIDATION_MODEL.fileName);
+      let written = 0;
+      try {
+        for (let offset = 0; offset < file.size; offset += CHUNK_SIZE) {
+          const chunk = file.slice(offset, Math.min(offset + CHUNK_SIZE, file.size));
+          const buf = await chunk.arrayBuffer();
+          const writePromise = writable.write(buf);
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(
+              `OPFS write timed out after ${CHUNK_WRITE_TIMEOUT / 1000}s at offset ${formatBytes(offset)}. ` +
+              `Written so far: ${formatBytes(written)}/${formatBytes(file.size)}. ` +
+              'Possible storage quota exceeded or OPFS stall.',
+            )), CHUNK_WRITE_TIMEOUT),
+          );
+          await Promise.race([writePromise, timeoutPromise]);
+          written += chunk.size;
+          const pct = Math.round((written / file.size) * 100);
+          updateStep('download-original', 'running', `OPFSに保存中... ${formatBytes(written)} / ${formatBytes(file.size)} (${pct}%)`);
+        }
+        await writable.close();
+        console.info(`[LowbitQValidation] OPFS write complete: ${formatBytes(written)}`);
+      } catch (e) {
+        console.error('[LowbitQValidation] OPFS write failed:', (e as Error).message);
+        await writable.abort().catch(() => {});
+        throw e;
+      }
+    } else {
+      await saveFile(originalDef.id, FIXED_VALIDATION_MODEL.fileName, file);
+    }
+
     setDownloadedOriginalBytes(file.size);
     const verify = await verifyStoredModel(originalDef.id, originalDef.manifest);
     if (verify !== 'saved') {
@@ -214,27 +270,99 @@ function LowbitQValidationPage() {
   };
 
   const handleConvertLowbitQ = async () => {
-    updateStep('convert-lowbit-q', 'running', `lowbit-Q 変換中 (mode: ${selectedConvertMode})`);
+    const allocatorConfigMap: Record<string, BitwidthAllocatorConfig> = {
+      'v2-default': DEFAULT_ALLOCATOR_CONFIG,
+      'v2-aggressive': AGGRESSIVE_ALLOCATOR_CONFIG,
+      'v2-conservative': CONSERVATIVE_ALLOCATOR_CONFIG,
+      'v2-q4only': Q4_0_ONLY_ALLOCATOR_CONFIG,
+      'v2-q3konly': Q3_K_ONLY_ALLOCATOR_CONFIG,
+      'v2-q2konly': Q2_K_ONLY_ALLOCATOR_CONFIG,
+      'v2-native-direct': PASSTHROUGH_ONLY_ALLOCATOR_CONFIG,
+    };
+    const allocatorConfig = allocatorConfigMap[selectedAllocatorPreset];
+    updateStep('convert-lowbit-q', 'running', `lowbit-Q 変換中 (preset: ${selectedAllocatorPreset})`);
     updateStep('save-opfs', 'running', 'OPFS 書き込み待機');
     updateStep('detect-lowbit-q-metadata', 'running', 'GGUF metadata 確認待機');
     setConversionProgressText('');
     setTensorRecords([]);
 
+    let result;
     const manager = new LowbitQConversionManager();
-    const result = await manager.convertFromOpfs(
-      originalDef.id,
-      FIXED_VALIDATION_MODEL.fileName,
-      FIXED_VALIDATION_MODEL.sourceLabel,
-      {
-        onProgress: (progress) => {
+
+    // Source resolution: check for test-injected URL first (for files > 2 GB
+    // that can't be stored in OPFS due to Chromium per-file limit), then try
+    // OPFS with large-file memory-copy strategy.
+    let useFileDirectly: File | null = null;
+    let sourceUrl: string | undefined;
+
+    // Test hook: window.__testSourceUrl is set by Playwright for files > 2 GB.
+    // The Worker fetches directly from this URL, avoiding OPFS and postMessage limits.
+    const testUrl = (window as any).__testSourceUrl as string | undefined;
+    if (testUrl) {
+      console.info(`[LowbitQValidation] Using test source URL: ${testUrl}`);
+      sourceUrl = testUrl;
+      delete (window as any).__testSourceUrl;
+      // Create a minimal dummy File for the manager API (actual data comes from URL)
+      useFileDirectly = new File([], FIXED_VALIDATION_MODEL.fileName, { type: 'application/octet-stream' });
+    } else {
+      // For large source files (>2 GB), read into memory chunks then delete
+      // OPFS entry to free quota.
+      const LARGE_FILE_THRESHOLD = 2 * 1024 * 1024 * 1024;
+      try {
+        const srcFile = await readFile(originalDef.id, FIXED_VALIDATION_MODEL.fileName);
+        if (srcFile.size > LARGE_FILE_THRESHOLD) {
+          console.info(`[LowbitQValidation] Large source (${formatBytes(srcFile.size)}) — reading into memory...`);
+          const chunks: Uint8Array[] = [];
+          const reader = srcFile.stream().getReader();
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+          }
+          useFileDirectly = new File(chunks, srcFile.name, { type: srcFile.type });
+          await deleteModelFile(originalDef.id, FIXED_VALIDATION_MODEL.fileName);
+          console.info('[LowbitQValidation] OPFS source deleted — quota freed');
+        }
+      } catch {
+        // Source not in OPFS or already deleted; proceed via convertFromOpfs
+      }
+    }
+
+    try {
+      const conversionCallbacks = {
+        onProgress: (progress: { stage: string; percent: number; currentTensorName: string }) => {
           setConversionProgressText(
             `${progress.stage} ${progress.percent}% ${progress.currentTensorName}`.trim(),
           );
         },
-        convertMode: selectedConvertMode,
+        allocatorConfig,
+        sourceModelName: FIXED_VALIDATION_MODEL.sourceLabel,
         computeQuality: true,
-      },
-    );
+        sourceUrl,
+      };
+
+      if (useFileDirectly) {
+        result = await manager.convertFromFile(
+          useFileDirectly,
+          originalDef.id,
+          FIXED_VALIDATION_MODEL.sourceLabel,
+          conversionCallbacks,
+        );
+      } else {
+        result = await manager.convertFromOpfs(
+          originalDef.id,
+          FIXED_VALIDATION_MODEL.fileName,
+          FIXED_VALIDATION_MODEL.sourceLabel,
+          conversionCallbacks,
+        );
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      updateStep('convert-lowbit-q', 'fail', msg);
+      updateStep('save-opfs', 'fail', '変換失敗のためスキップ');
+      updateStep('detect-lowbit-q-metadata', 'fail', '変換失敗のためスキップ');
+      throw err;
+    }
 
     updateStep(
       'convert-lowbit-q',
@@ -276,6 +404,7 @@ function LowbitQValidationPage() {
     const stepKey = variant === 'original' ? 'load-generate-original' : 'load-generate-lowbit-q';
     const provider = new OpfsFileProvider(def.id, def.manifest);
 
+    setLoadProgress(null);
     updateStep(stepKey, 'running', 'モデルをロード中');
 
     if (localModelRuntime.isLoaded(originalDef.id)) {
@@ -319,6 +448,10 @@ function LowbitQValidationPage() {
       });
       updateStep(stepKey, 'pass', `${finalOutput.length} chars`);
       return finalOutput;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      updateStep(stepKey, 'fail', msg);
+      throw err;
     } finally {
       if (localModelRuntime.isLoaded(def.id)) {
         await localModelRuntime.unloadModel(def.id);
@@ -596,7 +729,7 @@ function LowbitQValidationPage() {
                 </button>
               </div>
 
-              <div className='mt-4 grid gap-4 md:grid-cols-[1fr_1fr_0.6fr_0.6fr]'>
+              <div className='mt-4 grid gap-4 md:grid-cols-[1fr_1fr_1fr_0.6fr_0.6fr]'>
                 <label className='flex flex-col gap-2 text-sm'>
                   <span className='font-medium'>固定プロンプト</span>
                   <select
@@ -610,7 +743,24 @@ function LowbitQValidationPage() {
                   </select>
                 </label>
                 <label className='flex flex-col gap-2 text-sm'>
-                  <span className='font-medium'>変換モード</span>
+                  <span className='font-medium'>Allocator Preset (v2)</span>
+                  <select
+                    className='rounded-xl border border-indigo-300 bg-indigo-50 px-3 py-2 text-indigo-900'
+                    data-testid='allocator-preset-select'
+                    value={selectedAllocatorPreset}
+                    onChange={(event) => setSelectedAllocatorPreset(event.target.value as typeof selectedAllocatorPreset)}
+                  >
+                    <option value='v2-default'>DEFAULT (attnQK=Q4, VO+FFN=SVID)</option>
+                    <option value='v2-aggressive'>AGGRESSIVE (all=SVID exc 1st/last)</option>
+                    <option value='v2-conservative'>CONSERVATIVE (attn=Q4, FFN=SVID)</option>
+                    <option value='v2-q4only'>Q4_0-ONLY (native baseline, ~53%)</option>
+                    <option value='v2-q3konly'>Q3_K-ONLY (native 3-bit baseline, ~40%)</option>
+                    <option value='v2-q2konly'>Q2_K-ONLY (native 2-bit baseline, ~31%)</option>
+                    <option value='v2-native-direct'>NATIVE-DIRECT (PASSTHROUGH: pre-quantized GGUF)</option>
+                  </select>
+                </label>
+                <label className='flex flex-col gap-2 text-sm'>
+                  <span className='font-medium'>変換モード (v1 legacy)</span>
                   <select
                     className='rounded-xl border border-slate-300 bg-white px-3 py-2'
                     value={selectedConvertMode}
@@ -650,7 +800,7 @@ function LowbitQValidationPage() {
                 {selectedPrompt.prompt}
               </pre>
 
-              {(downloadProgress || conversionProgressText || actionError || batchProgress) && (
+              {(downloadProgress || conversionProgressText || loadProgress || actionError || batchProgress) && (
                 <div className='mt-4 space-y-2 text-sm text-slate-600'>
                   {downloadProgress && (
                     <div>
@@ -658,6 +808,16 @@ function LowbitQValidationPage() {
                     </div>
                   )}
                   {conversionProgressText && <div>convert: {conversionProgressText}</div>}
+                  {loadProgress && loadProgress.phase !== 'complete' && (
+                    <div className='text-blue-700'>
+                      load: {loadProgress.detail} ({loadProgress.percent}%)
+                    </div>
+                  )}
+                  {loadProgress && loadProgress.phase === 'complete' && (
+                    <div className='text-emerald-700'>
+                      load: {loadProgress.detail}
+                    </div>
+                  )}
                   {batchProgress && <div className='text-indigo-700'>batch: {batchProgress}</div>}
                   {actionError && <div className='text-rose-700'>error: {actionError}</div>}
                 </div>
@@ -891,6 +1051,25 @@ function LowbitQValidationPage() {
                       ? `version=${metadataSummary.lowbitQVersion ?? '-'} sign=${metadataSummary.signPacking ?? '-'} lowbit-Q tensors=${metadataSummary.lowbitQTensorCount}`
                       : '未検査'}
                   </div>
+                  {metadataSummary?.v2 && (
+                    <div className='mt-2 grid grid-cols-2 gap-1 text-xs text-slate-600'>
+                      <div>SVID_1BIT: <span className='font-medium text-indigo-700'>{metadataSummary.v2.svidCount}</span></div>
+                      <div>Q4_0: <span className='font-medium text-slate-800'>{metadataSummary.v2.q4_0Count}</span></div>
+                      <div>Q3_K: <span className='font-medium text-emerald-700'>{metadataSummary.v2.q3_kCount}</span></div>
+                      <div>Q2_K: <span className='font-medium text-teal-700'>{metadataSummary.v2.q2_kCount}</span></div>
+                      <div>passthrough: <span className='font-medium'>{metadataSummary.v2.passthroughCount}</span></div>
+                      <div>total: <span className='font-medium'>{metadataSummary.v2.totalCount}</span></div>
+                      {metadataSummary.v2.nmseMean !== undefined && (
+                        <div>NMSE mean: <span className='font-medium'>{metadataSummary.v2.nmseMean.toFixed(4)}</span></div>
+                      )}
+                      {metadataSummary.v2.nmseMax !== undefined && (
+                        <div>NMSE max: <span className='font-medium'>{metadataSummary.v2.nmseMax.toFixed(4)}</span></div>
+                      )}
+                      {metadataSummary.v2.sizeBudget !== undefined && (
+                        <div>size budget: <span className='font-medium'>{(metadataSummary.v2.sizeBudget * 100).toFixed(0)}%</span></div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className={`rounded-xl border p-4 ${nativeDetectedLowbitQ ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}>
                   <div className='text-sm font-medium'>native log に `detected lowbit-Q format` が出たか</div>

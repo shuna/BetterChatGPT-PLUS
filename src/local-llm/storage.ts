@@ -106,6 +106,100 @@ export async function saveFile(
 }
 
 /**
+ * Open a fresh OPFS writable stream for streaming writes.
+ *
+ * Always truncates to zero (keepExistingData: false). The caller must
+ * close() on success or abort() on failure. Using a single writable for
+ * the entire write avoids the seek-after-getFile pattern that is
+ * susceptible to stale-size races on some Chrome builds.
+ */
+export async function createOPFSWritable(
+  modelId: string,
+  relativePath: string,
+): Promise<FileSystemWritableFileStream> {
+  const dir = await getModelDir(modelId);
+  const fileHandle = await dir.getFileHandle(relativePath, { create: true }) as unknown as WritableFileHandle;
+  return fileHandle.createWritable({ keepExistingData: false });
+}
+
+/**
+ * Minimal writer interface that mirrors the subset of FileSystemWritableFileStream
+ * used by the conversion pipeline (write / close / abort).
+ */
+export interface OPFSWriter {
+  write(data: Uint8Array): Promise<void>;
+  close(): Promise<void>;
+  abort(): Promise<void>;
+}
+
+/**
+ * Create a writer backed by FileSystemSyncAccessHandle.
+ *
+ * Unlike createOPFSWritable() (which uses createWritable()), SyncAccessHandle
+ * writes directly to the file without a swap-file staging area. This avoids
+ * the ~2x storage overhead that causes quota errors for large files (>2 GB).
+ *
+ * IMPORTANT: Only available in Worker contexts. The file is truncated to 0
+ * before the first write. Writes are committed immediately on close/flush.
+ */
+export async function createOPFSSyncWriter(
+  modelId: string,
+  relativePath: string,
+): Promise<OPFSWriter> {
+  const dir = await getModelDir(modelId);
+  const fileHandle = await dir.getFileHandle(relativePath, { create: true });
+  // @ts-expect-error — createSyncAccessHandle is available in Worker OPFS
+  const accessHandle: FileSystemSyncAccessHandle = await fileHandle.createSyncAccessHandle();
+  accessHandle.truncate(0);
+
+  let offset = 0;
+
+  return {
+    async write(data: Uint8Array): Promise<void> {
+      const written = accessHandle.write(data, { at: offset });
+      if (written !== data.byteLength) {
+        throw new Error(
+          `OPFS SyncAccessHandle write incomplete at offset ${offset}: ` +
+          `expected ${data.byteLength} bytes but wrote ${written}. ` +
+          `Total written so far: ${offset + written} bytes. ` +
+          `Likely storage quota exceeded.`,
+        );
+      }
+      offset += written;
+    },
+    async close(): Promise<void> {
+      accessHandle.flush();
+      accessHandle.close();
+    },
+    async abort(): Promise<void> {
+      try {
+        accessHandle.close();
+      } catch {
+        // ignore close errors during abort
+      }
+    },
+  };
+}
+
+/**
+ * Return the current committed size of an OPFS file in bytes.
+ * Returns 0 if the file does not exist.
+ */
+export async function getOPFSFileSize(
+  modelId: string,
+  relativePath: string,
+): Promise<number> {
+  try {
+    const dir = await getModelDir(modelId);
+    const fileHandle = await dir.getFileHandle(relativePath);
+    const file = await (fileHandle as unknown as WritableFileHandle).getFile();
+    return file.size;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Read a file from OPFS.
  */
 export async function readFile(

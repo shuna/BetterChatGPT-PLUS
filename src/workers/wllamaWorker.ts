@@ -111,9 +111,27 @@ function postDiagnostic(phase: string, payload: Record<string, unknown>) {
   self.postMessage({ id: 0, type: '__diagnostic', phase, payload });
 }
 
+function postLoadProgress(phase: string, percent: number, detail: string) {
+  self.postMessage({ id: 0, type: '__load_progress', phase, percent, detail });
+}
+
 /** Forward logs to main thread since worker console is not visible in preview tools */
 function forwardLog(level: string, ...args: unknown[]) {
-  const text = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
+  const text = args.map(a => {
+    if (typeof a === 'object' && a !== null) {
+      // ErrorEvent has .message/.filename/.lineno but JSON.stringify can't capture them
+      const ev = a as Record<string, unknown>;
+      if ('message' in ev && 'filename' in ev) {
+        return `ErrorEvent: ${ev.message} at ${ev.filename}:${ev.lineno}`;
+      }
+      // Error objects
+      if (a instanceof Error) {
+        return `${a.name}: ${a.message}\n${a.stack ?? ''}`;
+      }
+      try { return JSON.stringify(a); } catch { return String(a); }
+    }
+    return String(a);
+  }).join(' ');
   self.postMessage({ id: 0, type: '__log', level, text: `[wllama-native] ${text}` });
   // Collect error/warn logs for inclusion in user-facing error messages
   if (level === 'error' || level === 'warn') {
@@ -170,13 +188,16 @@ async function handleLoad(req: LoadRequest) {
 
   // Clear native log buffer before each load attempt
   recentNativeLogs.length = 0;
+  const loadStartTime = performance.now();
 
   try {
+    const fileSizeMB = (req.file.size / 1024 / 1024).toFixed(1);
     console.info('[wllamaWorker] handleLoad start, file:', req.file.name, 'size:', req.file.size);
     postDiagnostic('worker-load-start', {
       fileName: req.file.name,
       fileSize: req.file.size,
     });
+    postLoadProgress('validating', 0, `GGUFヘッダを検証中 (${fileSizeMB} MB)`);
 
     // Validate GGUF magic header before passing to wllama
     if (req.file.size < 4) {
@@ -195,18 +216,24 @@ async function handleLoad(req: LoadRequest) {
       return;
     }
 
+    postLoadProgress('wasm-init', 10, 'WASM ランタイムを初期化中');
     console.info('[wllamaWorker] GGUF magic valid, calling wllama.loadModel...');
+
+    postLoadProgress('model-load', 20, `モデルをロード中 (${fileSizeMB} MB)`);
     // wllama.loadModel accepts Blob[] — wrap the single File in an array
     await wllama.loadModel([req.file], {
       n_ctx: 512,
       n_threads: 1,  // Single-thread until COOP/COEP is configured (Phase 8)
     });
 
+    const elapsed = ((performance.now() - loadStartTime) / 1000).toFixed(1);
     const info = wllama.getLoadedContextInfo();
+    postLoadProgress('complete', 100, `ロード完了 (${elapsed}s, ctx=${info.n_ctx}, layers=${info.n_layer})`);
     postDiagnostic('worker-load-success', {
       contextLength: info.n_ctx,
       nVocab: info.n_vocab,
       nLayer: info.n_layer,
+      elapsedSec: parseFloat(elapsed),
     });
     respond(req.id, 'loaded', {
       contextLength: info.n_ctx,
@@ -218,6 +245,9 @@ async function handleLoad(req: LoadRequest) {
     const msg = err.message;
     const stack = err.stack ?? '(no stack)';
 
+    const elapsed = ((performance.now() - loadStartTime) / 1000).toFixed(1);
+    postLoadProgress('error', -1, `ロード失敗 (${elapsed}s): ${msg.slice(0, 120)}`);
+
     // Forward full stack trace to main thread console
     forwardLog('error', `loadModel error: ${msg}\nStack: ${stack}`);
 
@@ -227,6 +257,9 @@ async function handleLoad(req: LoadRequest) {
       : '';
     const stackDetail = `\n\n[Stack Trace]\n${stack}`;
 
+    // File size context — always include in error message for diagnostics.
+    const fileSizeDetail = `\n\n[ファイル情報] name=${req.file.name} size=${req.file.size} bytes (${(req.file.size / 1024 / 1024).toFixed(2)} MB)`;
+
     if (msg.includes('Invalid magic number')) {
       const hasUnsupportedType = recentNativeLogs.some(l => l.includes('invalid ggml type'));
       const typeMatch = recentNativeLogs.find(l => l.includes('invalid ggml type'))?.match(/ggml type (\d+)/);
@@ -234,16 +267,22 @@ async function handleLoad(req: LoadRequest) {
         respondError(req.id,
           `モデルの読み込みに失敗しました: このGGUFファイルに含まれるテンソルの量子化形式（ggml type ${typeMatch?.[1] ?? '不明'}）は、` +
           '現在の独自ビルド wllama ランタイムでサポートされていません。' +
-          nativeDetail + stackDetail);
+          fileSizeDetail + nativeDetail + stackDetail);
       } else {
         respondError(req.id,
           'モデルの読み込みに失敗しました: llama.cppがモデルを処理できませんでした（wllama Glueプロトコルエラー: Invalid magic number）。' +
-          nativeDetail + stackDetail);
+          fileSizeDetail + nativeDetail + stackDetail);
       }
+    } else if (msg.includes('Invalid typed array length') || msg.includes('Out of memory') || msg.includes('memory access out of bounds')) {
+      // WASM allocation failures — almost always caused by file larger than expected.
+      respondError(req.id,
+        `モデルの読み込みに失敗しました: WASMメモリ不足 (${msg})。` +
+        'ファイルサイズが大きすぎるか、変換後のGGUFファイルが破損している可能性があります。' +
+        fileSizeDetail + nativeDetail + stackDetail);
     } else {
       respondError(req.id,
         `モデルの読み込みに失敗しました: ${msg}` +
-        nativeDetail + stackDetail);
+        fileSizeDetail + nativeDetail + stackDetail);
     }
   }
 }
@@ -261,12 +300,30 @@ async function handleGenerate(req: GenerateRequest) {
   let tokensGenerated = 0;
 
   try {
+    // Apply chat template if the model has one. Instruct-tuned models (SmolLM2,
+    // Qwen, Gemma, etc.) expect prompts wrapped in their chat template — passing
+    // raw text causes immediate EOS or garbage output.
+    let prompt = req.prompt;
+    const chatTemplate = wllama.getChatTemplate();
+    if (chatTemplate) {
+      try {
+        prompt = await wllama.formatChat(
+          [{ role: 'user', content: req.prompt }],
+          true, // addAssistant: append assistant turn start
+        );
+        console.info('[wllamaWorker] chat template applied, prompt length:', req.prompt.length, '->', prompt.length);
+      } catch (e) {
+        // Fall back to raw prompt if template formatting fails
+        console.warn('[wllamaWorker] chat template formatting failed, using raw prompt:', (e as Error).message);
+      }
+    }
+
     // wllama only supports stopTokens (token IDs), not string stop sequences.
     // Multi-token stop strings cannot be reliably mapped to single token IDs,
     // so we handle string stops via post-processing on the streamed text.
     const stopStrings = req.stop ?? [];
 
-    const stream = await wllama.createCompletion(req.prompt, {
+    const stream = await wllama.createCompletion(prompt, {
       nPredict: req.maxTokens,
       sampling: {
         temp: req.temperature,

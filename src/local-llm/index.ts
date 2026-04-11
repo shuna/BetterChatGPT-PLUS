@@ -1,7 +1,7 @@
 export * from './types';
 export * from './fileProvider';
 export { LocalModelRuntime, localModelRuntime, findModelDefinition, setRuntimeStoreGetter } from './runtime';
-export type { WllamaWorkerProxy, TransformersWorkerProxy } from './runtime';
+export type { WllamaWorkerProxy, TransformersWorkerProxy, RuntimeLoadProgressEvent, RuntimeLogEvent, RuntimeDiagnosticEvent } from './runtime';
 export * from './device';
 export { CURATED_MODELS, EXPERIMENTAL_MULTIMODAL_MODELS, getCatalogModel } from './catalog';
 export type { CatalogModel, ExperimentalModel } from './catalog';
