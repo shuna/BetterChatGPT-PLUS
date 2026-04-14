@@ -14,6 +14,7 @@ import type { ProviderId } from '@type/provider';
 import { cloneChatAtIndex } from '@utils/chatShallowClone';
 import { normalizeConfigStream } from '@utils/streamSupport';
 import useIsDesktop from '@hooks/useIsDesktop';
+import { stopSessionsForChat } from '@hooks/useSubmit';
 import { ProviderIcon, LocalChipIcon } from '@icon/ProviderIcons';
 import TokenCount from '@components/TokenCount/TokenCount';
 import useOpenRouterCreditBalance from '@hooks/useOpenRouterCreditBalance';
@@ -68,6 +69,7 @@ const ChatViewTabs = ({
   const isCurrentChatGenerating = useStore((state) =>
     Object.values(state.generatingSessions).some((s) => s.chatId === currentChatId)
   );
+  const isProxyMode = useStore((state) => state.proxyEnabled && !!state.proxyEndpoint);
 
   // OpenRouter credit balance
   const currentProviderId = chat?.config?.providerId;
@@ -409,6 +411,25 @@ const ChatViewTabs = ({
               })()}
             </div>
             </div>
+          )}
+
+          {/* Generating indicator (right of dropdown) */}
+          {isCurrentChatGenerating && (
+            <button
+              type='button'
+              className='flex shrink-0 items-center rounded p-1 transition-colors hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer'
+              onClick={() => { if (currentChatId) stopSessionsForChat(currentChatId); }}
+              title={String(tMain('stopGenerating'))}
+              aria-label={String(tMain('stopGenerating'))}
+            >
+              <span
+                className={`inline-block h-2 w-2 rounded-full animate-pulse ${
+                  isProxyMode
+                    ? 'bg-indigo-400 dark:bg-indigo-400'
+                    : 'bg-green-400 dark:bg-green-400'
+                }`}
+              />
+            </button>
           )}
         </div>
 
