@@ -14,7 +14,14 @@ import type { ProviderId } from '@type/provider';
 import { cloneChatAtIndex } from '@utils/chatShallowClone';
 import { normalizeConfigStream } from '@utils/streamSupport';
 import useIsDesktop from '@hooks/useIsDesktop';
-import { stopSessionsForChat } from '@hooks/useSubmit';
+import { ProviderIcon, LocalChipIcon } from '@icon/ProviderIcons';
+import TokenCount from '@components/TokenCount/TokenCount';
+import useOpenRouterCreditBalance from '@hooks/useOpenRouterCreditBalance';
+import { buildVerifiedStatsKey } from '@utils/openrouterVerification';
+import type {
+  PendingOpenRouterVerification,
+  VerifiedStats,
+} from '@store/openrouter-stats-slice';
 import { CURATED_MODELS } from '@src/local-llm/catalog';
 import { localModelRuntime } from '@src/local-llm/runtime';
 import { OpfsFileProvider } from '@src/local-llm/storage';
@@ -57,22 +64,52 @@ const ChatViewTabs = ({
   const [isModelDropdownOpen, setIsModelDropdownOpen] = useState<boolean>(false);
   const [isLayoutDropdownOpen, setIsLayoutDropdownOpen] = useState<boolean>(false);
   const [isCompact, setIsCompact] = useState<boolean>(false);
-  const setAllOmitted = useStore((state) => state.setAllOmitted);
-  // Derive omit-all state from the current chat's omittedNodeMaps
-  const isAllOmitted = useStore((state) => {
-    const mapKey = String(state.currentChatIndex);
-    const omitted = state.omittedNodeMaps[mapKey] ?? state.chats?.[state.currentChatIndex]?.omittedNodes ?? {};
-    const count = Object.keys(omitted).length;
-    if (count === 0) return false;
-    const chat = state.chats?.[state.currentChatIndex];
-    const totalMessages = chat?.branchTree?.activePath?.length ?? chat?.messages?.length ?? 0;
-    return totalMessages > 0 && count >= totalMessages;
-  });
   const currentChatId = chat?.id ?? '';
   const isCurrentChatGenerating = useStore((state) =>
     Object.values(state.generatingSessions).some((s) => s.chatId === currentChatId)
   );
-  const isProxyMode = useStore((state) => state.proxyEnabled && !!state.proxyEndpoint);
+
+  // OpenRouter credit balance
+  const currentProviderId = chat?.config?.providerId;
+  const isOpenRouter = currentProviderId === 'openrouter';
+  const creditBalance = useStore((state) => state.creditBalance);
+  const creditBalanceFetching = useStore((state) => state.creditBalanceFetching);
+  useOpenRouterCreditBalance(isOpenRouter);
+
+  // Verified stats & retry
+  const {
+    verifiedStats,
+    pendingVerification,
+    lastAssistantStatsKey,
+  }: {
+    verifiedStats?: VerifiedStats;
+    pendingVerification?: PendingOpenRouterVerification;
+    lastAssistantStatsKey: string | null;
+  } = useStore((state) => {
+    const c = state.chats?.[state.currentChatIndex];
+    if (!c?.branchTree) return { verifiedStats: undefined, pendingVerification: undefined, lastAssistantStatsKey: null };
+    const path = c.branchTree.activePath;
+    for (let i = path.length - 1; i >= 0; i--) {
+      const node = c.branchTree.nodes[path[i]];
+      if (node?.role === 'assistant') {
+        const key = buildVerifiedStatsKey(c.id, node.id);
+        return { verifiedStats: state.verifiedStats[key], pendingVerification: state.pendingVerifications[key], lastAssistantStatsKey: key };
+      }
+    }
+    return { verifiedStats: undefined, pendingVerification: undefined, lastAssistantStatsKey: null };
+  });
+  const showRetryButton = !isCurrentChatGenerating && !!lastAssistantStatsKey && !verifiedStats && !!pendingVerification;
+  const handleRetryVerifiedStats = () => {
+    if (!lastAssistantStatsKey) return;
+    if (pendingVerification) { useStore.getState().retryVerificationNow(lastAssistantStatsKey); return; }
+  };
+  const creditDisplay = (() => {
+    if (!isOpenRouter) return null;
+    if (!creditBalance) return creditBalanceFetching ? '...' : null;
+    const remaining = Math.max(0, creditBalance.totalCredits - creditBalance.totalUsage);
+    return `$${remaining.toFixed(2)}`;
+  })();
+
   const dropdownRef = useRef<HTMLDivElement>(null);
   const modelRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -148,21 +185,13 @@ const ChatViewTabs = ({
   const getModelDisplayName = (modelId: string, modelSource?: 'remote' | 'local') => {
     if (modelSource === 'local') {
       const storeDef = localModels.find((m) => m.id === modelId);
-      if (storeDef) {
-        const q = storeDef.displayMeta?.quantization;
-        return `${storeDef.label} (Local${q ? ' · ' + q : ''})`;
-      }
+      if (storeDef) return storeDef.label;
       const catalogModel = CURATED_MODELS.find((cm) => cm.id === modelId);
-      if (catalogModel) {
-        const q = catalogModel.displayMeta?.quantization;
-        return `${catalogModel.label} (Local${q ? ' · ' + q : ''})`;
-      }
-      return `${modelId} (Local)`;
+      if (catalogModel) return catalogModel.label;
+      return modelId;
     }
     const fav = favoriteModels.find(f => f.modelId === modelId);
-    if (fav) {
-      return `${modelId} (${providers[fav.providerId]?.name || fav.providerId})`;
-    }
+    if (fav) return modelId;
     return t('provider.noModelSelected', 'モデル未選択') as string;
   };
 
@@ -234,7 +263,12 @@ const ChatViewTabs = ({
                   setIsModelDropdownOpen(!isModelDropdownOpen);
                 }}
               >
-                <span className='truncate'>{t('model')}: {getModelDisplayName(chat.config.model, chat.config.modelSource)}</span>
+                {chat.config.modelSource === 'local'
+                  ? <LocalChipIcon className='w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500' />
+                  : chat.config.providerId
+                    ? <ProviderIcon providerId={chat.config.providerId} className='w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500' />
+                    : null}
+                <span className='truncate'>{getModelDisplayName(chat.config.model, chat.config.modelSource)}</span>
                 <CapabilityIconsInline
                   reasoning={getModelCapabilities(chat.config.model, chat.config.providerId, chat.config.modelSource).reasoning}
                   vision={getModelCapabilities(chat.config.model, chat.config.providerId, chat.config.modelSource).vision}
@@ -295,14 +329,18 @@ const ChatViewTabs = ({
                       return (
                         <div
                           key={`${fav.providerId}-${fav.modelId}`}
-                          className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center ${
+                          className={`px-3 py-1.5 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center ${
                             chat.config.model === fav.modelId && chat.config.modelSource !== 'local'
                               ? 'bg-gray-100 dark:bg-gray-700 font-medium'
                               : ''
                           }`}
                           onClick={() => handleModelChange(fav.modelId, fav.providerId)}
                         >
-                          <span className='truncate flex-1'>{fav.modelId} ({providers[fav.providerId]?.name || fav.providerId})</span>
+                          <ProviderIcon providerId={fav.providerId} className='w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500' />
+                          <div className='truncate flex-1 ml-2'>
+                            <div className='text-sm'>{fav.modelId}</div>
+                            <div className='text-xs text-gray-400 dark:text-gray-500'>{providers[fav.providerId]?.name || fav.providerId}</div>
+                          </div>
                           <span className='ml-auto shrink-0'><CapabilityIconsInline reasoning={caps.reasoning} vision={caps.vision} audio={caps.audio} /></span>
                         </div>
                       );
@@ -313,71 +351,63 @@ const ChatViewTabs = ({
                     {localCandidates.map((lm) => (
                       <div
                         key={`local-${lm.id}`}
-                        className={`px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center ${
+                        className={`px-3 py-1.5 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center ${
                           chat.config.model === lm.id && chat.config.modelSource === 'local'
                             ? 'bg-gray-100 dark:bg-gray-700 font-medium'
                             : ''
                         }`}
                         onClick={() => handleModelChange(lm.id, undefined, 'local')}
                       >
-                        <span className='truncate flex-1'>{lm.label} (Local{lm.quantization ? ' · ' + lm.quantization : ''})</span>
+                        <LocalChipIcon className='w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500' />
+                        <div className='truncate flex-1 ml-2'>
+                          <div className='text-sm'>{lm.label}</div>
+                          <div className='text-xs text-gray-400 dark:text-gray-500'>Local{lm.quantization ? ' · ' + lm.quantization : ''}</div>
+                        </div>
                       </div>
                     ))}
                     </>
                   )}
+                  <div className='border-t border-gray-200 dark:border-gray-600 my-1' />
+                  <div
+                    className='px-3 py-2 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-1.5'
+                    onClick={() => { setIsModelDropdownOpen(false); setIsModalOpen(true); }}
+                  >
+                    <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4' />
+                    </svg>
+                    {tMain('chatSettings')}
+                  </div>
+                  {/* Token info section */}
+                  <div className='border-t border-gray-200 dark:border-gray-600 my-1' />
+                  <div className='px-3 py-2 text-xs text-gray-500 dark:text-gray-400'>
+                    <div className='flex items-center'>
+                      <span className='truncate flex-1'>
+                        <TokenCount />
+                        {isOpenRouter && creditDisplay && (
+                          <span className='text-gray-600 dark:text-gray-400'>
+                            {' / '}
+                            <span className='tabular-nums'>{creditDisplay}</span>
+                          </span>
+                        )}
+                      </span>
+                      {showRetryButton && (
+                        <button
+                          className='ml-1 rounded p-0.5 transition-colors hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400'
+                          onClick={(e) => { e.stopPropagation(); handleRetryVerifiedStats(); }}
+                          type='button'
+                          title='Retry'
+                        >
+                          <svg className='h-3 w-3' fill='none' stroke='currentColor' viewBox='0 0 24 24' strokeWidth={2}>
+                            <path strokeLinecap='round' strokeLinejoin='round' d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
                 );
               })()}
             </div>
-            <div
-              className='p-1 px-2 rounded-md bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 cursor-pointer flex items-center gap-1 shrink-0 whitespace-nowrap'
-              onClick={() => setIsModalOpen(true)}
-            >
-              <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4' />
-              </svg>
-              {!isCompact && tMain('modelOptions')}
-            </div>
-            <div
-              className={`p-1 px-2 rounded-md cursor-pointer flex items-center gap-1 shrink-0 whitespace-nowrap transition-colors ${
-                isAllOmitted
-                  ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:hover:bg-amber-900/50'
-                  : 'bg-gray-300/20 dark:bg-gray-900/10 hover:bg-gray-300/50 dark:hover:bg-gray-900/50 text-gray-600 dark:text-gray-300'
-              }`}
-              onClick={() => {
-                setAllOmitted(currentChatIndex, !isAllOmitted);
-              }}
-              title={String(isAllOmitted ? tMain('globalOmitOff') : tMain('globalOmitOn'))}
-            >
-              <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
-                <path d='M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94' />
-                <path d='M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19' />
-                <line x1='1' y1='1' x2='23' y2='23' />
-              </svg>
-              {!isCompact && tMain(isAllOmitted ? 'globalOmitOff' : 'globalOmitOn')}
-            </div>
-            {isCurrentChatGenerating && (
-              <button
-                type='button'
-                className='flex shrink-0 items-center gap-1.5 p-1 px-2 rounded-md cursor-pointer hover:bg-gray-300/50 dark:hover:bg-gray-900/50 transition-colors'
-                onClick={() => { if (currentChatId) stopSessionsForChat(currentChatId); }}
-                title={String(tMain('stopGenerating'))}
-                aria-label={String(tMain('stopGenerating'))}
-              >
-                <span
-                  className={`inline-block h-2 w-2 rounded-full animate-pulse ${
-                    isProxyMode
-                      ? 'bg-indigo-400 dark:bg-indigo-400'
-                      : 'bg-green-400 dark:bg-green-400'
-                  }`}
-                />
-                {!isCompact && (
-                  <span className='text-xs text-gray-500 dark:text-gray-400'>
-                    {isProxyMode ? 'proxy' : ''}
-                  </span>
-                )}
-              </button>
-            )}
             </div>
           )}
         </div>

@@ -261,15 +261,8 @@ const TokenCount = React.memo(() => {
     if (!isOpenRouter || !verifiedStats || generatingSession) return null;
     const cost = verifiedStats.totalCost;
     const costStr = cost === 0 ? 'Free' : `$${cost.toPrecision(3)}`;
-    return t('verifiedStatsShort', {
-      ns: 'main',
-      defaultValue:
-        'Actual: {{prompt}}+{{completion}} tokens, {{cost}}',
-      prompt: verifiedStats.nativePromptTokens,
-      completion: verifiedStats.nativeCompletionTokens,
-      cost: costStr,
-    });
-  }, [isOpenRouter, verifiedStats, generatingSession, t]);
+    return `${verifiedStats.nativePromptTokens}+${verifiedStats.nativeCompletionTokens} Tokens, ${costStr}`;
+  }, [isOpenRouter, verifiedStats, generatingSession]);
 
   const verificationStatusDisplay = useMemo(() => {
     if (!isOpenRouter || generatingSession || !pendingVerification) return null;
@@ -374,39 +367,47 @@ const TokenCount = React.memo(() => {
         isDisplayRefreshing ? 'opacity-80' : 'opacity-100'
       }`}
     >
-      {generatingSession
-        ? imageTokenCount > 0
-          ? t('liveTokenCountWithImages', {
-              ns: 'main',
-              defaultValue:
-                'Input: {{prompt}} / Output: {{completion}} / Images: {{images}} ({{cost}})',
-              prompt: promptTokenCount,
-              completion: completionTokenCount,
-              images: imageTokenCount,
-              cost: costDisplay,
-            })
-          : t('liveTokenCount', {
-              ns: 'main',
-              defaultValue: 'Input: {{prompt}} / Output: {{completion}} ({{cost}})',
-              prompt: promptTokenCount,
-              completion: completionTokenCount,
-              cost: costDisplay,
-            })
-        : imageTokenCount > 0
-          ? t('tokenCountWithImages', {
-              ns: 'main',
-              defaultValue: 'Tokens: {{tokens}} / Images: {{images}} ({{cost}})',
-              tokens: promptTokenCount,
-              images: imageTokenCount,
-              cost: costDisplay,
-            })
-          : `Tokens: ${promptTokenCount} (${costDisplay})`}
-      {(verifiedDisplay || verificationStatusDisplay) && (
+      {verifiedDisplay ? (
+        <span className='not-italic text-green-700 dark:text-green-400'>
+          {verifiedDisplay}
+        </span>
+      ) : (
         <>
-          {' / '}
-          <span className={`not-italic ${verifiedDisplay ? 'text-green-700 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}`}>
-            {verifiedDisplay ?? verificationStatusDisplay}
-          </span>
+          {generatingSession
+            ? imageTokenCount > 0
+              ? t('liveTokenCountWithImages', {
+                  ns: 'main',
+                  defaultValue:
+                    'Input: {{prompt}} / Output: {{completion}} / Images: {{images}} ({{cost}})',
+                  prompt: promptTokenCount,
+                  completion: completionTokenCount,
+                  images: imageTokenCount,
+                  cost: costDisplay,
+                })
+              : t('liveTokenCount', {
+                  ns: 'main',
+                  defaultValue: 'Input: {{prompt}} / Output: {{completion}} ({{cost}})',
+                  prompt: promptTokenCount,
+                  completion: completionTokenCount,
+                  cost: costDisplay,
+                })
+            : imageTokenCount > 0
+              ? t('tokenCountWithImages', {
+                  ns: 'main',
+                  defaultValue: 'Tokens: {{tokens}} / Images: {{images}} ({{cost}})',
+                  tokens: promptTokenCount,
+                  images: imageTokenCount,
+                  cost: costDisplay,
+                })
+              : `Tokens: ${promptTokenCount} (${costDisplay})`}
+          {verificationStatusDisplay && (
+            <>
+              {' / '}
+              <span className='not-italic text-gray-600 dark:text-gray-400'>
+                {verificationStatusDisplay}
+              </span>
+            </>
+          )}
         </>
       )}
     </span>

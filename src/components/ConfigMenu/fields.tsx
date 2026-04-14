@@ -4,6 +4,8 @@ import Select, { GroupBase, StylesConfig } from 'react-select';
 type SelectOption<T extends string> = {
   value: T;
   label: string;
+  sublabel?: string;
+  icon?: React.ReactNode;
 };
 
 const createSelectStyles = <T extends string>(): StylesConfig<
@@ -239,6 +241,15 @@ export const DarkSelectField = <T extends string>({
       styles={createSelectStyles<T>()}
       menuPortalTarget={document.body}
       menuPosition='fixed'
+      formatOptionLabel={(option) => (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          {option.icon && <span style={{ flexShrink: 0, display: 'flex' }}>{option.icon}</span>}
+          <div>
+            <div>{option.label}</div>
+            {option.sublabel && <div style={{ fontSize: '0.75rem', opacity: 0.55 }}>{option.sublabel}</div>}
+          </div>
+        </div>
+      )}
     />
   </ConfigSection>
 );
