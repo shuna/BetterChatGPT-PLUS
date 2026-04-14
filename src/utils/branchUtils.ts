@@ -137,7 +137,11 @@ export function getSiblingsOf(
   nodeId: string
 ): BranchNode[] {
   const node = tree.nodes[nodeId];
-  if (!node?.parentId) return [node];
+  if (!node) return [];
+  if (!node.parentId) {
+    // Root-level node: siblings are all nodes with parentId === null
+    return Object.values(tree.nodes).filter((n) => n.parentId === null);
+  }
   return getChildrenOf(tree, node.parentId);
 }
 

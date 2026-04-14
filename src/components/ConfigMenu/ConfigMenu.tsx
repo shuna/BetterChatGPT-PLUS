@@ -98,6 +98,7 @@ const ConfigMenu = ({
   const [_maxToken, _setMaxToken] = useState<number>(config.max_tokens);
   const [_model, _setModel] = useState<ModelOptions>(config.model);
   const [_providerId, _setProviderId] = useState<ProviderId | undefined>(config.providerId);
+  const [_modelSource, _setModelSource] = useState<'remote' | 'local' | undefined>(config.modelSource);
   const [_temperature, _setTemperature] = useState<number>(config.temperature);
   const [_presencePenalty, _setPresencePenalty] = useState<number>(
     config.presence_penalty
@@ -113,7 +114,7 @@ const ConfigMenu = ({
   const [_verbosity, _setVerbosity] = useState<Verbosity | undefined>(config.verbosity ?? DEFAULT_VERBOSITY);
   const [_systemPrompt, _setSystemPrompt] = useState<string>(config.systemPrompt ?? '');
   const { t } = useTranslation('model');
-  const isStreamSupported = isModelStreamSupported(_model, _providerId);
+  const isStreamSupported = isModelStreamSupported(_model, _providerId, _modelSource);
   const reasoningSupported = useModelSupportsReasoning(_model, _providerId);
   const capabilities = useModelCapabilities(_model, _providerId);
   const verbositySupported = isOpenRouterClaudeVerbosityModel(_model, _providerId);
@@ -131,7 +132,7 @@ const ConfigMenu = ({
       isFirstRender.current = false;
       return;
     }
-    const modelContextLength = getModelConfigContextInfo(_model, _providerId).contextLength;
+    const modelContextLength = getModelConfigContextInfo(_model, _providerId, _modelSource).contextLength;
     setConfig(normalizeConfigStream({
       max_tokens: clampCompletionTokens(_maxToken, modelContextLength),
       model: _model,
@@ -141,13 +142,14 @@ const ConfigMenu = ({
       frequency_penalty: _frequencyPenalty,
       stream: _stream,
       providerId: _providerId,
+      modelSource: _modelSource,
       reasoning_effort: reasoningSupported ? _reasoningEffort : undefined,
       reasoning_budget_tokens: reasoningSupported && _reasoningBudget >= 1024 ? _reasoningBudget : undefined,
       verbosity: verbositySupported ? _verbosity : undefined,
       systemPrompt: _systemPrompt || undefined,
     }));
     setImageDetail(_imageDetail);
-  }, [_maxToken, _model, _providerId, _temperature, _presencePenalty, _topP, _frequencyPenalty, _imageDetail, _stream, _reasoningEffort, _reasoningBudget, _verbosity, _systemPrompt]);
+  }, [_maxToken, _model, _providerId, _modelSource, _temperature, _presencePenalty, _topP, _frequencyPenalty, _imageDetail, _stream, _reasoningEffort, _reasoningBudget, _verbosity, _systemPrompt]);
 
   const FieldCell = ({ children }: { children: React.ReactNode }) => (
     <div className='px-4 py-3 [&>*:first-child]:mt-0 [&>*:first-child]:pt-0'>
@@ -168,9 +170,11 @@ const ConfigMenu = ({
             _model={_model}
             _setModel={_setModel}
             _providerId={_providerId}
-            _onModelChange={(modelId, providerId) => {
+            _modelSource={_modelSource}
+            _onModelChange={(modelId, providerId, modelSource) => {
               _setModel(modelId);
               _setProviderId(providerId);
+              _setModelSource(modelSource);
             }}
             _label={t('model')}
             className=''
@@ -199,6 +203,7 @@ const ConfigMenu = ({
               _setMaxToken={_setMaxToken}
               _model={_model}
               _providerId={_providerId}
+              _modelSource={_modelSource}
             />
           </FieldCell>
           <FieldCell>
@@ -420,23 +425,25 @@ export const MaxTokenSlider = ({
   _setMaxToken,
   _model,
   _providerId,
+  _modelSource,
 }: {
   _maxToken: number;
   _setMaxToken: React.Dispatch<React.SetStateAction<number>>;
   _model: ModelOptions;
   _providerId?: ProviderId;
+  _modelSource?: 'remote' | 'local';
 }) => {
   const { t } = useTranslation('model');
   const favoriteModels = useStore((state) => state.favoriteModels) || [];
 
   const getMaxForModel = (): number => {
-    const lookupMax = getModelConfigContextInfo(_model, _providerId).contextLength;
+    const lookupMax = getModelConfigContextInfo(_model, _providerId, _modelSource).contextLength;
     if (lookupMax > 0) return lookupMax;
     const fav = _providerId
       ? favoriteModels.find((f) => f.modelId === _model && f.providerId === _providerId)
       : favoriteModels.find((f) => f.modelId === _model);
     if (fav?.contextLength) return fav.contextLength;
-    return getModelConfigContextInfo(_model, _providerId).contextLength;
+    return getModelConfigContextInfo(_model, _providerId, _modelSource).contextLength;
   };
 
   const maxForModel = getMaxForModel();

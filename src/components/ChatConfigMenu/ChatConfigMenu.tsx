@@ -110,6 +110,7 @@ const ChatConfigFields = ({
             _setMaxToken={_setMaxToken}
             _model={_model}
             _providerId={_providerId}
+            _modelSource={_modelSource}
           />
         </FieldCell>
         <FieldCell>

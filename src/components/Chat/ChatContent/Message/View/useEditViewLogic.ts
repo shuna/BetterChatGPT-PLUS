@@ -100,7 +100,7 @@ export function useEditViewLogic({
   const replaceMessageAndPruneFollowing = useStore((state) => state.replaceMessageAndPruneFollowing);
   const upsertWithAutoBranch = useStore((state) => state.upsertWithAutoBranch);
   const currentChatIndex = useStore((state) => state.currentChatIndex);
-  const { model, providerId } = useStore((state) => {
+  const { model, providerId, modelSource } = useStore((state) => {
     const { chats, currentChatIndex: idx } = state;
     const config =
       chats && chats.length > 0 && idx >= 0 && idx < chats.length
@@ -109,6 +109,7 @@ export function useEditViewLogic({
     return {
       model: config?.model ?? defaultModel,
       providerId: config?.providerId,
+      modelSource: config?.modelSource,
     };
   });
   const favoriteModels = useStore((state) => state.favoriteModels) || [];
@@ -120,6 +121,7 @@ export function useEditViewLogic({
     )
   );
   const modelValid = !!model && (
+    modelSource === 'local' ||
     favoriteModels.some((f) =>
       f.modelId === model && (providerId ? f.providerId === providerId : true)
     ) || isKnownModel(model)

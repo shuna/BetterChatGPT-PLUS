@@ -114,10 +114,13 @@ const useSubmit = () => {
       if (!hasMeaningfulMessageContent(contextMessages))
         throw new Error(t('errors.noMessagesSubmitted') as string);
 
+      const isLocal = isLocalModelConfig(chats[chatIndex].config);
+
       await loadEncoder();
       const { contextLength: modelContextLength } = getModelContextInfo(
         chats[chatIndex].config.model,
-        chats[chatIndex].config.providerId
+        chats[chatIndex].config.providerId,
+        chats[chatIndex].config.modelSource
       );
       const completionBudget = chats[chatIndex].config.max_tokens;
       const promptBudget = getPromptBudgetForContext(modelContextLength, completionBudget);
@@ -133,27 +136,40 @@ const useSubmit = () => {
       if (!fitsContextWindow(promptTokens, modelContextLength, completionBudget))
         throw new Error(t('errors.messageExceedMaxToken') as string);
 
-      // --- Local model branch ---
-      if (isLocalModelConfig(chats[chatIndex].config)) {
-        // Gather all models for this execution unit (gen + eval)
-        const genModelId = chats[chatIndex].config.model;
+      // Resolve execution target
+      const resolved = isLocal
+        ? undefined
+        : resolveProviderForModel(
+            chats[chatIndex].config.model,
+            favoriteModels,
+            providers,
+            fallbackProvider,
+            chats[chatIndex].config.providerId
+          );
+
+      // Pre-send evaluation (async, non-blocking)
+      const userMsg = [...messages].reverse().find((m) => m.role === 'user');
+      const evalCtx: EvaluationContext = {
+        chatId,
+        nodeId: targetNodeId,
+        endpoint: resolved?.endpoint ?? '',
+        apiKey: resolved?.key,
+        model: chats[chatIndex].config.model,
+      };
+
+      if (isLocal) {
         const evalModelIds = await getEvaluationModelIds();
-        const allRequired = [genModelId, ...evalModelIds].filter(Boolean);
+        const allRequired = [chats[chatIndex].config.model, ...evalModelIds].filter(Boolean);
         await prepareModelsForExecution(allRequired);
+      }
 
-        // Pre-send evaluation (models already loaded by prepareModelsForExecution)
-        const localUserMsg = [...messages].reverse().find((m) => m.role === 'user');
-        const localEvalCtx: EvaluationContext = {
-          chatId,
-          nodeId: targetNodeId,
-          endpoint: '',
-          apiKey: undefined,
-          model: chats[chatIndex].config.model,
-        };
-        if (localUserMsg) {
-          runPreSendEvaluation(localUserMsg.content, localEvalCtx).catch(() => {});
-        }
+      if (userMsg) {
+        runPreSendEvaluation(userMsg.content, evalCtx).catch(() => {});
+      }
 
+      // Execute generation
+      let streamResult: { generationId?: string } = {};
+      if (isLocal) {
         await executeLocalSubmit({
           sessionId,
           chatId,
@@ -166,71 +182,24 @@ const useSubmit = () => {
           abortController,
           t: (key: string) => t(key) as string,
         });
-
-        // Post-receive evaluation for local generation
-        if (localUserMsg) {
-          const postChats = useStore.getState().chats;
-          const assistantMsg = postChats?.[chatIndex]?.messages[messageIndex];
-          if (assistantMsg) {
-            runPostReceiveEvaluation(localUserMsg.content, assistantMsg.content, localEvalCtx).catch(() => {});
-          }
-        }
-
-        // Auto-title for local generation
-        if (mode === 'append') {
-          await maybeGenerateAutoTitle({
-            chatId,
-            language: i18n.language,
-            setChats,
-            apiVersion: useStore.getState().apiVersion,
-            titleModel: useStore.getState().titleModel,
-            titleProviderId: useStore.getState().titleProviderId,
-            t: (key: string) => t(key) as string,
-            favoriteModels,
-            providers,
-            fallbackProvider,
-          });
-        }
       } else {
-      // --- Remote model branch ---
-      const resolved = resolveProviderForModel(
-        chats[chatIndex].config.model,
-        favoriteModels,
-        providers,
-        fallbackProvider,
-        chats[chatIndex].config.providerId
-      );
-
-      // --- Pre-send evaluation (async, non-blocking) ---
-      const userMsg = [...messages].reverse().find((m) => m.role === 'user');
-      const evalCtx: EvaluationContext = {
-        chatId,
-        nodeId: targetNodeId,
-        endpoint: resolved.endpoint,
-        apiKey: resolved.key,
-        model: chats[chatIndex].config.model,
-      };
-      if (userMsg) {
-        runPreSendEvaluation(userMsg.content, evalCtx).catch(() => {});
+        streamResult = await executeSubmitStream({
+          sessionId,
+          chatId,
+          chatIndex,
+          messageIndex,
+          targetNodeId,
+          messages,
+          config: chats[chatIndex].config,
+          resolvedProvider: resolved!,
+          abortController,
+          apiVersion: useStore.getState().apiVersion,
+          t: (key: string) => t(key) as string,
+        });
+        await applySubmitTokenUsage(chatId, targetNodeId);
       }
 
-      const streamResult = await executeSubmitStream({
-        sessionId,
-        chatId,
-        chatIndex,
-        messageIndex,
-        targetNodeId,
-        messages,
-        config: chats[chatIndex].config,
-        resolvedProvider: resolved,
-        abortController,
-        apiVersion: useStore.getState().apiVersion,
-        t: (key: string) => t(key) as string,
-      });
-
-      await applySubmitTokenUsage(chatId, targetNodeId);
-
-      // --- Post-receive evaluation (async, non-blocking) ---
+      // Post-receive evaluation (async, non-blocking)
       if (userMsg) {
         const postChats = useStore.getState().chats;
         const assistantMsg = postChats?.[chatIndex]?.messages[messageIndex];
@@ -268,7 +237,6 @@ const useSubmit = () => {
           fallbackProvider,
         });
       }
-      } // end remote model branch
       useStore.getState().setLastSubmitContext(null, null, null, null);
     } catch (e: unknown) {
       const generationId = getGenerationIdFromSubmitError(e);
