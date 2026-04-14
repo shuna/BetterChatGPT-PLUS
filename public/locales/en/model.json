@@ -29,6 +29,16 @@
   "systemPromptPlaceholder": "Enter system prompt for this chat...",
   "insertFromLibrary": "Insert from library",
   "resetToDefault": "Reset To Default",
+  "section": {
+    "model": "Model",
+    "generation": "Generation",
+    "defaultGeneration": "Default Generation",
+    "penalties": "Penalties",
+    "options": "Options",
+    "displayOptions": "Display Options",
+    "reasoning": "Reasoning",
+    "systemMessage": "Default System Prompt"
+  },
   "stream": {
     "label": "Stream response text",
     "description": "Enable streaming to display responses in real-time as they are generated."

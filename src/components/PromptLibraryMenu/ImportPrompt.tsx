@@ -4,69 +4,108 @@ import { v4 as uuidv4 } from 'uuid';
 import useStore from '@store/store';
 
 import { importPromptCSV } from '@utils/prompt';
+import { showToast } from '@utils/showToast';
 
-const ImportPrompt = () => {
-  const { t } = useTranslation();
+type ImportMode = 'append' | 'replace';
+
+const ImportPrompt = ({ hideTitle }: { hideTitle?: boolean }) => {
+  const { t } = useTranslation(['main', 'import']);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const [mode, setMode] = useState<ImportMode>('append');
+  const [fileSelected, setFileSelected] = useState(false);
   const [alert, setAlert] = useState<{
     message: string;
     success: boolean;
   } | null>(null);
 
   const handleFileUpload = () => {
-    if (!inputRef || !inputRef.current) return;
-    const file = inputRef.current.files?.[0];
-    if (file) {
-      const reader = new FileReader();
+    const file = inputRef.current?.files?.[0];
+    if (!file) return;
 
-      reader.onload = (event) => {
-        const csvString = event.target?.result as string;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const csvString = event.target?.result as string;
+      try {
+        const results = importPromptCSV(csvString);
+        const newPrompts = results.map((data) => {
+          const columns = Object.values(data);
+          return { id: uuidv4(), name: columns[0], prompt: columns[1] };
+        });
 
-        try {
-          const results = importPromptCSV(csvString);
-
-          const prompts = useStore.getState().prompts;
-          const setPrompts = useStore.getState().setPrompts;
-
-          const newPrompts = results.map((data) => {
-            const columns = Object.values(data);
-            return {
-              id: uuidv4(),
-              name: columns[0],
-              prompt: columns[1],
-            };
-          });
-
-          setPrompts(prompts.concat(newPrompts));
-
-          setAlert({ message: 'Succesfully imported!', success: true });
-        } catch (error: unknown) {
-          setAlert({ message: (error as Error).message, success: false });
+        const setPrompts = useStore.getState().setPrompts;
+        if (mode === 'replace') {
+          setPrompts(newPrompts);
+        } else {
+          const existing = useStore.getState().prompts;
+          setPrompts(existing.concat(newPrompts));
         }
-      };
-
-      reader.readAsText(file);
-    }
+        setAlert({ message: String(t('importSuccess', { ns: 'import', defaultValue: 'Successfully imported!' })), success: true });
+      } catch (error: unknown) {
+        setAlert({ message: (error as Error).message, success: false });
+      }
+    };
+    reader.readAsText(file);
   };
 
   return (
-    <div>
-      <label className='block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300'>
-        {t('import')} (CSV)
-      </label>
+    <>
+      {!hideTitle && (
+        <div className='block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300'>
+          {t('import')} (CSV)
+        </div>
+      )}
+      <p className='text-xs text-gray-500 dark:text-gray-400 mb-2 truncate'>
+        {fileSelected && inputRef.current?.files?.[0]
+          ? inputRef.current.files[0].name
+          : t('selectFileDescription', { ns: 'import', defaultValue: 'インポートするファイルを選択してください' })}
+      </p>
       <input
-        className='w-full text-sm file:p-2 text-gray-800 file:text-gray-700 dark:text-gray-300 dark:file:text-gray-200 rounded-md cursor-pointer focus:outline-none bg-gray-50 file:bg-gray-100 dark:bg-gray-800 dark:file:bg-gray-700 file:border-0 border border-gray-300 dark:border-gray-600 placeholder-gray-900 dark:placeholder-gray-300 file:cursor-pointer'
+        className='hidden'
         type='file'
+        accept='.csv'
         ref={inputRef}
+        onChange={() => setFileSelected(!!inputRef.current?.files?.length)}
       />
-      <button
-        className='btn btn-small btn-primary mt-3'
-        onClick={handleFileUpload}
-        aria-label={t('import') as string}
-      >
-        {t('import')}
-      </button>
+      <div className='mt-3 flex flex-col gap-2 text-xs text-gray-500 dark:text-gray-400'>
+        <label className='flex items-center gap-1.5 cursor-pointer'>
+          <input
+            type='radio'
+            name='promptImportMode'
+            checked={mode === 'append'}
+            onChange={() => setMode('append')}
+            className='rounded'
+          />
+          {t('mode.append', { ns: 'import' })}
+        </label>
+        <label className='flex items-center gap-1.5 cursor-pointer'>
+          <input
+            type='radio'
+            name='promptImportMode'
+            checked={mode === 'replace'}
+            onChange={() => setMode('replace')}
+            className='rounded'
+          />
+          {t('mode.replace', { ns: 'import' })}
+        </label>
+      </div>
+      <div className='flex items-center justify-between mt-3'>
+        <button
+          className='btn btn-small btn-neutral flex items-center gap-2 whitespace-nowrap'
+          onClick={() => inputRef.current?.click()}
+          type='button'
+        >
+          {t('selectFile')}
+        </button>
+        <button
+          className={`btn btn-small w-32 justify-center ${fileSelected ? 'btn-primary' : 'btn-neutral cursor-not-allowed opacity-50'}`}
+          onClick={handleFileUpload}
+          disabled={!fileSelected}
+          aria-label={t('import') as string}
+        >
+          {t('import')}
+        </button>
+      </div>
       {alert && (
         <div
           className={`relative py-2 px-3 w-full mt-3 border rounded-md text-gray-600 dark:text-gray-100 text-sm whitespace-pre-wrap ${
@@ -78,7 +117,7 @@ const ImportPrompt = () => {
           {alert.message}
         </div>
       )}
-    </div>
+    </>
   );
 };
 

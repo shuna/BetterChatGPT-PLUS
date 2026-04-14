@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { showToast } from '@utils/showToast';
 import { ImportMode, importChatFromFile } from './importService';
 
-const ImportChat = () => {
+const ImportChat = ({ hideTitle }: { hideTitle?: boolean }) => {
   const { t } = useTranslation(['main', 'import']);
   const inputRef = useRef<HTMLInputElement>(null);
   const [mode, setMode] = useState<ImportMode>('append');
@@ -45,9 +45,11 @@ const ImportChat = () => {
 
   return (
     <>
-      <div className='block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300'>
-        {t('import')} (JSON)
-      </div>
+      {!hideTitle && (
+        <div className='block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300'>
+          {t('import')} (JSON)
+        </div>
+      )}
       <p className='text-xs text-gray-500 dark:text-gray-400 mb-2 truncate'>
         {fileSelected && inputRef.current?.files?.[0]
           ? inputRef.current.files[0].name
