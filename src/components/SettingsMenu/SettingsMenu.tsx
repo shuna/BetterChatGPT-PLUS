@@ -15,6 +15,9 @@ import ClearConversation from '@components/Menu/MenuOptions/ClearConversation';
 import ProviderMenuInline from '@components/ProviderMenu/ProviderMenuInline';
 import { ProxySettingsInline } from './ProxySettings';
 import { ChatConfigInline } from '@components/ChatConfigMenu/ChatConfigMenu';
+import { isModelStreamSupported } from '@utils/streamSupport';
+import { ImageDetail } from '@type/chat';
+import Toggle from '@components/Toggle';
 import { PromptLibraryInline } from '@components/PromptLibraryMenu/PromptLibraryMenu';
 import ImportChat from '@components/ImportExportChat/ImportChat';
 import ExportChat from '@components/ImportExportChat/ExportChat';
@@ -334,6 +337,57 @@ const ThemeRadioGroup = () => {
   );
 };
 
+const DefaultStreamToggle = () => {
+  const { t } = useTranslation('model');
+  const config = useStore((state) => state.defaultChatConfig);
+  const setDefaultChatConfig = useStore((state) => state.setDefaultChatConfig);
+  const stream = config.stream !== false;
+  const supported = isModelStreamSupported(config.model, config.providerId, config.modelSource);
+
+  return (
+    <Toggle
+      label={t('stream.label') as string}
+      isChecked={supported && stream}
+      setIsChecked={() => {
+        if (supported) setDefaultChatConfig({ ...config, stream: !stream });
+      }}
+    />
+  );
+};
+
+const DefaultImageDetailSelect = () => {
+  const { t } = useTranslation('model');
+  const imageDetail = useStore((state) => state.defaultImageDetail);
+  const setDefaultImageDetail = useStore((state) => state.setDefaultImageDetail);
+
+  const options: { value: ImageDetail; label: string }[] = [
+    { value: 'low', label: t('imageDetail.low') },
+    { value: 'high', label: t('imageDetail.high') },
+    { value: 'auto', label: t('imageDetail.auto') },
+  ];
+
+  return (
+    <SettingsRow label={t('imageDetail.label') as string}>
+      <div className='inline-flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden'>
+        {options.map((opt) => (
+          <button
+            key={opt.value}
+            type='button'
+            className={`px-3 py-1 text-sm font-medium transition-colors ${
+              imageDetail === opt.value
+                ? 'bg-green-500/70 text-white'
+                : 'bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
+            }`}
+            onClick={() => setDefaultImageDetail(opt.value)}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
+    </SettingsRow>
+  );
+};
+
 const GeneralTab = () => {
   const { t } = useTranslation();
   return (
@@ -356,6 +410,8 @@ const GeneralTab = () => {
         <StoreToggle stateKey='displayChatSize' setterKey='setDisplayChatSize' i18nKey='displayChatSize' i18nNs='main' />
         <TotalTokenCostToggle />
         <StoreToggle stateKey='showDebugPanel' setterKey='setShowDebugPanel' i18nKey='showDebugPanel' i18nNs='main' />
+        <DefaultStreamToggle />
+        <DefaultImageDetailSelect />
       </SettingsGroup>
       <TotalTokenCost />
 
@@ -380,23 +436,26 @@ const DataTab = () => {
   const { t } = useTranslation();
   return (
     <div className='flex flex-col gap-6'>
-      {/* Import */}
-      <div className='rounded-lg border border-gray-200 dark:border-gray-600 p-4'>
-        <ImportChat />
-      </div>
-
-      {/* Export */}
-      <div className='rounded-lg border border-gray-200 dark:border-gray-600 p-4'>
-        <ExportChat />
-      </div>
-
-      {/* Danger zone */}
-      <div className='border-t border-gray-200 dark:border-gray-600 pt-4'>
-        <SectionLabel>{t('settingsSection.dangerZone')}</SectionLabel>
-        <div className='mt-3'>
-          <ClearConversation />
+      <SettingsGroup label={`${t('import')} (JSON)`}>
+        <div className='px-4 py-3'>
+          <ImportChat hideTitle />
         </div>
-      </div>
+      </SettingsGroup>
+
+      <SettingsGroup label={`${t('export')} (JSON)`}>
+        <div className='px-4 py-3'>
+          <ExportChat hideTitle />
+        </div>
+      </SettingsGroup>
+
+      <SettingsGroup label={t('settingsSection.dangerZone')}>
+        <div className='flex items-center justify-between gap-4 px-4 py-3'>
+          <span className='text-sm font-medium text-gray-900 dark:text-gray-300'>{t('clearAllConversations')}</span>
+          <div className='flex-shrink-0'>
+            <ClearConversation variant='danger' />
+          </div>
+        </div>
+      </SettingsGroup>
     </div>
   );
 };

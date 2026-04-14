@@ -73,6 +73,16 @@
   "systemPromptPlaceholder": "このチャットのシステムプロンプトを入力...",
   "insertFromLibrary": "ライブラリから挿入",
   "resetToDefault": "デフォルトにリセット",
+  "section": {
+    "model": "モデル",
+    "generation": "生成パラメータ",
+    "defaultGeneration": "デフォルト 生成パラメータ",
+    "penalties": "ペナルティ",
+    "options": "オプション",
+    "displayOptions": "表示オプション",
+    "reasoning": "推論",
+    "systemMessage": "デフォルト システムプロンプト"
+  },
   "provider": {
     "title": "AIプロバイダ設定",
     "search": "モデルを検索...",

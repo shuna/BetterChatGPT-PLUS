@@ -6,7 +6,7 @@ import PopupModal from '@components/PopupModal';
 import DeleteIcon from '@icon/DeleteIcon';
 import useInitialiseNewChat from '@hooks/useInitialiseNewChat';
 
-const ClearConversation = () => {
+const ClearConversation = ({ variant }: { variant?: 'danger' }) => {
   const { t } = useTranslation();
 
   const initialiseNewChat = useInitialiseNewChat();
@@ -22,7 +22,9 @@ const ClearConversation = () => {
   return (
     <>
       <button
-        className='btn btn-neutral'
+        className={variant === 'danger'
+          ? 'btn btn-small w-32 justify-center bg-red-600 text-white hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700'
+          : 'btn btn-neutral'}
         onClick={() => {
           setIsModalOpen(true);
         }}

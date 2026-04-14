@@ -2,18 +2,17 @@ import React, { useEffect, useRef, useState } from 'react';
 import useStore from '@store/store';
 import { useTranslation } from 'react-i18next';
 
-import Select from 'react-select';
 import PopupModal from '@components/PopupModal';
 import {
   FrequencyPenaltySlider,
-  ImageDetailSelector,
   MaxTokenSlider,
   ModelSelector,
   PresencePenaltySlider,
-  StreamToggle,
+  SystemPromptField,
   TemperatureSlider,
   TopPSlider,
 } from '@components/ConfigMenu/ConfigMenu';
+import { SettingsGroup } from '@components/SettingsMenu/SettingsMenu';
 
 import {
   _defaultChatConfig,
@@ -38,6 +37,106 @@ const isSameConfig = (left: typeof _defaultChatConfig, right: typeof _defaultCha
   left.providerId === right.providerId &&
   (left.modelSource ?? undefined) === (right.modelSource ?? undefined) &&
   (left.systemPrompt ?? '') === (right.systemPrompt ?? '');
+
+/** Wrapper that provides consistent cell padding inside SettingsGroup and neutralizes field-internal margins */
+const FieldCell = ({ children }: { children: React.ReactNode }) => (
+  <div className='px-4 py-3 [&>*:first-child]:mt-0 [&>*:first-child]:pt-0'>
+    {children}
+  </div>
+);
+
+/** Shared field layout used by both ChatConfigPopup and ChatConfigInline */
+const ChatConfigFields = ({
+  _systemMessage,
+  _setSystemMessage,
+  _model,
+  _setModel,
+  _providerId,
+  _modelSource,
+  _onModelChange,
+  _maxToken,
+  _setMaxToken,
+  _temperature,
+  _setTemperature,
+  _topP,
+  _setTopP,
+  _presencePenalty,
+  _setPresencePenalty,
+  _frequencyPenalty,
+  _setFrequencyPenalty,
+}: {
+  _systemMessage: string;
+  _setSystemMessage: React.Dispatch<React.SetStateAction<string>>;
+  _model: ModelOptions;
+  _setModel: React.Dispatch<React.SetStateAction<ModelOptions>>;
+  _providerId?: ProviderId;
+  _modelSource?: 'remote' | 'local';
+  _onModelChange: (modelId: ModelOptions, providerId: ProviderId | undefined, modelSource?: 'remote' | 'local') => void;
+  _maxToken: number;
+  _setMaxToken: React.Dispatch<React.SetStateAction<number>>;
+  _temperature: number;
+  _setTemperature: React.Dispatch<React.SetStateAction<number>>;
+  _topP: number;
+  _setTopP: React.Dispatch<React.SetStateAction<number>>;
+  _presencePenalty: number;
+  _setPresencePenalty: React.Dispatch<React.SetStateAction<number>>;
+  _frequencyPenalty: number;
+  _setFrequencyPenalty: React.Dispatch<React.SetStateAction<number>>;
+}) => {
+  const { t } = useTranslation('model');
+
+  return (
+    <div className='flex flex-col gap-5'>
+      <ModelSelector
+        _model={_model}
+        _setModel={_setModel}
+        _providerId={_providerId}
+        _modelSource={_modelSource}
+        _onModelChange={_onModelChange}
+        _label=''
+        className=''
+      />
+
+      <SystemPromptField
+        systemPrompt={_systemMessage}
+        setSystemPrompt={_setSystemMessage}
+        label={t('section.systemMessage') as string}
+      />
+
+      <SettingsGroup label={t('section.defaultGeneration')}>
+        <FieldCell>
+          <MaxTokenSlider
+            _maxToken={_maxToken}
+            _setMaxToken={_setMaxToken}
+            _model={_model}
+            _providerId={_providerId}
+          />
+        </FieldCell>
+        <FieldCell>
+          <TemperatureSlider
+            _temperature={_temperature}
+            _setTemperature={_setTemperature}
+          />
+        </FieldCell>
+        <FieldCell>
+          <TopPSlider _topP={_topP} _setTopP={_setTopP} />
+        </FieldCell>
+        <FieldCell>
+          <PresencePenaltySlider
+            _presencePenalty={_presencePenalty}
+            _setPresencePenalty={_setPresencePenalty}
+          />
+        </FieldCell>
+        <FieldCell>
+          <FrequencyPenaltySlider
+            _frequencyPenalty={_frequencyPenalty}
+            _setFrequencyPenalty={_setFrequencyPenalty}
+          />
+        </FieldCell>
+      </SettingsGroup>
+    </div>
+  );
+};
 
 const ChatConfigMenu = () => {
   const { t } = useTranslation('model');
@@ -147,11 +246,9 @@ const ChatConfigPopup = ({
       handleConfirm={handleSave}
     >
       <div className='p-6 border-b border-gray-200 dark:border-gray-600 w-[90vw] max-w-full text-sm text-gray-900 dark:text-gray-300'>
-        <DefaultSystemChat
+        <ChatConfigFields
           _systemMessage={_systemMessage}
           _setSystemMessage={_setSystemMessage}
-        />
-        <ModelSelector
           _model={_model}
           _setModel={_setModel}
           _providerId={_providerId}
@@ -161,91 +258,27 @@ const ChatConfigPopup = ({
             _setProviderId(providerId);
             _setModelSource(modelSource);
           }}
-          _label={t('model')}
-        />
-        <StreamToggle
-          _stream={_stream}
-          _setStream={_setStream}
-          disabled={!isStreamSupported}
-        />
-        <MaxTokenSlider
           _maxToken={_maxToken}
           _setMaxToken={_setMaxToken}
-          _model={_model}
-          _providerId={_providerId}
-        />
-        <TemperatureSlider
           _temperature={_temperature}
           _setTemperature={_setTemperature}
-        />
-        <TopPSlider _topP={_topP} _setTopP={_setTopP} />
-        <PresencePenaltySlider
+          _topP={_topP}
+          _setTopP={_setTopP}
           _presencePenalty={_presencePenalty}
           _setPresencePenalty={_setPresencePenalty}
-        />
-        <FrequencyPenaltySlider
           _frequencyPenalty={_frequencyPenalty}
           _setFrequencyPenalty={_setFrequencyPenalty}
         />
-        <ImageDetailSelector
-          _imageDetail={_imageDetail}
-          _setImageDetail={_setImageDetail}
-        />
-        
-        <div
-          className='btn btn-neutral cursor-pointer mt-5'
-          onClick={handleReset}
-        >
-          {t('resetToDefault')}
+        <div className='flex gap-3 mt-5'>
+          <button
+            className='btn btn-neutral cursor-pointer'
+            onClick={handleReset}
+          >
+            {t('resetToDefault')}
+          </button>
         </div>
       </div>
     </PopupModal>
-  );
-};
-
-const DefaultSystemChat = ({
-  _systemMessage,
-  _setSystemMessage,
-}: {
-  _systemMessage: string;
-  _setSystemMessage: React.Dispatch<React.SetStateAction<string>>;
-}) => {
-  const { t } = useTranslation('model');
-
-  const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    e.target.style.height = 'auto';
-    e.target.style.height = `${e.target.scrollHeight}px`;
-    e.target.style.maxHeight = `${e.target.scrollHeight}px`;
-  };
-
-  const handleOnFocus = (e: React.FocusEvent<HTMLTextAreaElement, Element>) => {
-    e.target.style.height = 'auto';
-    e.target.style.height = `${e.target.scrollHeight}px`;
-    e.target.style.maxHeight = `${e.target.scrollHeight}px`;
-  };
-
-  const handleOnBlur = (e: React.FocusEvent<HTMLTextAreaElement, Element>) => {
-    e.target.style.height = 'auto';
-    e.target.style.maxHeight = '2.5rem';
-  };
-
-  return (
-    <div>
-      <div className='block text-sm font-medium text-gray-900 dark:text-white'>
-        {t('defaultSystemMessage')}
-      </div>
-      <textarea
-        className='my-2 mx-0 px-2 resize-none rounded-lg bg-transparent overflow-y-hidden leading-7 p-1 border border-gray-400/50 focus:ring-1 focus:ring-blue w-full max-h-10 transition-all'
-        onFocus={handleOnFocus}
-        onBlur={handleOnBlur}
-        onChange={(e) => {
-          _setSystemMessage(e.target.value);
-        }}
-        onInput={handleInput}
-        value={_systemMessage}
-        rows={1}
-      ></textarea>
-    </div>
   );
 };
 
@@ -355,11 +388,9 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
 
   return (
     <div className='text-sm text-gray-900 dark:text-gray-300'>
-      <DefaultSystemChat
+      <ChatConfigFields
         _systemMessage={_systemMessage}
         _setSystemMessage={_setSystemMessage}
-      />
-      <ModelSelector
         _model={_model}
         _setModel={_setModel}
         _providerId={_providerId}
@@ -369,35 +400,16 @@ const ChatConfigInline = ({ onSettingsChanged }: { onSettingsChanged?: () => voi
           _setProviderId(providerId);
           _setModelSource(modelSource);
         }}
-        _label={t('model')}
-      />
-      <StreamToggle
-        _stream={_stream}
-        _setStream={_setStream}
-        disabled={!isStreamSupported}
-      />
-      <MaxTokenSlider
         _maxToken={_maxToken}
         _setMaxToken={_setMaxToken}
-        _model={_model}
-        _providerId={_providerId}
-      />
-      <TemperatureSlider
         _temperature={_temperature}
         _setTemperature={_setTemperature}
-      />
-      <TopPSlider _topP={_topP} _setTopP={_setTopP} />
-      <PresencePenaltySlider
+        _topP={_topP}
+        _setTopP={_setTopP}
         _presencePenalty={_presencePenalty}
         _setPresencePenalty={_setPresencePenalty}
-      />
-      <FrequencyPenaltySlider
         _frequencyPenalty={_frequencyPenalty}
         _setFrequencyPenalty={_setFrequencyPenalty}
-      />
-      <ImageDetailSelector
-        _imageDetail={_imageDetail}
-        _setImageDetail={_setImageDetail}
       />
       <div className='flex gap-3 mt-5'>
         <button

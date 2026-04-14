@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import PopupModal from '@components/PopupModal';
 import { PromptLibraryPicker } from '@components/PromptLibraryMenu/PromptLibraryMenu';
+import { SettingsGroup } from '@components/SettingsMenu/SettingsMenu';
 import { ConfigInterface, ImageDetail, ReasoningEffort, Verbosity } from '@type/chat';
 import {
   getModelConfigContextInfo,
@@ -38,20 +39,22 @@ const DEFAULT_REASONING_BUDGET = 0;
 const DEFAULT_REASONING_EFFORT: ReasoningEffort = 'medium';
 const DEFAULT_VERBOSITY: Verbosity = 'medium';
 
-const SystemPromptField = ({
+export const SystemPromptField = ({
   systemPrompt,
   setSystemPrompt,
+  label,
 }: {
   systemPrompt: string;
   setSystemPrompt: React.Dispatch<React.SetStateAction<string>>;
+  label?: string;
 }) => {
   const { t } = useTranslation('model');
   const [isPickerOpen, setIsPickerOpen] = useState(false);
 
   return (
-    <div className='mt-3 pt-3 border-t border-gray-200 dark:border-gray-600'>
+    <div>
       <div className='flex items-center justify-between'>
-        <FieldLabel>{t('chatSystemPrompt', 'System Prompt')}</FieldLabel>
+        <FieldLabel>{label ?? t('chatSystemPrompt', 'System Prompt')}</FieldLabel>
         <button
           type='button'
           className='text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors'
@@ -146,93 +149,109 @@ const ConfigMenu = ({
     setImageDetail(_imageDetail);
   }, [_maxToken, _model, _providerId, _temperature, _presencePenalty, _topP, _frequencyPenalty, _imageDetail, _stream, _reasoningEffort, _reasoningBudget, _verbosity, _systemPrompt]);
 
+  const FieldCell = ({ children }: { children: React.ReactNode }) => (
+    <div className='px-4 py-3 [&>*:first-child]:mt-0 [&>*:first-child]:pt-0'>
+      {children}
+    </div>
+  );
+
   return (
     <PopupModal
       title={t('configuration') as string}
       setIsModalOpen={setIsModalOpen}
       cancelButton={false}
+      maxWidth='max-w-4xl'
     >
-      <div className='flex flex-col'>
-      <div className='px-6 pt-4 pb-3 border-b border-gray-200 dark:border-gray-600 sticky top-0 bg-gray-50 dark:bg-gray-700 z-10'>
-        <ModelSelector
-          _model={_model}
-          _setModel={_setModel}
-          _providerId={_providerId}
-          _onModelChange={(modelId, providerId) => {
-            _setModel(modelId);
-            _setProviderId(providerId);
-          }}
-          _label={t('model')}
-        />
-        <CapabilityBadges
-          reasoning={capabilities.reasoning}
-          vision={capabilities.vision}
-          audio={capabilities.audio}
-          labels={{
-            reasoning: t('capabilities.reasoning'),
-            vision: t('capabilities.vision'),
-            audio: t('capabilities.audio'),
-          }}
-        />
-      </div>
-      <div className='px-6 py-4'>
-        <MaxTokenSlider
-          _maxToken={_maxToken}
-          _setMaxToken={_setMaxToken}
-          _model={_model}
-          _providerId={_providerId}
-        />
-        <TemperatureSlider
-          _temperature={_temperature}
-          _setTemperature={_setTemperature}
-        />
-        <TopPSlider _topP={_topP} _setTopP={_setTopP} />
-        <PresencePenaltySlider
-          _presencePenalty={_presencePenalty}
-          _setPresencePenalty={_setPresencePenalty}
-        />
-        <FrequencyPenaltySlider
-          _frequencyPenalty={_frequencyPenalty}
-          _setFrequencyPenalty={_setFrequencyPenalty}
-        />
-        {reasoningSupported && (
-          <div className='mt-3 pt-3 border-t border-gray-200 dark:border-gray-600'>
-            <ReasoningEffortSelector
-              _reasoningEffort={_reasoningEffort}
-              _setReasoningEffort={_setReasoningEffort}
-              _model={_model}
-              _providerId={_providerId}
-            />
-            <ReasoningBudgetInput
-              _reasoningBudget={_reasoningBudget}
-              _setReasoningBudget={_setReasoningBudget}
-            />
-            {verbositySupported && (
-              <VerbositySelector
-                _verbosity={_verbosity}
-                _setVerbosity={_setVerbosity}
-                _model={_model}
-                _providerId={_providerId}
-              />
-            )}
-          </div>
-        )}
-        <div className='mt-3 pt-3 border-t border-gray-200 dark:border-gray-600'>
-          <ImageDetailSelector
-            _imageDetail={_imageDetail}
-            _setImageDetail={_setImageDetail}
+      <div className='p-6 flex flex-col gap-5 w-[90vw] max-w-4xl'>
+        <div>
+          <ModelSelector
+            _model={_model}
+            _setModel={_setModel}
+            _providerId={_providerId}
+            _onModelChange={(modelId, providerId) => {
+              _setModel(modelId);
+              _setProviderId(providerId);
+            }}
+            _label={t('model')}
+            className=''
           />
-          <StreamToggle
-            _stream={_stream}
-            _setStream={_setStream}
-            disabled={!isStreamSupported}
+          <CapabilityBadges
+            reasoning={capabilities.reasoning}
+            vision={capabilities.vision}
+            audio={capabilities.audio}
+            labels={{
+              reasoning: t('capabilities.reasoning'),
+              vision: t('capabilities.vision'),
+              audio: t('capabilities.audio'),
+            }}
           />
         </div>
+
         <SystemPromptField
           systemPrompt={_systemPrompt}
           setSystemPrompt={_setSystemPrompt}
         />
-      </div>
+
+        <SettingsGroup label={t('section.generation')}>
+          <FieldCell>
+            <MaxTokenSlider
+              _maxToken={_maxToken}
+              _setMaxToken={_setMaxToken}
+              _model={_model}
+              _providerId={_providerId}
+            />
+          </FieldCell>
+          <FieldCell>
+            <TemperatureSlider
+              _temperature={_temperature}
+              _setTemperature={_setTemperature}
+            />
+          </FieldCell>
+          <FieldCell>
+            <TopPSlider _topP={_topP} _setTopP={_setTopP} />
+          </FieldCell>
+          <FieldCell>
+            <PresencePenaltySlider
+              _presencePenalty={_presencePenalty}
+              _setPresencePenalty={_setPresencePenalty}
+            />
+          </FieldCell>
+          <FieldCell>
+            <FrequencyPenaltySlider
+              _frequencyPenalty={_frequencyPenalty}
+              _setFrequencyPenalty={_setFrequencyPenalty}
+            />
+          </FieldCell>
+        </SettingsGroup>
+
+        {reasoningSupported && (
+          <SettingsGroup label={t('section.reasoning')}>
+            <FieldCell>
+              <ReasoningEffortSelector
+                _reasoningEffort={_reasoningEffort}
+                _setReasoningEffort={_setReasoningEffort}
+                _model={_model}
+                _providerId={_providerId}
+              />
+            </FieldCell>
+            <FieldCell>
+              <ReasoningBudgetInput
+                _reasoningBudget={_reasoningBudget}
+                _setReasoningBudget={_setReasoningBudget}
+              />
+            </FieldCell>
+            {verbositySupported && (
+              <FieldCell>
+                <VerbositySelector
+                  _verbosity={_verbosity}
+                  _setVerbosity={_setVerbosity}
+                  _model={_model}
+                  _providerId={_providerId}
+                />
+              </FieldCell>
+            )}
+          </SettingsGroup>
+        )}
       </div>
     </PopupModal>
   );
@@ -245,6 +264,7 @@ export const ModelSelector = ({
   _modelSource,
   _onModelChange,
   _label,
+  className,
 }: {
   _model: ModelOptions;
   _setModel: React.Dispatch<React.SetStateAction<ModelOptions>>;
@@ -252,6 +272,7 @@ export const ModelSelector = ({
   _modelSource?: 'remote' | 'local';
   _onModelChange?: (modelId: ModelOptions, providerId: ProviderId | undefined, modelSource?: 'remote' | 'local') => void;
   _label: string;
+  className?: string;
 }) => {
   const { t } = useTranslation(['main', 'model']);
   const favoriteModels = useStore((state) => state.favoriteModels) || [];
@@ -389,7 +410,7 @@ export const ModelSelector = ({
       }}
       placeholder={t('model:provider.noModelSelected', 'No model selected') as string}
       isClearable
-      className='mb-4'
+      className={className ?? 'mb-4'}
     />
   );
 };

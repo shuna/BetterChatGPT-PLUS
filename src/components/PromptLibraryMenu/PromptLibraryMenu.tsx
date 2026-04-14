@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 
 import PopupModal from '@components/PopupModal';
 import { Prompt } from '@type/prompt';
+import { SettingsGroup, SectionLabel } from '@components/SettingsMenu/SettingsMenu';
 import PlusIcon from '@icon/PlusIcon';
 import CrossIcon from '@icon/CrossIcon';
 import { v4 as uuidv4 } from 'uuid';
@@ -252,97 +253,115 @@ const PromptLibraryInline = ({ onSettingsChanged }: { onSettingsChanged?: () => 
   }, [prompts]);
 
   return (
-    <div className='text-sm text-gray-900 dark:text-gray-300'>
-      <div className='border px-4 py-2 rounded border-gray-200 dark:border-gray-600'>
-        <ImportPrompt />
-        <ExportPrompt />
-      </div>
-      <div className='flex flex-col p-2 max-w-full' ref={container}>
-        <div className='flex font-bold border-b border-gray-500/50 mb-1 p-1'>
-          <div className='sm:w-1/4 max-sm:flex-1'>{t('name')}</div>
-          <div className='flex-1'>{t('prompt')}</div>
-        </div>
-        {_prompts.map((prompt, index) => (
-          <div
-            key={prompt.id}
-            className='flex items-center border-b border-gray-500/50 mb-1 p-1'
+    <div className='flex flex-col gap-6 text-sm text-gray-900 dark:text-gray-300'>
+      <div>
+        <div className='flex items-center justify-between mb-1'>
+          <SectionLabel>{t('settingsSection.promptList')}</SectionLabel>
+          <button
+            type='button'
+            className='text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors'
+            onClick={() => {
+              if (window.confirm(t('clearPromptsConfirm', 'Are you sure you want to clear all prompts?') as string)) {
+                clearPrompts();
+              }
+            }}
           >
-            <div className='sm:w-1/4 max-sm:flex-1'>
-              <textarea
-                className='m-0 resize-none rounded-lg bg-transparent overflow-y-hidden leading-7 p-1 focus:ring-1 focus:ring-blue w-full max-h-10 transition-all'
-                onFocus={handleOnFocus}
-                onBlur={handleOnBlur}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  _setPrompts((prev) =>
-                    prev.map((p, i) => (i === index ? { ...p, name: val } : p))
-                  );
-                }}
-                onInput={handleInput}
-                value={prompt.name}
-                rows={1}
-              ></textarea>
-              <select
-                className='text-xs mt-0.5 px-1 py-0.5 rounded bg-transparent border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400'
-                value={prompt.label ?? ''}
-                onChange={(e) => {
-                  const val = e.target.value as '' | 'system' | 'user';
-                  _setPrompts((prev) =>
-                    prev.map((p, i) => (i === index ? { ...p, label: val || undefined } : p))
-                  );
-                }}
+            {t('clearPrompts')}
+          </button>
+        </div>
+        <div className='rounded-lg border border-gray-200 dark:border-gray-600'>
+          <div className='flex flex-col px-4 py-3 max-w-full' ref={container}>
+            <div className='flex font-bold border-b border-gray-500/50 mb-1 p-1'>
+              <div className='sm:w-1/4 max-sm:flex-1'>{t('name')}</div>
+              <div className='flex-1'>{t('prompt')}</div>
+            </div>
+            {_prompts.map((prompt, index) => (
+              <div
+                key={prompt.id}
+                className='flex items-center border-b border-gray-500/50 mb-1 p-1'
               >
-                <option value=''>{t('noLabel', '-')}</option>
-                <option value='system'>system</option>
-                <option value='user'>user</option>
-              </select>
-            </div>
-            <div className='flex-1'>
-              <textarea
-                className='m-0 resize-none rounded-lg bg-transparent overflow-y-hidden leading-7 p-1 focus:ring-1 focus:ring-blue w-full max-h-10 transition-all'
-                onFocus={handleOnFocus}
-                onBlur={handleOnBlur}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  _setPrompts((prev) =>
-                    prev.map((p, i) => (i === index ? { ...p, prompt: val } : p))
-                  );
-                }}
-                onInput={handleInput}
-                value={prompt.prompt}
-                rows={1}
-              ></textarea>
-            </div>
-            <div
-              className='cursor-pointer'
-              onClick={() => deletePrompt(index)}
-            >
-              <CrossIcon />
+                <div className='sm:w-1/4 max-sm:flex-1'>
+                  <textarea
+                    className='m-0 resize-none rounded-lg bg-transparent overflow-y-hidden leading-7 p-1 focus:ring-1 focus:ring-blue w-full max-h-10 transition-all'
+                    onFocus={handleOnFocus}
+                    onBlur={handleOnBlur}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      _setPrompts((prev) =>
+                        prev.map((p, i) => (i === index ? { ...p, name: val } : p))
+                      );
+                    }}
+                    onInput={handleInput}
+                    value={prompt.name}
+                    rows={1}
+                  ></textarea>
+                  <select
+                    className='text-xs mt-0.5 px-1 py-0.5 rounded bg-transparent border border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400'
+                    value={prompt.label ?? ''}
+                    onChange={(e) => {
+                      const val = e.target.value as '' | 'system' | 'user';
+                      _setPrompts((prev) =>
+                        prev.map((p, i) => (i === index ? { ...p, label: val || undefined } : p))
+                      );
+                    }}
+                  >
+                    <option value=''>{t('noLabel', '-')}</option>
+                    <option value='system'>system</option>
+                    <option value='user'>user</option>
+                  </select>
+                </div>
+                <div className='flex-1'>
+                  <textarea
+                    className='m-0 resize-none rounded-lg bg-transparent overflow-y-hidden leading-7 p-1 focus:ring-1 focus:ring-blue w-full max-h-10 transition-all'
+                    onFocus={handleOnFocus}
+                    onBlur={handleOnBlur}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      _setPrompts((prev) =>
+                        prev.map((p, i) => (i === index ? { ...p, prompt: val } : p))
+                      );
+                    }}
+                    onInput={handleInput}
+                    value={prompt.prompt}
+                    rows={1}
+                  ></textarea>
+                </div>
+                <div
+                  className='cursor-pointer'
+                  onClick={() => deletePrompt(index)}
+                >
+                  <CrossIcon />
+                </div>
+              </div>
+            ))}
+            <div className='flex justify-center cursor-pointer mt-2' onClick={addPrompt}>
+              <PlusIcon />
             </div>
           </div>
-        ))}
+        </div>
+        <div className='mt-2 px-1 text-xs text-gray-500 dark:text-gray-400'>
+          {t('morePrompts')}
+          <a
+            href='https://github.com/f/awesome-chatgpt-prompts'
+            target='_blank'
+            className='link'
+          >
+            awesome-chatgpt-prompts
+          </a>
+        </div>
       </div>
-      <div className='flex justify-center cursor-pointer' onClick={addPrompt}>
-        <PlusIcon />
-      </div>
-      <div className='flex justify-center gap-3 mt-2'>
-        <button
-          className='btn btn-neutral cursor-pointer text-xs'
-          onClick={clearPrompts}
-        >
-          {t('clearPrompts')}
-        </button>
-      </div>
-      <div className='mt-6 px-2'>
-        {t('morePrompts')}
-        <a
-          href='https://github.com/f/awesome-chatgpt-prompts'
-          target='_blank'
-          className='link'
-        >
-          awesome-chatgpt-prompts
-        </a>
-      </div>
+
+      <SettingsGroup label={`${t('import')} (CSV)`}>
+        <div className='px-4 py-3'>
+          <ImportPrompt hideTitle />
+        </div>
+      </SettingsGroup>
+
+      <SettingsGroup label={`${t('export')} (CSV)`}>
+        <div className='px-4 py-3'>
+          <ExportPrompt hideTitle />
+        </div>
+      </SettingsGroup>
     </div>
   );
 };

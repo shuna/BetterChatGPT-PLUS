@@ -13,7 +13,7 @@ import { chatToOpenAIFormat, chatToOpenRouterFormat, chatToLMStudioFormat } from
 
 type ExportFormat = 'v3' | 'v1' | 'openai' | 'openrouter' | 'lmstudio';
 
-const ExportChat = () => {
+const ExportChat = ({ hideTitle }: { hideTitle?: boolean }) => {
   const { t } = useTranslation();
   const [format, setFormat] = useState<ExportFormat>('v3');
   const isExternalFormat = format === 'openai' || format === 'openrouter' || format === 'lmstudio';
@@ -73,9 +73,11 @@ const ExportChat = () => {
 
   return (
     <div>
-      <div className='block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300'>
-        {t('export')} (JSON)
-      </div>
+      {!hideTitle && (
+        <div className='block mb-2 text-sm font-medium text-gray-900 dark:text-gray-300'>
+          {t('export')} (JSON)
+        </div>
+      )}
       <div className='flex flex-col gap-2 text-xs text-gray-500 dark:text-gray-400'>
         <label className='flex items-center gap-1.5 cursor-pointer'>
           <input

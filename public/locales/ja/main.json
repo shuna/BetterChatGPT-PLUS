@@ -11,6 +11,7 @@
   "clearMessageWarning": "このメッセージを送信すると、以降のメッセージがすべて削除されることに注意してください！",
   "clearConversationWarning": "この操作を確認すると、すべてのメッセージが削除されることに注意してください！",
   "clearConversation": "会話をクリア",
+  "clearAllConversations": "全ての会話をクリアする",
   "import": "インポート",
   "export": "エクスポート",
   "exportFormatCompact": "コンパクト (v3)",
@@ -75,6 +76,7 @@
   "refreshCreditBalance": "クレジット残高を更新",
   "morePrompts": "ここでさらにプロンプトを見つけることができます：",
   "clearPrompts": "プロンプトをクリア",
+  "clearPromptsConfirm": "全てのプロンプトをクリアしますか？",
   "newFolder": "新しいフォルダー",
   "cloneChat": "チャットのコピーを作成",
   "cloned": "完了しました",
@@ -173,7 +175,8 @@
     "features": "機能",
     "dangerZone": "危険な操作",
     "proxyConnection": "接続",
-    "proxyAuth": "認証"
+    "proxyAuth": "認証",
+    "promptList": "プロンプトリスト"
   },
   "settingsLabel": {
     "language": "言語",
