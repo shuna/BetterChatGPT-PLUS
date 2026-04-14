@@ -10,10 +10,8 @@ import NewMessageButton from './Message/NewMessageButton';
 import CrossIcon from '@icon/CrossIcon';
 
 import useSubmit from '@hooks/useSubmit';
-import { stopSessionsForChat } from '@hooks/useSubmit';
 import { recoverPending } from '@hooks/useStreamRecovery';
 import { getAllPending } from '@utils/streamDb';
-import TokenCount from '@components/TokenCount/TokenCount';
 import { MessageInterface, TextContentInterface } from '@type/chat';
 import countTokens, { limitMessageTokens } from '@utils/messageUtils';
 import { perfStart, perfEnd } from '@utils/perfTrace';
@@ -752,45 +750,6 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
               messageIndex={stickyIndex}
               sticky
             />
-
-            <div className='flex justify-center mt-1'>
-              <TokenCount />
-            </div>
-
-            <div
-              className={`flex justify-center my-2 min-h-[40px] ${
-                isCurrentChatGenerating ? '' : 'invisible pointer-events-none'
-              }`}
-              aria-hidden={!isCurrentChatGenerating}
-            >
-              {isCurrentChatGenerating && (
-                <button
-                  className='btn relative btn-neutral border-0 md:border'
-                  onClick={() => {
-                    if (currentChatId) stopSessionsForChat(currentChatId);
-                  }}
-                  aria-label={t('stopGenerating') as string}
-                >
-                  <div className='flex w-full items-center justify-center gap-2'>
-                    <svg
-                      stroke='currentColor'
-                      fill='none'
-                      strokeWidth='1.5'
-                      viewBox='0 0 24 24'
-                      strokeLinecap='round'
-                      strokeLinejoin='round'
-                      className='h-3 w-3 animate-pulse'
-                      height='1em'
-                      width='1em'
-                      xmlns='http://www.w3.org/2000/svg'
-                    >
-                      <rect x='3' y='3' width='18' height='18' rx='2' ry='2'></rect>
-                    </svg>
-                    {t('stopGenerating')}
-                  </div>
-                </button>
-              )}
-            </div>
 
             {error !== '' && (
               <div className='relative py-2 px-3 w-3/5 mt-3 max-md:w-11/12 border rounded-md border-red-500 bg-red-500/10'>

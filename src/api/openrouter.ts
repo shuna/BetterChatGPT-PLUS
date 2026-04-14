@@ -8,6 +8,33 @@
 
 const OPENROUTER_BASE = 'https://openrouter.ai/api/v1';
 
+// ── Credit balance ─────────────────────────────────────────────────────
+
+export interface OpenRouterCredits {
+  total_credits: number;
+  total_usage: number;
+}
+
+/**
+ * Fetch credit balance from OpenRouter via /api/v1/credits.
+ *
+ * Returns { total_credits, total_usage } on success, null on failure.
+ */
+export async function fetchCreditBalance(
+  apiKey: string
+): Promise<OpenRouterCredits | null> {
+  try {
+    const res = await fetch(`${OPENROUTER_BASE}/credits`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return (json as { data: OpenRouterCredits }).data ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Generation stats ────────────────────────────────────────────────────
 
 export interface OpenRouterGenerationStats {

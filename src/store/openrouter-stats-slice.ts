@@ -26,6 +26,12 @@ export interface PendingOpenRouterVerification {
   lastError?: string;
 }
 
+export interface CreditBalance {
+  totalCredits: number;
+  totalUsage: number;
+  fetchedAt: number;
+}
+
 export interface OpenRouterStatsSlice {
   /**
    * Verified generation stats keyed by `chatId:::targetNodeId`.
@@ -33,6 +39,9 @@ export interface OpenRouterStatsSlice {
    */
   verifiedStats: Record<string, VerifiedStats>;
   pendingVerifications: Record<string, PendingOpenRouterVerification>;
+  /** Ephemeral — not persisted to localStorage. */
+  creditBalance: CreditBalance | null;
+  creditBalanceFetching: boolean;
   setVerifiedStats: (key: string, stats: VerifiedStats) => void;
   queueVerification: (
     key: string,
@@ -50,6 +59,8 @@ export interface OpenRouterStatsSlice {
   retryVerificationNow: (key: string) => void;
   removePendingVerification: (key: string) => void;
   clearVerifiedStats: () => void;
+  setCreditBalance: (balance: CreditBalance | null) => void;
+  setCreditBalanceFetching: (fetching: boolean) => void;
 }
 
 const MAX_ENTRIES = 50;
@@ -59,6 +70,8 @@ export const createOpenRouterStatsSlice: StoreSlice<OpenRouterStatsSlice> = (
 ) => ({
   verifiedStats: {},
   pendingVerifications: {},
+  creditBalance: null,
+  creditBalanceFetching: false,
   setVerifiedStats: (key, stats) =>
     set((prev) => {
       const next = { ...prev.verifiedStats, [key]: stats };
@@ -153,6 +166,8 @@ export const createOpenRouterStatsSlice: StoreSlice<OpenRouterStatsSlice> = (
       return { pendingVerifications: next };
     }),
   clearVerifiedStats: () => set({ verifiedStats: {}, pendingVerifications: {} }),
+  setCreditBalance: (balance) => set({ creditBalance: balance }),
+  setCreditBalanceFetching: (fetching) => set({ creditBalanceFetching: fetching }),
 });
 
 export const toVerifiedStats = (

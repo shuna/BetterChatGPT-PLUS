@@ -7,6 +7,7 @@ import MobileBar from '../MobileBar';
 import SplitView from './SplitView';
 
 import ChatViewTabs from './ChatViewTabs';
+import ChatStatusBar from './ChatStatusBar';
 import NavigationButtons from './NavigationButtons';
 import useIsDesktop from '@hooks/useIsDesktop';
 import useNavigationHistory, { isPWA } from '@hooks/useNavigationHistory';
@@ -38,6 +39,7 @@ const Chat = () => {
       />
       <main className='relative h-full w-full transition-width flex flex-col overflow-hidden items-stretch flex-1'>
         <ChatViewTabs activeView={effectiveView} setActiveView={setActiveView} />
+        <ChatStatusBar />
         {isSplitView(effectiveView) ? (
           <SplitView direction={effectiveView === 'split-horizontal' ? 'horizontal' : 'vertical'} />
         ) : (

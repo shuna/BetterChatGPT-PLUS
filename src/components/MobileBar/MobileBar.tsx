@@ -5,6 +5,7 @@ import PlusIcon from '@icon/PlusIcon';
 import MenuIcon from '@icon/MenuIcon';
 import SearchIcon from '@icon/SearchIcon';
 import useAddChat from '@hooks/useAddChat';
+import { stopSessionsForChat } from '@hooks/useSubmit';
 
 interface MobileBarProps {
   onSearchOpen?: () => void;
@@ -56,18 +57,13 @@ const MobileBar = ({ onSearchOpen, extraButtons }: MobileBarProps) => {
       <h1 className='flex-1 text-center text-base font-normal px-2 truncate min-w-0'>
         {chatTitle}
       </h1>
-      {onSearchOpen && (
+      {isCurrentChatGenerating && (
         <button
           type='button'
-          className='px-2 text-gray-400 cursor-pointer hover:text-gray-600 dark:hover:text-gray-200'
-          onClick={onSearchOpen}
-          aria-label='ページ内検索'
+          className='flex shrink-0 items-center gap-1.5 px-2 cursor-pointer'
+          onClick={() => { if (currentChatId) stopSessionsForChat(currentChatId); }}
+          aria-label='生成を停止'
         >
-          <SearchIcon className='h-5 w-5' />
-        </button>
-      )}
-      {isCurrentChatGenerating && (
-        <div className='flex shrink-0 items-center gap-1.5 mr-1'>
           <span
             className={`inline-block h-2 w-2 rounded-full animate-pulse ${
               isProxyMode
@@ -78,7 +74,17 @@ const MobileBar = ({ onSearchOpen, extraButtons }: MobileBarProps) => {
           <span className='text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap'>
             {isProxyMode ? 'proxy' : ''}
           </span>
-        </div>
+        </button>
+      )}
+      {onSearchOpen && (
+        <button
+          type='button'
+          className='px-2 text-gray-400 cursor-pointer hover:text-gray-600 dark:hover:text-gray-200'
+          onClick={onSearchOpen}
+          aria-label='ページ内検索'
+        >
+          <SearchIcon className='h-5 w-5' />
+        </button>
       )}
       <button
         type='button'

@@ -14,6 +14,7 @@ import type { ProviderId } from '@type/provider';
 import { cloneChatAtIndex } from '@utils/chatShallowClone';
 import { normalizeConfigStream } from '@utils/streamSupport';
 import useIsDesktop from '@hooks/useIsDesktop';
+import { stopSessionsForChat } from '@hooks/useSubmit';
 import { CURATED_MODELS } from '@src/local-llm/catalog';
 import { localModelRuntime } from '@src/local-llm/runtime';
 import { OpfsFileProvider } from '@src/local-llm/storage';
@@ -67,6 +68,11 @@ const ChatViewTabs = ({
     const totalMessages = chat?.branchTree?.activePath?.length ?? chat?.messages?.length ?? 0;
     return totalMessages > 0 && count >= totalMessages;
   });
+  const currentChatId = chat?.id ?? '';
+  const isCurrentChatGenerating = useStore((state) =>
+    Object.values(state.generatingSessions).some((s) => s.chatId === currentChatId)
+  );
+  const isProxyMode = useStore((state) => state.proxyEnabled && !!state.proxyEndpoint);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const modelRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -350,6 +356,28 @@ const ChatViewTabs = ({
               </svg>
               {!isCompact && tMain(isAllOmitted ? 'globalOmitOff' : 'globalOmitOn')}
             </div>
+            {isCurrentChatGenerating && (
+              <button
+                type='button'
+                className='flex shrink-0 items-center gap-1.5 p-1 px-2 rounded-md cursor-pointer hover:bg-gray-300/50 dark:hover:bg-gray-900/50 transition-colors'
+                onClick={() => { if (currentChatId) stopSessionsForChat(currentChatId); }}
+                title={String(tMain('stopGenerating'))}
+                aria-label={String(tMain('stopGenerating'))}
+              >
+                <span
+                  className={`inline-block h-2 w-2 rounded-full animate-pulse ${
+                    isProxyMode
+                      ? 'bg-indigo-400 dark:bg-indigo-400'
+                      : 'bg-green-400 dark:bg-green-400'
+                  }`}
+                />
+                {!isCompact && (
+                  <span className='text-xs text-gray-500 dark:text-gray-400'>
+                    {isProxyMode ? 'proxy' : ''}
+                  </span>
+                )}
+              </button>
+            )}
             </div>
           )}
         </div>

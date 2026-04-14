@@ -78,22 +78,15 @@ const TokenCount = React.memo(() => {
   const {
     verifiedStats,
     pendingVerification,
-    lastAssistantStatsKey,
   }: {
     verifiedStats?: VerifiedStats;
     pendingVerification?: PendingOpenRouterVerification;
-    lastAssistantStatsKey: string | null;
   } = useStore((state) => {
     const chat = state.chats?.[state.currentChatIndex];
     if (!chat?.branchTree) {
-      return {
-        verifiedStats: undefined,
-        pendingVerification: undefined,
-        lastAssistantStatsKey: null,
-      };
+      return { verifiedStats: undefined, pendingVerification: undefined };
     }
     const path = chat.branchTree.activePath;
-    // Walk backwards to find the last assistant node
     for (let i = path.length - 1; i >= 0; i--) {
       const node = chat.branchTree.nodes[path[i]];
       if (node?.role === 'assistant') {
@@ -101,15 +94,10 @@ const TokenCount = React.memo(() => {
         return {
           verifiedStats: state.verifiedStats[key],
           pendingVerification: state.pendingVerifications[key],
-          lastAssistantStatsKey: key,
         };
       }
     }
-    return {
-      verifiedStats: undefined,
-      pendingVerification: undefined,
-      lastAssistantStatsKey: null,
-    };
+    return { verifiedStats: undefined, pendingVerification: undefined };
   });
   const latestInputRef = useRef({ messages, generatingSession, model, currentChatIndex, omittedNodes });
   const currentCountsRef = useRef<TokenCounts>({
@@ -267,89 +255,41 @@ const TokenCount = React.memo(() => {
     t,
   ]);
 
+  const isOpenRouter = providerId === 'openrouter';
+
   const verifiedDisplay = useMemo(() => {
-    if (!verifiedStats || generatingSession) return null;
+    if (!isOpenRouter || !verifiedStats || generatingSession) return null;
     const cost = verifiedStats.totalCost;
     const costStr = cost === 0 ? 'Free' : `$${cost.toPrecision(3)}`;
-    const modelShort = verifiedStats.model.split('/').pop() ?? verifiedStats.model;
-    return t('verifiedStats', {
+    return t('verifiedStatsShort', {
       ns: 'main',
       defaultValue:
-        'Verified: {{prompt}}+{{completion}} tokens, {{cost}} ({{model}})',
+        'Actual: {{prompt}}+{{completion}} tokens, {{cost}}',
       prompt: verifiedStats.nativePromptTokens,
       completion: verifiedStats.nativeCompletionTokens,
       cost: costStr,
-      model: modelShort,
     });
-  }, [verifiedStats, generatingSession, t]);
-
-  const [verificationCountdownNow, setVerificationCountdownNow] = useState(
-    () => Date.now()
-  );
-
-  useEffect(() => {
-    if (
-      generatingSession ||
-      !pendingVerification ||
-      pendingVerification.status !== 'pending'
-    ) {
-      return;
-    }
-
-    setVerificationCountdownNow(Date.now());
-    const timer = window.setInterval(() => {
-      setVerificationCountdownNow(Date.now());
-    }, 1000);
-
-    return () => {
-      clearInterval(timer);
-    };
-  }, [pendingVerification, generatingSession]);
+  }, [isOpenRouter, verifiedStats, generatingSession, t]);
 
   const verificationStatusDisplay = useMemo(() => {
-    if (generatingSession || !pendingVerification) return null;
+    if (!isOpenRouter || generatingSession || !pendingVerification) return null;
     if (pendingVerification.status === 'fetching') {
       return t('openrouterVerificationChecking', {
         ns: 'main',
-        defaultValue: 'Checking OpenRouter verified usage...',
+        defaultValue: 'Checking...',
       });
     }
     if (pendingVerification.status === 'failed') {
       return t('openrouterVerificationFailed', {
         ns: 'main',
-        defaultValue: 'OpenRouter verified usage is not available yet.',
+        defaultValue: 'Check failed',
       });
     }
-    const secondsLeft = Math.max(
-      0,
-      Math.ceil((pendingVerification.nextAttemptAt - verificationCountdownNow) / 1000)
-    );
     return t('openrouterVerificationPending', {
       ns: 'main',
-      defaultValue: 'OpenRouter verified usage will be checked in {{seconds}}s.',
-      seconds: secondsLeft,
+      defaultValue: 'Waiting...',
     });
-  }, [pendingVerification, generatingSession, t, verificationCountdownNow]);
-
-  const handleRetryVerifiedStats = () => {
-    if (!lastAssistantStatsKey) return;
-    if (pendingVerification) {
-      useStore.getState().retryVerificationNow(lastAssistantStatsKey);
-      return;
-    }
-    if (!verifiedStats) return;
-
-    const separatorIndex = lastAssistantStatsKey.indexOf(':::');
-    if (separatorIndex < 0) return;
-    const chatId = lastAssistantStatsKey.slice(0, separatorIndex);
-    const targetNodeId = lastAssistantStatsKey.slice(separatorIndex + 3);
-    useStore.getState().queueVerification(lastAssistantStatsKey, {
-      generationId: verifiedStats.generationId,
-      chatId,
-      targetNodeId,
-      nextAttemptAt: Date.now(),
-    });
-  };
+  }, [isOpenRouter, pendingVerification, generatingSession, t]);
 
   latestInputRef.current = { messages, generatingSession, model, currentChatIndex, omittedNodes };
 
@@ -429,57 +369,47 @@ const TokenCount = React.memo(() => {
   }, [omittedNodes]);
 
   return (
-    <div>
-      <div
-        className={`text-xs italic tabular-nums text-gray-900 transition-opacity duration-200 dark:text-gray-300 ${
-          isDisplayRefreshing ? 'opacity-80' : 'opacity-100'
-        }`}
-      >
-        {generatingSession
-          ? imageTokenCount > 0
-            ? t('liveTokenCountWithImages', {
-                ns: 'main',
-                defaultValue:
-                  'Input: {{prompt}} / Output: {{completion}} / Images: {{images}} ({{cost}})',
-                prompt: promptTokenCount,
-                completion: completionTokenCount,
-                images: imageTokenCount,
-                cost: costDisplay,
-              })
-            : t('liveTokenCount', {
-                ns: 'main',
-                defaultValue: 'Input: {{prompt}} / Output: {{completion}} ({{cost}})',
-                prompt: promptTokenCount,
-                completion: completionTokenCount,
-                cost: costDisplay,
-              })
-          : imageTokenCount > 0
-            ? t('tokenCountWithImages', {
-                ns: 'main',
-                defaultValue: 'Tokens: {{tokens}} / Images: {{images}} ({{cost}})',
-                tokens: promptTokenCount,
-                images: imageTokenCount,
-                cost: costDisplay,
-              })
-            : `Tokens: ${promptTokenCount} (${costDisplay})`}
-      </div>
+    <span
+      className={`text-xs italic tabular-nums text-gray-900 transition-opacity duration-200 dark:text-gray-300 ${
+        isDisplayRefreshing ? 'opacity-80' : 'opacity-100'
+      }`}
+    >
+      {generatingSession
+        ? imageTokenCount > 0
+          ? t('liveTokenCountWithImages', {
+              ns: 'main',
+              defaultValue:
+                'Input: {{prompt}} / Output: {{completion}} / Images: {{images}} ({{cost}})',
+              prompt: promptTokenCount,
+              completion: completionTokenCount,
+              images: imageTokenCount,
+              cost: costDisplay,
+            })
+          : t('liveTokenCount', {
+              ns: 'main',
+              defaultValue: 'Input: {{prompt}} / Output: {{completion}} ({{cost}})',
+              prompt: promptTokenCount,
+              completion: completionTokenCount,
+              cost: costDisplay,
+            })
+        : imageTokenCount > 0
+          ? t('tokenCountWithImages', {
+              ns: 'main',
+              defaultValue: 'Tokens: {{tokens}} / Images: {{images}} ({{cost}})',
+              tokens: promptTokenCount,
+              images: imageTokenCount,
+              cost: costDisplay,
+            })
+          : `Tokens: ${promptTokenCount} (${costDisplay})`}
       {(verifiedDisplay || verificationStatusDisplay) && (
-        <div className='mt-1 flex items-center gap-2 text-xs tabular-nums'>
-          <span className={verifiedDisplay ? 'text-green-700 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}>
+        <>
+          {' / '}
+          <span className={`not-italic ${verifiedDisplay ? 'text-green-700 dark:text-green-400' : 'text-gray-600 dark:text-gray-400'}`}>
             {verifiedDisplay ?? verificationStatusDisplay}
           </span>
-          {lastAssistantStatsKey && (
-            <button
-              className='rounded border border-gray-300 px-2 py-0.5 text-[11px] transition-colors hover:bg-gray-100 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800'
-              onClick={handleRetryVerifiedStats}
-              type='button'
-            >
-              {t('retry')}
-            </button>
-          )}
-        </div>
+        </>
       )}
-    </div>
+    </span>
   );
 });
 
