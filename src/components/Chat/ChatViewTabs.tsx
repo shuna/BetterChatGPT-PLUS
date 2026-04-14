@@ -253,25 +253,6 @@ const ChatViewTabs = ({
             </button>
           )}
 
-          {/* Generating indicator */}
-          {isCurrentChatGenerating && (
-            <button
-              type='button'
-              className='flex shrink-0 items-center rounded p-1 transition-colors hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer'
-              onClick={() => { if (currentChatId) stopSessionsForChat(currentChatId); }}
-              title={String(tMain('stopGenerating'))}
-              aria-label={String(tMain('stopGenerating'))}
-            >
-              <span
-                className={`inline-block h-2 w-2 rounded-full animate-pulse ${
-                  isProxyMode
-                    ? 'bg-indigo-400 dark:bg-indigo-400'
-                    : 'bg-green-400 dark:bg-green-400'
-                }`}
-              />
-            </button>
-          )}
-
           {/* Left: Model dropdown & options */}
           {advancedMode && chat && (
             <div className='flex min-w-0 items-center gap-2 text-sm text-gray-600 dark:text-gray-300'>
@@ -430,6 +411,25 @@ const ChatViewTabs = ({
               })()}
             </div>
             </div>
+          )}
+
+          {/* Generating indicator (right of dropdown) */}
+          {isCurrentChatGenerating && (
+            <button
+              type='button'
+              className='flex shrink-0 items-center rounded p-1 transition-colors hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer'
+              onClick={() => { if (currentChatId) stopSessionsForChat(currentChatId); }}
+              title={String(tMain('stopGenerating'))}
+              aria-label={String(tMain('stopGenerating'))}
+            >
+              <span
+                className={`inline-block h-2 w-2 rounded-full animate-pulse ${
+                  isProxyMode
+                    ? 'bg-indigo-400 dark:bg-indigo-400'
+                    : 'bg-green-400 dark:bg-green-400'
+                }`}
+              />
+            </button>
           )}
         </div>
 
