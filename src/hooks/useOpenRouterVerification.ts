@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 
-import { fetchGenerationStats } from '@api/openrouter';
+import { fetchCreditBalance, fetchGenerationStats } from '@api/openrouter';
 import useStore from '@store/store';
 import { debugReport } from '@store/debug-store';
 import { toVerifiedStats } from '@store/openrouter-stats-slice';
@@ -79,6 +79,16 @@ export default function useOpenRouterVerification() {
               debugReport(`or-verify:${statsKey}`, {
                 status: 'done',
                 detail: `${formatDebugTime()} fetched ${raw.id}`,
+              });
+              // Refresh credit balance alongside verified stats
+              void fetchCreditBalance(resolvedApiKey).then((info) => {
+                if (info) {
+                  useStore.getState().setCreditBalance({
+                    totalCredits: info.total_credits,
+                    totalUsage: info.total_usage,
+                    fetchedAt: Date.now(),
+                  });
+                }
               });
               return;
             }

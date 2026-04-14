@@ -17,6 +17,7 @@ import { CURATED_MODELS } from '@src/local-llm/catalog';
 import { localModelRuntime } from '@src/local-llm/runtime';
 import { OpfsFileProvider } from '@src/local-llm/storage';
 import { ProviderId } from '@type/provider';
+import { ProviderIcon, LocalChipIcon } from '@icon/ProviderIcons';
 import {
   isOpenRouterAdaptiveReasoningModel,
   isOpenRouterClaudeVerbosityModel,
@@ -262,7 +263,9 @@ export const ModelSelector = ({
   // Remote model options (composite key: "modelId:::providerId")
   const remoteOptions = favoriteModels.map((fav) => ({
     value: `${fav.modelId}:::${fav.providerId}`,
-    label: `${fav.modelId} (${providers[fav.providerId]?.name || fav.providerId})`,
+    label: fav.modelId,
+    sublabel: providers[fav.providerId]?.name || fav.providerId,
+    icon: <ProviderIcon providerId={fav.providerId} className='w-4 h-4' />,
   }));
 
   // Local model options (composite key: "local:::modelId")
@@ -275,19 +278,24 @@ export const ModelSelector = ({
     }
   }
 
-  const localOptionMap = new Map<string, { value: string; label: string }>();
+  const localIcon = <LocalChipIcon className='w-4 h-4' />;
+  const localOptionMap = new Map<string, { value: string; label: string; sublabel?: string; icon?: React.ReactNode }>();
   for (const m of localModels) {
     if (favoriteLocalIds.includes(m.id) && savedMeta[m.id]?.storageState === 'saved') {
       const ob = lowbitQByOrigin.get(m.id);
       if (ob && ob.id !== m.id) {
         localOptionMap.set(ob.id, {
           value: `local:::${ob.id}`,
-          label: `${ob.label} (Local${ob.displayMeta?.quantization ? ' · ' + ob.displayMeta.quantization : ''})`,
+          label: ob.label,
+          sublabel: `Local${ob.displayMeta?.quantization ? ' · ' + ob.displayMeta.quantization : ''}`,
+          icon: localIcon,
         });
       } else {
         localOptionMap.set(m.id, {
           value: `local:::${m.id}`,
-          label: `${m.label} (Local${m.displayMeta?.quantization ? ' · ' + m.displayMeta.quantization : ''})`,
+          label: m.label,
+          sublabel: `Local${m.displayMeta?.quantization ? ' · ' + m.displayMeta.quantization : ''}`,
+          icon: localIcon,
         });
       }
     }
@@ -298,12 +306,16 @@ export const ModelSelector = ({
       if (ob && !localOptionMap.has(ob.id)) {
         localOptionMap.set(ob.id, {
           value: `local:::${ob.id}`,
-          label: `${ob.label} (Local${ob.displayMeta?.quantization ? ' · ' + ob.displayMeta.quantization : ''})`,
+          label: ob.label,
+          sublabel: `Local${ob.displayMeta?.quantization ? ' · ' + ob.displayMeta.quantization : ''}`,
+          icon: localIcon,
         });
       } else {
         localOptionMap.set(cm.id, {
           value: `local:::${cm.id}`,
-          label: `${cm.label} (Local)`,
+          label: cm.label,
+          sublabel: 'Local',
+          icon: localIcon,
         });
       }
     }

@@ -4,6 +4,7 @@ import useStore from '@store/store';
 import TokenCount from '@components/TokenCount/TokenCount';
 import useOpenRouterCreditBalance from '@hooks/useOpenRouterCreditBalance';
 import { buildVerifiedStatsKey } from '@utils/openrouterVerification';
+import { stopSessionsForChat } from '@hooks/useSubmit';
 import type {
   PendingOpenRouterVerification,
   VerifiedStats,
@@ -26,6 +27,8 @@ const ChatStatusBar = React.memo(() => {
     state.chats?.[state.currentChatIndex]?.config?.providerId
   );
   const isOpenRouter = providerId === 'openrouter';
+
+  const isProxyMode = useStore((state) => state.proxyEnabled && !!state.proxyEndpoint);
 
   const creditBalance = useStore((state) => state.creditBalance);
   const creditBalanceFetching = useStore((state) => state.creditBalanceFetching);
@@ -101,21 +104,38 @@ const ChatStatusBar = React.memo(() => {
     }
 
     const remaining = Math.max(0, creditBalance.totalCredits - creditBalance.totalUsage);
-    return t('openrouterCreditRemaining', {
-      ns: 'main',
-      defaultValue: 'Remaining: ${{remaining}}',
-      remaining: remaining.toFixed(2),
-    });
-  }, [isOpenRouter, creditBalance, creditBalanceFetching, t]);
+    return `$${remaining.toFixed(2)}`;
+  }, [isOpenRouter, creditBalance, creditBalanceFetching]);
 
   return (
     <div className='border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 py-1 text-xs'>
-      {/* Row 1: Token info (centered) + retry/stop buttons (right) */}
       <div className='relative flex items-center justify-center min-h-[20px]'>
         <span className='truncate max-w-[calc(100%-3rem)]'>
           <TokenCount />
+          {isOpenRouter && creditDisplay && (
+            <span className='text-gray-600 dark:text-gray-400'>
+              {' / '}
+              <span className='tabular-nums'>{creditDisplay}</span>
+            </span>
+          )}
         </span>
-        {showRetryButton && (
+        {isGenerating ? (
+          <button
+            type='button'
+            className='absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-1.5 rounded p-0.5 px-1 transition-colors hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer'
+            onClick={() => { if (currentChatId) stopSessionsForChat(currentChatId); }}
+            title={t('stopGenerating') as string}
+            aria-label={t('stopGenerating') as string}
+          >
+            <span
+              className={`inline-block h-2 w-2 rounded-full animate-pulse ${
+                isProxyMode
+                  ? 'bg-indigo-400 dark:bg-indigo-400'
+                  : 'bg-green-400 dark:bg-green-400'
+              }`}
+            />
+          </button>
+        ) : showRetryButton ? (
           <button
             className='absolute right-0 top-1/2 -translate-y-1/2 rounded p-0.5 transition-colors hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400'
             onClick={handleRetryVerifiedStats}
@@ -136,17 +156,8 @@ const ChatStatusBar = React.memo(() => {
               />
             </svg>
           </button>
-        )}
+        ) : null}
       </div>
-
-      {/* Row 2: Credit balance (OpenRouter only, centered) + refresh button (right) */}
-      {isOpenRouter && creditDisplay && (
-        <div className='flex items-center justify-center min-h-[20px]'>
-          <span className='truncate tabular-nums text-gray-600 dark:text-gray-400'>
-            {creditDisplay}
-          </span>
-        </div>
-      )}
     </div>
   );
 });
