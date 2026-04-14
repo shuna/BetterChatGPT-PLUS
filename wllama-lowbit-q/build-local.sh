@@ -54,37 +54,77 @@ echo ""
 # ---------------------------------------------------------------------------
 # Shared compiler flags (matches docker-compose.yml from upstream)
 # ---------------------------------------------------------------------------
-SHARED_EMCC_CFLAGS="--no-entry -O3 -msimd128 -DNDEBUG -flto=full -frtti -fwasm-exceptions -sMEMORY64=1 -sEXPORT_ALL=1 -sEXPORT_ES6=0 -sMODULARIZE=0 -sINITIAL_MEMORY=128MB -sMAXIMUM_MEMORY=4096MB -sALLOW_MEMORY_GROWTH=1 -sFORCE_FILESYSTEM=1 -sEXPORTED_FUNCTIONS=_main,_wllama_malloc,_wllama_start,_wllama_action,_wllama_exit,_wllama_debug -sEXPORTED_RUNTIME_METHODS=ccall,cwrap -sNO_EXIT_RUNTIME=1"
+# Base flags shared by all variants (memory64 and compat)
+SHARED_EMCC_CFLAGS_BASE="--no-entry -O3 -msimd128 -DNDEBUG -flto=full -frtti -fwasm-exceptions -sEXPORT_ALL=1 -sEXPORT_ES6=0 -sMODULARIZE=0 -sALLOW_MEMORY_GROWTH=1 -sFORCE_FILESYSTEM=1 -sEXPORTED_FUNCTIONS=_main,_wllama_malloc,_wllama_start,_wllama_action,_wllama_exit,_wllama_debug -sEXPORTED_RUNTIME_METHODS=ccall,cwrap -sNO_EXIT_RUNTIME=1"
+
+# Memory64 variant: 64-bit addressing, supports models >2 GB
+SHARED_EMCC_CFLAGS_MEM64="$SHARED_EMCC_CFLAGS_BASE -sMEMORY64=1 -sINITIAL_MEMORY=128MB -sMAXIMUM_MEMORY=4096MB"
+
+# Compat variant: 32-bit addressing, max ~2 GB — for browsers without Memory64
+SHARED_EMCC_CFLAGS_COMPAT="$SHARED_EMCC_CFLAGS_BASE -sINITIAL_MEMORY=128MB -sMAXIMUM_MEMORY=2048MB"
+
+NPROC=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 
 cd "$FORK_DIR"
 
 # ---------------------------------------------------------------------------
-# Build single-thread
+# Build 1/4: single-thread (Memory64)
 # ---------------------------------------------------------------------------
-echo "[1/2] Building single-thread WASM..."
+echo "[1/4] Building single-thread WASM (Memory64)..."
 rm -rf wasm/single-thread
 mkdir -p wasm/single-thread
 cd wasm/single-thread
 
 emcmake cmake ../.. -DLLAMA_WASM_MEM64=ON 2>&1 | tail -3
-export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS"
-emmake make wllama -j$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4) 2>&1
+export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_MEM64"
+emmake make wllama -j"$NPROC" 2>&1
 
 cd "$FORK_DIR"
 
 # ---------------------------------------------------------------------------
-# Build multi-thread
+# Build 2/4: multi-thread (Memory64)
 # ---------------------------------------------------------------------------
 echo ""
-echo "[2/2] Building multi-thread WASM..."
+echo "[2/4] Building multi-thread WASM (Memory64)..."
 rm -rf wasm/multi-thread
 mkdir -p wasm/multi-thread
 cd wasm/multi-thread
 
 export EMCC_CFLAGS=""
 emcmake cmake ../.. -DLLAMA_WASM_MEM64=ON 2>&1 | tail -3
-export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS -pthread -sUSE_PTHREADS=1 -sPTHREAD_POOL_SIZE=Module[\"pthreadPoolSize\"]"
-emmake make wllama -j$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4) 2>&1
+export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_MEM64 -pthread -sUSE_PTHREADS=1 -sPTHREAD_POOL_SIZE=Module[\"pthreadPoolSize\"]"
+emmake make wllama -j"$NPROC" 2>&1
+
+cd "$FORK_DIR"
+
+# ---------------------------------------------------------------------------
+# Build 3/4: single-thread compat (no Memory64)
+# ---------------------------------------------------------------------------
+echo ""
+echo "[3/4] Building single-thread WASM (compat, no Memory64)..."
+rm -rf wasm/single-thread-compat
+mkdir -p wasm/single-thread-compat
+cd wasm/single-thread-compat
+
+emcmake cmake ../.. 2>&1 | tail -3
+export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_COMPAT"
+emmake make wllama -j"$NPROC" 2>&1
+
+cd "$FORK_DIR"
+
+# ---------------------------------------------------------------------------
+# Build 4/4: multi-thread compat (no Memory64)
+# ---------------------------------------------------------------------------
+echo ""
+echo "[4/4] Building multi-thread WASM (compat, no Memory64)..."
+rm -rf wasm/multi-thread-compat
+mkdir -p wasm/multi-thread-compat
+cd wasm/multi-thread-compat
+
+export EMCC_CFLAGS=""
+emcmake cmake ../.. 2>&1 | tail -3
+export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_COMPAT -pthread -sUSE_PTHREADS=1 -sPTHREAD_POOL_SIZE=Module[\"pthreadPoolSize\"]"
+emmake make wllama -j"$NPROC" 2>&1
 
 cd "$FORK_DIR"
 
@@ -95,11 +135,16 @@ echo ""
 echo "=== Copying WASM to vendor/wllama/ ==="
 mkdir -p "$VENDOR_DIR"
 
-cp wasm/single-thread/wllama.wasm "$VENDOR_DIR/single-thread.wasm"
-cp wasm/multi-thread/wllama.wasm  "$VENDOR_DIR/multi-thread.wasm"
+cp wasm/single-thread/wllama.wasm        "$VENDOR_DIR/single-thread.wasm"
+cp wasm/multi-thread/wllama.wasm         "$VENDOR_DIR/multi-thread.wasm"
+cp wasm/single-thread-compat/wllama.wasm "$VENDOR_DIR/single-thread-compat.wasm"
+cp wasm/multi-thread-compat/wllama.wasm  "$VENDOR_DIR/multi-thread-compat.wasm"
 
 echo ""
 echo "=== Build complete ==="
 ls -lh "$VENDOR_DIR/"
 echo ""
 echo "lowbit-Q WASM ready at: $VENDOR_DIR/"
+echo ""
+echo "  Memory64 variants:  single-thread.wasm, multi-thread.wasm"
+echo "  Compat variants:    single-thread-compat.wasm, multi-thread-compat.wasm"

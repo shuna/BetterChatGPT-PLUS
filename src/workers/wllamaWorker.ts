@@ -50,29 +50,74 @@ function canUseMultiThread(): boolean {
 }
 
 /**
+ * Check if the browser supports WebAssembly Memory64 proposal.
+ *
+ * Memory64 enables 64-bit memory addressing, required for models >2 GB.
+ * Browsers without Memory64 support will fail to parse WASM binaries
+ * compiled with -sMEMORY64=1 (error: "Memory64 is not enabled").
+ *
+ * Detection: compile a minimal WASM module that declares a memory64-type
+ * linear memory. If the browser rejects it, Memory64 is not available.
+ */
+function supportsWasmMemory64(): boolean {
+  try {
+    // Minimal valid WASM module with a memory64 memory declaration:
+    //   magic  + version
+    //   section 5 (memory), 3 bytes payload:
+    //     1 memory, flags=0x04 (i64 index, no max), min=1 page
+    const bytes = new Uint8Array([
+      0x00, 0x61, 0x73, 0x6d, // \0asm
+      0x01, 0x00, 0x00, 0x00, // version 1
+      0x05, 0x03, 0x01, 0x04, 0x01, // memory section: 1 mem, flags=4 (memory64), min=1
+    ]);
+    new WebAssembly.Module(bytes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Cached result of Memory64 support detection */
+let _memory64Supported: boolean | null = null;
+
+function isMemory64Supported(): boolean {
+  if (_memory64Supported === null) {
+    _memory64Supported = supportsWasmMemory64();
+  }
+  return _memory64Supported;
+}
+
+/**
  * Resolve WASM binary paths relative to the worker's location.
  *
  * - Only includes multi-thread WASM when the environment supports it,
  *   avoiding unnecessary downloads on single-thread-only browsers.
+ * - When the browser does not support Memory64, uses *-compat.wasm binaries
+ *   compiled without -sMEMORY64=1 (32-bit addressing, max ~2 GB models).
  * - The project always uses the custom-built WASM from vendor/wllama/.
  * - Rebuilding vendor/wllama/*.wasm is therefore required for any runtime changes.
  */
 function getWasmPaths(useLowbitQ = false) {
   const multiThread = canUseMultiThread();
+  const mem64 = isMemory64Supported();
+
+  const singleThreadFile = mem64 ? 'single-thread.wasm' : 'single-thread-compat.wasm';
+  const multiThreadFile = mem64 ? 'multi-thread.wasm' : 'multi-thread-compat.wasm';
 
   const paths: AssetsPathConfig = {
     'single-thread/wllama.wasm': new URL(
-      '../../vendor/wllama/single-thread.wasm',
+      `../../vendor/wllama/${singleThreadFile}`,
       import.meta.url,
     ).href,
   };
   if (multiThread) {
     paths['multi-thread/wllama.wasm'] = new URL(
-      '../../vendor/wllama/multi-thread.wasm',
+      `../../vendor/wllama/${multiThreadFile}`,
       import.meta.url,
     ).href;
   }
-  console.info('[wllamaWorker] Using vendored WASM paths:', paths, 'isLowbitQ:', useLowbitQ);
+  console.info('[wllamaWorker] Using vendored WASM paths:', paths,
+    'isLowbitQ:', useLowbitQ, 'memory64:', mem64, 'multiThread:', multiThread);
   return paths;
 }
 
@@ -158,13 +203,15 @@ const workerLogger = {
 async function handleInit(req: InitRequest) {
   try {
     const useLowbitQ = req.isLowbitQ ?? false;
+    const mem64 = isMemory64Supported();
     const paths = getWasmPaths(useLowbitQ);
     postDiagnostic('worker-init', {
       isLowbitQ: useLowbitQ,
       wasmPaths: paths,
       multiThreadCapable: canUseMultiThread(),
+      memory64Supported: mem64,
     });
-    console.info('[wllamaWorker] init, isLowbitQ:', useLowbitQ, 'WASM paths:', paths);
+    console.info('[wllamaWorker] init, isLowbitQ:', useLowbitQ, 'memory64:', mem64, 'WASM paths:', paths);
     wllama = new Wllama(paths, {
       suppressNativeLog: false,
       logger: workerLogger,
@@ -174,9 +221,19 @@ async function handleInit(req: InitRequest) {
   } catch (e) {
     const err = e as Error;
     console.error('[wllamaWorker] init error:', err.message);
-    respondError(req.id,
-      `WASMランタイムの初期化に失敗しました: ${err.message}。` +
-      'ブラウザがWebAssemblyをサポートしていないか、WASMバイナリの読み込みに失敗した可能性があります。');
+
+    // Detect Memory64-related failures and provide a specific message
+    const mem64 = isMemory64Supported();
+    if (!mem64 && (err.message.includes('Memory64') || err.message.includes("doesn't parse"))) {
+      respondError(req.id,
+        'WASMランタイムの初期化に失敗しました: お使いのブラウザはWebAssembly Memory64をサポートしていません。' +
+        'Chrome 133以降、Edge 133以降、またはFirefox 134以降をお使いください。' +
+        '互換モード用のWASMバイナリ（*-compat.wasm）がまだビルドされていない可能性もあります。');
+    } else {
+      respondError(req.id,
+        `WASMランタイムの初期化に失敗しました: ${err.message}。` +
+        'ブラウザがWebAssemblyをサポートしていないか、WASMバイナリの読み込みに失敗した可能性があります。');
+    }
   }
 }
 
@@ -278,6 +335,14 @@ async function handleLoad(req: LoadRequest) {
       respondError(req.id,
         `モデルの読み込みに失敗しました: WASMメモリ不足 (${msg})。` +
         'ファイルサイズが大きすぎるか、変換後のGGUFファイルが破損している可能性があります。' +
+        fileSizeDetail + nativeDetail + stackDetail);
+    } else if (msg.includes('Memory64') || msg.includes("doesn't parse")) {
+      // Memory64-related WASM parse failure
+      respondError(req.id,
+        'モデルの読み込みに失敗しました: WASMバイナリの解析に失敗しました（Memory64非対応）。' +
+        'お使いのブラウザはWebAssembly Memory64をサポートしていません。' +
+        'Chrome 133以降、Edge 133以降、またはFirefox 134以降にアップデートするか、' +
+        '互換モード用WASMバイナリ（*-compat.wasm）をビルドしてください。' +
         fileSizeDetail + nativeDetail + stackDetail);
     } else {
       respondError(req.id,
