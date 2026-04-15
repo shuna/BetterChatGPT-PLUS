@@ -130,21 +130,18 @@ async function wasmAssetExists(url: string): Promise<boolean> {
 async function getWasmPaths(useLowbitQ = false) {
   const multiThread = canUseMultiThread();
   const mem64 = isMemory64Supported();
-  let webgpu = await canUseWebGPU();
 
-  let singleThreadFile = webgpu
-    ? (mem64 ? 'single-thread-webgpu.wasm' : 'single-thread-webgpu-compat.wasm')
-    : mem64 ? 'single-thread.wasm' : 'single-thread-compat.wasm';
-  let multiThreadFile = webgpu
-    ? (mem64 ? 'multi-thread-webgpu.wasm' : 'multi-thread-webgpu-compat.wasm')
-    : mem64 ? 'multi-thread.wasm' : 'multi-thread-compat.wasm';
+  // WebGPU WASM binaries (single-thread-webgpu.wasm etc.) require a dedicated
+  // Emscripten JS glue with 53 import functions (vs 21 for non-WebGPU).
+  // The vendored wllama library currently embeds only the non-WebGPU JS glue
+  // (WLLAMA_SINGLE_THREAD_CODE / WLLAMA_MULTI_THREAD_CODE), so loading a
+  // WebGPU WASM will always fail with "Import #0 'a': module is not an object
+  // or function".  Disable WebGPU WASM selection until the library is updated
+  // to embed WebGPU-specific glue variants.
+  const webgpu = false;
 
-  const singleThreadUrl = new URL(`../../vendor/wllama/${singleThreadFile}`, import.meta.url).href;
-  if (webgpu && !(await wasmAssetExists(singleThreadUrl))) {
-    webgpu = false;
-    singleThreadFile = mem64 ? 'single-thread.wasm' : 'single-thread-compat.wasm';
-    multiThreadFile = mem64 ? 'multi-thread.wasm' : 'multi-thread-compat.wasm';
-  }
+  const singleThreadFile = mem64 ? 'single-thread.wasm' : 'single-thread-compat.wasm';
+  const multiThreadFile = mem64 ? 'multi-thread.wasm' : 'multi-thread-compat.wasm';
   currentWasmUsesWebGPU = webgpu;
 
   const paths: AssetsPathConfig = {
