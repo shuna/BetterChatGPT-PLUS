@@ -147,6 +147,9 @@ export const FieldLabelWithInfo = ({
   </label>
 );
 
+const rangeThumbClassName =
+  '[&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-green-500 [&::-webkit-slider-thumb]:border-solid [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white [&::-webkit-slider-thumb]:shadow [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-green-500 [&::-moz-range-thumb]:border-solid [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white [&::-moz-range-thumb]:shadow [&::-moz-range-thumb]:cursor-pointer';
+
 export const RangeField = ({
   label,
   value,
@@ -223,44 +226,53 @@ export const RangeField = ({
           </span>
         )}
       </div>
-      <input
-        id={rangeInputId}
-        name={fieldName}
-        type='range'
-        value={value}
-        onPointerDown={(event) => {
-          event.preventDefault();
-          dragCleanupRef.current?.();
-
-          const rect = event.currentTarget.getBoundingClientRect();
-          applyClientXValue(event.clientX, rect);
-          const handlePointerMove = (moveEvent: PointerEvent) => {
-            if (moveEvent.pointerId !== event.pointerId || moveEvent.buttons !== 1) return;
-            applyClientXValue(moveEvent.clientX, rect);
-          };
-          const handlePointerEnd = (endEvent: PointerEvent) => {
-            if (endEvent.pointerId !== event.pointerId) return;
+      <div className='relative h-6 flex items-center'>
+        {/* Track background */}
+        <div className='absolute inset-x-0 h-2 rounded-full bg-gray-200 dark:bg-gray-600' />
+        {/* Track fill */}
+        <div
+          className='absolute left-0 h-2 rounded-full bg-green-500/70'
+          style={{ width: `${((value - min) / (max - min)) * 100}%` }}
+        />
+        <input
+          id={rangeInputId}
+          name={fieldName}
+          type='range'
+          value={value}
+          onPointerDown={(event) => {
+            event.preventDefault();
             dragCleanupRef.current?.();
-          };
 
-          dragCleanupRef.current = () => {
-            window.removeEventListener('pointermove', handlePointerMove);
-            window.removeEventListener('pointerup', handlePointerEnd);
-            window.removeEventListener('pointercancel', handlePointerEnd);
-            dragCleanupRef.current = null;
-          };
+            const rect = event.currentTarget.getBoundingClientRect();
+            applyClientXValue(event.clientX, rect);
+            const handlePointerMove = (moveEvent: PointerEvent) => {
+              if (moveEvent.pointerId !== event.pointerId || moveEvent.buttons !== 1) return;
+              applyClientXValue(moveEvent.clientX, rect);
+            };
+            const handlePointerEnd = (endEvent: PointerEvent) => {
+              if (endEvent.pointerId !== event.pointerId) return;
+              dragCleanupRef.current?.();
+            };
 
-          window.addEventListener('pointermove', handlePointerMove);
-          window.addEventListener('pointerup', handlePointerEnd);
-          window.addEventListener('pointercancel', handlePointerEnd);
-        }}
-        onInput={(event) => applyRangeValue(event.currentTarget.value)}
-        onChange={(event) => applyRangeValue(event.target.value)}
-        min={min}
-        max={max}
-        step={step}
-        className='w-full cursor-pointer accent-emerald-600 hover:accent-emerald-600'
-      />
+            dragCleanupRef.current = () => {
+              window.removeEventListener('pointermove', handlePointerMove);
+              window.removeEventListener('pointerup', handlePointerEnd);
+              window.removeEventListener('pointercancel', handlePointerEnd);
+              dragCleanupRef.current = null;
+            };
+
+            window.addEventListener('pointermove', handlePointerMove);
+            window.addEventListener('pointerup', handlePointerEnd);
+            window.addEventListener('pointercancel', handlePointerEnd);
+          }}
+          onInput={(event) => applyRangeValue(event.currentTarget.value)}
+          onChange={(event) => applyRangeValue(event.target.value)}
+          min={min}
+          max={max}
+          step={step}
+          className={`absolute inset-x-0 w-full h-2 appearance-none bg-transparent cursor-pointer ${rangeThumbClassName}`}
+        />
+      </div>
     </ConfigSection>
   );
 };
