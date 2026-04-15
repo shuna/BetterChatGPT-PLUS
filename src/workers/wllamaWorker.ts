@@ -133,10 +133,10 @@ async function getWasmPaths(useLowbitQ = false) {
   let webgpu = await canUseWebGPU();
 
   let singleThreadFile = webgpu
-    ? 'single-thread-webgpu-compat.wasm'
+    ? (mem64 ? 'single-thread-webgpu.wasm' : 'single-thread-webgpu-compat.wasm')
     : mem64 ? 'single-thread.wasm' : 'single-thread-compat.wasm';
   let multiThreadFile = webgpu
-    ? 'multi-thread-webgpu-compat.wasm'
+    ? (mem64 ? 'multi-thread-webgpu.wasm' : 'multi-thread-webgpu-compat.wasm')
     : mem64 ? 'multi-thread.wasm' : 'multi-thread-compat.wasm';
 
   const singleThreadUrl = new URL(`../../vendor/wllama/${singleThreadFile}`, import.meta.url).href;
