@@ -55,7 +55,8 @@ export const createLocalModelSlice: StoreSlice<LocalModelSlice> = (set, get) => 
         delete active[task];
       }
     }
-    set({ localModels: models, activeLocalModels: active });
+    const favorites = get().favoriteLocalModelIds.filter((fid) => fid !== id);
+    set({ localModels: models, activeLocalModels: active, favoriteLocalModelIds: favorites });
   },
 
   updateLocalModel: (id, patch) => {

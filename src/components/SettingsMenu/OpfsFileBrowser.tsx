@@ -59,7 +59,7 @@ const OpfsFileBrowser = ({
     if (refreshTrigger != null && refreshTrigger > 0) {
       refresh();
     }
-  }, [refreshTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [refreshTrigger, refresh]);
 
   const toggleExpand = useCallback((modelId: string) => {
     setExpandedModels((prev) => {

@@ -84,11 +84,22 @@ interface EngineEntry {
 }
 
 // ---------------------------------------------------------------------------
+// WASM capabilities (in-memory only — not persisted to store)
+// ---------------------------------------------------------------------------
+
+export interface WasmCapabilities {
+  webgpu: boolean;
+  memory64: boolean;
+  multiThread: boolean;
+}
+
+// ---------------------------------------------------------------------------
 // LocalModelRuntime
 // ---------------------------------------------------------------------------
 
 export class LocalModelRuntime {
   private engines = new Map<string, EngineEntry>();
+  private wasmCaps = new Map<string, WasmCapabilities>();
   private listeners = new Set<() => void>();
   private logListeners = new Set<(event: RuntimeLogEvent) => void>();
   private diagnosticListeners = new Set<(event: RuntimeDiagnosticEvent) => void>();
@@ -117,6 +128,10 @@ export class LocalModelRuntime {
 
   getCapabilities(modelId: string): LocalModelCapabilities | null {
     return this.engines.get(modelId)?.capabilities ?? null;
+  }
+
+  getWasmCapabilities(modelId: string): WasmCapabilities | null {
+    return this.wasmCaps.get(modelId) ?? null;
   }
 
   // -------------------------------------------------------------------------
@@ -507,11 +522,22 @@ export class LocalModelRuntime {
     }
 
     if (type === '__diagnostic') {
+      const phase = String(data.phase ?? 'unknown');
+      const payload = (data.payload as Record<string, unknown> | undefined) ?? {};
+      // Capture WASM capabilities from worker-init diagnostic
+      if (phase === 'worker-init') {
+        this.wasmCaps.set(modelId, {
+          webgpu: !!payload.webgpuWasmSelected,
+          memory64: !!payload.memory64Supported,
+          multiThread: !!payload.multiThreadCapable,
+        });
+        this.notifyListeners();
+      }
       this.emitDiagnostic({
         modelId,
-        phase: String(data.phase ?? 'unknown'),
+        phase,
         timestamp: Date.now(),
-        payload: (data.payload as Record<string, unknown> | undefined) ?? {},
+        payload,
       });
       return;
     }

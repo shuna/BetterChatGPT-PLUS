@@ -16,6 +16,8 @@ import { normalizeConfigStream } from '@utils/streamSupport';
 import useIsDesktop from '@hooks/useIsDesktop';
 import { stopSessionsForChat } from '@hooks/useSubmit';
 import { ProviderIcon, LocalChipIcon } from '@icon/ProviderIcons';
+import WasmChipIcon from '@components/Chat/ChatContent/WasmChipIcon';
+import { useWasmCapabilities } from '@hooks/useWasmCapabilities';
 import TokenCount from '@components/TokenCount/TokenCount';
 import useOpenRouterCreditBalance from '@hooks/useOpenRouterCreditBalance';
 import { buildVerifiedStatsKey } from '@utils/openrouterVerification';
@@ -70,6 +72,9 @@ const ChatViewTabs = ({
     Object.values(state.generatingSessions).some((s) => s.chatId === currentChatId)
   );
   const isProxyMode = useStore((state) => state.proxyEnabled && !!state.proxyEndpoint);
+
+  const isLocalModel = chat?.config?.modelSource === 'local';
+  const wasmCaps = useWasmCapabilities(isLocalModel ? chat?.config?.model ?? null : null);
 
   // OpenRouter credit balance
   const currentProviderId = chat?.config?.providerId;
@@ -266,7 +271,7 @@ const ChatViewTabs = ({
                 }}
               >
                 {chat.config.modelSource === 'local'
-                  ? <LocalChipIcon className='w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500' />
+                  ? <WasmChipIcon caps={wasmCaps} className='w-4 h-4 shrink-0' />
                   : chat.config.providerId
                     ? <ProviderIcon providerId={chat.config.providerId} className='w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500' />
                     : null}
