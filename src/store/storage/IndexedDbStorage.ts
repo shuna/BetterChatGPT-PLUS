@@ -63,6 +63,27 @@ type LegacyChatDataRecord = PersistedChatData & {
   version: number;
 };
 
+export interface IndexedDbRecoveryChatSnapshot {
+  key: string;
+  packed: boolean;
+  generation?: number;
+  compressedBytes?: number;
+  record?: ChatRecord;
+  error?: string;
+}
+
+export interface IndexedDbRecoverySnapshot {
+  databaseName: typeof DB_NAME;
+  storeName: typeof STORE_NAME;
+  collectedAt: string;
+  keys: string[];
+  meta?: MetaRecord;
+  legacy?: LegacyChatDataRecord;
+  contentStore?: ContentStoreRecord;
+  branchClipboard?: BranchClipboardRecord;
+  chats: IndexedDbRecoveryChatSnapshot[];
+}
+
 let currentGeneration = 0;
 let previousContentStoreSnapshot: ContentStoreData = {};
 let migrationInProgress = false;
@@ -478,6 +499,95 @@ async function loadSplitData(
   } catch (e) {
     database.close();
     throw e;
+  }
+}
+
+export async function collectIndexedDbRecoverySnapshot(): Promise<IndexedDbRecoverySnapshot | null> {
+  if (!hasIndexedDb()) return null;
+
+  const database = await openDatabase();
+  try {
+    const tx = database.transaction(STORE_NAME, 'readonly');
+    const txDone = new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onabort = () => reject(tx.error ?? new Error('IDB transaction aborted'));
+      tx.onerror = () => reject(tx.error ?? new Error('IDB transaction failed'));
+    });
+    const store = tx.objectStore(STORE_NAME);
+
+    const allKeys = await idbGetAllKeys(store);
+    const keys = allKeys
+      .filter((key): key is string => typeof key === 'string')
+      .sort();
+
+    if (keys.length === 0) {
+      await txDone;
+      return null;
+    }
+
+    const rawChatKeys = keys.filter(
+      (key) => key.startsWith('chat:') && !isPackedKey(key)
+    );
+    const packedChatKeys = keys.filter(isPackedKey);
+    const chats: IndexedDbRecoveryChatSnapshot[] = [];
+
+    const [meta, legacy, contentStore, branchClipboard] = await Promise.all([
+      idbGet<MetaRecord>(store, META_KEY),
+      idbGet<LegacyChatDataRecord>(store, LEGACY_KEY),
+      idbGet<ContentStoreRecord>(store, CONTENT_STORE_KEY),
+      idbGet<BranchClipboardRecord>(store, BRANCH_CLIPBOARD_KEY),
+    ]);
+
+    for (const key of rawChatKeys) {
+      const record = await idbGet<ChatRecord>(store, key);
+      chats.push({
+        key,
+        packed: false,
+        generation: record?.generation,
+        record,
+      });
+    }
+
+    for (const key of packedChatKeys) {
+      const packed = await idbGet<{ compressed: Uint8Array; generation: number }>(store, key);
+      const snapshot: IndexedDbRecoveryChatSnapshot = {
+        key: key.slice(0, -':packed'.length),
+        packed: true,
+        generation: packed?.generation,
+      };
+
+      if (packed?.compressed) {
+        try {
+          const compressed = packed.compressed instanceof Uint8Array
+            ? packed.compressed
+            : new Uint8Array(packed.compressed as ArrayBufferLike);
+          snapshot.compressedBytes = compressed.byteLength;
+          snapshot.record = await decompressChatRecord<ChatRecord>(compressed);
+        } catch (error) {
+          snapshot.error = error instanceof Error ? error.message : String(error);
+        }
+      }
+
+      chats.push(snapshot);
+    }
+
+    const snapshot: IndexedDbRecoverySnapshot = {
+      databaseName: DB_NAME,
+      storeName: STORE_NAME,
+      collectedAt: new Date().toISOString(),
+      keys,
+      meta,
+      legacy,
+      contentStore,
+      branchClipboard,
+      chats,
+    };
+
+    await txDone;
+
+    return snapshot;
+  } finally {
+    database.close();
   }
 }
 

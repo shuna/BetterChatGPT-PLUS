@@ -27,6 +27,7 @@ import {
   compressInactiveChats,
   notifyActiveChatChanged,
   initCompressionScheduler,
+  collectIndexedDbRecoverySnapshot,
   _resetInternalState,
 } from './IndexedDbStorage';
 import type { ContentStoreData, ContentEntry } from '@utils/contentStore';
@@ -143,6 +144,51 @@ beforeEach(async () => {
   }
   await new Promise<void>((r) => { tx.oncomplete = () => r(); });
   db.close();
+});
+
+describe('collectIndexedDbRecoverySnapshot', () => {
+  it('exports raw IndexedDB recovery records without mutating storage', async () => {
+    const chat = makeChat('chat-1', ['h1']);
+    await idbPut('meta', { version: 17, generation: 2, chatIds: ['chat-1'] });
+    await idbPut('content-store', {
+      data: { h1: textEntry('recover me') },
+      generation: 2,
+    });
+    await idbPut('branch-clipboard', { data: null, generation: 2 });
+    await idbPut('chat:chat-1', { chat, generation: 2 });
+
+    const snapshot = await collectIndexedDbRecoverySnapshot();
+
+    expect(snapshot).toMatchObject({
+      databaseName: 'weavelet-canvas',
+      storeName: 'persisted-state',
+      keys: ['branch-clipboard', 'chat:chat-1', 'content-store', 'meta'],
+      meta: { version: 17, generation: 2, chatIds: ['chat-1'] },
+      contentStore: {
+        data: { h1: textEntry('recover me') },
+        generation: 2,
+      },
+      branchClipboard: { data: null, generation: 2 },
+      chats: [
+        {
+          key: 'chat:chat-1',
+          packed: false,
+          generation: 2,
+          record: { chat, generation: 2 },
+        },
+      ],
+    });
+    expect(await idbGetAllKeys()).toEqual([
+      'branch-clipboard',
+      'chat:chat-1',
+      'content-store',
+      'meta',
+    ]);
+  });
+
+  it('returns null when IndexedDB has no persisted keys', async () => {
+    await expect(collectIndexedDbRecoverySnapshot()).resolves.toBeNull();
+  });
 });
 
 // ─── Crash Recovery (Priority High) ───
@@ -540,4 +586,3 @@ describe('compression scheduler', () => {
 });
 
 // ─── Performance ───
-
