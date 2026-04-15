@@ -58,6 +58,7 @@ export const CURATED_MODELS: CatalogModel[] = [
       parameterSizeLabel: '360M',
       sourceLabel: 'catalog',
       recommended: true,
+      contextLength: 8192,
     },
   },
   {
@@ -82,6 +83,7 @@ export const CURATED_MODELS: CatalogModel[] = [
       parameterSizeLabel: '0.6B',
       sourceLabel: 'catalog',
       recommended: true,
+      contextLength: 40960,
     },
   },
   {
@@ -106,6 +108,7 @@ export const CURATED_MODELS: CatalogModel[] = [
       parameterSizeLabel: '1.8B',
       sourceLabel: 'catalog',
       recommended: true,
+      contextLength: 4096,
     },
   },
 ];

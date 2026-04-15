@@ -277,23 +277,31 @@ async function handleLoad(req: LoadRequest) {
     console.info('[wllamaWorker] GGUF magic valid, calling wllama.loadModel...');
 
     postLoadProgress('model-load', 20, `モデルをロード中 (${fileSizeMB} MB)`);
-    // wllama.loadModel accepts Blob[] — wrap the single File in an array
+
+    // First pass: load with minimal n_ctx to discover n_ctx_train from GGUF metadata
+    const MAX_BROWSER_CTX = 2048;
     await wllama.loadModel([req.file], {
-      n_ctx: 512,
+      n_ctx: MAX_BROWSER_CTX,
       n_threads: 1,  // Single-thread until COOP/COEP is configured (Phase 8)
     });
 
-    const elapsed = ((performance.now() - loadStartTime) / 1000).toFixed(1);
     const info = wllama.getLoadedContextInfo();
-    postLoadProgress('complete', 100, `ロード完了 (${elapsed}s, ctx=${info.n_ctx}, layers=${info.n_layer})`);
+    const nativeContextLength = info.n_ctx_train ?? info.n_ctx;
+    // The granted n_ctx is capped by MAX_BROWSER_CTX but never exceeds the model's native length
+    const grantedCtx = Math.min(info.n_ctx, nativeContextLength);
+
+    const elapsed = ((performance.now() - loadStartTime) / 1000).toFixed(1);
+    postLoadProgress('complete', 100, `ロード完了 (${elapsed}s, ctx=${grantedCtx}, n_ctx_train=${nativeContextLength}, layers=${info.n_layer})`);
     postDiagnostic('worker-load-success', {
-      contextLength: info.n_ctx,
+      contextLength: grantedCtx,
+      nativeContextLength,
       nVocab: info.n_vocab,
       nLayer: info.n_layer,
       elapsedSec: parseFloat(elapsed),
     });
     respond(req.id, 'loaded', {
-      contextLength: info.n_ctx,
+      contextLength: grantedCtx,
+      nativeContextLength,
       nVocab: info.n_vocab,
       nLayer: info.n_layer,
     });

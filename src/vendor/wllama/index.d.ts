@@ -23,6 +23,7 @@ export interface LoadModelConfig {
 
 export interface LoadedContextInfo {
   n_ctx: number;
+  n_ctx_train: number;
   n_vocab: number;
   n_layer: number;
 }

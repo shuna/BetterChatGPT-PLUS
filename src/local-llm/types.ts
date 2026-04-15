@@ -74,6 +74,8 @@ export interface LocalModelDisplayMeta {
   parameterSizeLabel?: string;
   sourceLabel?: 'catalog' | 'search' | 'imported';
   recommended?: boolean;
+  /** Model's trained context length (from GGUF n_ctx_train or known metadata) */
+  contextLength?: number;
 }
 
 export interface LocalModelDefinition {
@@ -111,7 +113,10 @@ export type LocalModelBusyReason = 'chat' | 'evaluation' | 'moderation' | 'test'
 // ---------------------------------------------------------------------------
 
 export interface LocalModelCapabilities {
+  /** Allocated context length (what n_ctx was actually granted by the runtime) */
   contextLength?: number;
+  /** Model's trained context length from GGUF metadata (n_ctx_train) */
+  nativeContextLength?: number;
   supportsStreaming: boolean;
   engine: LocalModelEngine;
 }

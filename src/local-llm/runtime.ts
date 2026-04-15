@@ -175,13 +175,19 @@ export class LocalModelRuntime {
       if (def.engine === 'wllama') {
         const file = await provider.getFile();
         console.info('[LocalModelRuntime] loading model file:', (file as File).name ?? '(blob)', 'size:', file.size);
-        const result = await this.sendRequest(def.id, { type: 'load', file }) as { contextLength?: number };
-        console.info('[LocalModelRuntime] model loaded, contextLength:', result?.contextLength);
+        const result = await this.sendRequest(def.id, { type: 'load', file }) as {
+          contextLength?: number;
+          nativeContextLength?: number;
+        };
+        console.info('[LocalModelRuntime] model loaded, contextLength:', result?.contextLength, 'nativeContextLength:', result?.nativeContextLength);
         entry.capabilities = {
           contextLength: result?.contextLength,
+          nativeContextLength: result?.nativeContextLength,
           supportsStreaming: true,
           engine: 'wllama',
         };
+        // Persist discovered context length to the store so modelLookup can use it
+        this.persistContextLength(def.id, result?.contextLength, result?.nativeContextLength);
       } else {
         // Transformers.js — send file entries to worker for customCache
         const fileEntries = await provider.getFileEntries();
@@ -373,6 +379,34 @@ export class LocalModelRuntime {
   // Internal
   // -------------------------------------------------------------------------
 
+  /**
+   * Persist discovered context length to the Zustand store so that
+   * modelLookup can access it before the model is loaded next time.
+   */
+  private persistContextLength(
+    modelId: string,
+    contextLength?: number,
+    nativeContextLength?: number,
+  ): void {
+    if (!_storeGetter || (!contextLength && !nativeContextLength)) return;
+    const state = _storeGetter();
+    const def = state.localModels.find((m) => m.id === modelId);
+    if (!def) return;
+
+    const existingMeta = def.displayMeta;
+    const newContextLength = nativeContextLength ?? contextLength;
+    // Only update if the value actually changed
+    if (existingMeta?.contextLength === newContextLength) return;
+
+    state.updateLocalModel(modelId, {
+      displayMeta: {
+        ...existingMeta,
+        supportsTextInference: existingMeta?.supportsTextInference ?? true,
+        contextLength: newContextLength,
+      },
+    });
+  }
+
   private createWorker(engine: LocalModelEngine): Worker {
     if (engine === 'wllama') {
       return new Worker(
@@ -508,10 +542,16 @@ export class LocalModelRuntime {
  *
  * Uses lazy import of store to avoid circular dependency.
  */
-let _storeGetter: (() => { localModels: LocalModelDefinition[] }) | null = null;
+let _storeGetter: (() => {
+  localModels: LocalModelDefinition[];
+  updateLocalModel: (id: string, patch: Partial<LocalModelDefinition>) => void;
+}) | null = null;
 
 /** Called once by the app to wire up the store for findModelDefinition. */
-export function setRuntimeStoreGetter(getter: () => { localModels: LocalModelDefinition[] }): void {
+export function setRuntimeStoreGetter(getter: () => {
+  localModels: LocalModelDefinition[];
+  updateLocalModel: (id: string, patch: Partial<LocalModelDefinition>) => void;
+}): void {
   _storeGetter = getter;
 }
 
