@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useId, useState, useRef, useEffect } from 'react';
 import Select, { GroupBase, StylesConfig } from 'react-select';
 
 type SelectOption<T extends string> = {
@@ -166,22 +166,46 @@ export const RangeField = ({
   description: React.ReactNode;
   defaultValue?: number;
 }) => {
+  const fieldId = useId();
+  const numberInputId = `${fieldId}-number`;
+  const rangeInputId = `${fieldId}-range`;
+  const normalizedLabel = label.toLowerCase().replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '');
+  const fieldName = normalizedLabel || rangeInputId;
+  const dragCleanupRef = useRef<(() => void) | null>(null);
   const clamp = (v: number) => Math.min(max, Math.max(min, v));
+  const clampRatio = (v: number) => Math.min(1, Math.max(0, v));
   const roundToStep = (v: number) => {
     const rounded = Math.round(v / step) * step;
     // Fix floating point precision
     const decimals = step < 1 ? String(step).split('.')[1]?.length ?? 0 : 0;
     return Number(rounded.toFixed(decimals));
   };
+  const applyRangeValue = (rawValue: string) => {
+    onChange(roundToStep(clamp(Number(rawValue))));
+  };
+  const applyClientXValue = (clientX: number, rect: DOMRect) => {
+    const ratio = rect.width === 0 ? 0 : (clientX - rect.left) / rect.width;
+    const nextValue = min + clampRatio(ratio) * (max - min);
+    onChange(roundToStep(clamp(nextValue)));
+  };
+
+  useEffect(() => {
+    return () => dragCleanupRef.current?.();
+  }, []);
 
   return (
     <ConfigSection>
       <div className='flex items-center'>
-        <span className='flex items-center text-sm font-medium text-gray-900 dark:text-white'>
+        <label
+          htmlFor={rangeInputId}
+          className='flex items-center text-sm font-medium text-gray-900 dark:text-white'
+        >
           {label}
           {description && <InfoTooltip text={description} />}
-        </span>
+        </label>
         <input
+          id={numberInputId}
+          name={`${fieldName}-number`}
           type='number'
           value={value}
           onChange={(e) => {
@@ -200,13 +224,42 @@ export const RangeField = ({
         )}
       </div>
       <input
+        id={rangeInputId}
+        name={fieldName}
         type='range'
         value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
+        onPointerDown={(event) => {
+          event.preventDefault();
+          dragCleanupRef.current?.();
+
+          const rect = event.currentTarget.getBoundingClientRect();
+          applyClientXValue(event.clientX, rect);
+          const handlePointerMove = (moveEvent: PointerEvent) => {
+            if (moveEvent.pointerId !== event.pointerId || moveEvent.buttons !== 1) return;
+            applyClientXValue(moveEvent.clientX, rect);
+          };
+          const handlePointerEnd = (endEvent: PointerEvent) => {
+            if (endEvent.pointerId !== event.pointerId) return;
+            dragCleanupRef.current?.();
+          };
+
+          dragCleanupRef.current = () => {
+            window.removeEventListener('pointermove', handlePointerMove);
+            window.removeEventListener('pointerup', handlePointerEnd);
+            window.removeEventListener('pointercancel', handlePointerEnd);
+            dragCleanupRef.current = null;
+          };
+
+          window.addEventListener('pointermove', handlePointerMove);
+          window.addEventListener('pointerup', handlePointerEnd);
+          window.addEventListener('pointercancel', handlePointerEnd);
+        }}
+        onInput={(event) => applyRangeValue(event.currentTarget.value)}
+        onChange={(event) => applyRangeValue(event.target.value)}
         min={min}
         max={max}
         step={step}
-        className='w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer'
+        className='w-full cursor-pointer accent-emerald-600 hover:accent-emerald-600'
       />
     </ConfigSection>
   );

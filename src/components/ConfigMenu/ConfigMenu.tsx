@@ -41,6 +41,12 @@ const DEFAULT_REASONING_BUDGET = 0;
 const DEFAULT_REASONING_EFFORT: ReasoningEffort = 'medium';
 const DEFAULT_VERBOSITY: Verbosity = 'medium';
 
+const ConfigFieldCell = ({ children }: { children: React.ReactNode }) => (
+  <div className='px-4 py-3 [&>*:first-child]:mt-0 [&>*:first-child]:pt-0'>
+    {children}
+  </div>
+);
+
 export const SystemPromptField = ({
   systemPrompt,
   setSystemPrompt,
@@ -120,7 +126,8 @@ const ConfigMenu = ({
   const reasoningSupported = useModelSupportsReasoning(_model, _providerId);
   const capabilities = useModelCapabilities(_model, _providerId);
   const verbositySupported = isOpenRouterClaudeVerbosityModel(_model, _providerId);
-  const isFirstRender = useRef(true);
+  const latestDraftRef = useRef<ConfigInterface>(config);
+  const latestImageDetailRef = useRef<ImageDetail>(imageDetail);
 
   useEffect(() => {
     if (!isStreamSupported && _stream) {
@@ -128,14 +135,9 @@ const ConfigMenu = ({
     }
   }, [isStreamSupported, _stream]);
 
-  // Auto-save on every change
   useEffect(() => {
-    if (isFirstRender.current) {
-      isFirstRender.current = false;
-      return;
-    }
     const modelContextLength = getModelConfigContextInfo(_model, _providerId, _modelSource).contextLength;
-    setConfig(normalizeConfigStream({
+    latestDraftRef.current = normalizeConfigStream({
       max_tokens: clampCompletionTokens(_maxToken, modelContextLength),
       model: _model,
       temperature: _temperature,
@@ -149,15 +151,14 @@ const ConfigMenu = ({
       reasoning_budget_tokens: reasoningSupported && _reasoningBudget >= 1024 ? _reasoningBudget : undefined,
       verbosity: verbositySupported ? _verbosity : undefined,
       systemPrompt: _systemPrompt || undefined,
-    }));
-    setImageDetail(_imageDetail);
-  }, [_maxToken, _model, _providerId, _modelSource, _temperature, _presencePenalty, _topP, _frequencyPenalty, _imageDetail, _stream, _reasoningEffort, _reasoningBudget, _verbosity, _systemPrompt]);
+    });
+    latestImageDetailRef.current = _imageDetail;
+  }, [_maxToken, _model, _providerId, _modelSource, _temperature, _presencePenalty, _topP, _frequencyPenalty, _imageDetail, _stream, _reasoningEffort, _reasoningBudget, _verbosity, _systemPrompt, reasoningSupported, verbositySupported]);
 
-  const FieldCell = ({ children }: { children: React.ReactNode }) => (
-    <div className='px-4 py-3 [&>*:first-child]:mt-0 [&>*:first-child]:pt-0'>
-      {children}
-    </div>
-  );
+  const applyDraft = () => {
+    setConfig(latestDraftRef.current);
+    setImageDetail(latestImageDetailRef.current);
+  };
 
   return (
     <PopupModal
@@ -165,6 +166,7 @@ const ConfigMenu = ({
       setIsModalOpen={setIsModalOpen}
       cancelButton={false}
       maxWidth='max-w-4xl'
+      handleClose={applyDraft}
     >
       <div className='p-6 flex flex-col gap-5 w-[90vw] max-w-4xl'>
         <div>
@@ -199,7 +201,7 @@ const ConfigMenu = ({
         />
 
         <SettingsGroup label={t('section.generation')}>
-          <FieldCell>
+          <ConfigFieldCell>
             <MaxTokenSlider
               _maxToken={_maxToken}
               _setMaxToken={_setMaxToken}
@@ -207,55 +209,55 @@ const ConfigMenu = ({
               _providerId={_providerId}
               _modelSource={_modelSource}
             />
-          </FieldCell>
-          <FieldCell>
+          </ConfigFieldCell>
+          <ConfigFieldCell>
             <TemperatureSlider
               _temperature={_temperature}
               _setTemperature={_setTemperature}
             />
-          </FieldCell>
-          <FieldCell>
+          </ConfigFieldCell>
+          <ConfigFieldCell>
             <TopPSlider _topP={_topP} _setTopP={_setTopP} />
-          </FieldCell>
-          <FieldCell>
+          </ConfigFieldCell>
+          <ConfigFieldCell>
             <PresencePenaltySlider
               _presencePenalty={_presencePenalty}
               _setPresencePenalty={_setPresencePenalty}
             />
-          </FieldCell>
-          <FieldCell>
+          </ConfigFieldCell>
+          <ConfigFieldCell>
             <FrequencyPenaltySlider
               _frequencyPenalty={_frequencyPenalty}
               _setFrequencyPenalty={_setFrequencyPenalty}
             />
-          </FieldCell>
+          </ConfigFieldCell>
         </SettingsGroup>
 
         {reasoningSupported && (
           <SettingsGroup label={t('section.reasoning')}>
-            <FieldCell>
+            <ConfigFieldCell>
               <ReasoningEffortSelector
                 _reasoningEffort={_reasoningEffort}
                 _setReasoningEffort={_setReasoningEffort}
                 _model={_model}
                 _providerId={_providerId}
               />
-            </FieldCell>
-            <FieldCell>
+            </ConfigFieldCell>
+            <ConfigFieldCell>
               <ReasoningBudgetInput
                 _reasoningBudget={_reasoningBudget}
                 _setReasoningBudget={_setReasoningBudget}
               />
-            </FieldCell>
+            </ConfigFieldCell>
             {verbositySupported && (
-              <FieldCell>
+              <ConfigFieldCell>
                 <VerbositySelector
                   _verbosity={_verbosity}
                   _setVerbosity={_setVerbosity}
                   _model={_model}
                   _providerId={_providerId}
                 />
-              </FieldCell>
+              </ConfigFieldCell>
             )}
           </SettingsGroup>
         )}

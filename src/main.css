@@ -104,13 +104,6 @@
     @apply inline-block;
   }
 
-  input[type='range']::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    @apply w-4;
-    @apply h-4;
-    @apply rounded-full;
-    background: rgba(16, 163, 127);
-  }
 
   /* Auto-hide scrollbar: visible on hover/scroll, hidden when idle */
   * {
