@@ -117,7 +117,7 @@ export function useModelDownload(onStorageChanged?: () => void) {
     }
 
     downloadFn(callbacks, controller.signal);
-  }, []);
+  }, [onStorageChanged]);
 
   const cancelDownload = useCallback((modelId: string) => {
     abortControllers.current[modelId]?.abort();
