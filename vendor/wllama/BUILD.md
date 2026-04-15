@@ -178,7 +178,54 @@ APIs that require patches:
 These patches are already applied in this fork. If you update `llama.cpp`
 (git submodule), you may need to re-apply them.
 
-### 6. cmake vs EMCC_CFLAGS for WebGPU port
+### 6. emsdk 4.x: HEAPU8 not exported on Module object
+
+In emsdk 4.0.x, Emscripten no longer exposes heap views (HEAPU8, HEAP32, etc.)
+as properties on the `Module` object. They are closure-local variables updated by
+`updateMemoryViews()`. The wllama worker code (`llama-cpp.js`) accesses
+`Module.HEAPU8` and will fail with:
+
+    TypeError: Cannot read properties of undefined (reading 'set')
+
+**Fix applied in this fork:** `src/single-thread/wllama.js` and
+`src/multi-thread/wllama.js` are patched after copying from `wasm/*/wllama.js`
+to add `Module["HEAPU8"]=HEAPU8` at the end of `updateMemoryViews()`:
+
+```javascript
+// Before closing brace of updateMemoryViews():
+HEAPU64=new BigUint64Array(b);Module["HEAPU8"]=HEAPU8}
+```
+
+**When this matters:** Whenever the JS glue files are updated from a new WASM build,
+re-apply this patch before running `npm run build:worker`.
+
+### 7. emsdk 4.x + Memory64: cwrap pointer type must be `'pointer'`
+
+In emsdk 4.0.x with Memory64 (`-sMEMORY64=1`), WASM pointer parameters are i64
+(BigInt). The Emscripten `cwrap` shortcut for all-numeric arguments bypasses type
+conversion, so calling WASM functions with JS Numbers fails with:
+
+    TypeError: Cannot convert 179 to a BigInt
+
+**Fix applied in this fork:** `src/workers-code/llama-cpp.js` uses `'pointer'`
+instead of `'number'` for pointer/size arguments in cwrap calls. The `ccall`
+path (triggered when any arg type is `'pointer'`) handles BigInt conversion:
+
+```javascript
+// Before (broken with Memory64):
+const pointer = 'number';
+wllamaMalloc = callWrapper('wllama_malloc', pointer, ['number', pointer]);
+
+// After (Memory64-compatible):
+const pointer = 'pointer';
+wllamaMalloc = callWrapper('wllama_malloc', pointer, [pointer, pointer]);
+```
+
+**When this matters:** Only affects Memory64 builds (`single-thread.wasm`,
+`multi-thread.wasm`). Compat builds (`*-compat.wasm`) use 32-bit pointers
+and would work with `'number'`, but `'pointer'` is safe for both.
+
+### 8. cmake vs EMCC_CFLAGS for WebGPU port
 
 The `--use-port=` flag for emdawnwebgpu must be passed via
 `CMAKE_EXE_LINKER_FLAGS` (not `EMCC_CFLAGS`). Using both causes a
