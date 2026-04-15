@@ -83,8 +83,12 @@ const LocalModelSettings = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const outputRef = useRef<HTMLDivElement>(null);
 
+  // OPFS browser refresh trigger: increment on every storage mutation.
+  const [opfsBrowserRefresh, setOpfsBrowserRefresh] = useState(0);
+  const bumpOpfsBrowser = useCallback(() => setOpfsBrowserRefresh((n) => n + 1), []);
+
   // Hooks
-  const { downloadProgresses, resumeFallbacks, abortControllers, startDownload, cancelDownload, clearProgress, clearResumeFallback } = useModelDownload();
+  const { downloadProgresses, resumeFallbacks, abortControllers, startDownload, cancelDownload, clearProgress, clearResumeFallback } = useModelDownload(bumpOpfsBrowser);
   const { deleteWithConfirm } = useModelDeletion();
   const hfSearch = useHfSearch(rehydrated);
 
@@ -145,10 +149,12 @@ const LocalModelSettings = () => {
     return unsubscribe;
   }, []);
 
-  // Rehydrate OPFS state on first mount
+  // Rehydrate OPFS state on first mount and after storage mutations.
+  const [rehydrationEpoch, setRehydrationEpoch] = useState(0);
   const rehydratedRef = useRef(false);
   useEffect(() => {
-    if (!enabled || rehydratedRef.current) return;
+    if (!enabled) return;
+    if (rehydratedRef.current && rehydrationEpoch === 0) return;
     rehydratedRef.current = true;
 
     const searchModels = useStore.getState().localModels
@@ -174,7 +180,7 @@ const LocalModelSettings = () => {
       }
       setRehydrated(true);
     }).catch(() => { setRehydrated(true); });
-  }, [enabled]);
+  }, [enabled, rehydrationEpoch]);
 
   // Sync partial model storedBytes on section mount
   useEffect(() => {
@@ -243,8 +249,8 @@ const LocalModelSettings = () => {
 
   // ----- Catalog deletion / load / unload -----
   const handleDeleteCatalogModel = useCallback(async (modelId: string) => {
-    await deleteWithConfirm(modelId, { abortControllers, clearProgress });
-  }, [deleteWithConfirm, clearProgress]);
+    await deleteWithConfirm(modelId, { abortControllers, clearProgress, onDeleted: bumpOpfsBrowser });
+  }, [deleteWithConfirm, clearProgress, bumpOpfsBrowser]);
 
   const handleLoadCatalogModel = useCallback(async (model: CatalogModel) => {
     const provider = new OpfsFileProvider(model.id, model.manifest);
@@ -499,9 +505,10 @@ const LocalModelSettings = () => {
       abortControllers, clearProgress,
       onDeleted: () => {
         hfSearch.setActiveSearchDownloads((prev) => { const { [modelId]: _, ...rest } = prev; return rest; });
+        bumpOpfsBrowser();
       },
     });
-  }, [deleteWithConfirm, clearProgress, hfSearch.setActiveSearchDownloads]);
+  }, [deleteWithConfirm, clearProgress, hfSearch.setActiveSearchDownloads, bumpOpfsBrowser]);
 
   // ----- Downloading section handlers -----
   const handleLoadSelected = useCallback(async () => {
@@ -575,9 +582,10 @@ const LocalModelSettings = () => {
       abortControllers, clearProgress,
       onDeleted: () => {
         hfSearch.setActiveSearchDownloads((prev) => { const { [modelId]: _, ...rest } = prev; return rest; });
+        bumpOpfsBrowser();
       },
     });
-  }, [deleteWithConfirm, clearProgress, hfSearch.setActiveSearchDownloads]);
+  }, [deleteWithConfirm, clearProgress, hfSearch.setActiveSearchDownloads, bumpOpfsBrowser]);
 
   const handleCancelDownloadingModel = useCallback((modelId: string) => {
     cancelDownload(modelId);
@@ -874,7 +882,13 @@ const LocalModelSettings = () => {
           {/* OPFS Storage Management */}
           <SettingsGroup label={t('localModel.opfsBrowser.title')}>
             <div className='px-4 py-2 text-xs text-gray-500 dark:text-gray-400'>{t('localModel.opfsBrowser.description')}</div>
-            <OpfsFileBrowser onStorageChanged={() => { rehydratedRef.current = false; }} />
+            <OpfsFileBrowser
+              refreshTrigger={opfsBrowserRefresh}
+              onStorageChanged={() => {
+                setRehydrationEpoch((n) => n + 1);
+                bumpOpfsBrowser();
+              }}
+            />
           </SettingsGroup>
 
           {/* 4. Hugging Face Search */}

@@ -13,9 +13,11 @@ export interface StartDownloadOpts {
   resume?: boolean;
   /** Translation function for resume fallback message */
   resumeFallbackMsg?: string;
+  /** Called whenever OPFS-backed storage may have changed */
+  onStorageChanged?: () => void;
 }
 
-export function useModelDownload() {
+export function useModelDownload(onStorageChanged?: () => void) {
   const [downloadProgresses, setDownloadProgresses] = useState<Record<string, DownloadProgress>>({});
   const [resumeFallbacks, setResumeFallbacks] = useState<Record<string, string>>({});
   const abortControllers = useRef<Record<string, AbortController>>({});
@@ -32,7 +34,7 @@ export function useModelDownload() {
       const { [modelId]: _, ...rest } = prev;
       return rest;
     });
-  }, []);
+  }, [onStorageChanged]);
 
   /**
    * Build unified download callbacks and invoke the download function.
@@ -57,6 +59,8 @@ export function useModelDownload() {
       // onFileComplete doesn't accumulate on top of stale partial state.
       ...(!opts?.resume ? { storedBytes: 0, storedFiles: [] } : {}),
     });
+    onStorageChanged?.();
+    opts?.onStorageChanged?.();
 
     const callbacks: DownloadCallbacks = {
       onProgress: (p) => {
@@ -68,6 +72,8 @@ export function useModelDownload() {
           storedBytes: (currentMeta?.storedBytes ?? 0) + fileSize,
           storedFiles: [...(currentMeta?.storedFiles ?? []), _fileName],
         });
+        onStorageChanged?.();
+        opts?.onStorageChanged?.();
       },
       onComplete: (totalBytes) => {
         useStore.getState().updateSavedModelMeta(modelId, {
@@ -81,6 +87,8 @@ export function useModelDownload() {
           return rest;
         });
         delete abortControllers.current[modelId];
+        onStorageChanged?.();
+        opts?.onStorageChanged?.();
         opts?.onComplete?.(totalBytes);
       },
       onError: (error) => {
@@ -93,6 +101,8 @@ export function useModelDownload() {
           return rest;
         });
         delete abortControllers.current[modelId];
+        onStorageChanged?.();
+        opts?.onStorageChanged?.();
         opts?.onError?.();
       },
     };
@@ -120,7 +130,8 @@ export function useModelDownload() {
       storageState: 'partial',
       lastError: undefined,
     });
-  }, []);
+    onStorageChanged?.();
+  }, [onStorageChanged]);
 
   return {
     downloadProgresses,

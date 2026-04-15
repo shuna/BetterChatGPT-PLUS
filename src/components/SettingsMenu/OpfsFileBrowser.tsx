@@ -10,6 +10,7 @@ import {
 import type { OpfsModelEntry } from '@src/local-llm/storage';
 import { formatBytes } from '@src/local-llm/device';
 import { localModelRuntime } from '@src/local-llm/runtime';
+import type { LocalModelTask } from '@src/local-llm/types';
 import useStore from '@store/store';
 
 // ---------------------------------------------------------------------------
@@ -18,9 +19,12 @@ import useStore from '@store/store';
 
 const OpfsFileBrowser = ({
   onStorageChanged,
+  refreshTrigger,
 }: {
   /** Called after any deletion so the parent can refresh metadata */
   onStorageChanged?: () => void;
+  /** Increment this counter to trigger a refresh from parent events (download start/stop/complete, load, etc.) */
+  refreshTrigger?: number;
 }) => {
   const { t } = useTranslation('main');
   const [entries, setEntries] = useState<OpfsModelEntry[]>([]);
@@ -50,6 +54,13 @@ const OpfsFileBrowser = ({
     refresh();
   }, [refresh]);
 
+  // Re-scan OPFS when the parent signals a storage mutation
+  useEffect(() => {
+    if (refreshTrigger != null && refreshTrigger > 0) {
+      refresh();
+    }
+  }, [refreshTrigger]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const toggleExpand = useCallback((modelId: string) => {
     setExpandedModels((prev) => {
       const next = new Set(prev);
@@ -68,8 +79,13 @@ const OpfsFileBrowser = ({
         await localModelRuntime.unloadModel(modelId);
       }
       await deleteModel(modelId);
-      // Clean store
+      // Clean store — metadata, definition, and task assignments
       const store = useStore.getState();
+      for (const task of Object.keys(store.activeLocalModels) as LocalModelTask[]) {
+        if (store.activeLocalModels[task] === modelId) {
+          store.setActiveLocalModel(task, null);
+        }
+      }
       store.removeSavedModelMeta(modelId);
       store.removeLocalModel(modelId);
       onStorageChanged?.();
@@ -87,6 +103,18 @@ const OpfsFileBrowser = ({
     setDeleting(`${modelId}/${fileName}`);
     try {
       await deleteModelFile(modelId, fileName);
+      // If this is a .part marker, also delete the corresponding data file
+      // (in the current design, data is written to the final name and .part
+      // is a zero-byte marker; leaving the data file would make a partial
+      // download look "saved").
+      if (fileName.endsWith('.part')) {
+        const dataFileName = fileName.slice(0, -'.part'.length);
+        try {
+          await deleteModelFile(modelId, dataFileName);
+        } catch {
+          // Data file may not exist
+        }
+      }
       onStorageChanged?.();
       await refresh();
     } catch {
