@@ -94,7 +94,7 @@ const EditViewButtons = memo(
     const [generateMenuOpen, setGenerateMenuOpen, generateMenuRef] = useHideOnOutsideClick();
 
     const wrapperClass = sticky
-      ? 'w-full min-h-[3rem]'
+      ? 'w-full'
       : 'mt-2.5 flex min-h-[2.75rem] items-center';
     const controlsRowClass = sticky
       ? 'flex items-center mt-1'
@@ -155,7 +155,7 @@ const EditViewButtons = memo(
         <div className={controlsRowClass}>
           <div className='flex items-center gap-1'>
             {isImageModel && (
-              <div className='relative' ref={attachDropDownRef}>
+              <div className='relative flex' ref={attachDropDownRef}>
                 <button
                   className='btn btn-neutral btn-small'
                   onClick={() => setAttachDropDown(!attachDropDown)}

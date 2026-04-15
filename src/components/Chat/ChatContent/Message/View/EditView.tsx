@@ -28,7 +28,7 @@ const EditView = ({
 }) => {
   const { t } = useTranslation();
   const stickySurfaceClass =
-    'rounded-2xl bg-white/60 px-4 pt-2.5 pb-4 shadow-sm ring-1 ring-black/5 dark:bg-gray-900/20 dark:ring-white/10 md:px-5 md:pt-3 md:pb-5';
+    'rounded-2xl bg-white/60 px-4 pt-2.5 pb-2.5 shadow-sm ring-1 ring-black/5 dark:bg-gray-900/20 dark:ring-white/10 md:px-5 md:pt-3 md:pb-3';
   const logic = useEditViewLogic({
     content,
     setIsEdit,
