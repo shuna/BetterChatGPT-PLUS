@@ -80,6 +80,41 @@ const cloneContent = (content: ContentInterface[]): ContentInterface[] =>
       : { ...item }
   );
 
+const firstTextIndex = (content: ContentInterface[]): number =>
+  content.findIndex((item) => item.type === 'text');
+
+const textValueOf = (content: ContentInterface[]): string => {
+  const index = firstTextIndex(content);
+  return index >= 0 ? (content[index] as TextContentInterface).text : '';
+};
+
+const replaceTextValue = (
+  content: ContentInterface[],
+  text: string
+): ContentInterface[] => {
+  const index = firstTextIndex(content);
+  if (index < 0) {
+    return [{ type: 'text', text } as TextContentInterface, ...content];
+  }
+
+  const next = [...content];
+  next[index] = { type: 'text', text } as TextContentInterface;
+  return next;
+};
+
+const imageContentIndexAt = (
+  content: ContentInterface[],
+  imageIndex: number
+): number => {
+  let seen = 0;
+  return content.findIndex((item) => {
+    if (!isImageContent(item)) return false;
+    if (seen === imageIndex) return true;
+    seen += 1;
+    return false;
+  });
+};
+
 export function useEditViewLogic({
   content,
   setIsEdit,
@@ -233,7 +268,8 @@ export function useEditViewLogic({
 
   const handleImageDetailChange = (index: number, detail: string) => {
     const updatedImages = [..._content];
-    const image = updatedImages[index + 1];
+    const imageContentIndex = imageContentIndexAt(updatedImages, index);
+    const image = imageContentIndex >= 0 ? updatedImages[imageContentIndex] : undefined;
     if (!isImageContent(image)) return;
     image.image_url.detail = detail as ImageContentInterface['image_url']['detail'];
     _setContent(updatedImages);
@@ -241,7 +277,9 @@ export function useEditViewLogic({
 
   const handleRemoveImage = (index: number) => {
     const updatedImages = [..._content];
-    updatedImages.splice(index + 1, 1);
+    const imageContentIndex = imageContentIndexAt(updatedImages, index);
+    if (imageContentIndex < 0) return;
+    updatedImages.splice(imageContentIndex, 1);
     _setContent(updatedImages);
   };
 
@@ -392,12 +430,17 @@ export function useEditViewLogic({
     }
   };
 
+  const textValue = textValueOf(_content);
+  const setTextValue = React.useCallback((value: string) => {
+    _setContent((prev) => replaceTextValue(prev, value));
+  }, [_setContent]);
+
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
       textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
     }
-  }, [(_content[0] as TextContentInterface)?.text]);
+  }, [textValue]);
 
   const handleUploadButtonClick = () => {
     (fileInputRef.current as HTMLInputElement)?.click();
@@ -432,6 +475,8 @@ export function useEditViewLogic({
     isGeneratingMessage,
     currentChatIndex,
     _content,
+    textValue,
+    setTextValue,
     contentChanged,
     _setContent,
     isModalOpen,

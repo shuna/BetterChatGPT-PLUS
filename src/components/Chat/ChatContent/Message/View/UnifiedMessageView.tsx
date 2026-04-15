@@ -22,7 +22,6 @@ import type { TabId } from './EvaluationModal';
 import PopupModal from '@components/PopupModal';
 import { useTranslation } from 'react-i18next';
 import { useModelType } from '@utils/modelLookup';
-import { TextContentInterface } from '@type/chat';
 import { useStreamingText } from '@hooks/useStreamingText';
 import { useStreamingReasoning } from '@hooks/useStreamingReasoning';
 import { isReasoningContent } from '@type/chat';
@@ -192,7 +191,7 @@ const UnifiedMessageView = memo(
 
     // Determine displayed value: draft when editing, saved content when viewing
     const displayValue = isEditState
-      ? (editLogic._content[0] as TextContentInterface)?.text ?? ''
+      ? editLogic.textValue
       : currentTextContent;
 
     return (
@@ -203,12 +202,7 @@ const UnifiedMessageView = memo(
               <OverTypeEditor
                 value={displayValue}
                 mode='edit'
-                onChange={(val) => {
-                  editLogic._setContent((prev) => [
-                    { type: 'text', text: val },
-                    ...prev.slice(1),
-                  ]);
-                }}
+                onChange={editLogic.setTextValue}
                 onKeyDown={(e) => {
                   // Convert native KeyboardEvent to React-compatible format for handleKeyDown
                   editLogic.handleKeyDown(e as unknown as React.KeyboardEvent<HTMLTextAreaElement>);

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { ContentInterface, TextContentInterface } from '@type/chat';
+import { ContentInterface } from '@type/chat';
 import { useModelType } from '@utils/modelLookup';
 import PopupModal from '@components/PopupModal';
 import EditViewButtons from './EditViewButtons';
@@ -49,14 +49,9 @@ const EditView = ({
         }`}
       >
         <OverTypeEditor
-          value={(logic._content[0] as TextContentInterface)?.text ?? ''}
+          value={logic.textValue}
           mode='edit'
-          onChange={(val) => {
-            logic._setContent((prev) => [
-              { type: 'text', text: val },
-              ...prev.slice(1),
-            ]);
-          }}
+          onChange={logic.setTextValue}
           onKeyDown={(e) => {
             logic.handleKeyDown(e as unknown as React.KeyboardEvent<HTMLTextAreaElement>);
           }}
