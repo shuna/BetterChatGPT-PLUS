@@ -8,6 +8,7 @@ const AttachmentIcon = () => {
       height='20'
       fill='none'
       viewBox='0 0 24 24'
+      className='block'
     >
       <path
         fill='currentColor'
