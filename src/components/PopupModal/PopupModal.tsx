@@ -56,6 +56,13 @@ const PopupModal = ({
     }
   };
 
+  const stopModalPointerPropagation = (
+    event: React.MouseEvent<HTMLDivElement> | React.PointerEvent<HTMLDivElement>
+  ) => {
+    if ((event.target as HTMLElement).closest('input[type="range"]')) return;
+    event.stopPropagation();
+  };
+
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
     return () => {
@@ -66,7 +73,11 @@ const PopupModal = ({
   if (modalRoot) {
     return ReactDOM.createPortal(
       <div className='fixed top-0 left-0 z-[999] w-full p-4 overflow-x-hidden overflow-y-auto h-full flex justify-center items-center'>
-        <div className={`relative z-2 ${maxWidth ?? 'max-w-2xl'} md:h-auto flex justify-center max-h-full`}>
+        <div
+          className={`relative z-2 ${maxWidth ?? 'max-w-2xl'} md:h-auto flex justify-center max-h-full`}
+          onMouseDown={stopModalPointerPropagation}
+          onPointerDown={stopModalPointerPropagation}
+        >
           <div className='relative bg-gray-50 rounded-lg shadow dark:bg-gray-700 max-h-full overflow-hidden flex flex-col'>
             <div className='flex items-center justify-between p-4 border-b rounded-t dark:border-gray-600'>
               <h3 className='ml-2 text-lg font-semibold text-gray-900 dark:text-white'>
