@@ -77,9 +77,32 @@ export async function hasGgufMagic(file: File | Blob): Promise<boolean> {
   );
 }
 
+/**
+ * Large files (e.g. multi-GB GGUFs from external volumes) cannot be read into
+ * a single ArrayBuffer – the browser may throw NotReadableError or OOM.
+ * For files above this threshold we hash head + tail + encoded size instead.
+ */
+const PARTIAL_HASH_THRESHOLD = 64 * 1024 * 1024; // 64 MB
+const PARTIAL_HASH_CHUNK = 1024 * 1024; // 1 MB
+
 export async function sha256Blob(blob: Blob): Promise<string> {
-  const buffer = await blob.arrayBuffer();
-  const hash = await crypto.subtle.digest('SHA-256', buffer);
+  let dataToHash: ArrayBuffer;
+
+  if (blob.size <= PARTIAL_HASH_THRESHOLD) {
+    dataToHash = await blob.arrayBuffer();
+  } else {
+    // Partial hash: first 1 MB + last 1 MB + file-size string
+    const head = await blob.slice(0, PARTIAL_HASH_CHUNK).arrayBuffer();
+    const tail = await blob.slice(blob.size - PARTIAL_HASH_CHUNK).arrayBuffer();
+    const sizeTag = new TextEncoder().encode(String(blob.size));
+    const combined = new Uint8Array(head.byteLength + tail.byteLength + sizeTag.byteLength);
+    combined.set(new Uint8Array(head), 0);
+    combined.set(new Uint8Array(tail), head.byteLength);
+    combined.set(sizeTag, head.byteLength + tail.byteLength);
+    dataToHash = combined.buffer as ArrayBuffer;
+  }
+
+  const hash = await crypto.subtle.digest('SHA-256', dataToHash);
   return Array.from(new Uint8Array(hash))
     .map((byte) => byte.toString(16).padStart(2, '0'))
     .join('');
@@ -100,7 +123,11 @@ export async function getModelDir(modelId: string): Promise<FileSystemDirectoryH
 }
 
 /**
- * Save a complete file to OPFS. For small confirmed files.
+ * Save a complete file to OPFS.
+ *
+ * Streams the blob in natural read-chunks (same pattern as openDownloadWriter)
+ * so that large files from external volumes don't require a single contiguous
+ * ArrayBuffer and no intermediate copies are created.
  */
 export async function saveFile(
   modelId: string,
@@ -110,8 +137,22 @@ export async function saveFile(
   const dir = await getModelDir(modelId);
   const fileHandle = await dir.getFileHandle(relativePath, { create: true }) as unknown as WritableFileHandle;
   const writable = await fileHandle.createWritable();
-  await writable.write(blob);
-  await writable.close();
+  try {
+    const reader = blob.stream().getReader();
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        await writable.write(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    await writable.close();
+  } catch (err) {
+    try { await writable.abort(); } catch { /* ignore */ }
+    throw err;
+  }
 }
 
 /**
