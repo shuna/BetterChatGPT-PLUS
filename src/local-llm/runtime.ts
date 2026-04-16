@@ -19,8 +19,11 @@ import type {
   GenerateOptions,
   ClassificationLabel,
   LocalModelBusyReason,
+  SingleFileManifest,
+  LoadDescriptor,
 } from './types';
 import type { ModelFileProvider } from './fileProvider';
+import { getOPFSFileSize } from './storage';
 import { CURATED_MODELS } from './catalog';
 import { isLowbitQModelId } from './lowbit-q/lowbitQManager';
 import { debugLog, debugReport } from '@store/debug-store';
@@ -139,6 +142,30 @@ function summarizePayload(payload: Record<string, unknown>): string {
     }
   }
   return formatDebugValue(clone);
+}
+
+/**
+ * Compute the total byte size of a wllama model definition.
+ * Used for preferMemory64 determination in OPFS-direct mode (no File[] available).
+ *
+ * Trust order:
+ *  1. manifest.totalSize — gguf-sharded always has this
+ *  2. def.fileSize — stored in Zustand/IDB
+ *  3. getOPFSFileSize() — last-resort OPFS lookup for single-file models
+ */
+async function computeModelTotalSize(def: LocalModelDefinition): Promise<number> {
+  if (def.manifest.kind === 'gguf-sharded') {
+    return def.manifest.totalSize;
+  }
+  if (def.fileSize) {
+    return def.fileSize;
+  }
+  // single-file OPFS fallback
+  try {
+    return await getOPFSFileSize(def.id, (def.manifest as SingleFileManifest).entrypoint);
+  } catch {
+    return 0;
+  }
 }
 
 function emitRuntimeDebugLog(modelId: string, level: string, message: string, timestamp = Date.now()): void {
@@ -321,17 +348,32 @@ export class LocalModelRuntime {
     };
 
     try {
-      let wllamaFiles: (File | Blob)[] = [];
+      let descriptor: LoadDescriptor | null = null;
       let preferMemory64 = false;
       let allowWebGPU = false;
       if (def.engine === 'wllama') {
-        wllamaFiles = await provider.getGgufFiles();
-        // 32-bit compat builds are more broadly stable. Memory64 is only
-        // required once the total model size can exceed 32-bit address/file-size limits.
-        // NOTE: preferMemory64 selects the Memory64 WASM build, but does NOT guarantee
-        // load success — the WASM heap must still accommodate the total model size.
-        const totalSize = wllamaFiles.reduce((s, f) => s + f.size, 0);
-        preferMemory64 = totalSize >= 2 * 1024 * 1024 * 1024;
+        const useOpfsDirect = def.source === 'opfs' &&
+          (def.manifest.kind === 'single-file' || def.manifest.kind === 'gguf-sharded');
+
+        if (useOpfsDirect) {
+          // OPFS-direct: skip File[] retrieval — inner worker reads via SyncAccessHandle
+          const shards = def.manifest.kind === 'gguf-sharded'
+            ? def.manifest.shards
+            : [def.manifest.entrypoint];
+          descriptor = { mode: 'opfs-direct', modelId: def.id, shards };
+          const totalSize = await computeModelTotalSize(def);
+          preferMemory64 = totalSize >= 2 * 1024 * 1024 * 1024;
+        } else {
+          const wllamaFiles = await provider.getGgufFiles();
+          descriptor = { mode: 'files', files: wllamaFiles };
+          // 32-bit compat builds are more broadly stable. Memory64 is only
+          // required once the total model size can exceed 32-bit address/file-size limits.
+          // NOTE: preferMemory64 selects the Memory64 WASM build, but does NOT guarantee
+          // load success — the WASM heap must still accommodate the total model size.
+          const totalSize = wllamaFiles.reduce((s, f) => s + f.size, 0);
+          preferMemory64 = totalSize >= 2 * 1024 * 1024 * 1024;
+        }
+
         const webGpuSetting = this.webGpuEnabled;
         // Large (>2 GiB) GGUF files require Memory64. Our current WebGPU
         // Memory64 runtime path is still unstable, so keep those loads on the
@@ -352,22 +394,29 @@ export class LocalModelRuntime {
           allowWebGPU,
           forceDisableWebGPU: options.forceDisableWebGPU === true,
           webGpuSetting: this.webGpuEnabled,
+          loadMode: descriptor?.mode ?? null,
         },
       });
-      console.info('[LocalModelRuntime] init worker for', def.id, 'engine:', def.engine, 'isLowbitQ:', isLowbitQ, 'preferMemory64:', preferMemory64, 'allowWebGPU:', allowWebGPU);
+      console.info('[LocalModelRuntime] init worker for', def.id, 'engine:', def.engine, 'isLowbitQ:', isLowbitQ, 'preferMemory64:', preferMemory64, 'allowWebGPU:', allowWebGPU, 'loadMode:', descriptor?.mode);
       await this.sendRequest(def.id, { type: 'init', isLowbitQ, preferMemory64, allowWebGPU });
       console.info('[LocalModelRuntime] init done for', def.id);
 
       // Load model — engine-specific
       if (def.engine === 'wllama') {
-        const totalFileSize = wllamaFiles.reduce((s, f) => s + f.size, 0);
-        const shardInfo = wllamaFiles.length > 1 ? ` (${wllamaFiles.length} shards)` : '';
-        console.info('[LocalModelRuntime] loading model file:', (wllamaFiles[0] as File).name ?? '(blob)', shardInfo, 'totalSize:', totalFileSize);
+        if (!descriptor) throw new Error('wllama load descriptor not set');
+        const shardCount = descriptor.mode === 'opfs-direct'
+          ? descriptor.shards.length
+          : descriptor.files.length;
+        const shardInfo = shardCount > 1 ? ` (${shardCount} shards)` : '';
+        const nameHint = descriptor.mode === 'opfs-direct'
+          ? descriptor.shards[0]
+          : ((descriptor.files[0] as File).name ?? '(blob)');
+        console.info('[LocalModelRuntime] loading model:', nameHint, shardInfo, 'mode:', descriptor.mode);
         // Look up expected context length from catalog/store so the worker
         // allocates the right amount of KV cache instead of a fixed default.
         const expectedCtx = this.lookupExpectedContextLength(def.id);
         const result = await this.sendRequest(def.id, {
-          type: 'load', files: wllamaFiles, ...(expectedCtx ? { expectedContextLength: expectedCtx } : {}),
+          type: 'load', descriptor, ...(expectedCtx ? { expectedContextLength: expectedCtx } : {}),
         }) as {
           contextLength?: number;
           nativeContextLength?: number;

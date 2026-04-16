@@ -18,6 +18,7 @@ export interface WllamaConfig {
 
 export interface LoadModelConfig {
   use_mmap?: boolean;
+  use_mlock?: boolean;
   n_ctx?: number;
   n_threads?: number;
   n_gpu_layers?: number;
@@ -53,6 +54,11 @@ export interface ChatMessage {
 export class Wllama {
   constructor(pathConfig: AssetsPathConfig, config?: WllamaConfig);
   loadModel(files: Blob[], config?: LoadModelConfig): Promise<void>;
+  loadModelFromOpfs(
+    modelId: string,
+    shardPaths: string[],
+    config?: LoadModelConfig,
+  ): Promise<void>;
   getLoadedContextInfo(): LoadedContextInfo;
   isModelLoaded(): boolean;
   getChatTemplate(): string | null;

@@ -155,6 +155,23 @@ export interface WorkerResponse {
 }
 
 // ---------------------------------------------------------------------------
+// Load descriptor — how the wllama worker should load a model
+// ---------------------------------------------------------------------------
+
+/**
+ * Discriminated union describing the model loading strategy for wllama.
+ *
+ * - files: Transfer File/Blob array to inner worker (heapfs alloc + write).
+ *   Used for ephemeral-file source or as fallback.
+ * - opfs-direct: Inner worker opens OPFS files via FileSystemSyncAccessHandle.
+ *   No heapfsAlloc — model data is never copied to WASM heap.
+ *   Only valid for source === 'opfs'.
+ */
+export type LoadDescriptor =
+  | { mode: 'files'; files: (File | Blob)[] }
+  | { mode: 'opfs-direct'; modelId: string; shards: string[] };
+
+// ---------------------------------------------------------------------------
 // Generation options
 // ---------------------------------------------------------------------------
 
