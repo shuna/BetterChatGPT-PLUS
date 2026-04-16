@@ -19,6 +19,7 @@ import type {
 } from './types';
 import type { ModelFileProvider, CustomCacheAdapter } from './fileProvider';
 import { resolveUrlToManifestKey } from './fileProvider';
+import { getManifestFiles } from './ggufShardUtils';
 
 // ---------------------------------------------------------------------------
 // File System Access API augmentation (createWritable not in default DOM lib)
@@ -584,8 +585,8 @@ export async function verifyStoredModel(
     return 'saved';
   }
 
-  // Multi-file
-  const requiredFiles = manifest.requiredFiles;
+  // gguf-sharded and multi-file share similar logic: check all required files
+  const requiredFiles = getManifestFiles(manifest);
   let existingCount = 0;
   let hasAnyPart = false;
 
@@ -596,7 +597,7 @@ export async function verifyStoredModel(
     const exists = await fileExists(dir, f);
     if (exists) {
       const size = await fileSize(dir, f);
-      // any requiredFile zero-byte → invalid
+      // any file zero-byte → invalid
       if (size === 0) return 'invalid';
       existingCount++;
     }
@@ -606,9 +607,15 @@ export async function verifyStoredModel(
   if (existingCount === 0 && !hasAnyPart) return 'none';
   // 2. any .part marker → download in progress → partial
   if (hasAnyPart) return 'partial';
-  // 3. all present & non-zero, no markers → saved
+  // 3. all present & non-zero, no markers → validate first shard GGUF magic for sharded models
+  if (manifest.kind === 'gguf-sharded' && existingCount === requiredFiles.length) {
+    const firstShard = await readFile(modelId, manifest.entrypoint);
+    if (!(await hasGgufMagic(firstShard))) return 'invalid';
+    return 'saved';
+  }
+  // 4. all present & non-zero, no markers → saved
   if (existingCount === requiredFiles.length) return 'saved';
-  // 4. otherwise → partial
+  // 5. otherwise → partial
   return 'partial';
 }
 
@@ -808,6 +815,20 @@ export class OpfsFileProvider implements ModelFileProvider {
       throw new Error('getFile() is only available for single-file manifests');
     }
     return readFile(this.modelId, this.manifest.entrypoint);
+  }
+
+  async getGgufFiles(): Promise<(File | Blob)[]> {
+    if (this.manifest.kind === 'multi-file') {
+      throw new Error('getGgufFiles() is not available for multi-file (Transformers.js) manifests');
+    }
+    const fileNames = this.manifest.kind === 'gguf-sharded'
+      ? this.manifest.shards
+      : [this.manifest.entrypoint];
+    const result: (File | Blob)[] = [];
+    for (const name of fileNames) {
+      result.push(await readFile(this.modelId, name));
+    }
+    return result;
   }
 
   getCustomCache(): CustomCacheAdapter {

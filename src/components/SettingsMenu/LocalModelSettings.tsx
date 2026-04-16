@@ -24,6 +24,7 @@ import {
   resolveSearchCandidate,
   generateSearchModelId,
 } from '@src/local-llm/hfSearch';
+import { getManifestFiles, getManifestPrimaryFile, parseShardInfo } from '@src/local-llm/ggufShardUtils';
 import OpfsFileBrowser from './OpfsFileBrowser';
 
 import { ASSIGNABLE_TASKS, EPHEMERAL_MODEL_ID, getModelStatusLabel } from './localModelConstants';
@@ -252,9 +253,7 @@ const LocalModelSettings = () => {
         const model = CURATED_MODELS.find((c) => c.id === id)
           ?? useStore.getState().localModels.find((m) => m.id === id);
         if (!model) continue;
-        const file = model.manifest.kind === 'single-file'
-          ? model.manifest.entrypoint
-          : model.manifest.requiredFiles[0];
+        const file = getManifestPrimaryFile(model.manifest);
         if (!file) continue;
         getTempFileSize(id, file).then((size) => {
           if (size > 0) {
@@ -294,7 +293,9 @@ const LocalModelSettings = () => {
 
     for (const model of candidates) {
       if (model.id === excludeModelId) continue;
-      if (model.engine !== 'wllama' || model.manifest.kind !== 'single-file') continue;
+      if (model.engine !== 'wllama') continue;
+      // Only support single-file and gguf-sharded for hash-based duplicate detection
+      if (model.manifest.kind !== 'single-file' && model.manifest.kind !== 'gguf-sharded') continue;
       const meta = store.savedModelMeta[model.id];
       if (meta?.storageState !== 'saved') continue;
       if (meta.storedBytes && meta.storedBytes !== fileSize) continue;
@@ -304,7 +305,6 @@ const LocalModelSettings = () => {
       if (!storedHash) {
         try {
           const storedFile = await readFile(model.id, entrypoint);
-          if (storedFile.size !== fileSize) continue;
           storedHash = await sha256Blob(storedFile);
           store.updateSavedModelMeta(model.id, {
             fileHashes: { ...(meta.fileHashes ?? {}), [entrypoint]: storedHash },
@@ -313,14 +313,23 @@ const LocalModelSettings = () => {
           continue;
         }
       }
-      if (storedHash === fileHash) return model;
+      // For sharded models: composite key check (entrypoint hash + totalSize + shardCount)
+      // This avoids false positives where only later shards differ.
+      if (model.manifest.kind === 'gguf-sharded') {
+        const shardCount = model.manifest.shards.length;
+        const totalSize = model.manifest.totalSize;
+        if (storedHash === fileHash && totalSize === fileSize && shardCount > 0) return model;
+      } else {
+        if (storedHash === fileHash) return model;
+      }
     }
 
     return null;
   }, []);
 
   const registerDownloadedOrUseDuplicate = useCallback(async (model: LocalModelDefinition, totalBytes: number) => {
-    if (model.engine !== 'wllama' || model.manifest.kind !== 'single-file') {
+    if (model.engine !== 'wllama'
+      || (model.manifest.kind !== 'single-file' && model.manifest.kind !== 'gguf-sharded')) {
       useStore.getState().addLocalModel(model);
       return;
     }
@@ -422,37 +431,142 @@ const LocalModelSettings = () => {
 
   // ----- Ephemeral file handlers -----
   const handleFileSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
     setEphemeralLoadError(null);
-    setFileName(file.name);
     setOutput('');
     setContextLength(null);
 
+    // Collect selected files and detect shard sets
+    const selectedFiles = Array.from(fileList);
+    // Sort by filename so shard ordering is deterministic
+    selectedFiles.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Detect if all files form a shard set
+    const shardInfos = selectedFiles.map((f) => ({ file: f, info: parseShardInfo(f.name) }));
+    const allShards = shardInfos.every(({ info }) => info !== null);
+    const mightBeShardSet = allShards && selectedFiles.length > 1;
+
+    // Validate shard set integrity before accepting it
+    let isShardSet = false;
+    if (mightBeShardSet) {
+      const baseNames = new Set(shardInfos.map(({ info }) => info!.baseName));
+      const totals = new Set(shardInfos.map(({ info }) => info!.total));
+
+      if (baseNames.size !== 1) {
+        // Files belong to different models
+        setEphemeralLoadError(
+          `選択されたファイルは異なるモデルのシャードが混在しています（ベース名: ${[...baseNames].join(', ')}）。同じモデルの全シャードだけを選択してください。`,
+        );
+        e.target.value = '';
+        return;
+      }
+      if (totals.size !== 1) {
+        // Inconsistent total shard counts across files
+        setEphemeralLoadError(
+          '選択されたファイルのシャード総数が一致しません。同じモデルの全シャードだけを選択してください。',
+        );
+        e.target.value = '';
+        return;
+      }
+
+      const expectedTotal = [...totals][0];
+      if (selectedFiles.length !== expectedTotal) {
+        // Missing or extra shards
+        setEphemeralLoadError(
+          `シャードセットが不完全です: ${expectedTotal} 個中 ${selectedFiles.length} 個が選択されています。全 ${expectedTotal} シャードをまとめて選択してください。`,
+        );
+        e.target.value = '';
+        return;
+      }
+
+      // Verify contiguity: indices must be exactly {1, 2, ..., expectedTotal}
+      const indices = new Set(shardInfos.map(({ info }) => info!.current));
+      for (let i = 1; i <= expectedTotal; i++) {
+        if (!indices.has(i)) {
+          setEphemeralLoadError(
+            `シャードセットに欠番があります（${i} 番目が見つかりません）。全 ${expectedTotal} シャードをまとめて選択してください。`,
+          );
+          e.target.value = '';
+          return;
+        }
+      }
+
+      isShardSet = true;
+    }
+
+    // Build manifest
+    let manifest: import('@src/local-llm/types').LocalModelManifest;
+    let primaryFile: File;
+    let totalSize: number;
+    let displayLabel: string;
+
+    if (isShardSet) {
+      // Sort shards by shard index
+      shardInfos.sort((a, b) => (a.info?.current ?? 0) - (b.info?.current ?? 0));
+      const sortedFiles = shardInfos.map(({ file }) => file);
+      primaryFile = sortedFiles[0];
+      totalSize = sortedFiles.reduce((s, f) => s + f.size, 0);
+      manifest = {
+        kind: 'gguf-sharded',
+        entrypoint: primaryFile.name,
+        shards: sortedFiles.map((f) => f.name),
+        totalSize,
+      };
+      displayLabel = `${primaryFile.name} (${sortedFiles.length} shards)`;
+    } else {
+      // Single file (or non-shard multiple files treated as individual)
+      if (selectedFiles.length > 1) {
+        // Multiple files that don't form a valid shard set
+        setEphemeralLoadError(
+          '複数ファイルが選択されましたが、有効なシャードセットとして認識できません。単一の .gguf ファイル、または同一モデルの全シャードを選択してください。',
+        );
+        e.target.value = '';
+        return;
+      }
+      primaryFile = selectedFiles[0];
+      totalSize = primaryFile.size;
+      manifest = { kind: 'single-file', entrypoint: primaryFile.name };
+      displayLabel = primaryFile.name;
+    }
+
+    setFileName(displayLabel);
+
     try {
-      const fileHash = await sha256Blob(file);
-      const existingModel = await findStoredModelWithHash(fileHash, file.size);
-      const manifest = { kind: 'single-file' as const, entrypoint: file.name };
+      // Hash the primary (first) file; for shards: composite key includes totalSize + shardCount
+      const fileHash = await sha256Blob(primaryFile);
+      const existingModel = await findStoredModelWithHash(fileHash, totalSize);
       const store = useStore.getState();
+      const modelId = `${IMPORTED_MODEL_PREFIX}--${fileHash.slice(0, 16)}--${sanitizeModelIdSegment(primaryFile.name)}`;
+
       const model: LocalModelDefinition = existingModel ?? {
-        id: `${IMPORTED_MODEL_PREFIX}--${fileHash.slice(0, 16)}--${sanitizeModelIdSegment(file.name)}`,
+        id: modelId,
         engine: 'wllama',
         tasks: ['generation', 'analysis'],
-        label: file.name,
-        origin: file.name,
+        label: displayLabel,
+        origin: primaryFile.name,
         source: 'opfs',
         manifest,
-        fileSize: file.size,
-        lastFileName: file.name,
+        fileSize: totalSize,
+        lastFileName: primaryFile.name,
       };
 
       if (!existingModel) {
-        await saveFile(model.id, file.name, file);
+        // Save all files to OPFS
+        const filesToSave = isShardSet
+          ? shardInfos.sort((a, b) => (a.info?.current ?? 0) - (b.info?.current ?? 0)).map(({ file }) => file)
+          : [primaryFile];
+        const storedFiles: string[] = [];
+        const fileHashes: Record<string, string> = { [primaryFile.name]: fileHash };
+        for (const f of filesToSave) {
+          await saveFile(model.id, f.name, f);
+          storedFiles.push(f.name);
+        }
         store.updateSavedModelMeta(model.id, {
           storageState: 'saved',
-          storedBytes: file.size,
-          storedFiles: [file.name],
-          fileHashes: { [file.name]: fileHash },
+          storedBytes: totalSize,
+          storedFiles,
+          fileHashes,
           lastVerifiedAt: Date.now(),
           lastError: undefined,
         });
@@ -707,7 +821,7 @@ const LocalModelSettings = () => {
     const catalogModel = CURATED_MODELS.find((c) => c.id === modelId);
     if (catalogModel) { handleResumeCatalog(catalogModel); return; }
     if (!model?.origin) return;
-    const fileName = model.manifest?.kind === 'single-file' ? model.manifest.entrypoint : model.manifest?.requiredFiles?.[0];
+    const fileName = model.manifest ? getManifestPrimaryFile(model.manifest) : undefined;
     if (!fileName) return;
     try {
       const resolution = await resolveGgufFiles(model.origin);
@@ -725,7 +839,7 @@ const LocalModelSettings = () => {
     const catalogModel = CURATED_MODELS.find((c) => c.id === modelId);
     if (catalogModel) { handleDownload(catalogModel); return; }
     if (!model?.origin) return;
-    const fileName = model.manifest?.kind === 'single-file' ? model.manifest.entrypoint : model.manifest?.requiredFiles?.[0];
+    const fileName = model.manifest ? getManifestPrimaryFile(model.manifest) : undefined;
     if (!fileName) return;
     try {
       const resolution = await resolveGgufFiles(model.origin);
@@ -1017,6 +1131,7 @@ const LocalModelSettings = () => {
                     ref={fileInputRef}
                     type='file'
                     accept='.gguf'
+                    multiple
                     className='absolute w-0 h-0 overflow-hidden opacity-0'
                     onChange={handleFileSelect}
                     disabled={importedStatus === 'loading'}

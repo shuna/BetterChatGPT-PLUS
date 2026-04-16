@@ -27,6 +27,7 @@ import type {
   ResolvedSearchCandidate,
 } from './types';
 import { formatBytes } from './device';
+import { groupShardFiles, isShardGroupComplete, generateShardFileNames } from './ggufShardUtils';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -117,16 +118,6 @@ function sanitizeIdSegment(s: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Split GGUF detection
-// ---------------------------------------------------------------------------
-
-const SPLIT_GGUF_PATTERN = /[-.](\d{2,}[-.]of[-.]?\d+|part\d+of\d+)/i;
-
-function isSplitGguf(fileName: string): boolean {
-  return SPLIT_GGUF_PATTERN.test(fileName);
-}
-
-// ---------------------------------------------------------------------------
 // HF API types (raw response shapes)
 // ---------------------------------------------------------------------------
 
@@ -193,18 +184,8 @@ function classifyRepoSupport(
     };
   }
 
-  // Check if at least one non-split GGUF is within size limit
-  const hasUsable = ggufFiles.some(
-    (f) => !isSplitGguf(f.rfilename),
-  );
-
-  if (!hasUsable) {
-    return {
-      status: 'unsupported',
-      reason: 'All GGUF files are too large or split',
-    };
-  }
-
+  // Accept any GGUF file: single-file or split shard sets are both supported.
+  // Individual variant classification (size warnings, etc.) is done in resolveGgufFiles().
   return { status: 'supported', reason: '' };
 }
 
@@ -291,17 +272,32 @@ export async function searchHfModels(
     // Estimate best candidate size (recommended GGUF variant)
     let bestCandidateSize: number | null = null;
     if (siblings && detectedEngine === 'wllama') {
-      const ggufFiles = siblings
-        .filter((s) => s.rfilename.endsWith('.gguf') && !isSplitGguf(s.rfilename))
-        .sort((a, b) => {
-          const qa = extractRawQuantization(a.rfilename);
-          const qb = extractRawQuantization(b.rfilename);
-          const pa = qa ? (QUANT_PRIORITY[normalizeQuantization(qa)] ?? 99) : 99;
-          const pb = qb ? (QUANT_PRIORITY[normalizeQuantization(qb)] ?? 99) : 99;
-          return pa - pb;
-        });
-      if (ggufFiles.length > 0) {
-        bestCandidateSize = ggufFiles[0].size;
+      // Include both single-file GGUFs and shard group totals for best candidate size estimation
+      const siblingsWithSize = siblings.map((s) => ({ rfilename: s.rfilename, size: typeof s.size === 'number' ? s.size : 0 }));
+      const shardGroups = groupShardFiles(siblingsWithSize.filter((s) => s.rfilename.endsWith('.gguf')));
+      const shardedFileNames = new Set<string>();
+      for (const g of shardGroups.values()) for (const f of g.files) shardedFileNames.add(f);
+
+      // Candidates: single-file GGUFs + one entry per shard group
+      const candidates: Array<{ name: string; size: number }> = [];
+      for (const s of siblingsWithSize) {
+        if (!s.rfilename.endsWith('.gguf')) continue;
+        if (shardedFileNames.has(s.rfilename)) continue;
+        candidates.push({ name: s.rfilename, size: s.size });
+      }
+      for (const [baseName, group] of shardGroups) {
+        candidates.push({ name: baseName, size: group.totalSize });
+      }
+
+      candidates.sort((a, b) => {
+        const qa = extractRawQuantization(a.name);
+        const qb = extractRawQuantization(b.name);
+        const pa = qa ? (QUANT_PRIORITY[normalizeQuantization(qa)] ?? 99) : 99;
+        const pb = qb ? (QUANT_PRIORITY[normalizeQuantization(qb)] ?? 99) : 99;
+        return pa - pb;
+      });
+      if (candidates.length > 0) {
+        bestCandidateSize = candidates[0].size;
       }
     }
 
@@ -352,12 +348,26 @@ export async function resolveGgufFiles(
 
   const variants: GgufVariant[] = [];
 
+  // Group split GGUF files into shard sets.
+  // Key: baseName (e.g. "model"), Value: { files: [...], totalSize }
+  const shardGroups = groupShardFiles(
+    ggufSiblings.map((s) => ({ rfilename: s.rfilename, size: typeof s.size === 'number' ? s.size : 0 })),
+  );
+  // Collect all filenames that belong to a shard group so we can skip them in the single-file loop
+  const shardedFileNames = new Set<string>();
+  for (const group of shardGroups.values()) {
+    for (const f of group.files) shardedFileNames.add(f);
+  }
+
+  // Process single-file (non-sharded) GGUFs
   for (const sibling of ggufSiblings) {
     const rfilename = sibling.rfilename;
     const size = typeof sibling.size === 'number' ? sibling.size : 0;
 
     // Exclude: filename unparseable (empty or just extension)
     if (!rfilename || rfilename === '.gguf') continue;
+    // Skip files that are part of a shard group — handled separately below
+    if (shardedFileNames.has(rfilename)) continue;
 
     const rawQuant = extractRawQuantization(rfilename);
     const normalizedQuant = rawQuant
@@ -368,10 +378,7 @@ export async function resolveGgufFiles(
     let supportStatus: GgufVariantStatus = 'supported';
     let supportReason: string | undefined;
 
-    if (isSplitGguf(rfilename)) {
-      supportStatus = 'unsupported';
-      supportReason = 'Split GGUF not supported';
-    } else if (size > 0 && size > SIZE_EXTREME) {
+    if (size > 0 && size > SIZE_EXTREME) {
       supportStatus = 'not-recommended';
       supportReason = 'extreme';
     } else if (size > 0 && size > SIZE_VERY_HEAVY) {
@@ -396,6 +403,72 @@ export async function resolveGgufFiles(
       supportReason,
       label,
       recommended: false, // set below
+    });
+  }
+
+  // Process shard groups — each complete group becomes a single variant
+  for (const [baseName, group] of shardGroups) {
+    const firstShard = group.files[0];
+    if (!firstShard) continue;
+
+    const rawQuant = extractRawQuantization(baseName);
+    const normalizedQuant = rawQuant
+      ? normalizeQuantization(rawQuant)
+      : sanitizeIdSegment(baseName);
+
+    // Incomplete groups (missing shards) are exposed as unsupported so the user
+    // can see them but knows they cannot be downloaded as-is.
+    if (!isShardGroupComplete(group)) {
+      const shardLabel = `${group.files.length}/${group.expectedTotal} shards`;
+      const sizeStr = group.totalSize > 0 ? formatBytes(group.totalSize) : '?';
+      const label = rawQuant
+        ? `${normalizedQuant.toUpperCase()} — ${sizeStr} (${shardLabel}, incomplete)`
+        : `${baseName} — ${sizeStr} (${shardLabel}, incomplete)`;
+      variants.push({
+        fileName: firstShard,
+        size: group.totalSize,
+        rawQuantization: rawQuant,
+        normalizedQuantization: normalizedQuant,
+        supportStatus: 'unsupported',
+        supportReason: `Incomplete shard set: ${group.files.length} of ${group.expectedTotal} shards found`,
+        label,
+        recommended: false,
+        shardFiles: group.files,
+      });
+      continue;
+    }
+
+    const totalSize = group.totalSize;
+
+    let supportStatus: GgufVariantStatus = 'supported';
+    let supportReason: string | undefined;
+    if (totalSize > 0 && totalSize > SIZE_EXTREME) {
+      supportStatus = 'not-recommended';
+      supportReason = 'extreme';
+    } else if (totalSize > 0 && totalSize > SIZE_VERY_HEAVY) {
+      supportStatus = 'not-recommended';
+      supportReason = 'very-heavy';
+    } else if (totalSize > 0 && totalSize > SIZE_HEAVY) {
+      supportStatus = 'not-recommended';
+      supportReason = 'heavy';
+    }
+
+    const sizeStr = totalSize > 0 ? formatBytes(totalSize) : '?';
+    const shardLabel = `${group.files.length} shards`;
+    const label = rawQuant
+      ? `${normalizedQuant.toUpperCase()} — ${sizeStr} (${shardLabel})`
+      : `${baseName} — ${sizeStr} (${shardLabel})`;
+
+    variants.push({
+      fileName: firstShard,
+      size: totalSize,
+      rawQuantization: rawQuant,
+      normalizedQuantization: normalizedQuant,
+      supportStatus,
+      supportReason,
+      label,
+      recommended: false, // set below
+      shardFiles: group.files,
     });
   }
 
@@ -458,15 +531,21 @@ export function resolveSearchCandidate(
   variant: GgufVariant,
 ): ResolvedSearchCandidate | null {
   // Defensive checks
-  // Only block split GGUF (structurally incompatible); size warnings are advisory
-  if (variant.supportReason === 'Split GGUF not supported') return null;
   if (!variant.fileName.endsWith('.gguf')) return null;
   if (result.engine !== 'wllama' && !result.tags.includes('gguf')) return null;
 
-  const manifest: LocalModelManifest = {
-    kind: 'single-file',
-    entrypoint: variant.fileName,
-  };
+  // Build manifest: sharded or single-file
+  const manifest: LocalModelManifest = variant.shardFiles && variant.shardFiles.length > 1
+    ? {
+        kind: 'gguf-sharded',
+        entrypoint: variant.shardFiles[0],
+        shards: variant.shardFiles,
+        totalSize: variant.size,
+      }
+    : {
+        kind: 'single-file',
+        entrypoint: variant.fileName,
+      };
 
   const tasks = guessTasksFromRepo(result.repoId, result.tags, variant.fileName);
 
@@ -490,7 +569,10 @@ export function resolveSearchCandidate(
     engine: 'wllama',
     label,
     manifest,
-    downloadFiles: [variant.fileName],
+    // For sharded models, downloadFiles contains all shards; for single-file, just the one file.
+    downloadFiles: variant.shardFiles && variant.shardFiles.length > 1
+      ? variant.shardFiles
+      : [variant.fileName],
     estimatedSize: variant.size,
     tasks,
     selectedFile: variant.fileName,

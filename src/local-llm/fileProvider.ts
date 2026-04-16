@@ -13,6 +13,7 @@
  */
 
 import type { LocalModelSource, LocalModelManifest } from './types';
+import { getManifestFiles } from './ggufShardUtils';
 
 // ---------------------------------------------------------------------------
 // ModelFileProvider interface
@@ -35,6 +36,18 @@ export interface ModelFileProvider {
    * Throws if manifest is multi-file.
    */
   getFile(): Promise<File | Blob>;
+
+  /**
+   * For wllama (single-file or gguf-sharded manifest): return all GGUF blobs in order.
+   *
+   * - single-file  → [blob]   (length-1 array, same semantics as getFile())
+   * - gguf-sharded → [shard1, shard2, …]  in shard-index order
+   * - multi-file   → throws   (use getCustomCache()/getFileEntries() instead)
+   *
+   * Callers should prefer this over getFile() so that sharded models work
+   * without separate code paths.
+   */
+  getGgufFiles(): Promise<(File | Blob)[]>;
 
   /**
    * For Transformers.js (multi-file manifest): return a Cache API-compatible
@@ -90,10 +103,7 @@ export class EphemeralFileProvider implements ModelFileProvider {
   ) {}
 
   async isAvailable(): Promise<boolean> {
-    if (this.manifest.kind === 'single-file') {
-      return this.files.has(this.manifest.entrypoint);
-    }
-    return this.manifest.requiredFiles.every((f) => this.files.has(f));
+    return getManifestFiles(this.manifest).every((f) => this.files.has(f));
   }
 
   async getFile(): Promise<File | Blob> {
@@ -105,6 +115,22 @@ export class EphemeralFileProvider implements ModelFileProvider {
       throw new Error(`File not found: ${this.manifest.entrypoint}`);
     }
     return file;
+  }
+
+  async getGgufFiles(): Promise<(File | Blob)[]> {
+    if (this.manifest.kind === 'multi-file') {
+      throw new Error('getGgufFiles() is not available for multi-file (Transformers.js) manifests');
+    }
+    const fileNames = this.manifest.kind === 'gguf-sharded'
+      ? this.manifest.shards
+      : [this.manifest.entrypoint];
+    const result: (File | Blob)[] = [];
+    for (const name of fileNames) {
+      const blob = this.files.get(name);
+      if (!blob) throw new Error(`GGUF file not found in provider: ${name}`);
+      result.push(blob);
+    }
+    return result;
   }
 
   async getFileEntries(): Promise<[string, Blob][]> {

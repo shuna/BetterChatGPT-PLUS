@@ -111,6 +111,13 @@ function summarizePayload(payload: Record<string, unknown>): string {
         size: value.size,
         type: value.type,
       };
+    } else if (key === 'files' && Array.isArray(value) && value.every((v) => v instanceof Blob)) {
+      const blobs = value as Blob[];
+      clone[key] = {
+        count: blobs.length,
+        totalSize: blobs.reduce((s, b) => s + b.size, 0),
+        names: blobs.map((b) => (b instanceof File ? b.name : '(blob)')),
+      };
     } else if (key === 'fileEntries' && Array.isArray(value)) {
       clone[key] = value.map((entry) => {
         if (!entry || typeof entry !== 'object') return entry;
@@ -314,16 +321,22 @@ export class LocalModelRuntime {
     };
 
     try {
-      let wllamaFile: File | Blob | null = null;
+      let wllamaFiles: (File | Blob)[] = [];
       let preferMemory64 = false;
       let allowWebGPU = false;
       if (def.engine === 'wllama') {
-        wllamaFile = await provider.getFile();
+        wllamaFiles = await provider.getGgufFiles();
         // 32-bit compat builds are more broadly stable. Memory64 is only
-        // required once a model can exceed 32-bit address/file-size limits.
-        preferMemory64 = wllamaFile.size >= 2 * 1024 * 1024 * 1024;
+        // required once the total model size can exceed 32-bit address/file-size limits.
+        // NOTE: preferMemory64 selects the Memory64 WASM build, but does NOT guarantee
+        // load success — the WASM heap must still accommodate the total model size.
+        const totalSize = wllamaFiles.reduce((s, f) => s + f.size, 0);
+        preferMemory64 = totalSize >= 2 * 1024 * 1024 * 1024;
         const webGpuSetting = this.webGpuEnabled;
-        allowWebGPU = !options.forceDisableWebGPU && webGpuSetting !== false;
+        // Large (>2 GiB) GGUF files require Memory64. Our current WebGPU
+        // Memory64 runtime path is still unstable, so keep those loads on the
+        // rebuilt CPU WASM path instead of failing once and retrying.
+        allowWebGPU = !preferMemory64 && !options.forceDisableWebGPU && webGpuSetting !== false;
       }
 
       // Init worker — pass flags so the worker can select the right WASM.
@@ -347,13 +360,14 @@ export class LocalModelRuntime {
 
       // Load model — engine-specific
       if (def.engine === 'wllama') {
-        const file = wllamaFile!;
-        console.info('[LocalModelRuntime] loading model file:', (file as File).name ?? '(blob)', 'size:', file.size);
+        const totalFileSize = wllamaFiles.reduce((s, f) => s + f.size, 0);
+        const shardInfo = wllamaFiles.length > 1 ? ` (${wllamaFiles.length} shards)` : '';
+        console.info('[LocalModelRuntime] loading model file:', (wllamaFiles[0] as File).name ?? '(blob)', shardInfo, 'totalSize:', totalFileSize);
         // Look up expected context length from catalog/store so the worker
         // allocates the right amount of KV cache instead of a fixed default.
         const expectedCtx = this.lookupExpectedContextLength(def.id);
         const result = await this.sendRequest(def.id, {
-          type: 'load', file, ...(expectedCtx ? { expectedContextLength: expectedCtx } : {}),
+          type: 'load', files: wllamaFiles, ...(expectedCtx ? { expectedContextLength: expectedCtx } : {}),
         }) as {
           contextLength?: number;
           nativeContextLength?: number;

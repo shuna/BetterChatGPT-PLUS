@@ -200,8 +200,13 @@ async function getWasmPaths(useLowbitQ = false, preferMemory64 = false, allowWeb
   const multiThread = canUseMultiThread();
   const memory64Available = isMemory64Supported();
   const mem64 = preferMemory64 && memory64Available;
-
-  const webgpu = await canUseWebGPU(allowWebGPU);
+  let webgpu = false;
+  if (mem64 && allowWebGPU) {
+    currentWebGpuSelectionReason = 'memory64-webgpu-temporarily-disabled';
+    console.info('[wllamaWorker] WebGPU disabled for Memory64 model load; using CPU WASM for stability');
+  } else {
+    webgpu = await canUseWebGPU(allowWebGPU);
+  }
 
   const singleThreadFile = webgpu
     ? (mem64 ? 'single-thread-webgpu.wasm' : 'single-thread-webgpu-compat.wasm')
@@ -228,7 +233,7 @@ async function getWasmPaths(useLowbitQ = false, preferMemory64 = false, allowWeb
 
 interface InitRequest { id: number; type: 'init'; isLowbitQ?: boolean; preferMemory64?: boolean; allowWebGPU?: boolean }
 interface PreflightLoadRuntimeRequest { id: number; type: 'preflightLoadRuntime' }
-interface LoadRequest { id: number; type: 'load'; file: File; expectedContextLength?: number }
+interface LoadRequest { id: number; type: 'load'; files: File[]; expectedContextLength?: number }
 interface GenerateRequest {
   id: number;
   type: 'generate';
@@ -536,22 +541,29 @@ async function handleLoad(req: LoadRequest) {
   currentLoadActivityAt = loadStartTime;
 
   try {
-    const fileSizeMB = (req.file.size / 1024 / 1024).toFixed(1);
-    console.info('[wllamaWorker] handleLoad start, file:', req.file.name, 'size:', req.file.size);
+    const firstFile = req.files[0];
+    const shardCount = req.files.length;
+    const totalSize = req.files.reduce((s, f) => s + f.size, 0);
+    const totalSizeMB = (totalSize / 1024 / 1024).toFixed(1);
+    const fileLabel = shardCount > 1
+      ? `${firstFile.name} (${shardCount} shards, ${totalSizeMB} MB total)`
+      : `${firstFile.name} (${totalSizeMB} MB)`;
+    console.info('[wllamaWorker] handleLoad start, file:', fileLabel);
     postDiagnostic('worker-load-start', {
-      fileName: req.file.name,
-      fileSize: req.file.size,
+      fileName: firstFile.name,
+      fileSize: totalSize,
+      shardCount,
     });
-    postLoadProgress('validating', 0, `GGUFヘッダを検証中 (${fileSizeMB} MB)`);
+    postLoadProgress('validating', 0, `GGUFヘッダを検証中 (${totalSizeMB} MB${shardCount > 1 ? `, ${shardCount} shards` : ''})`);
 
-    // Validate GGUF magic header before passing to wllama
-    if (req.file.size < 4) {
+    // Validate GGUF magic header on the first file before passing to wllama
+    if (firstFile.size < 4) {
       respondError(req.id,
-        `GGUFファイルの検証に失敗しました: ファイルサイズが${req.file.size}バイトしかありません（最低4バイト必要）。` +
+        `GGUFファイルの検証に失敗しました: ファイルサイズが${firstFile.size}バイトしかありません（最低4バイト必要）。` +
         'ダウンロードが中断された可能性があります。モデルを削除して再ダウンロードしてください。');
       return;
     }
-    const magic = new Uint8Array(await req.file.slice(0, 4).arrayBuffer());
+    const magic = new Uint8Array(await firstFile.slice(0, 4).arrayBuffer());
     const magicHex = Array.from(magic).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ');
     console.info('[wllamaWorker] GGUF magic bytes:', magicHex);
     if (magic[0] !== 0x47 || magic[1] !== 0x47 || magic[2] !== 0x55 || magic[3] !== 0x46) {
@@ -564,7 +576,7 @@ async function handleLoad(req: LoadRequest) {
     postLoadProgress('wasm-init', 10, 'WASM ランタイムを初期化中');
     console.info('[wllamaWorker] GGUF magic valid, calling wllama.loadModel...');
 
-    postLoadProgress('model-load', 20, `モデルをロード中 (${fileSizeMB} MB)`);
+    postLoadProgress('model-load', 20, `モデルをロード中 (${totalSizeMB} MB${shardCount > 1 ? `, ${shardCount} shards` : ''})`);
 
     // Use expected context length from catalog/store if available,
     // otherwise fall back to a safe default. Cap at MAX_BROWSER_CTX for memory safety.
@@ -609,8 +621,9 @@ async function handleLoad(req: LoadRequest) {
     }, LOAD_HEARTBEAT_MS);
 
     try {
+      // wllama.loadModel accepts multiple Blobs for split GGUF; internally calls sortFileByShard
       await Promise.race([
-        wllama.loadModel([req.file], loadOptions),
+        wllama.loadModel(req.files, loadOptions),
         noProgressPromise,
       ]);
     } finally {
@@ -695,7 +708,11 @@ async function handleLoad(req: LoadRequest) {
     const stackDetail = `\n\n[Stack Trace]\n${stack}`;
 
     // File size context — always include in error message for diagnostics.
-    const fileSizeDetail = `\n\n[ファイル情報] name=${req.file.name} size=${req.file.size} bytes (${(req.file.size / 1024 / 1024).toFixed(2)} MB)`;
+    const firstFile = req.files[0];
+    const totalBytes = req.files.reduce((s, f) => s + f.size, 0);
+    const fileSizeDetail = req.files.length > 1
+      ? `\n\n[ファイル情報] name=${firstFile.name} (${req.files.length} shards) totalSize=${totalBytes} bytes (${(totalBytes / 1024 / 1024).toFixed(2)} MB)`
+      : `\n\n[ファイル情報] name=${firstFile.name} size=${totalBytes} bytes (${(totalBytes / 1024 / 1024).toFixed(2)} MB)`;
 
     if (msg.includes('Invalid magic number')) {
       const hasUnsupportedType = recentNativeLogs.some(l => l.includes('invalid ggml type'));

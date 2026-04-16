@@ -56,7 +56,24 @@ export interface MultiFileManifest {
   entrypoint: string;
 }
 
-export type LocalModelManifest = SingleFileManifest | MultiFileManifest;
+/**
+ * wllama: split GGUF model across multiple shards (e.g. model-00001-of-00005.gguf).
+ *
+ * All shards must be present and are loaded together by wllama.loadModel(blobs[]).
+ * Note: Phase 1 infrastructure only — shards still occupy WASM heap in full.
+ * WASMヒープ総量の削減はPhase 2 (OPFS-backed virtual FS) で対処する。
+ */
+export interface GgufShardedManifest {
+  kind: 'gguf-sharded';
+  /** 先頭シャードのファイル名 e.g. "model-00001-of-00005.gguf" */
+  entrypoint: string;
+  /** 全シャードファイル名（順序保証済み、entrypoint含む） */
+  shards: string[];
+  /** 全シャードの合計バイト数 */
+  totalSize: number;
+}
+
+export type LocalModelManifest = SingleFileManifest | MultiFileManifest | GgufShardedManifest;
 
 // ---------------------------------------------------------------------------
 // Model definition (persisted in store)
@@ -226,6 +243,11 @@ export interface GgufVariant {
   label: string;
   /** Whether this is the auto-recommended pick */
   recommended: boolean;
+  /**
+   * For split GGUF models: all shard filenames in order (including fileName as first).
+   * Undefined for single-file models.
+   */
+  shardFiles?: string[];
 }
 
 export interface GgufRepoResolution {
