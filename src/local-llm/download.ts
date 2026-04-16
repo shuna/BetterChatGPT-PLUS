@@ -10,7 +10,7 @@
 
 import type { CatalogModel } from './catalog';
 import {
-  writeTempChunk,
+  openDownloadWriter,
   commitTempFile,
   removeTempFile,
   getTempFileSize,
@@ -29,6 +29,7 @@ export interface DownloadProgress {
   bytesTotal: number;
   fileIndex: number;
   fileCount: number;
+  bytesPerSecond: number;
 }
 
 export interface DownloadCallbacks {
@@ -206,17 +207,39 @@ export async function downloadModelFiles(
       }
 
       let fileDownloaded = existingSize;
-      // For resume: all chunks append. For fresh: first creates, rest append.
-      let isFirstChunk = !isResuming;
+      const writer = await openDownloadWriter(modelId, fileName, isResuming ? existingSize : 0);
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      let lastProgressTime = Date.now();
+      let lastProgressBytes = existingSize;
+      let lastBytesPerSecond = 0;
 
-        await writeTempChunk(modelId, fileName, value, !isFirstChunk);
-        isFirstChunk = false;
-        fileDownloaded += value.byteLength;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
+          await writer.write(value);
+          fileDownloaded += value.byteLength;
+
+          const now = Date.now();
+          const elapsed = now - lastProgressTime;
+          if (elapsed >= 500) {
+            lastBytesPerSecond = ((fileDownloaded - lastProgressBytes) / elapsed) * 1000;
+            lastProgressTime = now;
+            lastProgressBytes = fileDownloaded;
+            callbacks.onProgress({
+              modelId,
+              fileName,
+              bytesDownloaded: fileDownloaded,
+              bytesTotal: expectedTotal || fileDownloaded,
+              fileIndex: i,
+              fileCount,
+              bytesPerSecond: lastBytesPerSecond,
+            });
+          }
+        }
+
+        // Final progress to ensure 100% is reported
         callbacks.onProgress({
           modelId,
           fileName,
@@ -224,7 +247,13 @@ export async function downloadModelFiles(
           bytesTotal: expectedTotal || fileDownloaded,
           fileIndex: i,
           fileCount,
+          bytesPerSecond: lastBytesPerSecond,
         });
+
+        await writer.close();
+      } catch (writeErr) {
+        await writer.abort();
+        throw writeErr;
       }
 
       // Integrity: check total matches if we know expected
