@@ -57,11 +57,45 @@ const SwToggle = () => {
   );
 };
 
+const formatLogTime = (timestamp: number) => {
+  const d = new Date(timestamp);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}.${String(d.getMilliseconds()).padStart(3, '0')}`;
+};
+
+const formatLogLine = (line: {
+  timestamp: number;
+  source: string;
+  level: string;
+  message: string;
+}) => `${formatLogTime(line.timestamp)} [${line.source}] ${line.level} ${line.message}`;
+
+const logLevelClass = (level: string) => {
+  if (level === 'error') return 'text-red-600 dark:text-red-300';
+  if (level === 'warn') return 'text-amber-600 dark:text-amber-300';
+  if (level === 'debug') return 'text-gray-500 dark:text-gray-400';
+  return 'text-gray-700 dark:text-gray-200';
+};
+
 const DebugPanel = () => {
   const { t } = useTranslation();
   const showDebugPanel = useStore((state) => state.showDebugPanel);
   const entries = useDebugStore((state) => state.entries);
+  const logs = useDebugStore((state) => state.logs);
+  const clearLogs = useDebugStore((state) => state.clearLogs);
   const removeEntry = useDebugStore((state) => state.remove);
+  const logScrollRef = React.useRef<HTMLDivElement | null>(null);
+  const [copyState, setCopyState] = React.useState<'idle' | 'copied' | 'error'>('idle');
+
+  React.useEffect(() => {
+    const el = logScrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [logs.length]);
+
+  React.useEffect(() => {
+    if (copyState === 'idle') return;
+    const timer = window.setTimeout(() => setCopyState('idle'), 1600);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
 
   if (!showDebugPanel) return null;
 
@@ -71,11 +105,41 @@ const DebugPanel = () => {
     return b.updatedAt - a.updatedAt;
   });
 
+  const copyLogs = async () => {
+    if (logs.length === 0) return;
+    try {
+      await navigator.clipboard.writeText(logs.map(formatLogLine).join('\n'));
+      setCopyState('copied');
+    } catch (error) {
+      console.warn('Failed to copy debug logs', error);
+      setCopyState('error');
+    }
+  };
+
   return (
     <div className='flex-shrink-0 w-full min-w-0 overflow-hidden border-t border-gray-300 dark:border-gray-600 px-2 py-1.5'>
       <div className='text-[10px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1 flex items-center justify-between'>
         <span>{t('debugPanel')}</span>
-        <SwToggle />
+        <div className='flex items-center gap-1'>
+          <button
+            type='button'
+            onClick={copyLogs}
+            disabled={logs.length === 0}
+            className='text-[10px] px-1.5 py-0.5 rounded border border-gray-400 dark:border-gray-500 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-default'
+            title='Copy runtime logs'
+          >
+            {copyState === 'copied' ? 'Copied' : copyState === 'error' ? 'Copy failed' : 'Copy'}
+          </button>
+          <button
+            type='button'
+            onClick={clearLogs}
+            className='text-[10px] px-1.5 py-0.5 rounded border border-gray-400 dark:border-gray-500 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700'
+            title='Clear runtime logs and completed tasks'
+          >
+            Clear
+          </button>
+          <SwToggle />
+        </div>
       </div>
       <div className='max-h-32 overflow-y-auto space-y-0.5'>
         {sorted.length === 0 ? (
@@ -86,10 +150,10 @@ const DebugPanel = () => {
           sorted.map((entry) => (
             <div
               key={entry.id}
-              className='flex items-center gap-1.5 min-w-0 text-[11px] text-gray-700 dark:text-gray-300 leading-tight'
+              className='flex items-start gap-1.5 min-w-0 text-[11px] text-gray-700 dark:text-gray-300 leading-tight'
             >
               <StatusIndicator status={entry.status} />
-              <span className='block truncate min-w-0 flex-1'>
+              <span className='block min-w-0 flex-1 whitespace-pre-wrap break-words'>
                 <span className='font-medium'>{entry.label}</span>
                 {entry.detail && (
                   <span className='text-gray-500 dark:text-gray-400'>
@@ -118,6 +182,23 @@ const DebugPanel = () => {
               >
                 ×
               </button>
+            </div>
+          ))
+        )}
+      </div>
+      <div
+        ref={logScrollRef}
+        className='mt-1 max-h-48 overflow-y-auto rounded border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/60 px-1.5 py-1 font-mono text-[10px] leading-snug'
+      >
+        {logs.length === 0 ? (
+          <div className='text-gray-400 dark:text-gray-500 italic'>no runtime logs</div>
+        ) : (
+          logs.map((line) => (
+            <div key={line.id} className='whitespace-pre-wrap break-words'>
+              <span className='text-gray-400 dark:text-gray-500'>{formatLogTime(line.timestamp)}</span>{' '}
+              <span className='text-gray-500 dark:text-gray-400'>[{line.source}]</span>{' '}
+              <span className={logLevelClass(line.level)}>{line.level}</span>{' '}
+              <span className='text-gray-800 dark:text-gray-100'>{line.message}</span>
             </div>
           ))
         )}

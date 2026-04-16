@@ -11,6 +11,7 @@ import {
   writeChunkToStore,
   finalizeStreamingNode,
 } from './submitRuntime';
+import { buildLocalPromptFromContext } from './submitHelpers';
 import { clearStreamingBuffersForTest } from '@utils/streamingBuffer';
 import { useStreamEndStatusStore } from '@store/stream-end-status-store';
 import * as swBridge from '@utils/swBridge';
@@ -894,5 +895,46 @@ describe('executeLocalSubmit abort handling', () => {
 
     expect(removeListenerSpy).toHaveBeenCalledWith('abort', expect.any(Function));
     expect(mockAbort).not.toHaveBeenCalled();
+  });
+
+  it('builds the local prompt from the full prepared context', async () => {
+    mockState = makeLocalMockState();
+    mockGenerateImpl = async () => 'Done';
+
+    const abortController = createSubmitAbortController('sess-local-context');
+    const messages = [
+      { role: 'system', content: [{ type: 'text', text: 'be helpful' }] },
+      { role: 'user', content: [{ type: 'text', text: 'hi' }] },
+    ] as any;
+
+    await executeLocalSubmit({
+      sessionId: 'sess-local-context',
+      chatId: 'chat-local',
+      chatIndex: 0,
+      messageIndex: 1,
+      targetNodeId: 'node-assistant',
+      messages,
+      config: {
+        model: 'local-model',
+        max_tokens: 256,
+        temperature: 0.7,
+        presence_penalty: 0,
+        top_p: 1,
+        frequency_penalty: 0,
+        systemPrompt: 'be helpful',
+      } as any,
+      mode: 'append',
+      abortController,
+      t: (key) => key,
+    });
+
+    expect(buildLocalPromptFromContext).toHaveBeenCalledWith(
+      messages,
+      'append',
+      messages.length,
+      'local-model',
+      undefined,
+      'be helpful',
+    );
   });
 });

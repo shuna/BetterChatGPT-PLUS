@@ -601,9 +601,12 @@ export const executeLocalSubmit = async ({
   const engine = localModelRuntime.getWllamaEngine(config.model);
   if (!engine) throw new Error('Local model engine not available');
 
+  // `messages` is already the token-limited submit context from useSubmit.
+  // Reusing the original chat messageIndex here would slice that context again
+  // and can drop the latest user turn on local generation.
   const prompt = buildLocalPromptFromContext(
-    messages, mode, messageIndex, config.model,
-    chatIndex, config.systemPrompt,
+    messages, mode, messages.length, config.model,
+    undefined, config.systemPrompt,
   );
 
   // Initialize streaming buffer for the target node (same pattern as handleStreamEvent)

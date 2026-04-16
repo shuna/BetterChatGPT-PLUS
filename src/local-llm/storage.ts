@@ -46,6 +46,7 @@ export interface SavedModelMeta {
   storageState: 'none' | 'downloading' | 'saved' | 'partial';
   storedBytes: number;
   storedFiles: string[];
+  fileHashes?: Record<string, string>;
   lastVerifiedAt?: number;
   lastError?: string;
   downloadRevision?: string;
@@ -74,6 +75,14 @@ export async function hasGgufMagic(file: File | Blob): Promise<boolean> {
     buf[2] === GGUF_MAGIC[2] &&
     buf[3] === GGUF_MAGIC[3]
   );
+}
+
+export async function sha256Blob(blob: Blob): Promise<string> {
+  const buffer = await blob.arrayBuffer();
+  const hash = await crypto.subtle.digest('SHA-256', buffer);
+  return Array.from(new Uint8Array(hash))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('');
 }
 
 async function opfsRoot(): Promise<FileSystemDirectoryHandle> {

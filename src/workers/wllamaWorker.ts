@@ -22,6 +22,7 @@ if (typeof document === 'undefined') {
 }
 
 import { Wllama, type AssetsPathConfig } from '../vendor/wllama';
+import { buildBackendSummary } from './wllamaBackendSummary';
 
 // ---------------------------------------------------------------------------
 // State
@@ -30,6 +31,29 @@ import { Wllama, type AssetsPathConfig } from '../vendor/wllama';
 let wllama: Wllama | null = null;
 let currentAbortController: AbortController | null = null;
 let currentWasmUsesWebGPU = false;
+let currentWebGpuSelectionReason = 'not-evaluated';
+let currentFileCopyPercent = 0;
+let currentNativeLoadPercent = 0;
+let currentLoadActivityAt = 0;
+let currentLoadSawCpuLayer = false;
+let currentLoadSawGpuLayer = false;
+let currentBackendCount: number | null = null;
+let currentObservedGpuDevices = new Set<string>();
+let currentFlashAttnAutoDisabled = false;
+let currentFlashAttnCpuFallback = false;
+
+const LOAD_HEARTBEAT_MS = 5_000;
+const LOAD_NO_PROGRESS_TIMEOUT_MS = 30_000;
+const WLLAMA_WASM_ASSET_VERSION = '20260416-webgpu-devices-4';
+
+type MinimalGpuDevice = {
+  destroy: () => void;
+};
+
+type MinimalGpuAdapter = {
+  features: Set<string>;
+  requestDevice: (descriptor?: { requiredFeatures?: string[] }) => Promise<MinimalGpuDevice>;
+};
 
 // ---------------------------------------------------------------------------
 // WASM path resolution
@@ -96,14 +120,53 @@ function hasWebGPUApi(): boolean {
   }
 }
 
-async function canUseWebGPU(): Promise<boolean> {
-  if (!hasWebGPUApi()) return false;
+function hasWebAssemblyJspi(): boolean {
+  const wasm = WebAssembly as unknown as {
+    Suspending?: unknown;
+    promising?: unknown;
+  };
+  return typeof wasm.Suspending === 'function' && typeof wasm.promising === 'function';
+}
+
+async function canUseWebGPU(allowWebGPU: boolean): Promise<boolean> {
+  if (!allowWebGPU) {
+    currentWebGpuSelectionReason = 'disabled-by-runtime-setting';
+    console.info('[wllamaWorker] WebGPU disabled by runtime setting');
+    return false;
+  }
+  if (!hasWebGPUApi()) {
+    currentWebGpuSelectionReason = 'navigator-gpu-unavailable';
+    console.info('[wllamaWorker] WebGPU API is not available in this worker environment');
+    return false;
+  }
+  if (!hasWebAssemblyJspi()) {
+    currentWebGpuSelectionReason = 'webassembly-jspi-unavailable';
+    console.warn('[wllamaWorker] WebGPU WASM requires JSPI, but WebAssembly.Suspending/promising is not available');
+    return false;
+  }
   try {
     const adapter = await (navigator as Navigator & {
-      gpu: { requestAdapter: () => Promise<{ features: Set<string> } | null> };
+      gpu: {
+        requestAdapter: () => Promise<MinimalGpuAdapter | null>;
+      };
     }).gpu.requestAdapter();
-    return adapter?.features.has('shader-f16') ?? false;
-  } catch {
+    if (!adapter) {
+      currentWebGpuSelectionReason = 'request-adapter-null';
+      console.info('[wllamaWorker] WebGPU requestAdapter returned null');
+      return false;
+    }
+    if (!adapter.features.has('shader-f16')) {
+      currentWebGpuSelectionReason = 'shader-f16-unavailable';
+      console.info('[wllamaWorker] WebGPU adapter does not expose shader-f16');
+      return false;
+    }
+    const device = await adapter.requestDevice({ requiredFeatures: ['shader-f16'] });
+    device.destroy();
+    currentWebGpuSelectionReason = 'selected';
+    return true;
+  } catch (e) {
+    currentWebGpuSelectionReason = `device-preflight-failed:${(e as Error).message}`;
+    console.warn('[wllamaWorker] WebGPU device preflight failed:', (e as Error).message);
     return false;
   }
 }
@@ -113,8 +176,8 @@ async function canUseWebGPU(): Promise<boolean> {
  *
  * - Only includes multi-thread WASM when the environment supports it,
  *   avoiding unnecessary downloads on single-thread-only browsers.
- * - When the browser does not support Memory64, uses *-compat.wasm binaries
- *   compiled without -sMEMORY64=1 (32-bit addressing, max ~2 GB models).
+ * - Uses *-compat.wasm binaries unless the caller explicitly prefers Memory64
+ *   and the browser supports it.
  * - The project always uses the custom-built WASM from vendor/wllama/.
  * - Rebuilding vendor/wllama/*.wasm is therefore required for any runtime changes.
  */
@@ -127,37 +190,35 @@ async function wasmAssetExists(url: string): Promise<boolean> {
   }
 }
 
-async function getWasmPaths(useLowbitQ = false) {
+function versionedWasmUrl(fileName: string): string {
+  const url = new URL(`../../vendor/wllama/${fileName}`, import.meta.url);
+  url.searchParams.set('v', WLLAMA_WASM_ASSET_VERSION);
+  return url.href;
+}
+
+async function getWasmPaths(useLowbitQ = false, preferMemory64 = false, allowWebGPU = false) {
   const multiThread = canUseMultiThread();
-  const mem64 = isMemory64Supported();
+  const memory64Available = isMemory64Supported();
+  const mem64 = preferMemory64 && memory64Available;
 
-  // WebGPU WASM binaries (single-thread-webgpu.wasm etc.) require a dedicated
-  // Emscripten JS glue with 53 import functions (vs 21 for non-WebGPU).
-  // The vendored wllama library currently embeds only the non-WebGPU JS glue
-  // (WLLAMA_SINGLE_THREAD_CODE / WLLAMA_MULTI_THREAD_CODE), so loading a
-  // WebGPU WASM will always fail with "Import #0 'a': module is not an object
-  // or function".  Disable WebGPU WASM selection until the library is updated
-  // to embed WebGPU-specific glue variants.
-  const webgpu = false;
+  const webgpu = await canUseWebGPU(allowWebGPU);
 
-  const singleThreadFile = mem64 ? 'single-thread.wasm' : 'single-thread-compat.wasm';
-  const multiThreadFile = mem64 ? 'multi-thread.wasm' : 'multi-thread-compat.wasm';
+  const singleThreadFile = webgpu
+    ? (mem64 ? 'single-thread-webgpu.wasm' : 'single-thread-webgpu-compat.wasm')
+    : (mem64 ? 'single-thread.wasm' : 'single-thread-compat.wasm');
+  const multiThreadFile = webgpu
+    ? (mem64 ? 'multi-thread-webgpu.wasm' : 'multi-thread-webgpu-compat.wasm')
+    : (mem64 ? 'multi-thread.wasm' : 'multi-thread-compat.wasm');
   currentWasmUsesWebGPU = webgpu;
 
   const paths: AssetsPathConfig = {
-    'single-thread/wllama.wasm': new URL(
-      `../../vendor/wllama/${singleThreadFile}`,
-      import.meta.url,
-    ).href,
+    'single-thread/wllama.wasm': versionedWasmUrl(singleThreadFile),
   };
   if (multiThread) {
-    paths['multi-thread/wllama.wasm'] = new URL(
-      `../../vendor/wllama/${multiThreadFile}`,
-      import.meta.url,
-    ).href;
+    paths['multi-thread/wllama.wasm'] = versionedWasmUrl(multiThreadFile);
   }
   console.info('[wllamaWorker] Using vendored WASM paths:', paths,
-    'isLowbitQ:', useLowbitQ, 'memory64:', mem64, 'multiThread:', multiThread, 'webgpu:', webgpu);
+    'isLowbitQ:', useLowbitQ, 'memory64:', mem64, 'memory64Available:', memory64Available, 'multiThread:', multiThread, 'webgpu:', webgpu);
   return paths;
 }
 
@@ -165,7 +226,8 @@ async function getWasmPaths(useLowbitQ = false) {
 // Message types
 // ---------------------------------------------------------------------------
 
-interface InitRequest { id: number; type: 'init'; isLowbitQ?: boolean }
+interface InitRequest { id: number; type: 'init'; isLowbitQ?: boolean; preferMemory64?: boolean; allowWebGPU?: boolean }
+interface PreflightLoadRuntimeRequest { id: number; type: 'preflightLoadRuntime' }
 interface LoadRequest { id: number; type: 'load'; file: File; expectedContextLength?: number }
 interface GenerateRequest {
   id: number;
@@ -178,7 +240,7 @@ interface GenerateRequest {
 interface AbortRequest { id: number; type: 'abort' }
 interface UnloadRequest { id: number; type: 'unload' }
 
-type WorkerRequest = InitRequest | LoadRequest | GenerateRequest | AbortRequest | UnloadRequest;
+type WorkerRequest = InitRequest | PreflightLoadRuntimeRequest | LoadRequest | GenerateRequest | AbortRequest | UnloadRequest;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -200,10 +262,18 @@ function postLoadProgress(phase: string, percent: number, detail: string) {
   self.postMessage({ id: 0, type: '__load_progress', phase, percent, detail });
 }
 
-/** Forward logs to main thread since worker console is not visible in preview tools */
-function forwardLog(level: string, ...args: unknown[]) {
-  const text = args.map(a => {
+function formatLogArgs(args: unknown[]) {
+  return args.map(a => {
     if (typeof a === 'object' && a !== null) {
+      if (typeof Event !== 'undefined' && a instanceof Event) {
+        const ev = a as ErrorEvent;
+        return [
+          `${a.constructor.name}: type=${a.type}`,
+          ev.message ? `message=${ev.message}` : '',
+          ev.filename ? `file=${ev.filename}:${ev.lineno}:${ev.colno}` : '',
+          ev.error instanceof Error ? `error=${ev.error.name}: ${ev.error.message}\n${ev.error.stack ?? ''}` : '',
+        ].filter(Boolean).join(' ');
+      }
       // ErrorEvent has .message/.filename/.lineno but JSON.stringify can't capture them
       const ev = a as Record<string, unknown>;
       if ('message' in ev && 'filename' in ev) {
@@ -217,13 +287,174 @@ function forwardLog(level: string, ...args: unknown[]) {
     }
     return String(a);
   }).join(' ');
-  self.postMessage({ id: 0, type: '__log', level, text: `[wllama-native] ${text}` });
+}
+
+/** Forward logs to main thread since worker console is not visible in preview tools */
+function postLog(level: string, source: string, ...args: unknown[]) {
+  const text = formatLogArgs(args);
+  self.postMessage({ id: 0, type: '__log', level, text: `${source}: ${text}` });
   // Collect error/warn logs for inclusion in user-facing error messages
   if (level === 'error' || level === 'warn') {
-    recentNativeLogs.push(text);
-    if (recentNativeLogs.length > 20) recentNativeLogs.shift();
+    recentNativeLogs.push(`${source}: ${text}`);
+    if (recentNativeLogs.length > 100) recentNativeLogs.shift();
   }
 }
+
+function shouldForwardNativeLog(level: string, text: string, isFirstCpuLayer: boolean, sawGpuLayer: boolean): boolean {
+  if (level === 'warn' || level === 'error') return true;
+  if (text.includes('wllama-')) return true;
+  if (isFirstCpuLayer || sawGpuLayer) return true;
+  if (text.includes('backend_ptrs.size()')) return true;
+  if (text.includes('CPU KV buffer size') || text.includes('CPU compute buffer size')) return true;
+  return false;
+}
+
+function forwardLog(level: string, ...args: unknown[]) {
+  const text = formatLogArgs(args);
+  const fileStageMatch = text.match(/(?:^|\s)wllama-file-stage:([a-z0-9_.-]+)(?:\s|$)/);
+  if (fileStageMatch) {
+    currentLoadActivityAt = performance.now();
+    postDiagnostic('file-load-stage', { stage: fileStageMatch[1], text });
+  }
+
+  const fileProgressMatch = text.match(/(?:^|\s)wllama-file-progress:(\d{1,3})(?:\s|$)/);
+  if (fileProgressMatch) {
+    const filePercent = Math.max(0, Math.min(100, Number(fileProgressMatch[1])));
+    if (filePercent >= currentFileCopyPercent) {
+      currentLoadActivityAt = performance.now();
+      currentFileCopyPercent = filePercent;
+      postLoadProgress(
+        'model-file-copy',
+        Math.round(20 + filePercent * 0.25),
+        `モデルデータを WASM メモリへ転送中 (${filePercent}%)`,
+      );
+    }
+  }
+
+  const stageMatch = text.match(/(?:^|\s)wllama-load-stage:([a-z0-9_.-]+)(?:\s|$)/);
+  if (stageMatch) {
+    currentLoadActivityAt = performance.now();
+    postDiagnostic('native-load-stage', { stage: stageMatch[1], text });
+  }
+
+  const progressMatch = text.match(/(?:^|\s)wllama-load-progress:(\d{1,3})(?:\s|$)/);
+  if (progressMatch) {
+    const nativePercent = Math.max(0, Math.min(100, Number(progressMatch[1])));
+    if (nativePercent >= currentNativeLoadPercent) {
+      currentLoadActivityAt = performance.now();
+      currentNativeLoadPercent = nativePercent;
+      postLoadProgress(
+        'model-load-native',
+        Math.round(45 + nativePercent * 0.5),
+        `モデルデータをロード中 (${nativePercent}%)`,
+      );
+    }
+  }
+
+  const backendSummaryMatch = text.match(/wllama-backend-summary:\s+reg_count=(\d+)\s+dev_count=(\d+)/);
+  if (backendSummaryMatch) {
+    currentBackendCount = Number(backendSummaryMatch[2]);
+    postDiagnostic('native-backend-summary', {
+      registryCount: Number(backendSummaryMatch[1]),
+      deviceCount: Number(backendSummaryMatch[2]),
+      webgpuWasmSelected: currentWasmUsesWebGPU,
+      text,
+    });
+  }
+
+  const backendDeviceMatch = text.match(/wllama-backend-device:(?:(\S+)\s+)?index=(\d+)\s+name=([^\s]+)\s+description=(.*?)\s+type=(\d+)/);
+  if (backendDeviceMatch) {
+    postDiagnostic('native-backend-device', {
+      stage: backendDeviceMatch[1] ?? null,
+      index: Number(backendDeviceMatch[2]),
+      name: backendDeviceMatch[3],
+      description: backendDeviceMatch[4],
+      type: Number(backendDeviceMatch[5]),
+      webgpuWasmSelected: currentWasmUsesWebGPU,
+      text,
+    });
+  }
+
+  const webgpuNativeMatch = text.match(/(?:^|\s)(wllama-webgpu-(?:reg|device):[^\n]+)/);
+  if (webgpuNativeMatch) {
+    currentLoadActivityAt = performance.now();
+    postDiagnostic('native-webgpu', {
+      webgpuWasmSelected: currentWasmUsesWebGPU,
+      text: webgpuNativeMatch[1],
+    });
+  }
+
+  const gpuLayerMatch = text.match(/load_tensors:\s+layer\s+\d+\s+assigned to device (?!CPU\b)([^\s,]+)/);
+  if (gpuLayerMatch) {
+    currentLoadSawGpuLayer = true;
+    currentObservedGpuDevices.add(gpuLayerMatch[1]);
+    postDiagnostic('effective-backend', {
+      selectedWasm: currentWasmUsesWebGPU ? 'webgpu' : 'cpu',
+      effectiveDevice: gpuLayerMatch[1],
+      reason: 'llama.cpp assigned model layers to a non-CPU device',
+      text,
+    });
+  }
+
+  const cpuLayerMatch = text.match(/load_tensors:\s+layer\s+\d+\s+assigned to device CPU/);
+  const isFirstCpuLayer = !!cpuLayerMatch && !currentLoadSawCpuLayer;
+  if (cpuLayerMatch) {
+    currentLoadSawCpuLayer = true;
+    if (isFirstCpuLayer) {
+      postDiagnostic('effective-backend', {
+        selectedWasm: currentWasmUsesWebGPU ? 'webgpu' : 'cpu',
+        effectiveDevice: 'CPU',
+        reason: currentWasmUsesWebGPU
+          ? 'WebGPU WASM was selected, but llama.cpp assigned model layers to CPU'
+          : `CPU WASM selected before model load (${currentWebGpuSelectionReason})`,
+        text,
+      });
+    }
+  }
+
+  if (text.includes('Flash Attention tensor is assigned to device CPU')) {
+    currentFlashAttnCpuFallback = true;
+  }
+
+  if (text.includes('Flash Attention was auto, set to disabled')) {
+    currentFlashAttnAutoDisabled = true;
+  }
+
+  const backendPtrsMatch = text.match(/backend_ptrs\.size\(\)\s*=\s*(\d+)/);
+  if (backendPtrsMatch) {
+    postDiagnostic('native-backend-active', {
+      backendCount: Number(backendPtrsMatch[1]),
+      webgpuWasmSelected: currentWasmUsesWebGPU,
+      webgpuSelectionReason: currentWebGpuSelectionReason,
+      text,
+    });
+  }
+
+  if (shouldForwardNativeLog(level, text, isFirstCpuLayer, !!gpuLayerMatch)) {
+    postLog(level, 'native', text);
+  }
+}
+
+function installConsoleForwarding() {
+  const original = {
+    debug: console.debug.bind(console),
+    log: console.log.bind(console),
+    info: console.info.bind(console),
+    warn: console.warn.bind(console),
+    error: console.error.bind(console),
+  };
+  const wrap = (level: keyof typeof original) => (...args: unknown[]) => {
+    original[level](...args);
+    postLog(level === 'log' ? 'info' : level, 'worker', ...args);
+  };
+  console.debug = wrap('debug');
+  console.log = wrap('log');
+  console.info = wrap('info');
+  console.warn = wrap('warn');
+  console.error = wrap('error');
+}
+
+installConsoleForwarding();
 
 /** Recent native error/warn logs for diagnostic messages */
 const recentNativeLogs: string[] = [];
@@ -243,17 +474,23 @@ const workerLogger = {
 async function handleInit(req: InitRequest) {
   try {
     const useLowbitQ = req.isLowbitQ ?? false;
+    const preferMemory64 = req.preferMemory64 ?? false;
+    const allowWebGPU = req.allowWebGPU ?? false;
     const mem64 = isMemory64Supported();
-    const paths = await getWasmPaths(useLowbitQ);
+    const paths = await getWasmPaths(useLowbitQ, preferMemory64, allowWebGPU);
     postDiagnostic('worker-init', {
       isLowbitQ: useLowbitQ,
       wasmPaths: paths,
       multiThreadCapable: canUseMultiThread(),
       memory64Supported: mem64,
+      memory64Selected: preferMemory64 && mem64,
+      memory64Required: preferMemory64,
+      webgpuAllowed: allowWebGPU,
       webgpuCapable: hasWebGPUApi(),
       webgpuWasmSelected: currentWasmUsesWebGPU,
+      webgpuSelectionReason: currentWebGpuSelectionReason,
     });
-    console.info('[wllamaWorker] init, isLowbitQ:', useLowbitQ, 'memory64:', mem64, 'WASM paths:', paths);
+    console.info('[wllamaWorker] init, isLowbitQ:', useLowbitQ, 'memory64Available:', mem64, 'preferMemory64:', preferMemory64, 'allowWebGPU:', allowWebGPU, 'WASM paths:', paths);
     wllama = new Wllama(paths, {
       suppressNativeLog: false,
       logger: workerLogger,
@@ -287,7 +524,16 @@ async function handleLoad(req: LoadRequest) {
 
   // Clear native log buffer before each load attempt
   recentNativeLogs.length = 0;
+  currentFileCopyPercent = 0;
+  currentNativeLoadPercent = 0;
+  currentLoadSawCpuLayer = false;
+  currentLoadSawGpuLayer = false;
+  currentBackendCount = null;
+  currentObservedGpuDevices = new Set();
+  currentFlashAttnAutoDisabled = false;
+  currentFlashAttnCpuFallback = false;
   const loadStartTime = performance.now();
+  currentLoadActivityAt = loadStartTime;
 
   try {
     const fileSizeMB = (req.file.size / 1024 / 1024).toFixed(1);
@@ -324,11 +570,76 @@ async function handleLoad(req: LoadRequest) {
     // otherwise fall back to a safe default. Cap at MAX_BROWSER_CTX for memory safety.
     const MAX_BROWSER_CTX = 8192;
     const requestedCtx = Math.min(req.expectedContextLength ?? MAX_BROWSER_CTX, MAX_BROWSER_CTX);
-    await wllama.loadModel([req.file], {
+    const loadOptions = {
       n_ctx: requestedCtx,
       n_threads: 1,  // Single-thread until COOP/COEP is configured (Phase 8)
       n_gpu_layers: currentWasmUsesWebGPU ? 999 : 0,
+    };
+    console.info('[wllamaWorker] wllama.loadModel options:', loadOptions);
+
+    let rejectNoProgress: ((error: Error) => void) | null = null;
+    const noProgressPromise = new Promise<never>((_, reject) => {
+      rejectNoProgress = reject;
     });
+    const heartbeat = self.setInterval(() => {
+      const elapsed = ((performance.now() - loadStartTime) / 1000).toFixed(1);
+      const idleMs = performance.now() - currentLoadActivityAt;
+      const overallPercent = currentNativeLoadPercent > 0
+        ? Math.round(45 + currentNativeLoadPercent * 0.5)
+        : Math.round(20 + currentFileCopyPercent * 0.25);
+      postLoadProgress(
+        'model-load',
+        overallPercent,
+        `モデルロード継続中 (${elapsed}s, idle=${(idleMs / 1000).toFixed(1)}s, fileCopy=${currentFileCopyPercent}%, native=${currentNativeLoadPercent}%, WebGPU=${currentWasmUsesWebGPU}, n_gpu_layers=${loadOptions.n_gpu_layers}, ctx=${requestedCtx})`,
+      );
+      console.info('[wllamaWorker] wllama.loadModel still pending, elapsedSec:', elapsed, 'webgpu:', currentWasmUsesWebGPU);
+
+      if (currentWasmUsesWebGPU && idleMs >= LOAD_NO_PROGRESS_TIMEOUT_MS) {
+        const message = `WebGPU WASM initialization made no progress for ${(idleMs / 1000).toFixed(1)}s`;
+        postDiagnostic('load-no-progress-timeout', {
+          elapsedSec: Number(elapsed),
+          idleSec: Number((idleMs / 1000).toFixed(1)),
+          fileCopyPercent: currentFileCopyPercent,
+          nativeLoadPercent: currentNativeLoadPercent,
+          webgpu: currentWasmUsesWebGPU,
+        });
+        rejectNoProgress?.(new Error(message));
+      }
+    }, LOAD_HEARTBEAT_MS);
+
+    try {
+      await Promise.race([
+        wllama.loadModel([req.file], loadOptions),
+        noProgressPromise,
+      ]);
+    } finally {
+      self.clearInterval(heartbeat);
+    }
+
+    if (currentWasmUsesWebGPU && currentLoadSawCpuLayer && !currentLoadSawGpuLayer) {
+      const summary = buildBackendSummary({
+        selectedWasm: 'webgpu',
+        webgpuSelectionReason: currentWebGpuSelectionReason,
+        backendCount: currentBackendCount,
+        sawCpuLayer: currentLoadSawCpuLayer,
+        sawGpuLayer: currentLoadSawGpuLayer,
+        observedGpuDevices: Array.from(currentObservedGpuDevices),
+        flashAttentionAutoDisabled: currentFlashAttnAutoDisabled,
+        flashAttentionCpuFallback: currentFlashAttnCpuFallback,
+      });
+      postDiagnostic('effective-backend-summary', {
+        ...summary,
+        selectedWasm: 'webgpu',
+        webgpuSelectionReason: currentWebGpuSelectionReason,
+      });
+      postDiagnostic('effective-backend-mismatch', {
+        selectedWasm: 'webgpu',
+        effectiveDevice: 'CPU',
+        nGpuLayers: loadOptions.n_gpu_layers,
+        reason: 'WebGPU WASM was selected, but llama.cpp assigned all observed layers to CPU',
+      });
+      throw new Error('WebGPU WASM loaded, but llama.cpp assigned the model to CPU');
+    }
 
     const info = wllama.getLoadedContextInfo();
     const nativeContextLength = info.n_ctx_train ?? info.n_ctx;
@@ -337,6 +648,21 @@ async function handleLoad(req: LoadRequest) {
 
     const elapsed = ((performance.now() - loadStartTime) / 1000).toFixed(1);
     postLoadProgress('complete', 100, `ロード完了 (${elapsed}s, ctx=${grantedCtx}, n_ctx_train=${nativeContextLength}, layers=${info.n_layer})`);
+    const summary = buildBackendSummary({
+      selectedWasm: currentWasmUsesWebGPU ? 'webgpu' : 'cpu',
+      webgpuSelectionReason: currentWebGpuSelectionReason,
+      backendCount: currentBackendCount,
+      sawCpuLayer: currentLoadSawCpuLayer,
+      sawGpuLayer: currentLoadSawGpuLayer,
+      observedGpuDevices: Array.from(currentObservedGpuDevices),
+      flashAttentionAutoDisabled: currentFlashAttnAutoDisabled,
+      flashAttentionCpuFallback: currentFlashAttnCpuFallback,
+    });
+    postDiagnostic('effective-backend-summary', {
+      ...summary,
+      selectedWasm: currentWasmUsesWebGPU ? 'webgpu' : 'cpu',
+      webgpuSelectionReason: currentWebGpuSelectionReason,
+    });
     postDiagnostic('worker-load-success', {
       contextLength: grantedCtx,
       nativeContextLength,
@@ -402,6 +728,89 @@ async function handleLoad(req: LoadRequest) {
         `モデルの読み込みに失敗しました: ${msg}` +
         fileSizeDetail + nativeDetail + stackDetail);
     }
+  }
+}
+
+async function handlePreflightLoadRuntime(req: PreflightLoadRuntimeRequest) {
+  if (!wllama) {
+    respondError(req.id, 'Worker not initialized. Call init first.');
+    return;
+  }
+
+  recentNativeLogs.length = 0;
+  currentFileCopyPercent = 0;
+  currentNativeLoadPercent = 0;
+  const start = performance.now();
+  currentLoadActivityAt = start;
+
+  const emptyGguf = new File([new Uint8Array([0x47, 0x47, 0x55, 0x46])], '__wllama_preflight__.gguf');
+
+  try {
+    postLoadProgress('wasm-preflight', 10, 'WebGPU WASM グルーを検証中');
+    let rejectNoProgress: ((error: Error) => void) | null = null;
+    const noProgressPromise = new Promise<never>((_, reject) => {
+      rejectNoProgress = reject;
+    });
+    const heartbeat = self.setInterval(() => {
+      const idleMs = performance.now() - currentLoadActivityAt;
+      const elapsedMs = performance.now() - start;
+      postLoadProgress(
+        'wasm-preflight',
+        10,
+        `WebGPU WASM グルー検証中 (${(elapsedMs / 1000).toFixed(1)}s, idle=${(idleMs / 1000).toFixed(1)}s)`,
+      );
+      if (idleMs >= 10_000) {
+        postDiagnostic('wasm-preflight-no-progress', {
+          elapsedSec: Number((elapsedMs / 1000).toFixed(1)),
+          idleSec: Number((idleMs / 1000).toFixed(1)),
+          webgpu: currentWasmUsesWebGPU,
+        });
+        rejectNoProgress?.(new Error(`WebGPU WASM glue made no progress for ${(idleMs / 1000).toFixed(1)}s`));
+      }
+    }, 2_000);
+
+    try {
+      await Promise.race([
+        wllama.loadModel([emptyGguf], { n_ctx: 16, n_threads: 1, n_gpu_layers: currentWasmUsesWebGPU ? 1 : 0 }),
+        noProgressPromise,
+      ]);
+      // A 4-byte dummy GGUF should not load successfully. If it does, still
+      // report the runtime as usable and unload it immediately.
+      await wllama.exit();
+      wllama = null;
+      respond(req.id, 'preflight-ok');
+    } catch (e) {
+      const err = e as Error;
+      const webGpuDeviceFailed = recentNativeLogs.some((line) =>
+        line.includes('wllama-webgpu-device:device-failed')
+        || line.includes('ggml_webgpu: Failed to get a device')
+        || line.includes('ggml_webgpu: Device lost')
+      );
+      const reachedRuntime = currentFileCopyPercent > 0
+        || currentNativeLoadPercent > 0
+        || recentNativeLogs.some((line) =>
+          line.includes('inner-runtime-initialized')
+          || line.includes('inner-cwrap-ready')
+          || line.includes('file-write-begin')
+          || line.includes('wllama-load-stage')
+          || line.includes('Invalid')
+          || line.includes('GGUF')
+        );
+      if (webGpuDeviceFailed) {
+        throw err;
+      }
+      if (reachedRuntime && !err.message.includes('made no progress')) {
+        respond(req.id, 'preflight-ok', { expectedFailure: err.message });
+      } else {
+        throw err;
+      }
+    } finally {
+      self.clearInterval(heartbeat);
+    }
+  } catch (e) {
+    const err = e as Error;
+    forwardLog('error', `preflightLoadRuntime error: ${err.message}\nStack: ${err.stack ?? '(no stack)'}`);
+    respondError(req.id, `WebGPU WASMランタイムの検証に失敗しました: ${err.message}`);
   }
 }
 
@@ -543,6 +952,9 @@ self.onmessage = async (ev: MessageEvent<WorkerRequest>) => {
   switch (req.type) {
     case 'init':
       await handleInit(req);
+      break;
+    case 'preflightLoadRuntime':
+      await handlePreflightLoadRuntime(req);
       break;
     case 'load':
       await handleLoad(req);

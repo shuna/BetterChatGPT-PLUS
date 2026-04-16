@@ -32,6 +32,7 @@ const OpfsFileBrowser = ({
   const [loading, setLoading] = useState(false);
   const [expandedModels, setExpandedModels] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState<string | null>(null);
+  const localModels = useStore((s) => s.localModels);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -203,6 +204,7 @@ const OpfsFileBrowser = ({
         const isExpanded = expandedModels.has(entry.modelId);
         const tempFiles = entry.files.filter((f) => f.isTemp);
         const finalFiles = entry.files.filter((f) => !f.isTemp);
+        const displayName = localModels.find((m) => m.id === entry.modelId)?.label ?? entry.modelId;
 
         return (
           <div
@@ -219,7 +221,7 @@ const OpfsFileBrowser = ({
                   {isExpanded ? '▼' : '▶'}
                 </span>
                 <span className='text-sm font-medium text-gray-800 dark:text-gray-200 truncate'>
-                  {entry.modelId}
+                  {displayName}
                 </span>
                 <span className='text-xs text-gray-500 dark:text-gray-400 font-mono flex-shrink-0'>
                   {formatBytes(entry.totalSize)}

@@ -23,6 +23,7 @@ import type {
 import type { ModelFileProvider } from './fileProvider';
 import { CURATED_MODELS } from './catalog';
 import { isLowbitQModelId } from './lowbit-q/lowbitQManager';
+import { debugLog, debugReport } from '@store/debug-store';
 
 // ---------------------------------------------------------------------------
 // Worker proxy interfaces (engine-specific facades)
@@ -83,6 +84,83 @@ interface EngineEntry {
   busyReason?: LocalModelBusyReason;
 }
 
+interface LoadModelOptions {
+  forceDisableWebGPU?: boolean;
+}
+
+function formatDebugValue(value: unknown): string {
+  if (value instanceof Error) return `${value.name}: ${value.message}`;
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function summarizePayload(payload: Record<string, unknown>): string {
+  const clone: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (key === 'fullText' && typeof value === 'string') {
+      clone.fullTextLength = value.length;
+    } else if (key === 'text' && typeof value === 'string') {
+      clone.textLength = value.length;
+    } else if (key === 'file' && value instanceof Blob) {
+      clone[key] = {
+        name: value instanceof File ? value.name : '(blob)',
+        size: value.size,
+        type: value.type,
+      };
+    } else if (key === 'fileEntries' && Array.isArray(value)) {
+      clone[key] = value.map((entry) => {
+        if (!entry || typeof entry !== 'object') return entry;
+        const obj = entry as Record<string, unknown>;
+        const file = obj.file;
+        return {
+          ...obj,
+          file: file instanceof Blob ? {
+            name: file instanceof File ? file.name : '(blob)',
+            size: file.size,
+            type: file.type,
+          } : file,
+        };
+      });
+    } else if (typeof value === 'string' && value.length > 500) {
+      clone[key] = `${value.slice(0, 500)}... (${value.length} chars)`;
+    } else {
+      clone[key] = value;
+    }
+  }
+  return formatDebugValue(clone);
+}
+
+function emitRuntimeDebugLog(modelId: string, level: string, message: string, timestamp = Date.now()): void {
+  debugLog({
+    source: `llm:${formatModelLogName(modelId)}`,
+    level,
+    message,
+    timestamp,
+  });
+}
+
+function shouldLogWorkerInfo(text: string): boolean {
+  return !(
+    text.startsWith('worker: [wllamaWorker] generate start')
+    || text.startsWith('worker: [wllamaWorker] generate done')
+  );
+}
+
+function formatModelLogName(modelId: string): string {
+  const preflightPrefix = '__wllama_webgpu_preflight__:';
+  if (modelId.startsWith(preflightPrefix)) return 'webgpu-preflight';
+
+  const localFileMatch = modelId.match(/^local-file--[^-]+--(.+)$/);
+  if (localFileMatch) return localFileMatch[1];
+
+  const trimmed = modelId.replace(/^local-file--/, '');
+  return trimmed.length > 48 ? `${trimmed.slice(0, 45)}...` : trimmed;
+}
+
 // ---------------------------------------------------------------------------
 // WASM capabilities (in-memory only — not persisted to store)
 // ---------------------------------------------------------------------------
@@ -100,6 +178,7 @@ export interface WasmCapabilities {
 export class LocalModelRuntime {
   private engines = new Map<string, EngineEntry>();
   private wasmCaps = new Map<string, WasmCapabilities>();
+  private webGpuEnabled: boolean | null = null;
   private listeners = new Set<() => void>();
   private logListeners = new Set<(event: RuntimeLogEvent) => void>();
   private diagnosticListeners = new Set<(event: RuntimeDiagnosticEvent) => void>();
@@ -134,11 +213,75 @@ export class LocalModelRuntime {
     return this.wasmCaps.get(modelId) ?? null;
   }
 
+  getWebGpuEnabled(): boolean | null {
+    return this.webGpuEnabled;
+  }
+
+  setWebGpuEnabled(enabled: boolean | null): void {
+    this.webGpuEnabled = enabled;
+  }
+
   // -------------------------------------------------------------------------
   // Lifecycle
   // -------------------------------------------------------------------------
 
-  async loadModel(def: LocalModelDefinition, provider: ModelFileProvider): Promise<void> {
+  async preflightWllamaWebGPU(): Promise<boolean> {
+    const modelId = `__wllama_webgpu_preflight__:${Date.now()}`;
+    const worker = this.createWorker('wllama');
+    const entry: EngineEntry = {
+      worker,
+      engine: 'wllama',
+      status: 'loading',
+      capabilities: null,
+      nextId: 1,
+      pending: new Map(),
+      onChunk: null,
+      abortRequested: false,
+    };
+    this.engines.set(modelId, entry);
+
+    worker.onmessage = (ev: MessageEvent) => {
+      this.handleWorkerMessage(modelId, ev.data);
+    };
+
+    worker.onerror = (err: ErrorEvent) => {
+      for (const [, p] of entry.pending) {
+        p.reject(new Error(err.message));
+      }
+      entry.pending.clear();
+    };
+
+    try {
+      this.emitDiagnostic({
+        modelId,
+        phase: 'runtime-webgpu-preflight-request',
+        timestamp: Date.now(),
+        payload: { allowWebGPU: true },
+      });
+      await this.sendRequest(modelId, {
+        type: 'init',
+        isLowbitQ: false,
+        preferMemory64: false,
+        allowWebGPU: true,
+      });
+      if (this.wasmCaps.get(modelId)?.webgpu !== true) return false;
+      await this.sendRequest(modelId, { type: 'preflightLoadRuntime' });
+      return true;
+    } catch (e) {
+      console.warn('[LocalModelRuntime] WebGPU preflight failed:', (e as Error).message);
+      return false;
+    } finally {
+      worker.terminate();
+      for (const [, p] of entry.pending) {
+        p.reject(new Error('WebGPU preflight worker terminated'));
+      }
+      entry.pending.clear();
+      this.engines.delete(modelId);
+      this.wasmCaps.delete(modelId);
+    }
+  }
+
+  async loadModel(def: LocalModelDefinition, provider: ModelFileProvider, options: LoadModelOptions = {}): Promise<void> {
     if (this.isLoaded(def.id)) {
       throw new Error(`Model ${def.id} is already loaded`);
     }
@@ -171,7 +314,19 @@ export class LocalModelRuntime {
     };
 
     try {
-      // Init worker — pass isLowbitQ flag so the worker can select the right WASM
+      let wllamaFile: File | Blob | null = null;
+      let preferMemory64 = false;
+      let allowWebGPU = false;
+      if (def.engine === 'wllama') {
+        wllamaFile = await provider.getFile();
+        // 32-bit compat builds are more broadly stable. Memory64 is only
+        // required once a model can exceed 32-bit address/file-size limits.
+        preferMemory64 = wllamaFile.size >= 2 * 1024 * 1024 * 1024;
+        const webGpuSetting = this.webGpuEnabled;
+        allowWebGPU = !options.forceDisableWebGPU && webGpuSetting !== false;
+      }
+
+      // Init worker — pass flags so the worker can select the right WASM.
       const isLowbitQ = def.engine === 'wllama' && isLowbitQModelId(def.id);
       this.emitDiagnostic({
         modelId: def.id,
@@ -180,15 +335,19 @@ export class LocalModelRuntime {
         payload: {
           engine: def.engine,
           isLowbitQ,
+          preferMemory64,
+          allowWebGPU,
+          forceDisableWebGPU: options.forceDisableWebGPU === true,
+          webGpuSetting: this.webGpuEnabled,
         },
       });
-      console.info('[LocalModelRuntime] init worker for', def.id, 'engine:', def.engine, 'isLowbitQ:', isLowbitQ);
-      await this.sendRequest(def.id, { type: 'init', isLowbitQ });
+      console.info('[LocalModelRuntime] init worker for', def.id, 'engine:', def.engine, 'isLowbitQ:', isLowbitQ, 'preferMemory64:', preferMemory64, 'allowWebGPU:', allowWebGPU);
+      await this.sendRequest(def.id, { type: 'init', isLowbitQ, preferMemory64, allowWebGPU });
       console.info('[LocalModelRuntime] init done for', def.id);
 
       // Load model — engine-specific
       if (def.engine === 'wllama') {
-        const file = await provider.getFile();
+        const file = wllamaFile!;
         console.info('[LocalModelRuntime] loading model file:', (file as File).name ?? '(blob)', 'size:', file.size);
         // Look up expected context length from catalog/store so the worker
         // allocates the right amount of KV cache instead of a fixed default.
@@ -224,8 +383,28 @@ export class LocalModelRuntime {
 
       this.setStatus(def.id, 'ready');
     } catch (e) {
+      const selectedWebGPU = this.wasmCaps.get(def.id)?.webgpu === true;
       console.error('[LocalModelRuntime] loadModel failed for', def.id, ':', (e as Error).message);
       this.setStatus(def.id, 'error');
+      if (def.engine === 'wllama' && selectedWebGPU && !options.forceDisableWebGPU) {
+        this.emitDiagnostic({
+          modelId: def.id,
+          phase: 'runtime-webgpu-fallback',
+          timestamp: Date.now(),
+          payload: {
+            reason: (e as Error).message,
+          },
+        });
+        console.warn('[LocalModelRuntime] WebGPU load failed for', def.id, 'retrying with CPU WASM');
+        emitRuntimeDebugLog(def.id, 'warn', 'WebGPU load failed; retrying this load with CPU WASM without changing the WebGPU setting');
+        worker.terminate();
+        entry.pending.clear();
+        this.engines.delete(def.id);
+        this.wasmCaps.delete(def.id);
+        this.notifyListeners();
+        await this.loadModel(def, provider, { forceDisableWebGPU: true });
+        return;
+      }
       throw e;
     }
   }
@@ -460,6 +639,12 @@ export class LocalModelRuntime {
     if (entry) {
       entry.status = status;
       entry.busyReason = status === 'busy' ? busyReason : undefined;
+      debugReport(`local-model:${modelId}`, {
+        label: 'Local model',
+        status: status === 'error' ? 'error' : status === 'loading' || status === 'busy' ? 'active' : 'done',
+        detail: `${modelId} ${status}${busyReason ? ` (${busyReason})` : ''}`,
+      });
+      emitRuntimeDebugLog(modelId, status === 'error' ? 'error' : 'debug', `status=${status}${busyReason ? ` busyReason=${busyReason}` : ''}`);
       this.notifyListeners();
     }
   }
@@ -471,18 +656,26 @@ export class LocalModelRuntime {
   }
 
   private emitLog(event: RuntimeLogEvent): void {
+    emitRuntimeDebugLog(event.modelId, event.level, event.text, event.timestamp);
     for (const listener of this.logListeners) {
       listener(event);
     }
   }
 
   private emitDiagnostic(event: RuntimeDiagnosticEvent): void {
+    emitRuntimeDebugLog(event.modelId, 'debug', `diagnostic ${event.phase}: ${formatDebugValue(event.payload)}`, event.timestamp);
     for (const listener of this.diagnosticListeners) {
       listener(event);
     }
   }
 
   private emitLoadProgress(event: RuntimeLoadProgressEvent): void {
+    debugReport(`local-load:${event.modelId}`, {
+      label: 'Local model load',
+      status: event.phase === 'error' ? 'error' : event.phase === 'complete' ? 'done' : 'active',
+      detail: `${event.phase} ${Math.max(0, Math.round(event.percent))}% ${event.detail}`,
+    });
+    emitRuntimeDebugLog(event.modelId, event.phase === 'error' ? 'error' : 'debug', `load-progress ${event.phase} ${event.percent}% ${event.detail}`, event.timestamp);
     for (const listener of this.loadProgressListeners) {
       listener(event);
     }
@@ -493,6 +686,7 @@ export class LocalModelRuntime {
     if (!entry) return Promise.reject(new Error(`No engine for model ${modelId}`));
 
     const id = entry.nextId++;
+    emitRuntimeDebugLog(modelId, 'debug', `request #${id} ${String(payload.type ?? 'unknown')}: ${summarizePayload(payload)}`);
     return new Promise((resolve, reject) => {
       entry.pending.set(id, { resolve, reject });
       entry.worker.postMessage({ ...payload, id });
@@ -512,12 +706,14 @@ export class LocalModelRuntime {
       const text = data.text as string;
       if (level === 'error') console.error(text);
       else console.info(text);
-      this.emitLog({
-        modelId,
-        level,
-        text,
-        timestamp: Date.now(),
-      });
+      if (level !== 'info' || shouldLogWorkerInfo(text)) {
+        this.emitLog({
+          modelId,
+          level,
+          text,
+          timestamp: Date.now(),
+        });
+      }
       return;
     }
 
@@ -528,7 +724,7 @@ export class LocalModelRuntime {
       if (phase === 'worker-init') {
         this.wasmCaps.set(modelId, {
           webgpu: !!payload.webgpuWasmSelected,
-          memory64: !!payload.memory64Supported,
+          memory64: !!payload.memory64Selected,
           multiThread: !!payload.multiThreadCapable,
         });
         this.notifyListeners();
@@ -564,6 +760,7 @@ export class LocalModelRuntime {
       const pending = entry.pending.get(id);
       if (pending) {
         entry.pending.delete(id);
+        emitRuntimeDebugLog(modelId, 'error', `response #${id} error: ${String(data.message ?? '')}`);
         pending.reject(new Error(data.message as string));
       }
       return;
@@ -573,6 +770,7 @@ export class LocalModelRuntime {
     const pending = entry.pending.get(id);
     if (pending) {
       entry.pending.delete(id);
+      emitRuntimeDebugLog(modelId, 'debug', `response #${id} ${type}: ${summarizePayload(data)}`);
       pending.resolve(data);
     }
   }

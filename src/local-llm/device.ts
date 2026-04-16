@@ -9,6 +9,15 @@ export type DeviceTier = 'low' | 'standard' | 'high';
 
 export type ModelFitLabel = 'lightweight' | 'recommended' | 'heavy' | 'very-heavy' | 'extreme' | 'not-recommended';
 
+type MinimalGpuDevice = {
+  destroy: () => void;
+};
+
+type MinimalGpuAdapter = {
+  features: Set<string>;
+  requestDevice: (descriptor?: { requiredFeatures?: string[] }) => Promise<MinimalGpuDevice>;
+};
+
 /**
  * Estimate the device tier based on available browser APIs.
  *
@@ -29,6 +38,34 @@ export function estimateDeviceTier(): DeviceTier {
   // deviceMemory unavailable — fall back to cores only, conservatively
   if (cores >= 8) return 'standard';
   return 'low';
+}
+
+/**
+ * Check whether WebGPU looks usable enough to try the wllama WebGPU build.
+ *
+ * This is still a browser capability check, not a guarantee that llama.cpp's
+ * WebGPU backend will initialize successfully for every adapter. The runtime
+ * keeps a CPU fallback for that case.
+ */
+export async function detectWebGpuCapability(): Promise<boolean> {
+  try {
+    const gpu = (navigator as Navigator & {
+      gpu?: {
+        requestAdapter: () => Promise<MinimalGpuAdapter | null>;
+      };
+    }).gpu;
+    if (!gpu) return false;
+
+    const adapter = await gpu.requestAdapter();
+    if (!adapter) return false;
+    if (!adapter.features.has('shader-f16')) return false;
+
+    const device = await adapter.requestDevice({ requiredFeatures: ['shader-f16'] });
+    device.destroy();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 const TIER_ORDER: Record<DeviceTier, number> = { low: 0, standard: 1, high: 2 };

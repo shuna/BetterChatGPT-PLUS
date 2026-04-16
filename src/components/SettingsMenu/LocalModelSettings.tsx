@@ -4,13 +4,12 @@ import useStore from '@store/store';
 import Toggle from '@components/Toggle';
 import { SettingsGroup } from './SettingsMenu';
 import { localModelRuntime } from '@src/local-llm/runtime';
-import { EphemeralFileProvider } from '@src/local-llm/fileProvider';
-import { OpfsFileProvider, getTempFileSize } from '@src/local-llm/storage';
+import { OpfsFileProvider, deleteModel, getTempFileSize, readFile, saveFile, sha256Blob } from '@src/local-llm/storage';
 import { rehydrateSavedModels } from '@src/local-llm/storage';
 import { CURATED_MODELS } from '@src/local-llm/catalog';
 import type { CatalogModel } from '@src/local-llm/catalog';
 import { downloadCatalogModel, downloadModelFiles } from '@src/local-llm/download';
-import { estimateDeviceTier, getModelFit } from '@src/local-llm/device';
+import { detectWebGpuCapability, estimateDeviceTier, getModelFit } from '@src/local-llm/device';
 import type { DeviceTier } from '@src/local-llm/device';
 import { localAnalyze, localFormat } from '@api/localGeneration';
 import type {
@@ -34,6 +33,12 @@ import SearchResultCard from './SearchResultCard';
 import { useModelDownload } from '@src/hooks/useModelDownload';
 import { useModelDeletion } from '@src/hooks/useModelDeletion';
 import { useHfSearch } from '@src/hooks/useHfSearch';
+
+const IMPORTED_MODEL_PREFIX = 'local-file';
+
+function sanitizeModelIdSegment(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'model';
+}
 
 // Helper: build a fake HfSearchResult from a persisted model definition
 function buildFakeSearchResult(model: LocalModelDefinition, variant: { size: number }): HfSearchResult {
@@ -66,6 +71,9 @@ const LocalModelSettings = () => {
   // Local UI state
   const [enabled, setEnabled] = useState(localModelEnabled);
   const [rehydrated, setRehydrated] = useState(false);
+  const [webGpuEnabled, setWebGpuEnabled] = useState<boolean | null>(() => localModelRuntime.getWebGpuEnabled());
+  const [webGpuCapable, setWebGpuCapable] = useState<boolean | null>(null);
+  const [webGpuPreflighting, setWebGpuPreflighting] = useState(false);
 
   // Ephemeral model state
   const [ephemeralStatus, setEphemeralStatus] = useState<LocalModelStatus>('idle');
@@ -74,6 +82,7 @@ const LocalModelSettings = () => {
   const [generating, setGenerating] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [ephemeralLoadError, setEphemeralLoadError] = useState<string | null>(null);
+  const [importedModelId, setImportedModelId] = useState<string | null>(null);
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
   const [contextLength, setContextLength] = useState<number | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -108,6 +117,16 @@ const LocalModelSettings = () => {
   });
 
   const deviceTier = useMemo(() => estimateDeviceTier(), []);
+  const resolvedWebGpuEnabled = webGpuEnabled ?? webGpuCapable === true;
+  const webGpuStatusText = webGpuPreflighting
+    ? t('localModel.webgpuPreflightChecking')
+    : webGpuEnabled === false
+      ? t('localModel.webgpuDisabled')
+      : webGpuCapable === null
+        ? t('localModel.webgpuChecking')
+        : webGpuCapable
+          ? t('localModel.webgpuAvailable')
+          : t('localModel.webgpuUnavailable');
 
   // Derive active test model from task assignments
   const generationModelId = activeLocalModels.generation ?? null;
@@ -129,6 +148,48 @@ const LocalModelSettings = () => {
 
   // Sync toggle to store
   useEffect(() => { setLocalModelEnabled(enabled); }, [enabled]);
+
+  const runWebGpuPreflight = useCallback(async (): Promise<boolean> => {
+    setWebGpuPreflighting(true);
+    try {
+      const ok = await localModelRuntime.preflightWllamaWebGPU();
+      setWebGpuCapable(ok);
+      return ok;
+    } finally {
+      setWebGpuPreflighting(false);
+    }
+  }, []);
+
+  const setEnabledWithPreflight = useCallback<React.Dispatch<React.SetStateAction<boolean>>>((action) => {
+    setEnabled((prev) => {
+      const next = typeof action === 'function'
+        ? (action as (value: boolean) => boolean)(prev)
+        : action;
+      if (!prev && next && webGpuEnabled !== false) {
+        void runWebGpuPreflight();
+      }
+      return next;
+    });
+  }, [runWebGpuPreflight, webGpuEnabled]);
+
+  const handleWebGpuToggle = useCallback(() => {
+    const next = !resolvedWebGpuEnabled;
+    setWebGpuEnabled(next);
+    localModelRuntime.setWebGpuEnabled(next);
+    if (next) void runWebGpuPreflight();
+  }, [resolvedWebGpuEnabled, runWebGpuPreflight]);
+
+  useEffect(() => {
+    let cancelled = false;
+    detectWebGpuCapability()
+      .then((capable) => {
+        if (!cancelled) setWebGpuCapable(capable);
+      })
+      .catch(() => {
+        if (!cancelled) setWebGpuCapable(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   // Subscribe to runtime status changes
   useEffect(() => {
@@ -214,6 +275,81 @@ const LocalModelSettings = () => {
     }
   }, []);
 
+  const findStoredModelWithHash = useCallback(async (fileHash: string, fileSize: number, excludeModelId?: string): Promise<LocalModelDefinition | null> => {
+    const store = useStore.getState();
+    const candidates = [
+      ...CURATED_MODELS.map((model) => ({
+        id: model.id,
+        engine: model.engine,
+        tasks: model.tasks,
+        label: model.label,
+        origin: model.huggingFaceRepo,
+        source: 'opfs' as const,
+        manifest: model.manifest,
+        fileSize: model.expectedDownloadSize,
+        displayMeta: model.displayMeta,
+      })),
+      ...store.localModels,
+    ];
+
+    for (const model of candidates) {
+      if (model.id === excludeModelId) continue;
+      if (model.engine !== 'wllama' || model.manifest.kind !== 'single-file') continue;
+      const meta = store.savedModelMeta[model.id];
+      if (meta?.storageState !== 'saved') continue;
+      if (meta.storedBytes && meta.storedBytes !== fileSize) continue;
+
+      const entrypoint = model.manifest.entrypoint;
+      let storedHash = meta.fileHashes?.[entrypoint];
+      if (!storedHash) {
+        try {
+          const storedFile = await readFile(model.id, entrypoint);
+          if (storedFile.size !== fileSize) continue;
+          storedHash = await sha256Blob(storedFile);
+          store.updateSavedModelMeta(model.id, {
+            fileHashes: { ...(meta.fileHashes ?? {}), [entrypoint]: storedHash },
+          });
+        } catch {
+          continue;
+        }
+      }
+      if (storedHash === fileHash) return model;
+    }
+
+    return null;
+  }, []);
+
+  const registerDownloadedOrUseDuplicate = useCallback(async (model: LocalModelDefinition, totalBytes: number) => {
+    if (model.engine !== 'wllama' || model.manifest.kind !== 'single-file') {
+      useStore.getState().addLocalModel(model);
+      return;
+    }
+
+    const store = useStore.getState();
+    const entrypoint = model.manifest.entrypoint;
+    try {
+      const storedFile = await readFile(model.id, entrypoint);
+      const fileHash = await sha256Blob(storedFile);
+      store.updateSavedModelMeta(model.id, {
+        fileHashes: { ...(store.savedModelMeta[model.id]?.fileHashes ?? {}), [entrypoint]: fileHash },
+      });
+      const duplicate = await findStoredModelWithHash(fileHash, totalBytes, model.id);
+      if (duplicate) {
+        await deleteModel(model.id);
+        store.removeSavedModelMeta(model.id);
+        store.removeLocalModel(model.id);
+        if (!store.favoriteLocalModelIds.includes(duplicate.id)) store.toggleFavoriteLocalModel(duplicate.id);
+        autoAssignIfUnset(duplicate.id, duplicate.tasks);
+        bumpOpfsBrowser();
+        return;
+      }
+    } catch {
+      // Keep the just-downloaded model if hashing or duplicate lookup fails.
+    }
+
+    store.addLocalModel(model);
+  }, [autoAssignIfUnset, bumpOpfsBrowser, findStoredModelWithHash]);
+
   // ----- Catalog download handlers (thin wrappers using useModelDownload) -----
   const handleDownload = useCallback((model: CatalogModel) => {
     const store = useStore.getState();
@@ -221,14 +357,14 @@ const LocalModelSettings = () => {
     startDownload(model.id, (cb, sig) => downloadCatalogModel(model, cb, sig), {
       storedFiles: [...model.downloadFiles],
       onComplete: (totalBytes) => {
-        useStore.getState().addLocalModel({
+        void registerDownloadedOrUseDuplicate({
           id: model.id, engine: model.engine, tasks: model.tasks, label: model.label,
           origin: model.huggingFaceRepo, source: 'opfs', manifest: model.manifest,
           fileSize: totalBytes, displayMeta: model.displayMeta,
-        });
+        }, totalBytes);
       },
     });
-  }, [startDownload]);
+  }, [registerDownloadedOrUseDuplicate, startDownload]);
 
   const handleResumeCatalog = useCallback((model: CatalogModel) => {
     clearResumeFallback(model.id);
@@ -293,41 +429,64 @@ const LocalModelSettings = () => {
     setOutput('');
     setContextLength(null);
 
-    const provider = new EphemeralFileProvider(
-      new Map([[file.name, file]]),
-      { kind: 'single-file', entrypoint: file.name },
-      EPHEMERAL_MODEL_ID,
-    );
     try {
-      if (localModelRuntime.isLoaded(EPHEMERAL_MODEL_ID)) {
-        await localModelRuntime.unloadModel(EPHEMERAL_MODEL_ID);
+      const fileHash = await sha256Blob(file);
+      const existingModel = await findStoredModelWithHash(fileHash, file.size);
+      const manifest = { kind: 'single-file' as const, entrypoint: file.name };
+      const store = useStore.getState();
+      const model: LocalModelDefinition = existingModel ?? {
+        id: `${IMPORTED_MODEL_PREFIX}--${fileHash.slice(0, 16)}--${sanitizeModelIdSegment(file.name)}`,
+        engine: 'wllama',
+        tasks: ['generation', 'analysis'],
+        label: file.name,
+        origin: file.name,
+        source: 'opfs',
+        manifest,
+        fileSize: file.size,
+        lastFileName: file.name,
+      };
+
+      if (!existingModel) {
+        await saveFile(model.id, file.name, file);
+        store.updateSavedModelMeta(model.id, {
+          storageState: 'saved',
+          storedBytes: file.size,
+          storedFiles: [file.name],
+          fileHashes: { [file.name]: fileHash },
+          lastVerifiedAt: Date.now(),
+          lastError: undefined,
+        });
+        store.addLocalModel(model);
       }
+
+      if (localModelRuntime.isLoaded(EPHEMERAL_MODEL_ID)) await localModelRuntime.unloadModel(EPHEMERAL_MODEL_ID);
+      if (localModelRuntime.isLoaded(model.id)) await localModelRuntime.unloadModel(model.id);
+
       await localModelRuntime.loadModel(
-        { id: EPHEMERAL_MODEL_ID, engine: 'wllama', tasks: ['generation', 'analysis'],
-          label: file.name, origin: file.name, source: 'ephemeral-file',
-          manifest: { kind: 'single-file', entrypoint: file.name }, fileSize: file.size, lastFileName: file.name },
-        provider,
+        model,
+        new OpfsFileProvider(model.id, model.manifest),
       );
-      const caps = localModelRuntime.getCapabilities(EPHEMERAL_MODEL_ID);
+      const caps = localModelRuntime.getCapabilities(model.id);
       if (caps?.contextLength) setContextLength(caps.contextLength);
-      useStore.getState().addLocalModel({
-        id: EPHEMERAL_MODEL_ID, engine: 'wllama', tasks: ['generation', 'analysis'],
-        label: file.name, origin: file.name, source: 'ephemeral-file',
-        manifest: { kind: 'single-file', entrypoint: file.name }, fileSize: file.size, lastFileName: file.name,
-      });
-      autoAssignIfUnset(EPHEMERAL_MODEL_ID, ['generation', 'analysis']);
+      setImportedModelId(model.id);
+      store.addLocalModel(model);
+      autoAssignIfUnset(model.id, model.tasks);
+      if (!store.favoriteLocalModelIds.includes(model.id)) store.toggleFavoriteLocalModel(model.id);
+      setSelectedModelId(null);
+      bumpOpfsBrowser();
     } catch (err) {
       setEphemeralLoadError((err as Error).message);
     }
     e.target.value = '';
-  }, [autoAssignIfUnset]);
+  }, [autoAssignIfUnset, bumpOpfsBrowser, findStoredModelWithHash]);
 
   const handleUnloadEphemeral = useCallback(async () => {
-    await localModelRuntime.unloadModel(EPHEMERAL_MODEL_ID);
+    if (importedModelId) await localModelRuntime.unloadModel(importedModelId);
     setContextLength(null);
     setFileName(null);
+    setImportedModelId(null);
     setOutput('');
-  }, []);
+  }, [importedModelId]);
 
   // ----- Task assignment -----
   const handleTaskAssign = useCallback((task: LocalModelTask, modelId: string | null) => {
@@ -436,9 +595,13 @@ const LocalModelSettings = () => {
       storedFiles: [...candidate.downloadFiles],
       onComplete: () => {
         hfSearch.setActiveSearchDownloads((prev) => { const { [modelId]: _, ...rest } = prev; return rest; });
+        void registerDownloadedOrUseDuplicate({
+          id: modelId, engine: candidate.engine, tasks: candidate.tasks, label: candidate.label,
+          origin: result.repoId, source: 'opfs', manifest: candidate.manifest, fileSize: candidate.estimatedSize,
+        }, candidate.estimatedSize);
       },
     });
-  }, [startDownload, hfSearch.findExistingModelForVariant, hfSearch.setActiveSearchDownloads]);
+  }, [registerDownloadedOrUseDuplicate, startDownload, hfSearch.findExistingModelForVariant, hfSearch.setActiveSearchDownloads]);
 
   const handleResumeSearchModel = useCallback((result: HfSearchResult, variant: GgufVariant) => {
     const candidate = resolveSearchCandidate(result, variant);
@@ -592,7 +755,8 @@ const LocalModelSettings = () => {
   }, [cancelDownload]);
 
   // ----- Derived state -----
-  const isEphemeralReady = ephemeralStatus === 'ready' || ephemeralStatus === 'busy';
+  const importedStatus = importedModelId ? (runtimeStatuses[importedModelId] ?? localModelRuntime.getStatus(importedModelId)) : ephemeralStatus;
+  const isEphemeralReady = importedStatus === 'ready' || importedStatus === 'busy';
   const canTestGenerate = isTestModelLoaded('generate');
   const canTestAnalyze = isTestModelLoaded('analyze') || isTestModelLoaded('generate');
   const showTestArea = canTestGenerate || canTestAnalyze;
@@ -619,10 +783,25 @@ const LocalModelSettings = () => {
       {/* 1. Enable toggle + device tier */}
       <SettingsGroup label=''>
         <div>
-          <Toggle label={t('localModel.enabled')} isChecked={enabled} setIsChecked={setEnabled} />
+          <Toggle label={t('localModel.enabled')} isChecked={enabled} setIsChecked={setEnabledWithPreflight} />
           {enabled && (
-            <div className='px-4 pb-3 -mt-1 text-xs text-gray-500 dark:text-gray-400'>
-              {t('localModel.deviceTier')}: <span className='font-medium text-gray-700 dark:text-gray-300'>{tierLabels[deviceTier]}</span>
+            <div className='px-4 pb-3 -mt-1 flex flex-col gap-3 text-xs text-gray-500 dark:text-gray-400'>
+              <div>
+                {t('localModel.deviceTier')}: <span className='font-medium text-gray-700 dark:text-gray-300'>{tierLabels[deviceTier]}</span>
+              </div>
+              <label className='flex cursor-pointer items-center justify-between gap-3 rounded-md border border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-800 px-3 py-2'>
+                <span className='flex flex-col gap-0.5'>
+                  <span className='text-sm font-medium text-gray-900 dark:text-gray-200'>{t('localModel.webgpuEnabled')}</span>
+                  <span>{webGpuStatusText}</span>
+                </span>
+                <input
+                  type='checkbox'
+                  className='sr-only peer'
+                  checked={resolvedWebGpuEnabled}
+                  onChange={handleWebGpuToggle}
+                />
+                <span className="relative flex-shrink-0 w-9 h-5 bg-gray-200 dark:bg-gray-600 rounded-full peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-green-500/70" />
+              </label>
             </div>
           )}
         </div>
@@ -833,12 +1012,12 @@ const LocalModelSettings = () => {
               <div className='flex items-center gap-3'>
                 <button
                   className='btn btn-neutral text-sm px-4 py-1.5'
-                  onClick={() => fileInputRef.current?.click()} disabled={ephemeralStatus === 'loading'}
+                  onClick={() => fileInputRef.current?.click()} disabled={importedStatus === 'loading'}
                 >
-                  {ephemeralStatus === 'loading' ? t('localModel.modelStatus.loading') : t('localModel.selectGgufFile')}
+                  {importedStatus === 'loading' ? t('localModel.modelStatus.loading') : t('localModel.selectGgufFile')}
                 </button>
                 <input ref={fileInputRef} type='file' accept='.gguf' className='hidden' onChange={handleFileSelect} />
-                {ephemeralStatus !== 'idle' && <StatusBadge status={ephemeralStatus} />}
+                {importedStatus !== 'idle' && <StatusBadge status={importedStatus} />}
               </div>
               {fileName && <div className='text-xs text-gray-600 dark:text-gray-400 truncate'>{fileName}</div>}
               {ephemeralLoadError && (
