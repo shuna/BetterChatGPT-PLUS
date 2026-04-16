@@ -84,6 +84,7 @@ export const ProgressBar = ({ progress }: { progress: DownloadProgress }) => {
       </div>
       <span className='text-xs text-gray-500 dark:text-gray-400'>
         {formatBytes(progress.bytesDownloaded)} / {formatBytes(progress.bytesTotal)}
+        {progress.bytesPerSecond > 0 && ` — ${formatBytes(progress.bytesPerSecond)}/s`}
         {progress.fileCount > 1 && ` (${progress.fileIndex + 1}/${progress.fileCount})`}
       </span>
     </div>

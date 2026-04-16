@@ -172,7 +172,7 @@ const OpfsFileBrowser = ({
         </div>
         <div className='flex items-center gap-2'>
           <button
-            className='text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50'
+            className='text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-600 disabled:opacity-50'
             onClick={refresh}
             disabled={loading || isDeleting}
           >
@@ -212,7 +212,7 @@ const OpfsFileBrowser = ({
             className='border border-gray-200 dark:border-gray-600 rounded-lg mx-4 overflow-hidden'
           >
             {/* Model header row */}
-            <div className='flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-750'>
+            <div className='flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800'>
               <button
                 className='flex-1 flex items-center gap-2 text-left min-w-0'
                 onClick={() => toggleExpand(entry.modelId)}

@@ -291,9 +291,48 @@ export async function deleteModel(modelId: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
+ * Streaming writer for downloads.
+ *
+ * Opens a single FileSystemWritableFileStream for the entire download
+ * instead of opening/closing one per chunk. This avoids the O(n²)
+ * internal copy overhead that createWritable({ keepExistingData: true })
+ * incurs when called repeatedly.
+ */
+export interface DownloadWriter {
+  write(chunk: Uint8Array): Promise<void>;
+  close(): Promise<void>;
+  abort(): Promise<void>;
+}
+
+export async function openDownloadWriter(
+  modelId: string,
+  relativePath: string,
+  resumeOffset: number,
+): Promise<DownloadWriter> {
+  const dir = await getModelDir(modelId);
+  const fileHandle = await dir.getFileHandle(relativePath, { create: true }) as unknown as WritableFileHandle;
+  const keepExisting = resumeOffset > 0;
+  const writable = await fileHandle.createWritable({ keepExistingData: keepExisting });
+  if (keepExisting) {
+    await writable.seek(resumeOffset);
+  }
+  // Create .part marker once (zero-byte sentinel = "download in progress")
+  await dir.getFileHandle(relativePath + PART_SUFFIX, { create: true });
+
+  return {
+    write: (chunk: Uint8Array) => writable.write(chunk),
+    close: () => writable.close(),
+    abort: async () => {
+      try { await writable.abort(); } catch { /* ignore */ }
+    },
+  };
+}
+
+/**
  * Write a chunk to the target file (final name) during download.
  * Maintains a zero-byte .part marker to signal "in progress".
  *
+ * @deprecated Use openDownloadWriter() for streaming downloads.
  * @param append false = create/truncate, true = append
  */
 export async function writeTempChunk(
