@@ -574,6 +574,7 @@ async function handleLoad(req: LoadRequest) {
       n_ctx: requestedCtx,
       n_threads: 1,  // Single-thread until COOP/COEP is configured (Phase 8)
       n_gpu_layers: currentWasmUsesWebGPU ? 999 : 0,
+      use_mmap: false,  // WASM emulated mmap fails on large files (>2GB)
     };
     console.info('[wllamaWorker] wllama.loadModel options:', loadOptions);
 
