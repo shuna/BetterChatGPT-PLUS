@@ -196,6 +196,23 @@ export const stopSubmitSession = (sessionId: string) => {
     useStreamEndStatusStore.getState().setStatus(chunkTarget.targetNodeId, 'interrupted');
   }
 
+  // For local model sessions, explicitly report the model's debug status as
+  // done.  The runtime.abort() path also handles this (by rejecting the
+  // pending promise so that generate()'s finally block transitions the model
+  // to 'ready'), but this acts as a safety net for edge cases where the
+  // runtime path might not complete (e.g. race conditions, worker crashes).
+  const session = useStore.getState().generatingSessions[sessionId];
+  if (session) {
+    const chat = useStore.getState().chats?.[session.chatIndex];
+    if (chat?.config?.modelSource === 'local') {
+      debugReport(`local-model:${chat.config.model}`, {
+        label: 'Local model',
+        status: 'done',
+        detail: `${chat.config.model} stopped by user`,
+      });
+    }
+  }
+
   abortControllers.get(sessionId)?.abort();
   swCancellers.get(sessionId)?.();
   cancelActiveRecovery();
@@ -656,12 +673,28 @@ export const executeLocalSubmit = async ({
   abortController.signal.addEventListener('abort', onAbort);
 
   let fullText = '';
+
+  // Stall detection: if no new token arrives within STALL_TIMEOUT_MS, the
+  // WASM computation is likely hung.  Auto-abort to free the model.
+  const STALL_TIMEOUT_MS = 60_000;
+  let stallTimer: ReturnType<typeof setTimeout> | null = null;
+  const resetStallTimer = () => {
+    if (stallTimer != null) clearTimeout(stallTimer);
+    stallTimer = setTimeout(() => {
+      if (!abortController.signal.aborted) {
+        console.warn('[executeLocalSubmit] generation stalled — no token for', STALL_TIMEOUT_MS, 'ms, aborting');
+        abortController.abort();
+      }
+    }, STALL_TIMEOUT_MS);
+  };
+
   try {
     // If already aborted before generation starts, bail out immediately.
     if (abortController.signal.aborted) {
       return {};
     }
 
+    resetStallTimer();
     await engine.generate(
       prompt,
       {
@@ -671,6 +704,7 @@ export const executeLocalSubmit = async ({
       (text) => {
         if (abortController.signal.aborted) return;
         fullText = text;
+        resetStallTimer();
         // wllama sends currentText (full text-so-far), not deltas —
         // use setStreamingBufferText to replace rather than append
         setStreamingBufferText(targetNodeId, text);
@@ -680,11 +714,12 @@ export const executeLocalSubmit = async ({
     );
   } catch (e) {
     if ((e as Error).name === 'AbortError' || abortController.signal.aborted) {
-      // User cancelled — finalize what we have
+      // User cancelled or stall timeout — finalize what we have
     } else {
       throw e;
     }
   } finally {
+    if (stallTimer != null) clearTimeout(stallTimer);
     abortController.signal.removeEventListener('abort', onAbort);
   }
 

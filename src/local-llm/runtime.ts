@@ -431,6 +431,15 @@ export class LocalModelRuntime {
     entry.abortRequested = true;
     // Send abort message to worker
     entry.worker.postMessage({ id: 0, type: 'abort' });
+    // Reject all pending generate requests immediately so the generate()
+    // proxy doesn't hang waiting for the worker response.  The worker will
+    // still process the abort and send a 'done' message, but by then the
+    // pending map is already empty so the late response is silently ignored.
+    const abortError = new DOMException('Generation aborted', 'AbortError');
+    for (const [id, pending] of entry.pending) {
+      entry.pending.delete(id);
+      pending.reject(abortError);
+    }
   }
 
   /**
