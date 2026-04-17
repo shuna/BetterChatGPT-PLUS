@@ -23,10 +23,13 @@ import * as http from 'http';
 
 const BASE_URL = 'http://localhost:5173/';
 const MODEL_DIR = '/Volumes/2TB-LLM/wllama-verification/Original';
-const WASM_ASSET_VERSION = '20260416-align-fix-2';
+const WASM_ASSET_VERSION = '20260418-step3a-clean';
 
 const SMALL_MODEL_PATH = path.join(MODEL_DIR, 'SmolLM2-1.7B-Instruct-Q4_K_M.gguf');
 const LARGE_MODEL_PATH = path.join(MODEL_DIR, 'Bonsai-8B-Q2_K.gguf');
+// Compat CPU (32-bit WASM, 2 GB max): use_mmap:false copies tensors separately, so
+// effective WASM heap = 2× model size + KV cache. Q2_K (~645 MB) stays well under 2 GB.
+const COMPAT_CPU_MODEL_PATH = path.join(MODEL_DIR, 'SmolLM2-1.7B-Instruct-Q2_K.gguf');
 
 interface WasmTestCase {
   label: string;
@@ -38,10 +41,10 @@ interface WasmTestCase {
 }
 
 const CASES: WasmTestCase[] = [
-  { label: 'A) SmolLM2 + WebGPU',  modelPath: SMALL_MODEL_PATH, preferMemory64: false, allowWebGPU: true,  expectedWasm: 'single-thread-webgpu-compat.wasm' },
-  { label: 'B) Bonsai-8B + WebGPU', modelPath: LARGE_MODEL_PATH, preferMemory64: true,  allowWebGPU: true,  expectedWasm: 'single-thread-webgpu.wasm' },
-  { label: 'C) SmolLM2 + CPU',      modelPath: SMALL_MODEL_PATH, preferMemory64: false, allowWebGPU: false, expectedWasm: 'single-thread-compat.wasm' },
-  { label: 'D) Bonsai-8B + CPU',    modelPath: LARGE_MODEL_PATH, preferMemory64: true,  allowWebGPU: false, expectedWasm: 'single-thread.wasm' },
+  { label: 'A) SmolLM2 + WebGPU',  modelPath: SMALL_MODEL_PATH,       preferMemory64: false, allowWebGPU: true,  expectedWasm: 'single-thread-webgpu-compat.wasm' },
+  { label: 'B) Bonsai-8B + WebGPU', modelPath: LARGE_MODEL_PATH,       preferMemory64: true,  allowWebGPU: true,  expectedWasm: 'single-thread-webgpu.wasm' },
+  { label: 'C) SmolLM2 + CPU',      modelPath: COMPAT_CPU_MODEL_PATH,  preferMemory64: false, allowWebGPU: false, expectedWasm: 'single-thread-compat.wasm' },
+  { label: 'D) Bonsai-8B + CPU',    modelPath: LARGE_MODEL_PATH,       preferMemory64: true,  allowWebGPU: false, expectedWasm: 'single-thread.wasm' },
 ];
 
 /** Simple file server for GGUF; avoids page.evaluate base64 conversion of large files */
@@ -89,7 +92,7 @@ test.describe.serial('WASM variant verification', () => {
 
   for (const tc of CASES) {
     test(tc.label, async ({ persistentContext, persistentPage: page }) => {
-      test.setTimeout(25 * 60_000);
+      test.setTimeout(10 * 60_000);
 
       if (!fs.existsSync(tc.modelPath)) {
         test.skip(true, `Model file not found: ${tc.modelPath}`);
@@ -108,15 +111,25 @@ test.describe.serial('WASM variant verification', () => {
       console.log(`[${tc.label}] Model: ${modelFileName} (${allowWebGPU ? 'WebGPU' : 'CPU'})`);
       console.log(`[${tc.label}] Model server: ${modelServerUrl}`);
 
+      // Capture browser console in real-time so we can diagnose hangs
+      page.on('console', msg => {
+        const text = msg.text();
+        if (text.length > 0) {
+          console.log(`  [BROWSER:${msg.type()}] ${text.slice(0, 300)}`);
+        }
+      });
+
       const result = await page.evaluate(async ({ wasmUrl, modelServerUrl, modelFileName, allowWebGPU }) => {
         const logs: [string, string][] = [];
         const errors: string[] = [];
 
         try {
+          console.log('[STAGE 1] importing wllama');
           // Dynamically import Wllama from the app bundle — needs to be on the same origin
           // @ts-ignore
           const mod = await import('/src/vendor/wllama/index.js');
           const { Wllama } = mod;
+          console.log('[STAGE 2] wllama imported');
 
           const pathConfig = {
             'single-thread/wllama.wasm': wasmUrl,
@@ -125,18 +138,20 @@ test.describe.serial('WASM variant verification', () => {
           const wllama = new Wllama(pathConfig, {
             suppressNativeLog: false,
             logger: {
-              debug: (...a: unknown[]) => logs.push(['debug', a.map(String).join(' ')]),
-              log:   (...a: unknown[]) => logs.push(['log',   a.map(String).join(' ')]),
-              info:  (...a: unknown[]) => logs.push(['info',  a.map(String).join(' ')]),
-              warn:  (...a: unknown[]) => { const m = a.map(String).join(' '); logs.push(['warn', m]); errors.push(m); },
-              error: (...a: unknown[]) => { const m = a.map(String).join(' '); logs.push(['error', m]); errors.push(m); },
+              debug: (...a: unknown[]) => { const m = a.map(String).join(' '); logs.push(['debug', m]); if (m.includes('map error') || m.includes('Failed') || m.includes('ABORT') || m.includes('wllama-load')) console.log('[wllama:debug]', m.slice(0, 200)); },
+              log:   (...a: unknown[]) => { const m = a.map(String).join(' '); logs.push(['log',   m]); },
+              info:  (...a: unknown[]) => { const m = a.map(String).join(' '); logs.push(['info',  m]); },
+              warn:  (...a: unknown[]) => { const m = a.map(String).join(' '); logs.push(['warn', m]); errors.push(m); console.log('[wllama:warn]', m.slice(0, 200)); },
+              error: (...a: unknown[]) => { const m = a.map(String).join(' '); logs.push(['error', m]); errors.push(m); console.log('[wllama:error]', m.slice(0, 200)); },
             },
           });
 
           // Fetch the model from the local server (fast, no copy)
+          console.log('[STAGE 3] fetching model');
           const resp = await fetch(modelServerUrl);
           if (!resp.ok) throw new Error(`Model fetch failed: ${resp.status}`);
           const modelBlob = await resp.blob();
+          console.log(`[STAGE 4] model blob received size=${modelBlob.size}`);
           logs.push(['debug', `blob size=${modelBlob.size}`]);
           // Validate GGUF magic
           const hdr = new Uint8Array(await modelBlob.slice(0, 4).arrayBuffer());
@@ -145,12 +160,14 @@ test.describe.serial('WASM variant verification', () => {
           if (magic !== 'GGUF') throw new Error(`Blob magic mismatch: expected GGUF got ${magic}`);
           const modelFile = new File([modelBlob], modelFileName, { type: 'application/octet-stream' });
 
+          console.log('[STAGE 5] calling loadModel n_gpu_layers=' + (allowWebGPU ? 999 : 0));
           await wllama.loadModel([modelFile], {
             n_ctx: 64,
             n_threads: 1,
             n_gpu_layers: allowWebGPU ? 999 : 0,
             use_mmap: false,
           });
+          console.log('[STAGE 6] loadModel complete, starting generation');
 
           let generated = '';
           const stream = await wllama.createCompletion('Hello', {
@@ -161,6 +178,7 @@ test.describe.serial('WASM variant verification', () => {
           for await (const chunk of stream) {
             generated = (chunk as { currentText: string }).currentText;
           }
+          console.log('[STAGE 7] generation complete: ' + generated.slice(0, 60));
 
           await wllama.exit();
           return { success: true, generated, logs, errors };

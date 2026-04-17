@@ -616,10 +616,105 @@ wasmExports["B"] = makeWrapper_p(wasmExports["B"]);              // wllama_debug
 (The actual minified names are discovered at build time and may differ across
 emsdk versions or after llama.cpp submodule updates.)
 
-**compat variants (32-bit)** — No `applySignatureConversions` at all; exports
-natively accept/return 32-bit Numbers. No injection needed.
+**compat WebGPU (32-bit + JSPI)** — Newer emsdk versions (observed with 4.0.x)
+generate `applySignatureConversions` even for compat WebGPU builds. These must
+receive **i32 wrappers** (plain Numbers), NOT BigInt wrappers. The
+`patch_emscripten_jspi_exports` function accepts a second argument:
+
+```bash
+# compat WebGPU — i32 wrappers
+patch_emscripten_jspi_exports wllama.js false
+
+# Memory64 WebGPU — i64/BigInt wrappers
+patch_emscripten_jspi_exports wllama.js true
+```
+
+For compat WebGPU the injected helpers are:
+
+```javascript
+// wllama_malloc(i32 size, i32 dummy)->i32: sync, uses existing makeWrapper_ppp
+wasmExports["wllama_malloc"] = makeWrapper_ppp(wasmExports["wllama_malloc"]);
+// wllama_start/exit/debug ()->i32: JSPI async, no args
+var makeWrapper_p_async      = f => () => Promise.resolve(f()).then(v=>v>>>0);
+// wllama_action(i32,i32)->i32: JSPI async, 2 i32 args
+var makeWrapper_pi32i32_async = f => (a0,a1) => Promise.resolve(f(a0,a1)).then(v=>v>>>0);
+```
+
+Injecting BigInt wrappers into a 32-bit WASM build causes:
+
+    TypeError: Cannot convert a BigInt value to a number
+
+at the first wllama_action call.
+
+**compat non-WebGPU (32-bit, no JSPI)** — No injection needed; exports natively
+accept/return 32-bit Numbers.
 
 **When this matters:** Any `build_all_wasm.sh` run re-applies these patches
 automatically. If you upgrade emsdk or update llama.cpp and see BigInt / NaN
 errors from `wllama_malloc` or `wllama_action`, check that the patch still
 applies (the `makeWrapper_p` marker must be present in the generated glue).
+
+### 12. `makeWrapper_p` marker string changed in emsdk 4.0.x
+
+`applySignatureConversions` was previously generated as:
+
+```javascript
+var makeWrapper_p=f=>()=>Number(f());
+```
+
+Newer emsdk emits:
+
+```javascript
+var makeWrapper_p=f=>()=>f()>>>0;
+```
+
+Both forms are functionally equivalent for 32-bit values. The build script uses
+`next()` to try both forms so that builds succeed across emsdk versions:
+
+```python
+marker = next(
+    (s for s in ('var makeWrapper_p=f=>()=>f()>>>0;',
+                 'var makeWrapper_p=f=>()=>Number(f());') if s in body),
+    None)
+if marker is None:
+    raise SystemExit(f"ERROR: makeWrapper_p marker not found in {path}")
+```
+
+**When this matters:** If you see `ERROR: makeWrapper_p marker not found` after
+an emsdk upgrade, add the new form to the tuple above.
+
+### 13. WebGPU set_rows error buffer pool exhaustion
+
+During generation, `ggml_backend_webgpu_submit()` maps error-check buffers
+asynchronously via `MapAsync(AllowSpontaneous)`. In the Emscripten build these
+callbacks consistently fail with:
+
+    ggml_webgpu: Failed to map error buffer: Buffer was destroyed before mapping was resolved.
+
+Without a fix every `MapAsync` failure leaks a slot from `set_rows_error_buf_pool`
+(fixed size: 32 slots). After 32 failures the pool is empty, `alloc_bufs()` calls
+`cv.wait()` which becomes a busy-spin in single-threaded Emscripten, and the
+browser tab hangs indefinitely.
+
+**Fix applied in this fork (Step 3-A):** On `MapAsync` failure the callback
+creates a fresh buffer pair via `ggml_webgpu_create_buffer()` and returns it to
+the pool, keeping the pool full regardless of how many callbacks fail:
+
+```cpp
+if (status != wgpu::MapAsyncStatus::Success) {
+    GGML_LOG_ERROR("ggml_webgpu: Failed to map error buffer: %s\n", ...);
+    webgpu_pool_bufs new_bufs;
+    ggml_webgpu_create_buffer(ctx->device, new_bufs.dev_buf, ...);
+    ggml_webgpu_create_buffer(ctx->device, new_bufs.host_buf, ...);
+    ctx->set_rows_error_buf_pool.free_bufs({ new_bufs });
+}
+```
+
+The failed buffers are abandoned (not unmapped or returned) because their state
+is undefined after an aborted map.
+
+**When this matters:** Any WebGPU build that reaches the generation phase. The
+patch is applied automatically by `apply_fork_compat_patches()` in
+`build_all_wasm.sh`. If you update the llama.cpp submodule and the patch no
+longer applies, check that the original `MapAsync` loop in
+`ggml_backend_webgpu_submit()` still matches the `old` string in the script.
