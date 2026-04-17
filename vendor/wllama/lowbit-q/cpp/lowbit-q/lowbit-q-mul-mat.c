@@ -1,7 +1,7 @@
 /**
  * lowbit-q-mul-mat.c — lowbit-Q matrix multiplication kernel.
  *
- * Part of wllama-lowbit-q. See wllama-lowbit-q/README.md for build instructions.
+ * Part of vendor/wllama/lowbit-q. See vendor/wllama/lowbit-q/README.md for build instructions.
  *
  * Implements the OneBit decomposition:
  *   out[batch][i] = a[i] * sum_j( sign[i,j] * b[j] * x[batch][j] )
@@ -15,7 +15,7 @@
  *
  * Build: compiled as part of the wllama WASM build.
  *        Requires: ggml.h from llama.cpp (for type definitions only)
- *        Patched into build via: patches/0001-cmake-add-lowbit-q-sources.patch
+ *        Patched into build via: 0001-cmake-add-lowbit-q-sources.patch
  */
 
 #include "lowbit-q-mul-mat.h"

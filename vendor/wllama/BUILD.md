@@ -1,7 +1,15 @@
-# wllama WASM Build Guide (Custom Fork)
+# wllama WASM Build Guide
 
-This document describes how to build the wllama WASM binaries and JS library
-for the weavelet-canvas project.
+This document describes how to rebuild the single deployed `vendor/wllama`
+artifact set for weavelet-canvas.
+
+Repository policy:
+
+- upstream `wllama` / `llama.cpp` sources are fetched externally
+- this repo does not treat `.wllama-fork/` as a long-term source of truth
+- reproducible differences should be stored as patches under
+  [`vendor/wllama/patches/`](/Users/suzuki/weavelet-canvas/vendor/wllama/patches/README.md)
+- low-bit-q specific extensions are maintained separately under `vendor/wllama/lowbit-q/`
 
 ## Overview
 
@@ -89,11 +97,16 @@ cd .wllama-fork
 ./scripts/build_all_wasm.sh
 ```
 
-This builds all 8 variants under `wasm/`. The script also re-applies the
-required Emscripten/WebGPU compatibility patches to
-`llama.cpp/ggml/src/ggml-webgpu/ggml-webgpu.cpp` before the first build so the
-WebGPU variants stay reproducible even if the fork was refreshed or partially
-rebased.
+`.wllama-fork/` is a local working tree created from upstream sources. Before
+running this step, apply the canonical patches tracked by this repo.
+
+The long-term intended flow is:
+
+1. fetch upstream sources into `.wllama-fork/`
+2. apply the tracked base-extension patches
+3. run `build_all_wasm.sh`
+
+This builds all 8 variants under `wasm/`.
 
 Each directory contains:
 - `wllama.wasm` — the WASM binary
@@ -109,8 +122,8 @@ To rebuild only selected variants, pass variant names as arguments:
   multi-thread-webgpu-compat
 ```
 
-This is the recommended fast path when only the WebGPU backend or its JS glue
-needs to be refreshed.
+This is the recommended fast path when only the base WebGPU backend or its JS
+glue needs to be refreshed.
 
 ### Step 2: Patch generated JS glue (CRITICAL)
 

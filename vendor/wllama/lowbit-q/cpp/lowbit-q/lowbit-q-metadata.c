@@ -209,7 +209,7 @@ int lowbit_q_read_tensor_alloc(
  *   - Call lowbit_q_read_tensor_alloc() directly per call (acceptable if
  *     llama_model_meta_val_str() is cheap after the first call).
  *
- * See STATUS.md — "Known limitations" for tracking. */
+ * See Low-bit-q-STATUS.md — "Known limitations" for tracking. */
 static struct lowbit_q_alloc_record s_cache[LOWBIT_Q_ALLOC_CACHE_SIZE];
 static int s_cache_count  = -1; /* -1 = not loaded */
 static const struct llama_model * s_cached_model = NULL;

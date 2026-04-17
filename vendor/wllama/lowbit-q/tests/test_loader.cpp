@@ -8,7 +8,7 @@
  *
  * Build (from .wllama-fork/build-native/):
  *   c++ -std=c++17 -I../llama.cpp/include -I../cpp/lowbit-q \
- *       ../../wllama-lowbit-q/tests/test_loader.cpp \
+ *       ../../vendor/wllama/lowbit-q/tests/test_loader.cpp \
  *       -L. -lllama -Wl,-rpath,. -o test_loader && ./test_loader
  */
 
@@ -30,7 +30,7 @@ static void log_callback(ggml_log_level level, const char * text, void * /* user
 int main(int argc, char ** argv)
 {
     const char * default_path =
-        "/Users/suzuki/weavelet-canvas/wllama-lowbit-q/tests/fixtures/minimal_lowbitq_v2.gguf";
+        "/Users/suzuki/weavelet-canvas/vendor/wllama/lowbit-q/tests/fixtures/minimal_lowbitq_v2.gguf";
     const char * model_path = (argc > 1) ? argv[1] : default_path;
 
     fprintf(stderr, "=== test_loader: lowbit-Q v2 GGUF load test ===\n");

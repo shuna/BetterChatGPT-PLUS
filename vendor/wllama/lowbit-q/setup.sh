@@ -12,7 +12,7 @@
 #   5. Optionally builds the WASM binaries (requires Docker)
 #
 # Usage:
-#   ./wllama-lowbit-q/setup.sh [--build]
+#   ./vendor/wllama/lowbit-q/setup.sh [--build]
 #
 # Prerequisites:
 #   - git
@@ -26,12 +26,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 FORK_DIR="$REPO_ROOT/.wllama-fork"
 WLLAMA_VERSION="$(cat "$SCRIPT_DIR/WLLAMA_VERSION" | tr -d '[:space:]')"
 WLLAMA_REPO="https://github.com/ngxson/wllama.git"
 
-echo "=== wllama-lowbit-q setup ==="
+echo "=== vendor/wllama/lowbit-q setup ==="
 echo "  wllama version: v$WLLAMA_VERSION"
 echo "  fork directory: $FORK_DIR"
 echo ""
@@ -145,7 +145,7 @@ if [ ! -f "$LLAMA_MODEL_CPP" ]; then
   echo "    WARNING: $LLAMA_MODEL_CPP not found — skipping patch 0002"
   echo "    (llama.cpp submodule may not be initialized)"
 else
-  python3 "$SCRIPT_DIR/patches/0002-llama-loader-optional-weights.py" "$LLAMA_MODEL_CPP" "$LLAMA_MODEL_H"
+  python3 "$SCRIPT_DIR/0002-llama-loader-optional-weights.py" "$LLAMA_MODEL_CPP" "$LLAMA_MODEL_H"
   echo "    Patch 0002 applied"
 fi
 
@@ -164,11 +164,11 @@ if [ ! -f "$LLAMA_MODELS_CPP" ]; then
     echo "    (expected: src/models/llama.cpp or src/llama-model.cpp)"
   else
     echo "    Using fallback path: $LLAMA_MODELS_CPP"
-    python3 "$SCRIPT_DIR/patches/0003-llama-build-lowbit-q-dispatch.py" "$LLAMA_MODELS_CPP"
+    python3 "$SCRIPT_DIR/0003-llama-build-lowbit-q-dispatch.py" "$LLAMA_MODELS_CPP"
     echo "    Patch 0003 applied (fallback path)"
   fi
 else
-  python3 "$SCRIPT_DIR/patches/0003-llama-build-lowbit-q-dispatch.py" "$LLAMA_MODELS_CPP"
+  python3 "$SCRIPT_DIR/0003-llama-build-lowbit-q-dispatch.py" "$LLAMA_MODELS_CPP"
   echo "    Patch 0003 applied"
 fi
 
@@ -260,5 +260,5 @@ echo "Next steps:"
 echo "  1. cd $FORK_DIR"
 echo "  2. Review changes in llama.cpp/src/{llama-model.cpp,models/llama.cpp}"
 echo "  3. Run: bash scripts/build_wasm.sh  (requires Docker)"
-echo "  4. Or:  ./wllama-lowbit-q/build-local.sh  (requires emsdk 4.0.3)"
+echo "  4. Or:  ./vendor/wllama/lowbit-q/build-local.sh  (requires emsdk 4.0.3)"
 echo "  5. Keep vendor/wllama/{single,multi}-thread.wasm on upstream binaries unless JS glue is updated too"

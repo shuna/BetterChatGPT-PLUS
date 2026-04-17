@@ -253,7 +253,7 @@ KV(bytes) = n_layers × 2 × n_kv_heads × head_dim × seq_len × bytes_per_elem
 
 | データソース | 種別 | 信頼性 |
 |---|---|---|
-| TinyLlama Phase 3.5/3.6 E2E 結果 | Playwright 実測 + 一部再構成 | ⚠️ 一部手動補完 (詳細: STATUS.md) |
+| TinyLlama Phase 3.5/3.6 E2E 結果 | Playwright 実測 + 一部再構成 | ⚠️ 一部手動補完 (詳細: Low-bit-q-STATUS.md) |
 | KIVI PoC NMSE 値 | Vitest 単体テスト実測 | ✅ pristine (コード: `kiviQuantize.test.ts`) |
 | KV cache 推定値 | `kvCacheDesign.ts` の推定関数 | ℹ️ 理論計算 (実測非確認) |
 | SmolLM2 Q4_K_M E2E | Playwright 実測 | ✅ pristine (`tests/phase4-smollm2-results.json`) |
