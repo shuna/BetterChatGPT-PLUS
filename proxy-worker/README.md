@@ -73,7 +73,7 @@ npx wrangler deploy
 
 1. Set repository variable `WORKER_DEPLOY_ENABLED` to `true`
 2. Add repository secret `CLOUDFLARE_API_TOKEN` (create at CloudFlare dashboard > API Tokens)
-3. Pushes to `main` that change files in `worker/` will auto-deploy
+3. Pushes to `main` that change files in `proxy-worker/` will auto-deploy
 
 ## Local development
 

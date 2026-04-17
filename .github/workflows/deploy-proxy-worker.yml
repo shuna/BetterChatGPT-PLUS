@@ -3,7 +3,7 @@ name: Deploy Stream Proxy Worker
 on:
   push:
     branches: [main]
-    paths: ['worker/**']
+    paths: ['proxy-worker/**']
   workflow_dispatch:
 
 jobs:
@@ -20,16 +20,16 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        run: cd worker && npm install
+        run: cd proxy-worker && npm install
 
       - name: Validate wrangler.toml KV namespace ID
         run: |
-          if grep -q 'REPLACE_WITH_KV_NAMESPACE_ID' worker/wrangler.toml; then
+          if grep -q 'REPLACE_WITH_KV_NAMESPACE_ID' proxy-worker/wrangler.toml; then
             echo "::error::wrangler.toml still contains placeholder KV namespace ID. Replace it before deploying."
             exit 1
           fi
 
       - name: Deploy to CloudFlare Workers
-        run: cd worker && npx wrangler deploy
+        run: cd proxy-worker && npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

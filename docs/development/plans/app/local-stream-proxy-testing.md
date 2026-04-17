@@ -13,7 +13,7 @@ The deployed proxy can fail in ways that still look like a successful stream in 
 
 ## Scope
 
-The local harness lives under [`scripts/mock-stream-proxy.cjs`](/Users/suzuki/weavelet-canvas/scripts/mock-stream-proxy.cjs). It does **not** modify anything under [`worker/`](/Users/suzuki/weavelet-canvas/worker), so it will not trigger the Cloudflare Worker deploy workflow by itself.
+The local harness lives under [`scripts/mock-stream-proxy.cjs`](/Users/suzuki/weavelet-canvas/scripts/mock-stream-proxy.cjs). It does **not** modify anything under [`proxy-worker/`](/Users/suzuki/weavelet-canvas/proxy-worker), so it will not trigger the Cloudflare Worker deploy workflow by itself.
 
 ## Start the app
 

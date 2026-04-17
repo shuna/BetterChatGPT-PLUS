@@ -7,7 +7,7 @@ into the OneBit (arXiv:2402.11295) SVID representation (a, b, sign),
 and writes a new GGUF file with lowbit-Q tensor triplets.
 
 Usage:
-    python scripts/convert_to_lowbit_q_gguf.py input.gguf output.gguf [--verify]
+    python vendor/wllama/lowbit-q/convert_to_lowbit_q_gguf.py input.gguf output.gguf [--verify]
 
 This script serves as a reference implementation for validating the
 browser-side TypeScript converter and for generating test fixtures.
