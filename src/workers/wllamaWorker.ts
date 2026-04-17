@@ -301,6 +301,10 @@ function postLog(level: string, source: string, ...args: unknown[]) {
 }
 
 function shouldForwardNativeLog(level: string, text: string, isFirstCpuLayer: boolean, sawGpuLayer: boolean): boolean {
+  if ((level === 'warn' || level === 'error') && text.includes(WEBGPU_MAP_ERROR_SIGNATURE)) {
+    suppressedWebgpuMapErrors++;
+    return false;
+  }
   if (level === 'warn' || level === 'error') return true;
   if (text.includes('wllama-')) return true;
   if (isFirstCpuLayer || sawGpuLayer) return true;
@@ -458,6 +462,16 @@ installConsoleForwarding();
 
 /** Recent native error/warn logs for diagnostic messages */
 const recentNativeLogs: string[] = [];
+
+/**
+ * Count of suppressed WebGPU "Failed to map error buffer" messages during the
+ * current generation. The underlying condition is a known race in the ggml
+ * WebGPU backend; the fork recovers from each failure (see vendor/wllama/BUILD.md
+ * §13), so individual occurrences are noise. We suppress them from the debug
+ * view and surface a single summary at generate start/end instead.
+ */
+const WEBGPU_MAP_ERROR_SIGNATURE = 'Failed to map error buffer: Buffer was destroyed';
+let suppressedWebgpuMapErrors = 0;
 
 const workerLogger = {
   debug: (...args: unknown[]) => forwardLog('debug', ...args),
@@ -886,6 +900,14 @@ async function handleGenerate(req: GenerateRequest) {
 
   currentAbortController = new AbortController();
 
+  // Reset suppression counter and announce filtering for this generation.
+  // The WebGPU "map error buffer" failures are known-recoverable (BUILD.md §13)
+  // but fire 100s of times per generation — we hide them and show a summary.
+  suppressedWebgpuMapErrors = 0;
+  if (currentWasmUsesWebGPU) {
+    postLog('info', 'native', 'ggml_webgpu: 既知の回復可能エラー (Failed to map error buffer) をデバッグビューから抑制します');
+  }
+
   // Track generated text outside try/catch so we can return partial text on abort
   let fullText = '';
   let tokensGenerated = 0;
@@ -966,6 +988,13 @@ async function handleGenerate(req: GenerateRequest) {
     }
   } finally {
     currentAbortController = null;
+    if (suppressedWebgpuMapErrors > 0) {
+      postLog(
+        'info',
+        'native',
+        `ggml_webgpu: 回復可能エラー (Failed to map error buffer) を ${suppressedWebgpuMapErrors} 回抑制しました`,
+      );
+    }
   }
 }
 
