@@ -104,9 +104,9 @@ The convert pipeline should call this before writing any GGUF output.
 
 ## REFERENCES
 
-- Phase 3.5 SVID test results: `wllama-lowbit-q/Docs/2026-04-09-SVID-Test-result.md`
-- Phase 3.6 native quant baseline: `wllama-lowbit-q/Docs/2026-04-10-Phase3-NativeQuantBaseline.md`
-- Phase 3 full evaluation: `wllama-lowbit-q/Docs/2026-04-10-Phase3-Evaluation.md`
+- Phase 3.5 SVID test results: `vendor/wllama/lowbit-q/Docs/2026-04-09-SVID-Test-result.md`
+- Phase 3.6 native quant baseline: `vendor/wllama/lowbit-q/Docs/2026-04-10-Phase3-NativeQuantBaseline.md`
+- Phase 3 full evaluation: `vendor/wllama/lowbit-q/Docs/2026-04-10-Phase3-Evaluation.md`
 - KIVI PoC implementation: `src/local-llm/lowbit-q/kiviQuantize.ts`
 - KIVI PoC tests (with measured NMSE): `src/local-llm/lowbit-q/kiviQuantize.test.ts`
 - Allocator validation: `src/local-llm/lowbit-q/allocator.ts:validateAllocations()`

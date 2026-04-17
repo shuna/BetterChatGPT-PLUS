@@ -3,8 +3,8 @@
 最終更新: 2026-04-09
 
 関連文書:
-- 実装方針: `wllama-lowbit-q/IMPLEMENTATION-STRATEGY.md`
-- 旧ステータス資料: `wllama-lowbit-q/Docs/old/STATUS-2026-04-08.md`
+- 実装方針: `vendor/wllama/lowbit-q/IMPLEMENTATION-STRATEGY.md`
+- 旧ステータス資料: `vendor/wllama/lowbit-q/Docs/old/STATUS-2026-04-08.md`
 
 ## 前提
 
@@ -102,10 +102,10 @@
   - `W ≈ diag(a) * Sign(W) * diag(b)` — rank-1 SVD ベースのスケール推定
   - W2A16 設定で他手法を上回る性能
 - **当プロジェクトとの関係**: **これが現在の `src/local-llm/lowbit-q/` (旧 `onebit/`) の直接の出典**。
-  旧 `STATUS.md` で「OneCompression 忠実実装」と記述しているが、正確には OneBit の SVID アルゴリズムを実装している
+  旧 `Low-bit-q-STATUS.md` で「OneCompression 忠実実装」と記述しているが、正確には OneBit の SVID アルゴリズムを実装している
 - **ブラウザ適合性**: 既に実装済み・動作確認済み
 
-> **重要な訂正**: 旧 `STATUS.md` の「OneBit 分解 (SVID — FujitsuResearch/OneCompression)」は
+> **重要な訂正**: 旧 `Low-bit-q-STATUS.md` の「OneBit 分解 (SVID — FujitsuResearch/OneCompression)」は
 > 不正確。SVID は OneBit 論文の手法であり、OneCompression (OneComp) とは別の研究。
 > OneComp リポジトリに SVID の実装が含まれている可能性はあるが、手法の出典は OneBit。
 

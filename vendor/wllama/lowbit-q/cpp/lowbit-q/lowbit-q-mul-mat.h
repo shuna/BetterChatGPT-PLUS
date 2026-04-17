@@ -1,8 +1,8 @@
 /**
  * lowbit-q-mul-mat.h — lowbit-Q matrix multiplication for ggml.
  *
- * Part of wllama-lowbit-q. See wllama-lowbit-q/README.md for build instructions.
- * Build integration: added to wllama via patches/0001-cmake-add-lowbit-q-sources.patch
+ * Part of vendor/wllama/lowbit-q. See vendor/wllama/lowbit-q/README.md for build instructions.
+ * Build integration: added to wllama via 0001-cmake-add-lowbit-q-sources.patch
  *
  * Implements the OneBit decomposition matmul:
  *   out[batch][i] = a[i] * sum_j( sign[i,j] * b[j] * x[batch][j] )

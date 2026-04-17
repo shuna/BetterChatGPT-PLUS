@@ -1,11 +1,24 @@
-# wllama-lowbit-q — lowbit-Q Inference Backend for wllama
+# vendor/wllama/lowbit-q — lowbit-Q Inference Backend for wllama
 
 wllama (llama.cpp WASM) に 1-bit 量子化推論カーネルを追加するためのパッチセット。
+
+## スコープ
+
+このディレクトリは、独自フォーマット拡張と low-bit-q 変換/推論だけを扱う。
+
+ここで扱わないもの:
+
+- 本流 `wllama` の WebGPU 対応
+- Memory64 / compat の一般対応
+- shard / OPFS / JSPI の一般対応
+- upstream に返すべき `ggml-webgpu` 修正
+
+これらは `vendor/wllama/` 側を正本とする。
 
 ## ディレクトリ構成
 
 ```
-wllama-lowbit-q/
+vendor/wllama/lowbit-q/
 ├── README.md               ← このファイル
 ├── WLLAMA_VERSION           ← 対象 wllama バージョン (2.3.7)
 ├── setup.sh                 ← セットアップスクリプト (clone → patch → build)
@@ -25,6 +38,7 @@ wllama-lowbit-q/
 - **パッチ (`patches/`)**: CMakeLists.txt にビルドターゲットを追加する最小差分のみ。
 - **ggml.h 変更不要**: `ggml_map_custom3_inplace` API を使用し、op enum の追加なしで
   カスタム演算を登録。upstream llama.cpp の更新に追従しやすい。
+- **前提**: `vendor/wllama` 側の本流拡張が先に適用されていることを想定し、その上に low-bit-q を別差分として重ねる。
 
 ## セットアップ手順
 
@@ -37,10 +51,10 @@ wllama-lowbit-q/
 
 ```bash
 # クローン + パッチ適用のみ
-./wllama-lowbit-q/setup.sh
+./vendor/wllama/lowbit-q/setup.sh
 
 # クローン + パッチ適用 + WASM ビルド
-./wllama-lowbit-q/setup.sh --build
+./vendor/wllama/lowbit-q/setup.sh --build
 ```
 
 `setup.sh` は以下を実行する:
@@ -61,7 +75,7 @@ git submodule update --init --depth 1
 
 # 2. lowbit-Q ソースをコピー
 mkdir -p cpp/lowbit-q
-cp ../wllama-lowbit-q/cpp/lowbit-q/* cpp/lowbit-q/
+cp ../vendor/wllama/lowbit-q/cpp/lowbit-q/* cpp/lowbit-q/
 
 # 3. CMakeLists.txt を編集 (パッチ参照または手動)
 #    - LOWBIT_Q_SRC 変数を追加
@@ -90,13 +104,13 @@ Docker を使わずローカルの Emscripten でビルドする手順。
 
 ```bash
 # 1. セットアップ
-./wllama-lowbit-q/setup.sh
+./vendor/wllama/lowbit-q/setup.sh
 
 # 2. Emscripten を有効化
 source ~/emsdk/emsdk_env.sh
 
 # 3. compat 版をビルド
-./wllama-lowbit-q/build-local.sh
+./vendor/wllama/lowbit-q/build-local.sh
 ```
 
 ### ビルド出力
@@ -163,7 +177,7 @@ result->src[3] = x;  // 入力活性化を src[3] に格納
 2. `setup.sh` を実行して新バージョンにパッチが適用されるか確認
 3. CMakeLists.txt のパッチが適用できない場合:
    - 新しい CMakeLists.txt を確認
-   - `patches/0001-cmake-add-lowbit-q-sources.patch` を更新
+   - `0001-cmake-add-lowbit-q-sources.patch` を更新
    - または `setup.sh` 内の `sed` コマンドを調整
 4. `ggml_map_custom3_inplace` API の互換性を確認
 5. WASM をリビルド

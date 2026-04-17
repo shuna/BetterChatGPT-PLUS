@@ -1,10 +1,10 @@
-# wllama-lowbit-q 実装方針
+# vendor/wllama/lowbit-q 実装方針
 
 最終更新: 2026-04-12
 
 ## この文書の位置づけ
 
-この文書は、`wllama-lowbit-q/TECH-SURVEY.md` の調査結果をもとに、
+この文書は、`vendor/wllama/lowbit-q/TECH-SURVEY.md` の調査結果をもとに、
 当プロジェクトで今後どのように OneBit / OneCompression 系の知見を
 参照し、実装へ取り込むかを定義するための方針書である。
 
@@ -532,7 +532,7 @@ wllama v2.3.7 が pin している llama.cpp のバージョンには
 
 以下の名称整理は **完了済み** である。
 
-- フォルダ名: `wllama-onebit/` → `wllama-lowbit-q/`、`src/local-llm/onebit/` → `src/local-llm/lowbit-q/`
+- フォルダ名: `wllama-onebit/` → `vendor/wllama/lowbit-q/`、`src/local-llm/onebit/` → `src/local-llm/lowbit-q/`
 - ファイル名: `convert_to_onebit_gguf.py` → `convert_to_lowbit_q_gguf.py`
 - metadata key: `onebit.version` → `lowbit-q.version`
 - テンソル名サフィックス: `_onebit_a` → `_lowbit_q_a` 等

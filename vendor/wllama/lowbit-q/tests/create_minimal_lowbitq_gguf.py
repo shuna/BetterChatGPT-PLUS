@@ -13,9 +13,9 @@ verifies the loader runs without crashing on the tensor names and metadata,
 but cannot produce correct inference output.
 
 Run:
-    python3 wllama-lowbit-q/tests/create_minimal_lowbitq_gguf.py
+    python3 vendor/wllama/lowbit-q/tests/create_minimal_lowbitq_gguf.py
 Output:
-    wllama-lowbit-q/tests/fixtures/minimal_lowbitq_v2.gguf
+    vendor/wllama/lowbit-q/tests/fixtures/minimal_lowbitq_v2.gguf
 """
 
 import sys
