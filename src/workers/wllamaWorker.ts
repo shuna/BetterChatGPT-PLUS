@@ -201,13 +201,7 @@ async function getWasmPaths(useLowbitQ = false, preferMemory64 = false, allowWeb
   const multiThread = canUseMultiThread();
   const memory64Available = isMemory64Supported();
   const mem64 = preferMemory64 && memory64Available;
-  let webgpu = false;
-  if (mem64 && allowWebGPU) {
-    currentWebGpuSelectionReason = 'memory64-webgpu-temporarily-disabled';
-    console.info('[wllamaWorker] WebGPU disabled for Memory64 model load; using CPU WASM for stability');
-  } else {
-    webgpu = await canUseWebGPU(allowWebGPU);
-  }
+  const webgpu = await canUseWebGPU(allowWebGPU);
 
   const singleThreadFile = webgpu
     ? (mem64 ? 'single-thread-webgpu.wasm' : 'single-thread-webgpu-compat.wasm')

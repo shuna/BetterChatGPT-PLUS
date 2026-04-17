@@ -351,8 +351,9 @@ export class LocalModelRuntime {
       let descriptor: LoadDescriptor | null = null;
       let preferMemory64 = false;
       let allowWebGPU = false;
+      let useOpfsDirect = false;
       if (def.engine === 'wllama') {
-        const useOpfsDirect = def.source === 'opfs' &&
+        useOpfsDirect = def.source === 'opfs' &&
           (def.manifest.kind === 'single-file' || def.manifest.kind === 'gguf-sharded');
 
         if (useOpfsDirect) {
@@ -375,10 +376,7 @@ export class LocalModelRuntime {
         }
 
         const webGpuSetting = this.webGpuEnabled;
-        // Large (>2 GiB) GGUF files require Memory64. Our current WebGPU
-        // Memory64 runtime path is still unstable, so keep those loads on the
-        // rebuilt CPU WASM path instead of failing once and retrying.
-        allowWebGPU = !preferMemory64 && !options.forceDisableWebGPU && webGpuSetting !== false;
+        allowWebGPU = !options.forceDisableWebGPU && webGpuSetting !== false;
       }
 
       // Init worker — pass flags so the worker can select the right WASM.
