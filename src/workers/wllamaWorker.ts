@@ -113,6 +113,38 @@ function isMemory64Supported(): boolean {
   return _memory64Supported;
 }
 
+/**
+ * Check whether the browser supports the WebAssembly exception-handling
+ * proposal with `exnref` (opcode 0x1f `try_table`).
+ *
+ * The WebGPU wllama WASM build is compiled with `-fwasm-exceptions`, which
+ * emits `try_table`/`throw_ref`. Validation fails on browsers where the
+ * proposal is disabled — in Firefox this maps to the about:config pref
+ * `javascript.options.wasm_exnref`.
+ */
+function supportsWasmExnref(): boolean {
+  try {
+    const bytes = new Uint8Array([
+      0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+      0x01, 0x04, 0x01, 0x60, 0x00, 0x00,
+      0x03, 0x02, 0x01, 0x00,
+      0x0a, 0x08, 0x01, 0x06, 0x00, 0x1f, 0x40, 0x00, 0x0b, 0x0b,
+    ]);
+    return WebAssembly.validate(bytes);
+  } catch {
+    return false;
+  }
+}
+
+let _exnrefSupported: boolean | null = null;
+
+function isWasmExnrefSupported(): boolean {
+  if (_exnrefSupported === null) {
+    _exnrefSupported = supportsWasmExnref();
+  }
+  return _exnrefSupported;
+}
+
 function hasWebGPUApi(): boolean {
   try {
     return typeof navigator !== 'undefined' && 'gpu' in navigator;
@@ -583,8 +615,13 @@ async function handleInspectRuntimeFeatures(req: InspectRuntimeFeaturesRequest) 
 
   const jspi = hasWebAssemblyJspi();
   checks.jspi = jspi
-    ? featureCheck('ok', 'JSPI があるので、このアプリの WebGPU 用 wllama WASM が使う非同期初期化を通せます。GPU 実行経路の前提です。')
-    : featureCheck('no', 'JSPI がないため、このアプリの WebGPU 用 wllama WASM は初期化できません。WebGPU API が見えてもモデル実行は CPU 経路になります。');
+    ? featureCheck('ok', 'JSPI (WebAssembly.Suspending/promising) があるので、このアプリの WebGPU 用 wllama WASM が使う非同期初期化を通せます。Firefox では about:config の javascript.options.wasm_js_promise_integration が true 相当です。')
+    : featureCheck('no', 'JSPI (WebAssembly.Suspending/promising) がないため、このアプリの WebGPU 用 wllama WASM は初期化できません。Firefox では about:config の javascript.options.wasm_js_promise_integration を true にしてください。');
+
+  const exnref = isWasmExnrefSupported();
+  checks.exnref = exnref
+    ? featureCheck('ok', 'WebAssembly 例外処理 (exnref / try_table) が使えます。WebGPU 用 wllama WASM の C++ 例外を処理できます。Firefox では about:config の javascript.options.wasm_exnref が true 相当です。')
+    : featureCheck('no', 'WebAssembly 例外処理 (exnref / try_table) が無効です。WebGPU 用 wllama WASM は -fwasm-exceptions で生成されているため検証が失敗します。Firefox では about:config の javascript.options.wasm_exnref を true にしてください。');
 
   const sab = hasSharedArrayBufferSupport();
   checks.sharedArrayBuffer = sab

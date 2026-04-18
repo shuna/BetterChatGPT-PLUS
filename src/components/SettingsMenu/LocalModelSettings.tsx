@@ -157,11 +157,35 @@ const LocalModelSettings = () => {
   const featureRows = useMemo(() => {
     if (!envReport) return [];
 
+    const { requestAdapter, requestDevice, webgpuPreflight } = envReport.checks;
+    const verdictState: WllamaFeatureCheck['state'] =
+      webgpuPreflight.state === 'ok'
+        ? 'ok'
+        : (requestAdapter.state === 'no' || requestDevice.state === 'no' || webgpuPreflight.state === 'no')
+          ? 'no'
+          : 'unknown';
+    const verdictSummary =
+      verdictState === 'ok'
+        ? t('localModel.featureWebGpuVerdictOk')
+        : verdictState === 'no'
+          ? t('localModel.featureWebGpuVerdictNo')
+          : t('localModel.featureWebGpuVerdictUnknown');
+    const stateLabel = (s: WllamaFeatureCheck['state']) =>
+      s === 'ok' ? t('localModel.featureStatusOk')
+        : s === 'no' ? t('localModel.featureStatusNo')
+          : t('localModel.featureStatusUnknown');
+    const verdictDetail = [
+      verdictSummary,
+      `・${t('localModel.featureWebGpuVerdictRequestAdapter')} [${stateLabel(requestAdapter.state)}]: ${requestAdapter.detail}`,
+      `・${t('localModel.featureWebGpuVerdictRequestDevice')} [${stateLabel(requestDevice.state)}]: ${requestDevice.detail}`,
+      `・${t('localModel.featureWebGpuVerdictPreflight')} [${stateLabel(webgpuPreflight.state)}]: ${webgpuPreflight.detail}`,
+    ].join('\n');
+
     const rows: Array<{
       key: keyof WllamaEnvironmentReport['checks'];
       category: string;
       label: string;
-      docUrl: string;
+      docUrl: string | null;
       check: WllamaFeatureCheck;
     }> = [
       { key: 'secureContext', category: t('localModel.featureCategoryPlatform'), label: t('localModel.featureSecureContext'), docUrl: MDN_FEATURE_LINKS.secureContext, check: envReport.checks.secureContext },
@@ -171,7 +195,15 @@ const LocalModelSettings = () => {
       { key: 'multiThread', category: t('localModel.featureCategoryThreading'), label: t('localModel.featureMultiThread'), docUrl: MDN_FEATURE_LINKS.multiThread, check: envReport.checks.multiThread },
       { key: 'webgpuApi', category: t('localModel.featureCategoryWebGpu'), label: t('localModel.featureWebGpuApi'), docUrl: MDN_FEATURE_LINKS.webgpuApi, check: envReport.checks.webgpuApi },
       { key: 'jspi', category: t('localModel.featureCategoryWebGpu'), label: t('localModel.featureJspi'), docUrl: MDN_FEATURE_LINKS.jspi, check: envReport.checks.jspi },
+      { key: 'exnref', category: t('localModel.featureCategoryWebGpu'), label: t('localModel.featureExnref'), docUrl: null, check: envReport.checks.exnref },
       { key: 'shaderF16', category: t('localModel.featureCategoryWebGpu'), label: t('localModel.featureShaderF16'), docUrl: MDN_FEATURE_LINKS.shaderF16, check: envReport.checks.shaderF16 },
+      {
+        key: 'webgpuPreflight',
+        category: t('localModel.featureCategoryWebGpu'),
+        label: t('localModel.featureWebGpuVerdict'),
+        docUrl: null,
+        check: { state: verdictState, detail: verdictDetail },
+      },
     ];
     return rows;
   }, [envReport, t]);
@@ -1035,14 +1067,18 @@ const LocalModelSettings = () => {
                                 )}
                                 <tr className='border-t border-gray-200 dark:border-gray-700 align-top'>
                                   <td className='px-3 py-2 text-gray-900 dark:text-gray-100'>
-                                    <a
-                                      href={row.docUrl}
-                                      target='_blank'
-                                      rel='noreferrer'
-                                      className='underline underline-offset-2'
-                                    >
-                                      {row.label}
-                                    </a>
+                                    {row.docUrl ? (
+                                      <a
+                                        href={row.docUrl}
+                                        target='_blank'
+                                        rel='noreferrer'
+                                        className='underline underline-offset-2'
+                                      >
+                                        {row.label}
+                                      </a>
+                                    ) : (
+                                      <span>{row.label}</span>
+                                    )}
                                   </td>
                                   <td className='px-3 py-2 text-gray-900 dark:text-gray-100'>
                                     <span className='inline-flex items-center gap-2 whitespace-nowrap'>
@@ -1050,7 +1086,7 @@ const LocalModelSettings = () => {
                                       <span>{label}</span>
                                     </span>
                                   </td>
-                                  <td className='px-3 py-2 text-gray-600 dark:text-gray-300'>{row.check.detail}</td>
+                                  <td className='px-3 py-2 text-gray-600 dark:text-gray-300 whitespace-pre-line'>{row.check.detail}</td>
                                 </tr>
                               </React.Fragment>
                             );

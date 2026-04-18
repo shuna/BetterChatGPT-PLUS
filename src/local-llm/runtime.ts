@@ -217,6 +217,7 @@ export interface WllamaEnvironmentReport {
     secureContext: WllamaFeatureCheck;
     memory64: WllamaFeatureCheck;
     jspi: WllamaFeatureCheck;
+    exnref: WllamaFeatureCheck;
     sharedArrayBuffer: WllamaFeatureCheck;
     crossOriginIsolated: WllamaFeatureCheck;
     multiThread: WllamaFeatureCheck;
@@ -399,6 +400,7 @@ export class LocalModelRuntime {
 
       const canAttemptPreflight =
         report.checks.jspi.state === 'ok' &&
+        report.checks.exnref.state === 'ok' &&
         report.checks.requestDevice.state === 'ok';
 
       if (canAttemptPreflight) {
@@ -423,6 +425,7 @@ export class LocalModelRuntime {
       } else {
         const blocker = [
           report.checks.jspi.state !== 'ok' ? 'JSPI' : null,
+          report.checks.exnref.state !== 'ok' ? 'exnref' : null,
           report.checks.requestDevice.state !== 'ok' ? 'requestDevice' : null,
         ].filter(Boolean).join(', ');
         report.checks.webgpuPreflight = {
