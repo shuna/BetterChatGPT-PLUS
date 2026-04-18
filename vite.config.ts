@@ -24,10 +24,22 @@ export default defineConfig({
     },
   },
   server: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'credentialless',
+      'Cross-Origin-Resource-Policy': 'same-origin',
+    },
     fs: {
       // Allow serving files from the main repo's node_modules when running
       // in a git worktree (where node_modules is a symlink).
       allow: ['..', '/Users/suzuki/weavelet-canvas'],
+    },
+  },
+  preview: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'credentialless',
+      'Cross-Origin-Resource-Policy': 'same-origin',
     },
   },
   base: './',

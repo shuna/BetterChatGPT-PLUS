@@ -598,7 +598,7 @@ async function handleInspectRuntimeFeatures(req: InspectRuntimeFeaturesRequest) 
 
   const multiThread = canUseMultiThread();
   if (multiThread) {
-    checks.multiThread = featureCheck('ok', 'multi-thread WASM を選べます。現行アプリはまだ n_threads=1 固定ですが、将来の並列実行条件は満たしています。');
+    checks.multiThread = featureCheck('ok', 'multi-thread WASM を使えます。wllama が hardwareConcurrency/2 スレッドで実行します。');
   } else if (!sab || !crossOriginIsolated) {
     const missing = [
       !sab ? 'SharedArrayBuffer' : null,
@@ -766,7 +766,6 @@ async function handleLoad(req: LoadRequest) {
     const requestedCtx = Math.min(req.expectedContextLength ?? MAX_BROWSER_CTX, MAX_BROWSER_CTX);
     const loadOptions = {
       n_ctx: requestedCtx,
-      n_threads: 1,  // Single-thread until COOP/COEP is configured (Phase 8)
       n_gpu_layers: currentWasmUsesWebGPU ? 999 : 0,
       use_mmap: false,  // WASM emulated mmap fails on large files (>2GB)
     };
