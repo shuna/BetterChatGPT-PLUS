@@ -281,7 +281,7 @@ Load=YES, TokGen=YES の実測結果がこれを証明している。
 - scales: 誤 nibble interleaving → 修正後: ggml の j-indexed nibble packing
 - d: 正値 (-maxScale/31) → 修正後: 負値 (-maxScale/32)
 
-**参照**: `.wllama-fork/llama.cpp/ggml/src/ggml-quants.c` の `quantize_row_q3_K_ref` / `dequantize_row_q3_K`
+**参照**: `vendor/wllama-src/llama.cpp/ggml/src/ggml-quants.c` の `quantize_row_q3_K_ref` / `dequantize_row_q3_K`
 
 ### Bug #3: Q2_K ブロックレイアウト (Phase 3.6 実装バグ)
 
@@ -291,7 +291,7 @@ Load=YES, TokGen=YES の実測結果がこれを証明している。
 - nibble 順逆: high=scale,low=min → 修正後: low=scale,high=min
 - qs: sequential → 修正後: stride-32 (Q3_K と同一)
 
-**参照**: `.wllama-fork/llama.cpp/ggml/src/ggml-common.h` の `block_q2_K` 構造体  
+**参照**: `vendor/wllama-src/llama.cpp/ggml/src/ggml-common.h` の `block_q2_K` 構造体  
 および `ggml-quants.c` の `quantize_row_q2_K_ref` / `dequantize_row_q2_K`
 
 ---

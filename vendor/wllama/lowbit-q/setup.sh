@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 #
-# setup.sh — Prepare a wllama fork with lowbit-Q kernel for WASM build.
+# setup.sh — Prepare a wllama source tree with lowbit-Q kernel for WASM build.
 #
 # This script:
-#   1. Clones wllama at the pinned version
+#   1. Clones wllama at the pinned version  (skipped when WLLAMA_SKIP_CLONE=1)
 #   2. Copies the independent lowbit-Q C sources into the clone
 #   3. Applies CMakeLists.txt patch (0001)
 #   4. Applies lowbit-Q patches to llama.cpp submodule:
@@ -12,7 +12,12 @@
 #   5. Optionally builds the WASM binaries (requires Docker)
 #
 # Usage:
-#   ./vendor/wllama/lowbit-q/setup.sh [--build]
+#   bash scripts/wllama/setup.sh [--build]   (preferred — also applies vendor/wllama-patches/)
+#   ./vendor/wllama/lowbit-q/setup.sh [--build]   (direct invocation)
+#
+# Environment:
+#   WLLAMA_SKIP_CLONE=1   Skip step 1 (clone). Used by scripts/wllama/setup.sh,
+#                         which handles cloning and vendor/wllama-patches/ itself.
 #
 # Prerequisites:
 #   - git
@@ -20,39 +25,49 @@
 #   - Docker (only if --build is passed)
 #
 # Output:
-#   .wllama-fork/           — patched wllama clone, ready to build
-#   .wllama-fork/esm/       — WASM binaries (only with --build)
+#   vendor/wllama-src/           — patched wllama source tree, ready to build
+#   vendor/wllama-src/esm/       — WASM binaries (only with --build)
 #
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-FORK_DIR="$REPO_ROOT/.wllama-fork"
+FORK_DIR="$REPO_ROOT/vendor/wllama-src"
 WLLAMA_VERSION="$(cat "$SCRIPT_DIR/WLLAMA_VERSION" | tr -d '[:space:]')"
 WLLAMA_REPO="https://github.com/ngxson/wllama.git"
+SKIP_CLONE="${WLLAMA_SKIP_CLONE:-0}"
 
 echo "=== vendor/wllama/lowbit-q setup ==="
-echo "  wllama version: v$WLLAMA_VERSION"
-echo "  fork directory: $FORK_DIR"
+echo "  wllama version:   v$WLLAMA_VERSION"
+echo "  source directory: $FORK_DIR"
+echo "  skip clone:       $SKIP_CLONE"
 echo ""
 
 # -----------------------------------------------------------------------
 # Step 1: Clone wllama at pinned version
 # -----------------------------------------------------------------------
-if [ -d "$FORK_DIR" ]; then
-  echo "[1/5] Fork directory exists, cleaning..."
-  rm -rf "$FORK_DIR"
-fi
+if [ "$SKIP_CLONE" = "1" ]; then
+  echo "[1/5] Clone skipped (WLLAMA_SKIP_CLONE=1) — using existing vendor/wllama-src/"
+  if [ ! -d "$FORK_DIR" ]; then
+    echo "ERROR: vendor/wllama-src/ not found. Run scripts/wllama/setup.sh without WLLAMA_SKIP_CLONE."
+    exit 1
+  fi
+else
+  if [ -d "$FORK_DIR" ]; then
+    echo "[1/5] Source directory exists, cleaning..."
+    rm -rf "$FORK_DIR"
+  fi
 
-echo "[1/5] Cloning wllama v$WLLAMA_VERSION..."
-git clone --depth 1 --branch "v$WLLAMA_VERSION" "$WLLAMA_REPO" "$FORK_DIR" 2>/dev/null \
-  || git clone --depth 1 "$WLLAMA_REPO" "$FORK_DIR"
+  echo "[1/5] Cloning wllama v$WLLAMA_VERSION..."
+  git clone --depth 1 --branch "v$WLLAMA_VERSION" "$WLLAMA_REPO" "$FORK_DIR" 2>/dev/null \
+    || git clone --depth 1 "$WLLAMA_REPO" "$FORK_DIR"
 
-# wllama uses llama.cpp as a submodule
-cd "$FORK_DIR"
-if [ -f ".gitmodules" ]; then
-  echo "    Initializing llama.cpp submodule..."
-  git submodule update --init --depth 1
+  # wllama uses llama.cpp as a submodule
+  cd "$FORK_DIR"
+  if [ -f ".gitmodules" ]; then
+    echo "    Initializing llama.cpp submodule..."
+    git submodule update --init --depth 1
+  fi
 fi
 
 # -----------------------------------------------------------------------
@@ -238,6 +253,7 @@ if [[ "${1:-}" == "--build" ]]; then
     echo ""
     echo "Do not copy these Memory64 WASM files directly into vendor/wllama/."
     echo "They require matching JS glue updates in src/vendor/wllama/index.js."
+    echo "See: docs/build/wllama.md for the full artifact update procedure."
   else
     echo "    WARNING: build_wasm.sh not found. Manual build required."
     echo "    See: https://github.com/nicekid1/Wllama#building-from-source"
@@ -249,7 +265,7 @@ fi
 echo ""
 echo "=== Setup complete ==="
 echo ""
-echo "Fork is at: $FORK_DIR"
+echo "Source tree is at: $FORK_DIR"
 echo ""
 echo "Patches applied:"
 echo "  0001: CMakeLists.txt — lowbit-Q sources added to WASM build"
@@ -259,6 +275,6 @@ echo ""
 echo "Next steps:"
 echo "  1. cd $FORK_DIR"
 echo "  2. Review changes in llama.cpp/src/{llama-model.cpp,models/llama.cpp}"
-echo "  3. Run: bash scripts/build_wasm.sh  (requires Docker)"
-echo "  4. Or:  ./vendor/wllama/lowbit-q/build-local.sh  (requires emsdk 4.0.3)"
-echo "  5. Keep vendor/wllama/{single,multi}-thread.wasm on upstream binaries unless JS glue is updated too"
+echo "  3. bash scripts/wllama/build.sh              (local emsdk, compat only)"
+echo "  4. bash scripts/wllama/build.sh --webgpu    (with WebGPU variants)"
+echo "  See: docs/build/wllama.md for the full artifact update procedure."

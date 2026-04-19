@@ -171,7 +171,7 @@ Phase 3/3.5 の TinyLlama 検証では、mixed-bit allocator を導入しても
 どこで上回れるかを検証する**
 方針を維持する。
 
-`.wllama-fork/llama.cpp/ggml/src/ggml-webgpu/` に **WebGPU 推論バックエンド**が
+`vendor/wllama-src/llama.cpp/ggml/src/ggml-webgpu/` に **WebGPU 推論バックエンド**が
 存在するがビルド未有効化であり、削減後モデルの GPU 推論が即座に利用可能な状態にある。
 
 今後は `OneCompression をそのまま移植する` のではなく、

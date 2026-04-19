@@ -1,0 +1,51 @@
+--- a/src/workers-code/llama-cpp.js
++++ b/src/workers-code/llama-cpp.js
+@@ -76,21 +76,39 @@
+ };
+ 
+ // Get the memory to be used by wasm. (Only used in multi-thread mode)
+-// Because we have a weird OOM issue on iOS, we need to try some values
++// Returns null for Memory64 builds so the Emscripten glue can construct the
++// correct i64-indexed shared memory itself.
++//
++// For compat (wasm32) builds, pre-allocate i32 shared memory but cap the
++// maximum at 32768 pages (2 GiB). The generated compat glue otherwise defaults
++// to 65536 pages (4 GiB), which exceeds the wasm32 import limit.
++//
++// We still step down on failure for iOS / low-memory environments.
+ // See: https://github.com/emscripten-core/emscripten/issues/19144
+ //      https://github.com/godotengine/godot/issues/70621
+ const getWasmMemory = () => {
+-  let minBytes = 128 * 1024 * 1024;
+-  let maxBytes = 4096 * 1024 * 1024;
+-  let stepBytes = 128 * 1024 * 1024;
+-  while (maxBytes > minBytes) {
++  const wasmPath = String((RUN_OPTIONS.pathConfig || {})['wllama.wasm'] || '');
++  const isCompat = /-compat(\.wasm|[?#]|$)/.test(wasmPath);
++
++  if (!isCompat) {
++    // Memory64 builds import i64 memory; providing an external i32 memory here
++    // causes "cannot import i32 memory as i64".
++    return null;
++  }
++
++  const PAGE_SIZE = 65536;
++  const minBytes = 128 * 1024 * 1024;
++  const maxStart = 2 * 1024 * 1024 * 1024;
++  const stepBytes = 128 * 1024 * 1024;
++
++  let maxBytes = maxStart;
++  while (maxBytes >= minBytes) {
+     try {
+-      const wasmMemory = new WebAssembly.Memory({
+-        initial: minBytes / 65536,
+-        maximum: maxBytes / 65536,
++      return new WebAssembly.Memory({
++        initial: minBytes / PAGE_SIZE,
++        maximum: maxBytes / PAGE_SIZE,
+         shared: true,
+       });
+-      return wasmMemory;
+     } catch (e) {
+       maxBytes -= stepBytes;
+       continue; // retry

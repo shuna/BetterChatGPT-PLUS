@@ -5,11 +5,9 @@ artifact set for weavelet-canvas.
 
 Repository policy:
 
-- upstream `wllama` / `llama.cpp` sources are fetched externally
-- this repo does not treat `.wllama-fork/` as a long-term source of truth
-- reproducible differences should be stored as patches under
-  [`vendor/wllama/patches/`](/Users/suzuki/weavelet-canvas/vendor/wllama/patches/README.md)
-- low-bit-q specific extensions are maintained separately under `vendor/wllama/lowbit-q/`
+- upstream `wllama` / `llama.cpp` sources are fetched into `vendor/wllama-src/` (gitignore'd)
+- reproducible differences are stored as patches under `vendor/wllama-patches/`
+- low-bit-q specific extensions are maintained under `vendor/wllama/lowbit-q/`
 
 ## Overview
 
@@ -93,18 +91,18 @@ See `deps/` for the patched headers that add `enabled_tags=['emscripten','dawn']
 ### Step 1: Build WASM binaries
 
 ```bash
-cd .wllama-fork
+cd vendor/wllama-src
 ./scripts/build_all_wasm.sh
 ```
 
-`.wllama-fork/` is a local working tree created from upstream sources. Before
-running this step, apply the canonical patches tracked by this repo.
+`vendor/wllama-src/` is a gitignore'd local working tree created from upstream
+sources. Set it up once with `bash scripts/wllama/setup.sh`, which clones
+wllama and applies patches from `vendor/wllama-patches/`.
 
-The long-term intended flow is:
+The intended flow:
 
-1. fetch upstream sources into `.wllama-fork/`
-2. apply the tracked base-extension patches
-3. run `build_all_wasm.sh`
+1. `bash scripts/wllama/setup.sh` — fetch upstream into `vendor/wllama-src/`, apply patches
+2. `cd vendor/wllama-src && ./scripts/build_all_wasm.sh`
 
 This builds all 8 variants under `wasm/`.
 
@@ -115,6 +113,7 @@ Each directory contains:
 To rebuild only selected variants, pass variant names as arguments:
 
 ```bash
+# run from vendor/wllama-src/
 ./scripts/build_all_wasm.sh \
   single-thread-webgpu \
   multi-thread-webgpu \
@@ -230,6 +229,7 @@ The wllama library embeds the Emscripten JS glue as string constants. After
 rebuilding WASM, you **must** update the embedded glue:
 
 ```bash
+# Run from vendor/wllama-src/
 # Re-embed all JS glue variants into generated.ts
 npm run build:worker
 
@@ -244,7 +244,7 @@ embedded JS glue, `WebAssembly.instantiate()` will fail with:
 
     Import #0 "a": module is not an object or function
 
-Verify the embedded bundle still contains the required runtime patches:
+Verify the embedded bundle still contains the required runtime patches (run from `vendor/wllama-src/`):
 
 ```bash
 node <<'NODE'
@@ -273,6 +273,8 @@ NODE
 
 ### Step 4: Copy artifacts to the main project
 
+Run from `vendor/wllama-src/` (one level inside the repo root):
+
 ```bash
 # Copy WASM binaries
 cp wasm/single-thread/wllama.wasm         ../vendor/wllama/single-thread.wasm
@@ -290,7 +292,7 @@ cp esm/index.js ../src/vendor/wllama/index.js
 
 ### Step 5: Verify the main project copy
 
-Run these checks from `.wllama-fork` after copying:
+Run these checks from `vendor/wllama-src/` after copying:
 
 ```bash
 node <<'NODE'

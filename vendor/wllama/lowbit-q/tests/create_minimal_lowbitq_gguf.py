@@ -25,7 +25,7 @@ import struct
 import numpy as np
 
 REPO_ROOT = os.path.join(os.path.dirname(__file__), '..', '..')
-GGUF_PY   = os.path.join(REPO_ROOT, '.wllama-fork', 'llama.cpp', 'gguf-py')
+GGUF_PY   = os.path.join(REPO_ROOT, 'vendor/wllama-src', 'llama.cpp', 'gguf-py')
 sys.path.insert(0, GGUF_PY)
 
 from gguf import GGUFWriter, GGMLQuantizationType

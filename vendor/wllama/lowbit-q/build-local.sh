@@ -4,15 +4,16 @@
 #
 # Prerequisites:
 #   - emsdk installed and activated (source emsdk_env.sh)
-#   - .wllama-fork/ prepared by setup.sh
+#   - vendor/wllama-src/ prepared by scripts/wllama/setup.sh
 #
 # Usage:
-#   ./vendor/wllama/lowbit-q/build-local.sh
+#   bash scripts/wllama/build.sh               (preferred entry point)
+#   ./vendor/wllama/lowbit-q/build-local.sh    (direct invocation)
 #
 # Optional WebGPU build:
-#   WLLAMA_BUILD_WEBGPU=1 ./vendor/wllama/lowbit-q/build-local.sh
-#   WLLAMA_BUILD_WEBGPU=1 EMDAWNWEBGPU_DIR=/path/to/emdawnwebgpu_pkg ./vendor/wllama/lowbit-q/build-local.sh
-#   WLLAMA_BUILD_WEBGPU=1 WLLAMA_SYNC_VENDOR_JS=1 ./vendor/wllama/lowbit-q/build-local.sh
+#   WLLAMA_BUILD_WEBGPU=1 bash scripts/wllama/build.sh
+#   WLLAMA_BUILD_WEBGPU=1 EMDAWNWEBGPU_DIR=/path/to/emdawnwebgpu_pkg bash scripts/wllama/build.sh
+#   WLLAMA_BUILD_WEBGPU=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
 #
 # Output:
 #   vendor/wllama/single-thread-compat.wasm
@@ -24,15 +25,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-FORK_DIR="$REPO_ROOT/.wllama-fork"
+FORK_DIR="$REPO_ROOT/vendor/wllama-src"
 VENDOR_DIR="$REPO_ROOT/vendor/wllama"
 
 # ---------------------------------------------------------------------------
 # Validate environment
 # ---------------------------------------------------------------------------
 if [ ! -d "$FORK_DIR" ]; then
-  echo "ERROR: .wllama-fork/ not found. Run setup.sh first:"
-  echo "  bash vendor/wllama/lowbit-q/setup.sh"
+  echo "ERROR: vendor/wllama-src/ not found. Run setup first:"
+  echo "  bash scripts/wllama/setup.sh"
   exit 1
 fi
 
@@ -60,7 +61,7 @@ fi
 
 echo "=== vendor/wllama/lowbit-q local build ==="
 echo "  emcc: $(emcc --version | head -1)"
-echo "  fork: $FORK_DIR"
+echo "  src:  $FORK_DIR"
 echo ""
 
 # ---------------------------------------------------------------------------

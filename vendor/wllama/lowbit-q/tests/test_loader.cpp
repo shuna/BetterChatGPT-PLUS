@@ -6,7 +6,7 @@
  *   2. lowbit_q_log_model_info() runs and prints the SVID/Q4_0 summary
  *   3. The load completes without errors
  *
- * Build (from .wllama-fork/build-native/):
+ * Build (from vendor/wllama-src/build-native/):
  *   c++ -std=c++17 -I../llama.cpp/include -I../cpp/lowbit-q \
  *       ../../vendor/wllama/lowbit-q/tests/test_loader.cpp \
  *       -L. -lllama -Wl,-rpath,. -o test_loader && ./test_loader

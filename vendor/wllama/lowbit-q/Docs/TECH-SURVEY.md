@@ -258,7 +258,7 @@
 
 **現状: 実装済み・ビルド未有効化**
 
-- **所在**: `.wllama-fork/llama.cpp/ggml/src/ggml-webgpu/`
+- **所在**: `vendor/wllama-src/llama.cpp/ggml/src/ggml-webgpu/`
 - **実装ファイル**: `ggml-webgpu.cpp` (135KB) + 14 WGSL シェーダ
 - **ビルドフラグ**: `GGML_WEBGPU=OFF` (デフォルト無効)
 - **Emscripten 依存**: `emdawnwebgpu_pkg` (Dawn WebGPU port for Emscripten)
@@ -479,7 +479,7 @@ Phase 4: Activation 量子化 (条件付き)
 1. **TurboQuant-Model は存在しない** — activation 量子化に差し替え
 2. **KV cache の初手は KIVI** — TurboQuant はブラウザ移植ハードルが想定より高い
 3. **BitNet b1.58 は認識すべき** — PTQ とは別軸。bitnet.cpp WASM 移植が進めば将来の選択肢
-4. **WebGPU バックエンドが .wllama-fork に存在する** — ビルド有効化で GPU 推論が即時利用可能
+4. **WebGPU バックエンドが vendor/wllama-src に存在する** — ビルド有効化で GPU 推論が即時利用可能
 5. **統一フォーマット先行** — mixed-bit / KV cache / 回転前処理を個別に段階拡張するのではなく、
    包含する統一フォーマットを先に設計し、カーネルは一度だけ実装する
 6. 別アーキテクチャ系は当面保留 (RWKV の WebGPU 動向はウォッチ)

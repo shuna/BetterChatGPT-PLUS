@@ -50,18 +50,18 @@ vendor/wllama/lowbit-q/
 ### 自動セットアップ
 
 ```bash
-# クローン + パッチ適用のみ
-./vendor/wllama/lowbit-q/setup.sh
+# クローン + パッチ適用のみ (推奨エントリポイント)
+bash scripts/wllama/setup.sh
 
 # クローン + パッチ適用 + WASM ビルド
-./vendor/wllama/lowbit-q/setup.sh --build
+bash scripts/wllama/setup.sh --build
 ```
 
 `setup.sh` は以下を実行する:
 
-1. wllama v2.3.7 を `.wllama-fork/` にクローン
+1. wllama v2.3.7 を `vendor/wllama-src/` にクローン
 2. llama.cpp サブモジュールを初期化
-3. `cpp/lowbit-q/` の 4 ファイルをフォークにコピー
+3. `cpp/lowbit-q/` の 4 ファイルをソース作業ツリーにコピー
 4. CMakeLists.txt にビルドターゲットを追加
 5. (--build 指定時) Docker 経由で WASM をビルド
 
@@ -69,8 +69,8 @@ vendor/wllama/lowbit-q/
 
 ```bash
 # 1. wllama をクローン
-git clone --depth 1 --branch v2.3.7 https://github.com/nicekid1/Wllama.git .wllama-fork
-cd .wllama-fork
+git clone --depth 1 --branch v2.3.7 https://github.com/nicekid1/Wllama.git vendor/wllama-src
+cd vendor/wllama-src
 git submodule update --init --depth 1
 
 # 2. lowbit-Q ソースをコピー
