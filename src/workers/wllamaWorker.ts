@@ -575,7 +575,7 @@ const recentNativeLogs: string[] = [];
 /**
  * Count of suppressed WebGPU "Failed to map error buffer" messages during the
  * current generation. The underlying condition is a known race in the ggml
- * WebGPU backend; the fork recovers from each failure (see vendor/wllama/BUILD.md
+ * WebGPU backend; the fork recovers from each failure (see vendor/wllama/WASM-BUILD.md
  * §13), so individual occurrences are noise. We suppress them from the debug
  * view and surface a single summary at generate start/end instead.
  */
@@ -1115,7 +1115,7 @@ async function handleGenerate(req: GenerateRequest) {
   currentAbortController = new AbortController();
 
   // Reset suppression counter and announce filtering for this generation.
-  // The WebGPU "map error buffer" failures are known-recoverable (BUILD.md §13)
+  // The WebGPU "map error buffer" failures are known-recoverable (WASM-BUILD.md §13)
   // but fire 100s of times per generation — we hide them and show a summary.
   suppressedWebgpuMapErrors = 0;
   if (currentWasmUsesWebGPU) {

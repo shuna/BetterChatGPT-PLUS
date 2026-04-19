@@ -14,7 +14,7 @@ WebGPU 対応、Memory64、JSPI、OPFS、shard 対応などの「本流 `wllama`
 本流 `wllama` 側のステータスは以下を参照してください。
 
 - [`vendor/wllama/SpecAndStatus.md`](/Users/suzuki/weavelet-canvas/vendor/wllama/SpecAndStatus.md)
-- [`vendor/wllama/BUILD.md`](/Users/suzuki/weavelet-canvas/vendor/wllama/BUILD.md)
+- [`vendor/wllama/WASM-BUILD.md`](/Users/suzuki/weavelet-canvas/vendor/wllama/WASM-BUILD.md)
 
 ## 旧記録について
 

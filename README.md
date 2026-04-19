@@ -151,7 +151,7 @@ To patch only the embedded worker code (`llama-cpp.js`):
    ```
 
 To rebuild the Emscripten WASM glue or the entire wllama library, see
-[`vendor/wllama/BUILD.md`](./vendor/wllama/BUILD.md).
+[`vendor/wllama/WASM-BUILD.md`](./vendor/wllama/WASM-BUILD.md).
 
 #### Google Drive Sync Setup
 
@@ -309,7 +309,7 @@ yarn build
    ```
 
 Emscripten WASM グルーや wllama ライブラリ全体の再ビルドは
-[`vendor/wllama/BUILD.md`](./vendor/wllama/BUILD.md) を参照してください。
+[`vendor/wllama/WASM-BUILD.md`](./vendor/wllama/WASM-BUILD.md) を参照してください。
 
 ### 謝辞
 
