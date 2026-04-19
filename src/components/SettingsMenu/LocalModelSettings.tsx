@@ -7,8 +7,8 @@ import {
   localModelRuntime,
   type WllamaEnvironmentReport,
   type WllamaFeatureCheck,
-  type WasmVariantOverride,
 } from '@src/local-llm/runtime';
+import type { VariantOverride as WasmVariantOverride } from '@src/vendor/wllama/variant-table';
 import { OpfsFileProvider, deleteModel, getTempFileSize, readFile, saveFile, sha256Blob } from '@src/local-llm/storage';
 import { rehydrateSavedModels } from '@src/local-llm/storage';
 import { CURATED_MODELS } from '@src/local-llm/catalog';
@@ -32,7 +32,7 @@ import {
 import { getManifestFiles, getManifestPrimaryFile, parseShardInfo } from '@src/local-llm/ggufShardUtils';
 import OpfsFileBrowser from './OpfsFileBrowser';
 
-import { ASSIGNABLE_TASKS, EPHEMERAL_MODEL_ID, getModelStatusLabel } from './localModelConstants';
+import { ASSIGNABLE_TASKS, getModelStatusLabel } from './localModelConstants';
 import { StatusBadge, FitBadge, SortableColumnHeader, FilterInfoButton } from './LocalModelBadges';
 import { CatalogCard, DownloadedModelRow, DownloadingModelRow, TaskAssignmentRow } from './LocalModelCards';
 import SearchResultCard from './SearchResultCard';
@@ -103,8 +103,6 @@ const LocalModelSettings = () => {
   const [showFeatureChecklist, setShowFeatureChecklist] = useState(false);
   const [wasmVariantOverride, setWasmVariantOverrideState] = useState<WasmVariantOverride>(() => localModelRuntime.getWasmVariantOverride());
 
-  // Ephemeral model state
-  const [ephemeralStatus, setEphemeralStatus] = useState<LocalModelStatus>('idle');
   const [prompt, setPrompt] = useState('');
   const [output, setOutput] = useState('');
   const [generating, setGenerating] = useState(false);
@@ -132,7 +130,6 @@ const LocalModelSettings = () => {
   // Runtime statuses for all known models
   const [runtimeStatuses, setRuntimeStatuses] = useState<Record<string, LocalModelStatus>>(() => {
     const initial: Record<string, LocalModelStatus> = {};
-    initial[EPHEMERAL_MODEL_ID] = localModelRuntime.getStatus(EPHEMERAL_MODEL_ID);
     for (const model of CURATED_MODELS) {
       initial[model.id] = localModelRuntime.getStatus(model.id);
     }
@@ -274,7 +271,6 @@ const LocalModelSettings = () => {
   useEffect(() => {
     const unsubscribe = localModelRuntime.subscribe(() => {
       const newStatuses: Record<string, LocalModelStatus> = {};
-      newStatuses[EPHEMERAL_MODEL_ID] = localModelRuntime.getStatus(EPHEMERAL_MODEL_ID);
       for (const model of CURATED_MODELS) {
         newStatuses[model.id] = localModelRuntime.getStatus(model.id);
       }
@@ -284,7 +280,6 @@ const LocalModelSettings = () => {
         }
       }
       setRuntimeStatuses(newStatuses);
-      setEphemeralStatus(newStatuses[EPHEMERAL_MODEL_ID]);
     });
     return unsubscribe;
   }, []);
@@ -651,7 +646,6 @@ const LocalModelSettings = () => {
         store.addLocalModel(model);
       }
 
-      if (localModelRuntime.isLoaded(EPHEMERAL_MODEL_ID)) await localModelRuntime.unloadModel(EPHEMERAL_MODEL_ID);
       if (localModelRuntime.isLoaded(model.id)) await localModelRuntime.unloadModel(model.id);
 
       await localModelRuntime.loadModel(
@@ -947,7 +941,7 @@ const LocalModelSettings = () => {
   }, [cancelDownload]);
 
   // ----- Derived state -----
-  const importedStatus = importedModelId ? (runtimeStatuses[importedModelId] ?? localModelRuntime.getStatus(importedModelId)) : ephemeralStatus;
+  const importedStatus = importedModelId ? (runtimeStatuses[importedModelId] ?? localModelRuntime.getStatus(importedModelId)) : 'idle';
   const isEphemeralReady = importedStatus === 'ready' || importedStatus === 'busy';
   const canTestGenerate = isTestModelLoaded('generate');
   const canTestAnalyze = isTestModelLoaded('analyze') || isTestModelLoaded('generate');
@@ -1053,14 +1047,12 @@ const LocalModelSettings = () => {
                           }}
                         >
                           <option value='auto'>{t('localModel.wasmVariantAuto')}</option>
-                          <option value='single-thread-compat'>single-thread-compat</option>
-                          <option value='single-thread'>single-thread (Memory64)</option>
-                          <option value='multi-thread-compat'>multi-thread-compat</option>
-                          <option value='multi-thread'>multi-thread (Memory64)</option>
-                          <option value='single-thread-webgpu-compat'>single-thread-webgpu-compat</option>
-                          <option value='single-thread-webgpu'>single-thread-webgpu (Memory64)</option>
-                          <option value='multi-thread-webgpu-compat'>multi-thread-webgpu-compat</option>
-                          <option value='multi-thread-webgpu'>multi-thread-webgpu (Memory64)</option>
+                          <option value='st-cpu-compat'>st-cpu-compat</option>
+                          <option value='mt-cpu-compat'>mt-cpu-compat</option>
+                          <option value='st-cpu-mem64'>st-cpu-mem64 (Memory64)</option>
+                          <option value='mt-cpu-mem64'>mt-cpu-mem64 (Memory64)</option>
+                          <option value='st-webgpu-jspi-compat'>st-webgpu-jspi-compat</option>
+                          <option value='mt-webgpu-jspi-compat'>mt-webgpu-jspi-compat</option>
                         </select>
                       </label>
                       <div className='text-[10px] text-gray-500 dark:text-gray-400'>{t('localModel.wasmVariantOverrideNote')}</div>

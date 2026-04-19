@@ -54,6 +54,7 @@ export interface ChatMessage {
 export class Wllama {
   constructor(pathConfig: AssetsPathConfig, config?: WllamaConfig);
   loadModel(files: Blob[], config?: LoadModelConfig): Promise<void>;
+  preflightInit(config?: Pick<LoadModelConfig, 'n_threads'>): Promise<void>;
   loadModelFromOpfs(
     modelId: string,
     shardPaths: string[],

@@ -6,14 +6,12 @@
  * - Transformers.js: needs a set of files served via customCache
  *
  * Supports multiple source types:
- * - ephemeral-file: <input type="file"> selection (no persistence)
  * - persistent-handle: File System Access API handles (stored in IDB)
- * - opfs: Origin Private File System (Phase 7)
- * - remote-download: HF Hub download (Phase 7)
+ * - opfs: Origin Private File System
+ * - remote-download: HF Hub download
  */
 
-import type { LocalModelSource, LocalModelManifest } from './types';
-import { getManifestFiles } from './ggufShardUtils';
+import type { LocalModelSource } from './types';
 
 // ---------------------------------------------------------------------------
 // ModelFileProvider interface
@@ -76,86 +74,6 @@ export interface ModelFileProvider {
 export interface CustomCacheAdapter {
   match(request: RequestInfo | URL): Promise<Response | undefined>;
   put(request: RequestInfo | URL, response: Response): Promise<void>;
-}
-
-// ---------------------------------------------------------------------------
-// Ephemeral file provider (Phase 1-6: <input type="file">)
-// ---------------------------------------------------------------------------
-
-/**
- * Simplest provider: holds files in memory from user's file picker selection.
- * No persistence — files must be re-selected each session.
- */
-export class EphemeralFileProvider implements ModelFileProvider {
-  readonly source: LocalModelSource = 'ephemeral-file';
-
-  /**
-   * @param files Map from normalized path to File/Blob.
-   *   For single-file (wllama): one entry, key = entrypoint filename.
-   *   For multi-file (Transformers.js): multiple entries, key = relative path.
-   * @param manifest The model's file manifest for validation.
-   * @param modelId Model identifier used for URL resolution in customCache.
-   */
-  constructor(
-    private files: Map<string, File | Blob>,
-    private manifest: LocalModelManifest,
-    private modelId: string,
-  ) {}
-
-  async isAvailable(): Promise<boolean> {
-    return getManifestFiles(this.manifest).every((f) => this.files.has(f));
-  }
-
-  async getFile(): Promise<File | Blob> {
-    if (this.manifest.kind !== 'single-file') {
-      throw new Error('getFile() is only available for single-file manifests');
-    }
-    const file = this.files.get(this.manifest.entrypoint);
-    if (!file) {
-      throw new Error(`File not found: ${this.manifest.entrypoint}`);
-    }
-    return file;
-  }
-
-  async getGgufFiles(): Promise<(File | Blob)[]> {
-    if (this.manifest.kind === 'multi-file') {
-      throw new Error('getGgufFiles() is not available for multi-file (Transformers.js) manifests');
-    }
-    const fileNames = this.manifest.kind === 'gguf-sharded'
-      ? this.manifest.shards
-      : [this.manifest.entrypoint];
-    const result: (File | Blob)[] = [];
-    for (const name of fileNames) {
-      const blob = this.files.get(name);
-      if (!blob) throw new Error(`GGUF file not found in provider: ${name}`);
-      result.push(blob);
-    }
-    return result;
-  }
-
-  async getFileEntries(): Promise<[string, Blob][]> {
-    return Array.from(this.files.entries()).map(([key, blob]) => [key, blob]);
-  }
-
-  getCustomCache(): CustomCacheAdapter {
-    return {
-      match: async (request: RequestInfo | URL): Promise<Response | undefined> => {
-        const url = typeof request === 'string' ? request : request instanceof URL ? request.href : request.url;
-        const key = resolveUrlToManifestKey(url, this.modelId);
-        if (!key) return undefined;
-        const blob = this.files.get(key);
-        if (!blob) return undefined;
-        return new Response(blob);
-      },
-      put: async (): Promise<void> => {
-        // No-op for ephemeral provider. OPFS persistence added in Phase 7.
-      },
-    };
-  }
-
-  dispose(): void {
-    this.files.clear();
-  }
 }
 
 // ---------------------------------------------------------------------------

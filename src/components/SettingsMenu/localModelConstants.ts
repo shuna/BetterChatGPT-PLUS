@@ -37,16 +37,14 @@ export const variantStatusColors: Record<string, string> = {
 
 // Constants
 export const ASSIGNABLE_TASKS: LocalModelTask[] = ['generation', 'analysis'];
-export const EPHEMERAL_MODEL_ID = '__wllama_test__';
 
 // Utility functions
 export function getModelStatusLabel(
   modelId: string,
   source: string,
   runtimeStatus: LocalModelStatus,
-): 'loaded' | 'saved' | 'imported' | 'notLoaded' {
+): 'loaded' | 'saved' | 'notLoaded' {
   if (runtimeStatus === 'ready' || runtimeStatus === 'busy') return 'loaded';
-  if (source === 'ephemeral-file') return 'imported';
   if (source === 'opfs') return 'saved';
   return 'notLoaded';
 }

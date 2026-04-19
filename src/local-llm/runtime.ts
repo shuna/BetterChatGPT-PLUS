@@ -27,6 +27,7 @@ import { getOPFSFileSize } from './storage';
 import { CURATED_MODELS } from './catalog';
 import { isLowbitQModelId } from './lowbit-q/lowbitQManager';
 import { debugLog, debugReport } from '@store/debug-store';
+import type { VariantOverride } from '../vendor/wllama/variant-table';
 
 // ---------------------------------------------------------------------------
 // Worker proxy interfaces (engine-specific facades)
@@ -241,22 +242,13 @@ export interface WllamaEnvironmentReport {
 // LocalModelRuntime
 // ---------------------------------------------------------------------------
 
-export type WasmVariantOverride =
-  | 'auto'
-  | 'single-thread'
-  | 'single-thread-compat'
-  | 'multi-thread'
-  | 'multi-thread-compat'
-  | 'single-thread-webgpu'
-  | 'single-thread-webgpu-compat'
-  | 'multi-thread-webgpu'
-  | 'multi-thread-webgpu-compat';
+export type { VariantOverride as WasmVariantOverride } from '../vendor/wllama/variant-table';
 
 export class LocalModelRuntime {
   private engines = new Map<string, EngineEntry>();
   private wasmCaps = new Map<string, WasmCapabilities>();
   private webGpuEnabled: boolean | null = null;
-  private wasmVariantOverride: WasmVariantOverride = 'auto';
+  private wasmVariantOverride: VariantOverride = 'auto';
   private listeners = new Set<() => void>();
   private logListeners = new Set<(event: RuntimeLogEvent) => void>();
   private diagnosticListeners = new Set<(event: RuntimeDiagnosticEvent) => void>();
@@ -299,11 +291,11 @@ export class LocalModelRuntime {
     this.webGpuEnabled = enabled;
   }
 
-  getWasmVariantOverride(): WasmVariantOverride {
+  getWasmVariantOverride(): VariantOverride {
     return this.wasmVariantOverride;
   }
 
-  setWasmVariantOverride(override: WasmVariantOverride): void {
+  setWasmVariantOverride(override: VariantOverride): void {
     this.wasmVariantOverride = override;
   }
 
@@ -527,13 +519,12 @@ export class LocalModelRuntime {
       let descriptor: LoadDescriptor | null = null;
       let preferMemory64 = false;
       let allowWebGPU = false;
-      let useOpfsDirect = false;
       if (def.engine === 'wllama') {
-        useOpfsDirect = def.source === 'opfs' &&
+        const isOpfsDirect = def.source === 'opfs' &&
           (def.manifest.kind === 'single-file' || def.manifest.kind === 'gguf-sharded');
 
-        if (useOpfsDirect) {
-          // OPFS-direct: skip File[] retrieval — inner worker reads via SyncAccessHandle
+        if (isOpfsDirect) {
+          // OPFS-direct: inner worker reads via SyncAccessHandle, no File[] copy to WASM heap
           const shards = def.manifest.kind === 'gguf-sharded'
             ? def.manifest.shards
             : [def.manifest.entrypoint];
@@ -541,14 +532,11 @@ export class LocalModelRuntime {
           const totalSize = await computeModelTotalSize(def);
           preferMemory64 = totalSize >= 2 * 1024 * 1024 * 1024;
         } else {
-          const wllamaFiles = await provider.getGgufFiles();
-          descriptor = { mode: 'files', files: wllamaFiles };
-          // 32-bit compat builds are more broadly stable. Memory64 is only
-          // required once the total model size can exceed 32-bit address/file-size limits.
-          // NOTE: preferMemory64 selects the Memory64 WASM build, but does NOT guarantee
-          // load success — the WASM heap must still accommodate the total model size.
-          const totalSize = wllamaFiles.reduce((s, f) => s + f.size, 0);
-          preferMemory64 = totalSize >= 2 * 1024 * 1024 * 1024;
+          // wllama engine only accepts OPFS-backed models. Non-OPFS sources
+          // (e.g. persistent-handle) are not supported for this engine.
+          throw new Error(
+            `wllama engine requires an OPFS-backed provider (source='opfs'), got source='${def.source}'`,
+          );
         }
 
         const webGpuSetting = this.webGpuEnabled;
@@ -580,14 +568,10 @@ export class LocalModelRuntime {
       // Load model — engine-specific
       if (def.engine === 'wllama') {
         if (!descriptor) throw new Error('wllama load descriptor not set');
-        const shardCount = descriptor.mode === 'opfs-direct'
-          ? descriptor.shards.length
-          : descriptor.files.length;
+        const shardCount = descriptor.shards.length;
         const shardInfo = shardCount > 1 ? ` (${shardCount} shards)` : '';
-        const nameHint = descriptor.mode === 'opfs-direct'
-          ? descriptor.shards[0]
-          : ((descriptor.files[0] as File).name ?? '(blob)');
-        console.info('[LocalModelRuntime] loading model:', nameHint, shardInfo, 'mode:', descriptor.mode);
+        const nameHint = descriptor.shards[0];
+        console.info('[LocalModelRuntime] loading model:', nameHint, shardInfo, 'mode: opfs-direct');
         // Look up expected context length from catalog/store so the worker
         // allocates the right amount of KV cache instead of a fixed default.
         const expectedCtx = this.lookupExpectedContextLength(def.id);
@@ -696,7 +680,6 @@ export class LocalModelRuntime {
 
     const def = findModelDefinition(modelId);
     if (!def) throw new Error(`Model ${modelId} not found in store or catalog`);
-    if (def.source === 'ephemeral-file') throw new Error('Cannot auto-load ephemeral model');
 
     // Import OpfsFileProvider lazily to avoid circular dependency
     const { OpfsFileProvider } = await import('./storage');

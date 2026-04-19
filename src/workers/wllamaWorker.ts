@@ -24,6 +24,17 @@ if (typeof document === 'undefined') {
 import { Wllama, type AssetsPathConfig } from '../vendor/wllama';
 import { buildBackendSummary } from './wllamaBackendSummary';
 import type { LoadDescriptor } from '../local-llm/types';
+import {
+  selectVariant,
+  type CapabilitySet,
+  type VariantEntry,
+  type VariantOverride,
+  type VariantSelection,
+} from '../vendor/wllama/variant-table';
+
+// Re-export so runtime.ts / LocalModelSettings.tsx can import from this module.
+export type { VariantOverride as WasmVariantOverride } from '../vendor/wllama/variant-table';
+export type { VariantId } from '../vendor/wllama/variant-table';
 
 // ---------------------------------------------------------------------------
 // State
@@ -230,100 +241,93 @@ async function canUseWebGPU(allowWebGPU: boolean): Promise<boolean> {
   }
 }
 
-/**
- * Resolve WASM binary paths relative to the worker's location.
- *
- * - Only includes multi-thread WASM when the environment supports it,
- *   avoiding unnecessary downloads on single-thread-only browsers.
- * - Uses *-compat.wasm binaries unless the caller explicitly prefers Memory64
- *   and the browser supports it.
- * - The project always uses the custom-built WASM from vendor/wllama/.
- * - Rebuilding vendor/wllama/*.wasm is therefore required for any runtime changes.
- */
-async function wasmAssetExists(url: string): Promise<boolean> {
-  try {
-    const res = await fetch(url, { method: 'HEAD' });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
 function versionedWasmUrl(fileName: string): string {
   const url = new URL(`../../vendor/wllama/${fileName}`, import.meta.url);
   url.searchParams.set('v', WLLAMA_WASM_ASSET_VERSION);
   return url.href;
 }
 
-export type WasmVariantOverride =
-  | 'auto'
-  | 'single-thread'
-  | 'single-thread-compat'
-  | 'multi-thread'
-  | 'multi-thread-compat'
-  | 'single-thread-webgpu'
-  | 'single-thread-webgpu-compat'
-  | 'multi-thread-webgpu'
-  | 'multi-thread-webgpu-compat';
-
-function parseOverride(override: Exclude<WasmVariantOverride, 'auto'>): {
-  multiThread: boolean;
-  webgpu: boolean;
-  mem64: boolean;
-} {
-  const multiThread = override.startsWith('multi-thread');
-  const webgpu = override.includes('-webgpu');
-  const mem64 = !override.endsWith('-compat');
-  return { multiThread, webgpu, mem64 };
+/** Collect all runtime capabilities. WebGPU probe is async. */
+async function detectCapabilities(allowWebGPU: boolean): Promise<CapabilitySet> {
+  return {
+    mt: canUseMultiThread(),
+    memory64: isMemory64Supported(),
+    jspi: hasWebAssemblyJspi(),
+    exnref: isWasmExnrefSupported(),
+    // canUseWebGPU sets currentWebGpuSelectionReason as a side-effect.
+    webgpu: await canUseWebGPU(allowWebGPU),
+  };
 }
 
-async function getWasmPaths(
-  useLowbitQ = false,
-  preferMemory64 = false,
-  allowWebGPU = false,
-  override: WasmVariantOverride = 'auto',
-) {
-  let multiThread: boolean;
-  let mem64: boolean;
-  let webgpu: boolean;
-
-  if (override === 'auto') {
-    multiThread = canUseMultiThread();
-    const memory64Available = isMemory64Supported();
-    mem64 = preferMemory64 && memory64Available;
-    webgpu = await canUseWebGPU(allowWebGPU);
-  } else {
-    const parsed = parseOverride(override);
-    multiThread = parsed.multiThread;
-    mem64 = parsed.mem64;
-    webgpu = parsed.webgpu;
+/** Convert a VariantEntry's wasm file names to AssetsPathConfig. */
+function variantToPaths(entry: VariantEntry): AssetsPathConfig {
+  if (!entry.wasm.single) {
+    throw new Error(
+      `Variant "${entry.id}" has no single-thread WASM path — cannot construct AssetsPathConfig`,
+    );
   }
-
-  const singleThreadFile = webgpu
-    ? (mem64 ? 'single-thread-webgpu.wasm' : 'single-thread-webgpu-compat.wasm')
-    : (mem64 ? 'single-thread.wasm' : 'single-thread-compat.wasm');
-  const multiThreadFile = webgpu
-    ? (mem64 ? 'multi-thread-webgpu.wasm' : 'multi-thread-webgpu-compat.wasm')
-    : (mem64 ? 'multi-thread.wasm' : 'multi-thread-compat.wasm');
-  currentWasmUsesWebGPU = webgpu;
-
   const paths: AssetsPathConfig = {
-    'single-thread/wllama.wasm': versionedWasmUrl(singleThreadFile),
+    'single-thread/wllama.wasm': versionedWasmUrl(entry.wasm.single),
   };
-  if (multiThread) {
-    paths['multi-thread/wllama.wasm'] = versionedWasmUrl(multiThreadFile);
+  if (entry.wasm.multi) {
+    paths['multi-thread/wllama.wasm'] = versionedWasmUrl(entry.wasm.multi);
   }
-  console.info('[wllamaWorker] Using vendored WASM paths:', paths,
-    'override:', override,
-    'isLowbitQ:', useLowbitQ, 'memory64:', mem64, 'multiThread:', multiThread, 'webgpu:', webgpu);
   return paths;
+}
+
+/**
+ * Detect capabilities, select the best variant, and return WASM paths.
+ * Posts a diagnostic with the full selection result.
+ */
+async function resolveVariant(
+  preferMemory64: boolean,
+  allowWebGPU: boolean,
+  override: VariantOverride,
+): Promise<{ paths: AssetsPathConfig; selection: VariantSelection }> {
+  const caps = await detectCapabilities(allowWebGPU);
+
+  let selection: VariantSelection;
+  if (override !== 'auto') {
+    selection = selectVariant(caps, { forceVariant: override, preferMemory64 });
+  } else {
+    selection = selectVariant(caps, { preferMemory64 });
+  }
+
+  const { chosen, considered, capsSnapshot } = selection;
+  if (!chosen) {
+    throw new Error(
+      `No eligible WASM variant found. caps=${JSON.stringify(capsSnapshot)}, ` +
+      `considered=${JSON.stringify(considered)}`,
+    );
+  }
+
+  currentWasmUsesWebGPU = chosen.id.includes('webgpu');
+  const paths = variantToPaths(chosen);
+
+  postDiagnostic('variant-selection', {
+    chosen: chosen.id,
+    considered,
+    capsSnapshot,
+    override,
+    webgpuSelectionReason: currentWebGpuSelectionReason,
+  });
+
+  console.info(
+    '[wllamaWorker] variant selected:', chosen.id,
+    'paths:', paths,
+    'override:', override,
+    'preferMemory64:', preferMemory64,
+    'caps:', capsSnapshot,
+  );
+
+  return { paths, selection };
 }
 
 // ---------------------------------------------------------------------------
 // Message types
 // ---------------------------------------------------------------------------
 
-interface InitRequest { id: number; type: 'init'; isLowbitQ?: boolean; preferMemory64?: boolean; allowWebGPU?: boolean; wasmVariantOverride?: WasmVariantOverride }
+interface InitRequest { id: number; type: 'init'; isLowbitQ?: boolean; preferMemory64?: boolean; allowWebGPU?: boolean; wasmVariantOverride?: VariantOverride }
 interface InspectRuntimeFeaturesRequest { id: number; type: 'inspectRuntimeFeatures' }
 interface PreflightLoadRuntimeRequest { id: number; type: 'preflightLoadRuntime' }
 interface LoadRequest { id: number; type: 'load'; descriptor: LoadDescriptor; expectedContextLength?: number }
@@ -606,22 +610,31 @@ async function handleInit(req: InitRequest) {
     const preferMemory64 = req.preferMemory64 ?? false;
     const allowWebGPU = req.allowWebGPU ?? false;
     const wasmVariantOverride = req.wasmVariantOverride ?? 'auto';
-    const mem64 = isMemory64Supported();
-    const paths = await getWasmPaths(useLowbitQ, preferMemory64, allowWebGPU, wasmVariantOverride);
+
+    const { paths, selection } = await resolveVariant(preferMemory64, allowWebGPU, wasmVariantOverride);
+    const { chosen, capsSnapshot } = selection;
+
     postDiagnostic('worker-init', {
       isLowbitQ: useLowbitQ,
       wasmPaths: paths,
+      variantId: chosen?.id ?? null,
       wasmVariantOverride,
-      multiThreadCapable: canUseMultiThread(),
-      memory64Supported: mem64,
-      memory64Selected: preferMemory64 && mem64,
+      multiThreadCapable: capsSnapshot.mt,
+      memory64Supported: capsSnapshot.memory64,
+      memory64Selected: chosen?.required.includes('memory64') ?? false,
       memory64Required: preferMemory64,
       webgpuAllowed: allowWebGPU,
       webgpuCapable: hasWebGPUApi(),
       webgpuWasmSelected: currentWasmUsesWebGPU,
       webgpuSelectionReason: currentWebGpuSelectionReason,
     });
-    console.info('[wllamaWorker] init, isLowbitQ:', useLowbitQ, 'memory64Available:', mem64, 'preferMemory64:', preferMemory64, 'allowWebGPU:', allowWebGPU, 'wasmVariantOverride:', wasmVariantOverride, 'WASM paths:', paths);
+    console.info(
+      '[wllamaWorker] init, isLowbitQ:', useLowbitQ,
+      'variantId:', chosen?.id,
+      'allowWebGPU:', allowWebGPU,
+      'wasmVariantOverride:', wasmVariantOverride,
+      'WASM paths:', paths,
+    );
     wllama = new Wllama(paths, {
       suppressNativeLog: false,
       logger: workerLogger,
@@ -771,11 +784,10 @@ async function handleLoad(req: LoadRequest) {
   currentLoadActivityAt = loadStartTime;
 
   const { descriptor } = req;
-  const isOpfsDirect = descriptor.mode === 'opfs-direct';
 
-  // Collect opfs stats after load (success or failure) for opfs-direct mode
+  // Collect opfs stats after load (success or failure)
   const collectOpfsStats = async () => {
-    if (!isOpfsDirect || !wllama) return;
+    if (!wllama) return;
     try {
       // Access proxy via type assertion — opfsStats() is on ProxyToWorker, not on Wllama public API
       const stats = await (wllama as unknown as { proxy: { opfsStats: () => Promise<{ opfsReadCount: number; opfsBytesRead: number }> } }).proxy?.opfsStats();
@@ -791,58 +803,22 @@ async function handleLoad(req: LoadRequest) {
   };
 
   try {
-    let firstFileName: string;
-    let shardCount: number;
-    let totalSize: number;
-
-    if (descriptor.mode === 'opfs-direct') {
-      shardCount = descriptor.shards.length;
-      firstFileName = descriptor.shards[0] ?? 'unknown';
-      totalSize = 0; // not available without reading OPFS metadata; size is informational only
-    } else {
-      const files = descriptor.files;
-      firstFileName = (files[0] as File).name ?? 'unknown';
-      shardCount = files.length;
-      totalSize = files.reduce((s, f) => s + f.size, 0);
-    }
-
-    const totalSizeMB = totalSize > 0 ? (totalSize / 1024 / 1024).toFixed(1) : '?';
-    const modeLabel = isOpfsDirect ? 'opfs-direct' : 'files';
+    const shardCount = descriptor.shards.length;
+    const firstFileName = descriptor.shards[0] ?? 'unknown';
     const fileLabel = shardCount > 1
-      ? `${firstFileName} (${shardCount} shards, ${totalSizeMB} MB total, mode=${modeLabel})`
-      : `${firstFileName} (${totalSizeMB} MB, mode=${modeLabel})`;
+      ? `${firstFileName} (${shardCount} shards, mode=opfs-direct)`
+      : `${firstFileName} (mode=opfs-direct)`;
     console.info('[wllamaWorker] handleLoad start, file:', fileLabel);
     postDiagnostic('worker-load-start', {
       fileName: firstFileName,
-      fileSize: totalSize,
+      fileSize: 0, // not available without reading OPFS metadata
       shardCount,
-      mode: modeLabel,
+      mode: 'opfs-direct',
     });
-    postLoadProgress('validating', 0, `${isOpfsDirect ? 'OPFS直接ロード準備中' : `GGUFヘッダを検証中 (${totalSizeMB} MB${shardCount > 1 ? `, ${shardCount} shards` : ''})`}`);
-
-    if (!isOpfsDirect) {
-      // Validate GGUF magic header on the first file before passing to wllama
-      const firstFile = descriptor.files[0];
-      if (firstFile.size < 4) {
-        respondError(req.id,
-          `GGUFファイルの検証に失敗しました: ファイルサイズが${firstFile.size}バイトしかありません（最低4バイト必要）。` +
-          'ダウンロードが中断された可能性があります。モデルを削除して再ダウンロードしてください。');
-        return;
-      }
-      const magic = new Uint8Array(await firstFile.slice(0, 4).arrayBuffer());
-      const magicHex = Array.from(magic).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ');
-      console.info('[wllamaWorker] GGUF magic bytes:', magicHex);
-      if (magic[0] !== 0x47 || magic[1] !== 0x47 || magic[2] !== 0x55 || magic[3] !== 0x46) {
-        respondError(req.id,
-          `GGUFファイルの検証に失敗しました: ファイル先頭のマジックバイトが不正です（検出: ${magicHex}、期待: 0x47 0x47 0x55 0x46 "GGUF"）。` +
-          'ファイルが破損しているか、GGUF以外の形式です。モデルを削除して再ダウンロードしてください。');
-        return;
-      }
-      console.info('[wllamaWorker] GGUF magic valid, calling wllama.loadModel...');
-    }
+    postLoadProgress('validating', 0, 'OPFS直接ロード準備中');
 
     postLoadProgress('wasm-init', 10, 'WASM ランタイムを初期化中');
-    postLoadProgress('model-load', 20, `モデルをロード中 (${totalSizeMB} MB${shardCount > 1 ? `, ${shardCount} shards` : ''}, mode=${modeLabel})`);
+    postLoadProgress('model-load', 20, `モデルをロード中 (${shardCount > 1 ? `${shardCount} shards, ` : ''}mode=opfs-direct)`);
 
     // Use expected context length from catalog/store if available,
     // otherwise fall back to a safe default. Cap at MAX_BROWSER_CTX for memory safety.
@@ -853,7 +829,7 @@ async function handleLoad(req: LoadRequest) {
       n_gpu_layers: currentWasmUsesWebGPU ? 999 : 0,
       use_mmap: false,  // WASM emulated mmap fails on large files (>2GB)
     };
-    console.info('[wllamaWorker] load options:', loadOptions, 'mode:', modeLabel);
+    console.info('[wllamaWorker] load options:', loadOptions, 'mode: opfs-direct');
 
     let rejectNoProgress: ((error: Error) => void) | null = null;
     const noProgressPromise = new Promise<never>((_, reject) => {
@@ -868,9 +844,9 @@ async function handleLoad(req: LoadRequest) {
       postLoadProgress(
         'model-load',
         overallPercent,
-        `モデルロード継続中 (${elapsed}s, idle=${(idleMs / 1000).toFixed(1)}s, fileCopy=${currentFileCopyPercent}%, native=${currentNativeLoadPercent}%, WebGPU=${currentWasmUsesWebGPU}, n_gpu_layers=${loadOptions.n_gpu_layers}, ctx=${requestedCtx}, mode=${modeLabel})`,
+        `モデルロード継続中 (${elapsed}s, idle=${(idleMs / 1000).toFixed(1)}s, native=${currentNativeLoadPercent}%, WebGPU=${currentWasmUsesWebGPU}, n_gpu_layers=${loadOptions.n_gpu_layers}, ctx=${requestedCtx}, mode=opfs-direct)`,
       );
-      console.info('[wllamaWorker] load still pending, elapsedSec:', elapsed, 'webgpu:', currentWasmUsesWebGPU, 'mode:', modeLabel);
+      console.info('[wllamaWorker] load still pending, elapsedSec:', elapsed, 'webgpu:', currentWasmUsesWebGPU, 'mode: opfs-direct');
 
       if (currentWasmUsesWebGPU && idleMs >= LOAD_NO_PROGRESS_TIMEOUT_MS) {
         const message = `WebGPU WASM initialization made no progress for ${(idleMs / 1000).toFixed(1)}s`;
@@ -886,18 +862,10 @@ async function handleLoad(req: LoadRequest) {
     }, LOAD_HEARTBEAT_MS);
 
     try {
-      if (descriptor.mode === 'opfs-direct') {
-        await Promise.race([
-          wllama.loadModelFromOpfs(descriptor.modelId, descriptor.shards, loadOptions),
-          noProgressPromise,
-        ]);
-      } else {
-        // wllama.loadModel accepts multiple Blobs for split GGUF; internally calls sortFileByShard
-        await Promise.race([
-          wllama.loadModel(descriptor.files, loadOptions),
-          noProgressPromise,
-        ]);
-      }
+      await Promise.race([
+        wllama.loadModelFromOpfs(descriptor.modelId, descriptor.shards, loadOptions),
+        noProgressPromise,
+      ]);
     } finally {
       self.clearInterval(heartbeat);
     }
@@ -980,18 +948,8 @@ async function handleLoad(req: LoadRequest) {
       : '';
     const stackDetail = `\n\n[Stack Trace]\n${stack}`;
 
-    // File size context — always include in error message for diagnostics.
-    // For opfs-direct, we don't have byte sizes readily available; use shard names instead.
-    const fileSizeDetail = descriptor.mode === 'opfs-direct'
-      ? `\n\n[ファイル情報] mode=opfs-direct modelId=${descriptor.modelId} shards=${descriptor.shards.join(', ')}`
-      : (() => {
-          const files = descriptor.files;
-          const firstFile = files[0];
-          const totalBytes = files.reduce((s, f) => s + f.size, 0);
-          return files.length > 1
-            ? `\n\n[ファイル情報] name=${(firstFile as File).name ?? 'unknown'} (${files.length} shards) totalSize=${totalBytes} bytes (${(totalBytes / 1024 / 1024).toFixed(2)} MB)`
-            : `\n\n[ファイル情報] name=${(firstFile as File).name ?? 'unknown'} size=${totalBytes} bytes (${(totalBytes / 1024 / 1024).toFixed(2)} MB)`;
-        })();
+    // File info for diagnostics (byte size not available in opfs-direct mode; use shard names)
+    const fileSizeDetail = `\n\n[ファイル情報] mode=opfs-direct modelId=${descriptor.modelId} shards=${descriptor.shards.join(', ')}`;
 
     if (msg.includes('Invalid magic number')) {
       const hasUnsupportedType = recentNativeLogs.some(l => l.includes('invalid ggml type'));
@@ -1042,8 +1000,6 @@ async function handlePreflightLoadRuntime(req: PreflightLoadRuntimeRequest) {
   const start = performance.now();
   currentLoadActivityAt = start;
 
-  const emptyGguf = new File([new Uint8Array([0x47, 0x47, 0x55, 0x46])], '__wllama_preflight__.gguf');
-
   try {
     postLoadProgress('wasm-preflight', 10, 'WebGPU WASM グルーを検証中');
     let rejectNoProgress: ((error: Error) => void) | null = null;
@@ -1069,29 +1025,33 @@ async function handlePreflightLoadRuntime(req: PreflightLoadRuntimeRequest) {
     }, 2_000);
 
     try {
+      // preflightInit() initialises the Emscripten module (module.init verb),
+      // waits for inner-cwrap-ready (which sets wasmRuntimeInitialized = true),
+      // then terminates the worker. No model files are required.
       await Promise.race([
-        wllama.loadModel([emptyGguf], { n_ctx: 16, n_threads: 1, n_gpu_layers: currentWasmUsesWebGPU ? 1 : 0 }),
+        wllama.preflightInit({ n_threads: 1 }),
         noProgressPromise,
       ]);
-      // A 4-byte dummy GGUF should not load successfully. If it does, still
-      // report the runtime as usable and unload it immediately.
-      await wllama.exit();
-      wllama = null;
-      respond(req.id, 'preflight-ok');
-    } catch (e) {
-      const err = e as Error;
+      // preflightInit() cleaned up its proxy internally. Check logs for any
+      // WebGPU device failure that may have been emitted during module init.
       const webGpuDeviceFailed = recentNativeLogs.some((line) =>
         line.includes('wllama-webgpu-device:device-failed')
         || line.includes('ggml_webgpu: Failed to get a device')
         || line.includes('ggml_webgpu: Device lost')
       );
-      const reachedRuntime = wasmRuntimeInitialized
-        || currentFileCopyPercent > 0
-        || currentNativeLoadPercent > 0;
       if (webGpuDeviceFailed) {
-        throw err;
+        throw new Error('WebGPU device failed during preflight initialization');
       }
-      if (reachedRuntime && !err.message.includes('made no progress')) {
+      wllama = null;
+      respond(req.id, 'preflight-ok');
+    } catch (e) {
+      const err = e as Error;
+      // wasmRuntimeInitialized is the authoritative signal: inner-cwrap-ready
+      // fires (setting it true) before module.init resolves, so if
+      // preflightInit() threw after the runtime was ready it is a non-fatal
+      // unexpected error; still treat as success to avoid false negatives.
+      if (!err.message.includes('made no progress') && wasmRuntimeInitialized) {
+        wllama = null;
         respond(req.id, 'preflight-ok', { expectedFailure: err.message });
       } else {
         throw err;

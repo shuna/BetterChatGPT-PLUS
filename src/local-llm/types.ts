@@ -21,13 +21,11 @@ export type LocalModelTask = 'moderation' | 'quality' | 'analysis' | 'generation
 /**
  * How model files are supplied to the runtime.
  *
- * - ephemeral-file: User selects via <input type="file"> each session
  * - persistent-handle: File System Access API handle stored in IDB
  * - opfs: Stored in Origin Private File System
  * - remote-download: Downloaded from HF Hub or other URL
  */
 export type LocalModelSource =
-  | 'ephemeral-file'
   | 'persistent-handle'
   | 'opfs'
   | 'remote-download';
@@ -159,17 +157,11 @@ export interface WorkerResponse {
 // ---------------------------------------------------------------------------
 
 /**
- * Discriminated union describing the model loading strategy for wllama.
- *
- * - files: Transfer File/Blob array to inner worker (heapfs alloc + write).
- *   Used for ephemeral-file source or as fallback.
- * - opfs-direct: Inner worker opens OPFS files via FileSystemSyncAccessHandle.
- *   No heapfsAlloc — model data is never copied to WASM heap.
- *   Only valid for source === 'opfs'.
+ * Describes the model loading strategy for wllama.
+ * The inner worker opens OPFS files via FileSystemSyncAccessHandle
+ * (no heapfsAlloc — model data is never copied to WASM heap).
  */
-export type LoadDescriptor =
-  | { mode: 'files'; files: (File | Blob)[] }
-  | { mode: 'opfs-direct'; modelId: string; shards: string[] };
+export type LoadDescriptor = { mode: 'opfs-direct'; modelId: string; shards: string[] };
 
 // ---------------------------------------------------------------------------
 // Generation options
