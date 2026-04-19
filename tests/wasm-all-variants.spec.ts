@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as http from 'http';
 
 const BASE_URL = 'http://localhost:5173/';
-const WASM_ASSET_VERSION = '20260419-all-variants';
+const WASM_ASSET_VERSION = '20260420-pr2-rename';
 const MODEL_PATH = '/Users/suzuki/Downloads/smollm2-360m-instruct-q8_0.gguf';
 
 interface VariantCase {
@@ -18,33 +18,33 @@ interface VariantCase {
 
 const CASES: VariantCase[] = [
   {
-    label: 'single-thread-compat',
-    singleThreadWasm: 'single-thread-compat.wasm',
+    label: 'single-thread-cpu-compat',
+    singleThreadWasm: 'single-thread-cpu-compat.wasm',
     multiThreadWasm: null,
     nThreads: 1,
     allowWebGPU: false,
     expectMultiThread: false,
   },
   {
-    label: 'single-thread',
-    singleThreadWasm: 'single-thread.wasm',
+    label: 'single-thread-cpu-mem64',
+    singleThreadWasm: 'single-thread-cpu-mem64.wasm',
     multiThreadWasm: null,
     nThreads: 1,
     allowWebGPU: false,
     expectMultiThread: false,
   },
   {
-    label: 'multi-thread-compat',
-    singleThreadWasm: 'single-thread-compat.wasm',
-    multiThreadWasm: 'multi-thread-compat.wasm',
+    label: 'multi-thread-cpu-compat',
+    singleThreadWasm: 'single-thread-cpu-compat.wasm',
+    multiThreadWasm: 'multi-thread-cpu-compat.wasm',
     nThreads: 4,
     allowWebGPU: false,
     expectMultiThread: true,
   },
   {
-    label: 'multi-thread',
-    singleThreadWasm: 'single-thread.wasm',
-    multiThreadWasm: 'multi-thread.wasm',
+    label: 'multi-thread-cpu-mem64',
+    singleThreadWasm: 'single-thread-cpu-mem64.wasm',
+    multiThreadWasm: 'multi-thread-cpu-mem64.wasm',
     nThreads: 4,
     allowWebGPU: false,
     expectMultiThread: true,

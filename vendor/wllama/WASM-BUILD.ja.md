@@ -37,8 +37,8 @@ ggml-webgpu.cpp:2593: GGML_ASSERT(webgpu_ctx->instance != nullptr) failed
 ```text
 wasm/single-thread/wllama.wasm          (~2.2 MB)
 wasm/multi-thread/wllama.wasm           (~2.3 MB)
-wasm/single-thread-compat/wllama.wasm   (~2.2 MB)
-wasm/multi-thread-compat/wllama.wasm    (~2.2 MB)
+wasm/single-thread-cpu-compat/wllama.wasm   (~2.2 MB)
+wasm/multi-thread-cpu-compat/wllama.wasm    (~2.2 MB)
 wasm/single-thread-webgpu/wllama.wasm   (~3.0 MB)
 wasm/multi-thread-webgpu/wllama.wasm    (~3.1 MB)
 wasm/single-thread-webgpu-compat/wllama.wasm (~2.9 MB)
@@ -53,10 +53,10 @@ Memory64/compat/WebGPU の各バリアント間で互換ではありません。
 
 | メインプロジェクト内のランタイムファイル | WASM ソース | 埋め込まれる JS glue 定数 |
 |------------------------------|-------------|---------------------------|
-| `vendor/wllama/single-thread.wasm` | `wasm/single-thread/wllama.wasm` | `WLLAMA_SINGLE_THREAD_CODE` |
-| `vendor/wllama/multi-thread.wasm` | `wasm/multi-thread/wllama.wasm` | `WLLAMA_MULTI_THREAD_CODE` |
-| `vendor/wllama/single-thread-compat.wasm` | `wasm/single-thread-compat/wllama.wasm` | `WLLAMA_SINGLE_THREAD_COMPAT_CODE` |
-| `vendor/wllama/multi-thread-compat.wasm` | `wasm/multi-thread-compat/wllama.wasm` | `WLLAMA_MULTI_THREAD_COMPAT_CODE` |
+| `vendor/wllama/single-thread-cpu-mem64.wasm` | `wasm/single-thread-cpu-mem64/wllama.wasm` | `WLLAMA_SINGLE_THREAD_CODE` |
+| `vendor/wllama/multi-thread-cpu-mem64.wasm` | `wasm/multi-thread-cpu-mem64/wllama.wasm` | `WLLAMA_MULTI_THREAD_CODE` |
+| `vendor/wllama/single-thread-cpu-compat.wasm` | `wasm/single-thread-cpu-compat/wllama.wasm` | `WLLAMA_SINGLE_THREAD_COMPAT_CODE` |
+| `vendor/wllama/multi-thread-cpu-compat.wasm` | `wasm/multi-thread-cpu-compat/wllama.wasm` | `WLLAMA_MULTI_THREAD_COMPAT_CODE` |
 | `vendor/wllama/single-thread-webgpu.wasm` | `wasm/single-thread-webgpu/wllama.wasm` | `WLLAMA_SINGLE_THREAD_WEBGPU_CODE` |
 | `vendor/wllama/multi-thread-webgpu.wasm` | `wasm/multi-thread-webgpu/wllama.wasm` | `WLLAMA_MULTI_THREAD_WEBGPU_CODE` |
 | `vendor/wllama/single-thread-webgpu-compat.wasm` | `wasm/single-thread-webgpu-compat/wllama.wasm` | `WLLAMA_SINGLE_THREAD_WEBGPU_COMPAT_CODE` |
@@ -66,36 +66,32 @@ Memory64/compat/WebGPU の各バリアント間で互換ではありません。
 
 ### Emscripten SDK
 
-ビルド対象に応じて、2 種類の SDK バージョンを使い分けます。
+すべてのビルド対象に単一の SDK バージョンを使用します。
 
-| ビルド種別 | 必要な emsdk | 理由 |
-|------------|----------------|--------|
-| CPU のみ（`single/multi-thread-compat`） | **4.0.3** | upstream wllama の ABI と一致させる必要がある。`-fwasm-exceptions` の ABI は 4.x と 5.x の間で変更されている |
-| WebGPU（`*-webgpu-compat`） | **4.0.10** | `--use-port=emdawnwebgpu` を built-in port として含む最小バージョン |
+| ビルド種別 | 必要な emsdk |
+|------------|----------------|
+| CPU compat（`*-cpu-compat`） | **≥ 5.0.0** |
+| CPU Memory64（`*-cpu-mem64`） | **≥ 5.0.0** |
+| WebGPU（`*-webgpu-compat`） | **≥ 5.0.0** |
 
-自動ビルドスクリプト（`scripts/wllama/build.sh`）はこの切り替えを前提にしており、
-間違ったバージョンが有効な場合はエラー終了します。
+自動ビルドスクリプト（`scripts/wllama/build.sh`）は semver チェックによって
+5.0.0 未満の場合はエラー終了します。
 
 ```bash
-# 両方のバージョンを一度だけインストール
+# 一度だけインストール
 cd ~/emsdk
-./emsdk install 4.0.3
-./emsdk install 4.0.10   # または 4.0.14 — emdawnwebgpu パッケージは同じ
-
-# CPU ビルド（先に 4.0.3 を有効化）
-./emsdk activate 4.0.3
+./emsdk install latest
+./emsdk activate latest
 source emsdk_env.sh
+
+# CPU ビルド（compat + Memory64）
 bash scripts/wllama/build.sh
 
-# WebGPU ビルド（4.0.10 に切り替え）
-./emsdk activate 4.0.10
-source emsdk_env.sh
+# WebGPU ビルドも含める（compat のみ — Memory64 WebGPU はビルドしない）
 WLLAMA_BUILD_WEBGPU=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
 ```
 
-**emsdk 4.0.14 について:** 4.0.10 と 4.0.14 はどちらも同じ emdawnwebgpu
-パッケージ（`v20250531.224602`）を含むため、WebGPU ビルドではどちらも使えます。
-再現性の観点では 4.0.10 を推奨します。
+**バージョンを固定する:** ビルドが成功したらその具体的なバージョン番号をここに記録してください。
 
 ### emdawnwebgpu（WebGPU ビルド時のみ）
 
@@ -176,10 +172,10 @@ HEAPU64=new BigUint64Array(b)Module["HEAPU8"]=HEAPU8
 node <<'NODE'
 const fs = require('fs');
 const variants = [
-  'single-thread',
-  'multi-thread',
-  'single-thread-compat',
-  'multi-thread-compat',
+  'single-thread-cpu-mem64',
+  'multi-thread-cpu-mem64',
+  'single-thread-cpu-compat',
+  'multi-thread-cpu-compat',
   'single-thread-webgpu',
   'multi-thread-webgpu',
   'single-thread-webgpu-compat',
@@ -224,10 +220,10 @@ NODE
 node <<'NODE'
 const fs = require('fs');
 const variants = [
-  'single-thread',
-  'multi-thread',
-  'single-thread-compat',
-  'multi-thread-compat',
+  'single-thread-cpu-mem64',
+  'multi-thread-cpu-mem64',
+  'single-thread-cpu-compat',
+  'multi-thread-cpu-compat',
   'single-thread-webgpu',
   'multi-thread-webgpu',
   'single-thread-webgpu-compat',
@@ -306,10 +302,10 @@ NODE
 
 ```bash
 # WASM バイナリをコピー
-cp wasm/single-thread/wllama.wasm         ../vendor/wllama/single-thread.wasm
-cp wasm/multi-thread/wllama.wasm          ../vendor/wllama/multi-thread.wasm
-cp wasm/single-thread-compat/wllama.wasm  ../vendor/wllama/single-thread-compat.wasm
-cp wasm/multi-thread-compat/wllama.wasm   ../vendor/wllama/multi-thread-compat.wasm
+cp wasm/single-thread-cpu-mem64/wllama.wasm    ../vendor/wllama/single-thread-cpu-mem64.wasm
+cp wasm/multi-thread-cpu-mem64/wllama.wasm     ../vendor/wllama/multi-thread-cpu-mem64.wasm
+cp wasm/single-thread-cpu-compat/wllama.wasm   ../vendor/wllama/single-thread-cpu-compat.wasm
+cp wasm/multi-thread-cpu-compat/wllama.wasm    ../vendor/wllama/multi-thread-cpu-compat.wasm
 cp wasm/single-thread-webgpu/wllama.wasm         ../vendor/wllama/single-thread-webgpu.wasm
 cp wasm/multi-thread-webgpu/wllama.wasm          ../vendor/wllama/multi-thread-webgpu.wasm
 cp wasm/single-thread-webgpu-compat/wllama.wasm  ../vendor/wllama/single-thread-webgpu-compat.wasm
@@ -327,10 +323,10 @@ cp esm/index.js ../src/vendor/wllama/index.js
 node <<'NODE'
 const fs = require('fs');
 const wasmPairs = [
-  ['wasm/single-thread/wllama.wasm', '../vendor/wllama/single-thread.wasm'],
-  ['wasm/multi-thread/wllama.wasm', '../vendor/wllama/multi-thread.wasm'],
-  ['wasm/single-thread-compat/wllama.wasm', '../vendor/wllama/single-thread-compat.wasm'],
-  ['wasm/multi-thread-compat/wllama.wasm', '../vendor/wllama/multi-thread-compat.wasm'],
+  ['wasm/single-thread-cpu-mem64/wllama.wasm',   '../vendor/wllama/single-thread-cpu-mem64.wasm'],
+  ['wasm/multi-thread-cpu-mem64/wllama.wasm',    '../vendor/wllama/multi-thread-cpu-mem64.wasm'],
+  ['wasm/single-thread-cpu-compat/wllama.wasm',  '../vendor/wllama/single-thread-cpu-compat.wasm'],
+  ['wasm/multi-thread-cpu-compat/wllama.wasm',   '../vendor/wllama/multi-thread-cpu-compat.wasm'],
   ['wasm/single-thread-webgpu/wllama.wasm', '../vendor/wllama/single-thread-webgpu.wasm'],
   ['wasm/multi-thread-webgpu/wllama.wasm', '../vendor/wllama/multi-thread-webgpu.wasm'],
   ['wasm/single-thread-webgpu-compat/wllama.wasm', '../vendor/wllama/single-thread-webgpu-compat.wasm'],
@@ -547,7 +543,7 @@ wllamaMalloc = callWrapper('wllama_malloc', pointer, [pointer, 'number']);
 ```
 
 **この対応が必要になる場面:** 影響するのは Memory64 ビルド
-（`single-thread.wasm`, `multi-thread.wasm`）のみです。compat ビルド
+（`single-thread-cpu-mem64.wasm`, `multi-thread-cpu-mem64.wasm`）のみです。compat ビルド
 （`*-compat.wasm`）は 32-bit ポインタなので `'number'` でも動きますが、
 `'pointer'` は両方に対して安全です。
 

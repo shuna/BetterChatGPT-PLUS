@@ -16,8 +16,10 @@
 #   - vendor/wllama-src/ prepared by scripts/wllama/setup.sh
 #
 # Output:
-#   vendor/wllama/single-thread-compat.wasm
-#   vendor/wllama/multi-thread-compat.wasm
+#   vendor/wllama/single-thread-cpu-compat.wasm
+#   vendor/wllama/multi-thread-cpu-compat.wasm
+#   vendor/wllama/single-thread-cpu-mem64.wasm
+#   vendor/wllama/multi-thread-cpu-mem64.wasm
 #   vendor/wllama/single-thread-webgpu-compat.wasm  (when WLLAMA_BUILD_WEBGPU=1)
 #   vendor/wllama/multi-thread-webgpu-compat.wasm   (when WLLAMA_BUILD_WEBGPU=1)
 #

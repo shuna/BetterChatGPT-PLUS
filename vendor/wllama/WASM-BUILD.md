@@ -35,8 +35,8 @@ Resulting files:
 ```
 wasm/single-thread/wllama.wasm          (~2.2 MB)
 wasm/multi-thread/wllama.wasm           (~2.3 MB)
-wasm/single-thread-compat/wllama.wasm   (~2.2 MB)
-wasm/multi-thread-compat/wllama.wasm    (~2.2 MB)
+wasm/single-thread-cpu-compat/wllama.wasm   (~2.2 MB)
+wasm/multi-thread-cpu-compat/wllama.wasm    (~2.2 MB)
 wasm/single-thread-webgpu/wllama.wasm   (~3.0 MB)
 wasm/multi-thread-webgpu/wllama.wasm    (~3.1 MB)
 wasm/single-thread-webgpu-compat/wllama.wasm (~2.9 MB)
@@ -52,10 +52,10 @@ Variant mapping:
 
 | Runtime file in main project | WASM source | Embedded JS glue constant |
 |------------------------------|-------------|---------------------------|
-| `vendor/wllama/single-thread.wasm` | `wasm/single-thread/wllama.wasm` | `WLLAMA_SINGLE_THREAD_CODE` |
-| `vendor/wllama/multi-thread.wasm` | `wasm/multi-thread/wllama.wasm` | `WLLAMA_MULTI_THREAD_CODE` |
-| `vendor/wllama/single-thread-compat.wasm` | `wasm/single-thread-compat/wllama.wasm` | `WLLAMA_SINGLE_THREAD_COMPAT_CODE` |
-| `vendor/wllama/multi-thread-compat.wasm` | `wasm/multi-thread-compat/wllama.wasm` | `WLLAMA_MULTI_THREAD_COMPAT_CODE` |
+| `vendor/wllama/single-thread-cpu-mem64.wasm` | `wasm/single-thread-cpu-mem64/wllama.wasm` | `WLLAMA_SINGLE_THREAD_CODE` |
+| `vendor/wllama/multi-thread-cpu-mem64.wasm` | `wasm/multi-thread-cpu-mem64/wllama.wasm` | `WLLAMA_MULTI_THREAD_CODE` |
+| `vendor/wllama/single-thread-cpu-compat.wasm` | `wasm/single-thread-cpu-compat/wllama.wasm` | `WLLAMA_SINGLE_THREAD_COMPAT_CODE` |
+| `vendor/wllama/multi-thread-cpu-compat.wasm` | `wasm/multi-thread-cpu-compat/wllama.wasm` | `WLLAMA_MULTI_THREAD_COMPAT_CODE` |
 | `vendor/wllama/single-thread-webgpu.wasm` | `wasm/single-thread-webgpu/wllama.wasm` | `WLLAMA_SINGLE_THREAD_WEBGPU_CODE` |
 | `vendor/wllama/multi-thread-webgpu.wasm` | `wasm/multi-thread-webgpu/wllama.wasm` | `WLLAMA_MULTI_THREAD_WEBGPU_CODE` |
 | `vendor/wllama/single-thread-webgpu-compat.wasm` | `wasm/single-thread-webgpu-compat/wllama.wasm` | `WLLAMA_SINGLE_THREAD_WEBGPU_COMPAT_CODE` |
@@ -65,36 +65,33 @@ Variant mapping:
 
 ### Emscripten SDK
 
-Two separate SDK versions are used depending on the build target:
+A single SDK version covers all build targets:
 
-| Build type | Required emsdk | Reason |
-|------------|----------------|--------|
-| CPU only (`single/multi-thread-compat`) | **4.0.3** | Must match upstream wllama ABI; `-fwasm-exceptions` ABI changed between 4.x and 5.x |
-| WebGPU (`*-webgpu-compat`) | **4.0.10** | Minimum version with `--use-port=emdawnwebgpu` built-in port |
+| Build type | Required emsdk |
+|------------|----------------|
+| CPU compat (`*-cpu-compat`) | **≥ 5.0.0** |
+| CPU Memory64 (`*-cpu-mem64`) | **≥ 5.0.0** |
+| WebGPU (`*-webgpu-compat`) | **≥ 5.0.0** |
 
-The automated build script (`scripts/wllama/build.sh`) enforces this split and
-will exit with an error if the wrong version is active.
+The automated build script (`scripts/wllama/build.sh`) enforces this via a
+semver check and will exit with an error if the version is below 5.0.0.
 
 ```bash
-# Install both versions (one-time)
+# Install (one-time)
 cd ~/emsdk
-./emsdk install 4.0.3
-./emsdk install 4.0.10   # or 4.0.14 — same emdawnwebgpu package
-
-# CPU builds (activate 4.0.3 first)
-./emsdk activate 4.0.3
+./emsdk install latest
+./emsdk activate latest
 source emsdk_env.sh
+
+# CPU builds (compat + Memory64)
 bash scripts/wllama/build.sh
 
-# WebGPU builds (switch to 4.0.10)
-./emsdk activate 4.0.10
-source emsdk_env.sh
+# WebGPU builds (compat only — Memory64 WebGPU not built)
 WLLAMA_BUILD_WEBGPU=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
 ```
 
-**Note on emsdk 4.0.14:** Both 4.0.10 and 4.0.14 bundle the same emdawnwebgpu
-package (`v20250531.224602`), so either works for WebGPU builds. 4.0.10 is
-recommended for reproducibility.
+**Pin the exact version** once a build succeeds. Update the version number here
+after a reproducible build is confirmed.
 
 ### emdawnwebgpu (for WebGPU builds only)
 
@@ -172,10 +169,10 @@ tools may preserve `Module["HEAPU8"]`, while a hand patch might use
 node <<'NODE'
 const fs = require('fs');
 const variants = [
-  'single-thread',
-  'multi-thread',
-  'single-thread-compat',
-  'multi-thread-compat',
+  'single-thread-cpu-mem64',
+  'multi-thread-cpu-mem64',
+  'single-thread-cpu-compat',
+  'multi-thread-cpu-compat',
   'single-thread-webgpu',
   'multi-thread-webgpu',
   'single-thread-webgpu-compat',
@@ -220,10 +217,10 @@ Then verify all eight glue files have the patch:
 node <<'NODE'
 const fs = require('fs');
 const variants = [
-  'single-thread',
-  'multi-thread',
-  'single-thread-compat',
-  'multi-thread-compat',
+  'single-thread-cpu-mem64',
+  'multi-thread-cpu-mem64',
+  'single-thread-cpu-compat',
+  'multi-thread-cpu-compat',
   'single-thread-webgpu',
   'multi-thread-webgpu',
   'single-thread-webgpu-compat',
@@ -299,10 +296,10 @@ Run from `vendor/wllama-src/` (one level inside the repo root):
 
 ```bash
 # Copy WASM binaries
-cp wasm/single-thread/wllama.wasm         ../vendor/wllama/single-thread.wasm
-cp wasm/multi-thread/wllama.wasm          ../vendor/wllama/multi-thread.wasm
-cp wasm/single-thread-compat/wllama.wasm  ../vendor/wllama/single-thread-compat.wasm
-cp wasm/multi-thread-compat/wllama.wasm   ../vendor/wllama/multi-thread-compat.wasm
+cp wasm/single-thread-cpu-mem64/wllama.wasm    ../vendor/wllama/single-thread-cpu-mem64.wasm
+cp wasm/multi-thread-cpu-mem64/wllama.wasm     ../vendor/wllama/multi-thread-cpu-mem64.wasm
+cp wasm/single-thread-cpu-compat/wllama.wasm   ../vendor/wllama/single-thread-cpu-compat.wasm
+cp wasm/multi-thread-cpu-compat/wllama.wasm    ../vendor/wllama/multi-thread-cpu-compat.wasm
 cp wasm/single-thread-webgpu/wllama.wasm         ../vendor/wllama/single-thread-webgpu.wasm
 cp wasm/multi-thread-webgpu/wllama.wasm          ../vendor/wllama/multi-thread-webgpu.wasm
 cp wasm/single-thread-webgpu-compat/wllama.wasm  ../vendor/wllama/single-thread-webgpu-compat.wasm
@@ -320,10 +317,10 @@ Run these checks from `vendor/wllama-src/` after copying:
 node <<'NODE'
 const fs = require('fs');
 const wasmPairs = [
-  ['wasm/single-thread/wllama.wasm', '../vendor/wllama/single-thread.wasm'],
-  ['wasm/multi-thread/wllama.wasm', '../vendor/wllama/multi-thread.wasm'],
-  ['wasm/single-thread-compat/wllama.wasm', '../vendor/wllama/single-thread-compat.wasm'],
-  ['wasm/multi-thread-compat/wllama.wasm', '../vendor/wllama/multi-thread-compat.wasm'],
+  ['wasm/single-thread-cpu-mem64/wllama.wasm',   '../vendor/wllama/single-thread-cpu-mem64.wasm'],
+  ['wasm/multi-thread-cpu-mem64/wllama.wasm',    '../vendor/wllama/multi-thread-cpu-mem64.wasm'],
+  ['wasm/single-thread-cpu-compat/wllama.wasm',  '../vendor/wllama/single-thread-cpu-compat.wasm'],
+  ['wasm/multi-thread-cpu-compat/wllama.wasm',   '../vendor/wllama/multi-thread-cpu-compat.wasm'],
   ['wasm/single-thread-webgpu/wllama.wasm', '../vendor/wllama/single-thread-webgpu.wasm'],
   ['wasm/multi-thread-webgpu/wllama.wasm', '../vendor/wllama/multi-thread-webgpu.wasm'],
   ['wasm/single-thread-webgpu-compat/wllama.wasm', '../vendor/wllama/single-thread-webgpu-compat.wasm'],
@@ -540,8 +537,8 @@ const pointer = 'pointer';
 wllamaMalloc = callWrapper('wllama_malloc', pointer, [pointer, 'number']);
 ```
 
-**When this matters:** Only affects Memory64 builds (`single-thread.wasm`,
-`multi-thread.wasm`). Compat builds (`*-compat.wasm`) use 32-bit pointers
+**When this matters:** Only affects Memory64 builds (`single-thread-cpu-mem64.wasm`,
+`multi-thread-cpu-mem64.wasm`). Compat builds (`*-compat.wasm`) use 32-bit pointers
 and would work with `'number'`, but `'pointer'` is safe for both.
 
 ### 8. cmake vs EMCC_CFLAGS for WebGPU port

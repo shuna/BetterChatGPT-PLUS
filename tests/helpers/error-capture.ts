@@ -272,8 +272,8 @@ export async function quickWllamaLoadTest(
       // @ts-expect-error wllama is globally available
       const { Wllama } = await import('/src/vendor/wllama/index.js');
       const wllama = new Wllama({
-        'single-thread/wllama.wasm': '/vendor/wllama/single-thread.wasm',
-        'multi-thread/wllama.wasm': '/vendor/wllama/multi-thread.wasm',
+        'single-thread/wllama.wasm': '/vendor/wllama/single-thread-cpu-compat.wasm',
+        'multi-thread/wllama.wasm': '/vendor/wllama/multi-thread-cpu-compat.wasm',
       });
 
       const start = performance.now();

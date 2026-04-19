@@ -5,13 +5,10 @@
  * file names, and adapter flavor. The selection algorithm picks the highest-
  * priority eligible entry given the runtime capability snapshot.
  *
- * Naming convention (confirmed in PR2 build rename):
- *   *-cpu-compat.wasm     — wasm32 compat, CPU only
- *   *-cpu-mem64.wasm      — Memory64, CPU only
- *   *-webgpu-compat.wasm  — wasm32 compat, WebGPU + CPU fallback
- *
- * Note: physical file names in this table reflect the current build output.
- * Files will be renamed in PR2; only the `wasm` field values need updating then.
+ * File naming convention:
+ *   {single,multi}-thread-cpu-compat.wasm  — wasm32 compat, CPU only
+ *   {single,multi}-thread-cpu-mem64.wasm   — Memory64, CPU only
+ *   {single,multi}-thread-webgpu-compat.wasm — wasm32 compat, WebGPU + CPU fallback
  */
 
 export type VariantCapability = 'jspi' | 'mt' | 'memory64' | 'webgpu' | 'exnref';
@@ -151,8 +148,8 @@ export const VARIANT_TABLE: readonly VariantEntry[] = [
     id: 'mt-cpu-mem64',
     required: ['mt', 'memory64'],
     wasm: {
-      single: 'single-thread.wasm',
-      multi: 'multi-thread.wasm',
+      single: 'single-thread-cpu-mem64.wasm',
+      multi: 'multi-thread-cpu-mem64.wasm',
     },
     exportFlavor: 'wrapped-sync',
     heapAccess: 'module-proxy',
@@ -163,7 +160,7 @@ export const VARIANT_TABLE: readonly VariantEntry[] = [
     id: 'st-cpu-mem64',
     required: ['memory64'],
     wasm: {
-      single: 'single-thread.wasm',
+      single: 'single-thread-cpu-mem64.wasm',
     },
     exportFlavor: 'wrapped-sync',
     heapAccess: 'module-proxy',
@@ -174,8 +171,8 @@ export const VARIANT_TABLE: readonly VariantEntry[] = [
     id: 'mt-cpu-compat',
     required: ['mt'],
     wasm: {
-      single: 'single-thread-compat.wasm',
-      multi: 'multi-thread-compat.wasm',
+      single: 'single-thread-cpu-compat.wasm',
+      multi: 'multi-thread-cpu-compat.wasm',
     },
     exportFlavor: 'wrapped-sync',
     heapAccess: 'module-proxy',
@@ -186,7 +183,7 @@ export const VARIANT_TABLE: readonly VariantEntry[] = [
     id: 'st-cpu-compat',
     required: [],
     wasm: {
-      single: 'single-thread-compat.wasm',
+      single: 'single-thread-cpu-compat.wasm',
     },
     exportFlavor: 'wrapped-sync',
     heapAccess: 'module-proxy',

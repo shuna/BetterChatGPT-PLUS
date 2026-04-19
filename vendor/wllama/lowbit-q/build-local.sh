@@ -3,7 +3,7 @@
 # build-local.sh — Build lowbit-Q-patched wllama WASM using local Emscripten.
 #
 # Prerequisites:
-#   - emsdk installed and activated (source emsdk_env.sh)
+#   - emsdk >= 5.0.0 installed and activated (source emsdk_env.sh)
 #   - vendor/wllama-src/ prepared by scripts/wllama/setup.sh
 #
 # Usage:
@@ -16,8 +16,10 @@
 #   WLLAMA_BUILD_WEBGPU=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
 #
 # Output:
-#   vendor/wllama/single-thread-compat.wasm
-#   vendor/wllama/multi-thread-compat.wasm
+#   vendor/wllama/single-thread-cpu-compat.wasm
+#   vendor/wllama/multi-thread-cpu-compat.wasm
+#   vendor/wllama/single-thread-cpu-mem64.wasm
+#   vendor/wllama/multi-thread-cpu-mem64.wasm
 #   vendor/wllama/single-thread-webgpu-compat.wasm  (when WLLAMA_BUILD_WEBGPU=1)
 #   vendor/wllama/multi-thread-webgpu-compat.wasm   (when WLLAMA_BUILD_WEBGPU=1)
 #
@@ -43,21 +45,20 @@ if ! command -v emcc &>/dev/null; then
   exit 1
 fi
 
-# Upstream wllama uses emsdk 4.0.3 for CPU builds — must match to avoid ABI
-# mismatch (-fwasm-exceptions changed ABI between 4.x and 5.x). WebGPU builds
-# need emdawnwebgpu, which is a built-in Emscripten port starting at 4.0.10.
-BUILD_WEBGPU="${WLLAMA_BUILD_WEBGPU:-0}"
-REQUIRED_EMSDK="4.0.3"
-if [ "$BUILD_WEBGPU" = "1" ]; then
-  REQUIRED_EMSDK="4.0.10"
-fi
+MIN_EMSDK="5.0.0"
 ACTUAL_EMSDK=$(emcc --version | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
-if [ "$ACTUAL_EMSDK" != "$REQUIRED_EMSDK" ]; then
-  echo "WARNING: emsdk version mismatch (have $ACTUAL_EMSDK, need $REQUIRED_EMSDK)"
-  echo "  Install correct version: cd /Users/suzuki/emsdk && ./emsdk install $REQUIRED_EMSDK && ./emsdk activate $REQUIRED_EMSDK"
-  echo "  Then: source /Users/suzuki/emsdk/emsdk_env.sh"
+if ! awk -v a="$ACTUAL_EMSDK" -v m="$MIN_EMSDK" 'BEGIN{
+  split(a,A,"."); split(m,M,".");
+  for(i=1;i<=3;i++){if(A[i]+0>M[i]+0)exit 0;if(A[i]+0<M[i]+0)exit 1}
+  exit 0
+}'; then
+  echo "ERROR: emsdk >= $MIN_EMSDK required (got $ACTUAL_EMSDK)"
+  echo "  Install: cd /Users/suzuki/emsdk && ./emsdk install latest && ./emsdk activate latest"
+  echo "  Then:    source /Users/suzuki/emsdk/emsdk_env.sh"
   exit 1
 fi
+
+BUILD_WEBGPU="${WLLAMA_BUILD_WEBGPU:-0}"
 
 echo "=== vendor/wllama/lowbit-q local build ==="
 echo "  emcc: $(emcc --version | head -1)"
@@ -69,11 +70,14 @@ echo ""
 # ---------------------------------------------------------------------------
 SHARED_EMCC_CFLAGS_BASE="--no-entry -O3 -msimd128 -DNDEBUG -flto=full -frtti -fwasm-exceptions -sEXPORT_ALL=1 -sEXPORT_ES6=0 -sMODULARIZE=0 -sALLOW_MEMORY_GROWTH=1 -sFORCE_FILESYSTEM=1 -sEXPORTED_FUNCTIONS=_main,_wllama_malloc,_wllama_start,_wllama_action,_wllama_exit,_wllama_debug -sEXPORTED_RUNTIME_METHODS=ccall,cwrap -sNO_EXIT_RUNTIME=1"
 SHARED_EMCC_CFLAGS_COMPAT="$SHARED_EMCC_CFLAGS_BASE -sINITIAL_MEMORY=128MB -sMAXIMUM_MEMORY=2048MB"
+# Memory64 uses 64-bit linear memory indexing; 8 GB maximum covers current large model sizes.
+SHARED_EMCC_CFLAGS_MEM64="$SHARED_EMCC_CFLAGS_BASE -sINITIAL_MEMORY=128MB -sMAXIMUM_MEMORY=8589934592 -sMEMORY64=1"
 NPROC=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 SYNC_VENDOR_JS="${WLLAMA_SYNC_VENDOR_JS:-0}"
 
-cmake_webgpu_args=()
 cmake_compat_args=("-DLLAMA_WASM_MEM64=OFF")
+cmake_mem64_args=("-DLLAMA_WASM_MEM64=ON")
+cmake_webgpu_args=()
 if [ "$BUILD_WEBGPU" = "1" ]; then
   cmake_webgpu_args+=("-DGGML_WEBGPU=ON")
   # JSPI is the default in llama.cpp, but keep it explicit for reproducibility.
@@ -83,6 +87,22 @@ if [ "$BUILD_WEBGPU" = "1" ]; then
   fi
 fi
 
+# ---------------------------------------------------------------------------
+# Post-build patches
+#
+# patch #1 (expose_emscripten_heap_views): Appends Module["HEAP*"] assignments so
+#   the inner worker can access heap views via Module.*. Still required as of emsdk 4;
+#   verify under emsdk 5 — remove if Emscripten exports them natively.
+#
+# patch #2 (patch_emscripten_jspi_exports): Widens the JSPI async-export pattern to
+#   include wllama_* symbols, and normalises async-mode handling to Promise.resolve.
+#   Verify under emsdk 5 — if the upstream export pattern already covers wllama_*,
+#   this patch can be removed.
+#
+# patch #3 (fix_pthread_pool_size) has been eliminated: -sPTHREAD_POOL_SIZE=0 is
+#   now hardcoded in the build flags; runtime-adapter injects pthreadPoolSize at
+#   attach time, so the generated glue no longer references the Module variable.
+# ---------------------------------------------------------------------------
 expose_emscripten_heap_views() {
   local js_file="$1"
 
@@ -114,27 +134,15 @@ patch_emscripten_jspi_exports() {
     "$js_file"
 }
 
-# Emscripten generates Module[pthreadPoolSize] (unquoted variable lookup) instead of
-# Module["pthreadPoolSize"] (string key lookup), which silently discards the pool size.
-fix_pthread_pool_size() {
-  local js_file="$1"
-
-  if grep -q 'Module\["pthreadPoolSize"\]' "$js_file"; then
-    return
-  fi
-
-  perl -0pi -e 's/Module\[pthreadPoolSize\]/Module["pthreadPoolSize"]/g' "$js_file"
-}
-
 cd "$FORK_DIR"
 
 # ---------------------------------------------------------------------------
-# Build 1/2: single-thread compat (no Memory64)
+# Build 1/4: single-thread CPU compat (no Memory64)
 # ---------------------------------------------------------------------------
-echo "[1/2] Building single-thread WASM (compat, no Memory64)..."
-rm -rf wasm/single-thread-compat
-mkdir -p wasm/single-thread-compat
-cd wasm/single-thread-compat
+echo "[1/4] Building single-thread WASM (CPU compat, no Memory64)..."
+rm -rf wasm/single-thread-cpu-compat
+mkdir -p wasm/single-thread-cpu-compat
+cd wasm/single-thread-cpu-compat
 
 export EMCC_CFLAGS=""
 emcmake cmake ../.. "${cmake_compat_args[@]}" 2>&1 | tail -3
@@ -146,33 +154,70 @@ patch_emscripten_jspi_exports wllama.js
 cd "$FORK_DIR"
 
 # ---------------------------------------------------------------------------
-# Build 2/2: multi-thread compat (no Memory64)
+# Build 2/4: multi-thread CPU compat (no Memory64)
 # ---------------------------------------------------------------------------
 echo ""
-echo "[2/2] Building multi-thread WASM (compat, no Memory64)..."
-rm -rf wasm/multi-thread-compat
-mkdir -p wasm/multi-thread-compat
-cd wasm/multi-thread-compat
+echo "[2/4] Building multi-thread WASM (CPU compat, no Memory64)..."
+rm -rf wasm/multi-thread-cpu-compat
+mkdir -p wasm/multi-thread-cpu-compat
+cd wasm/multi-thread-cpu-compat
 
 export EMCC_CFLAGS=""
 emcmake cmake ../.. "${cmake_compat_args[@]}" 2>&1 | tail -3
-export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_COMPAT -pthread -sUSE_PTHREADS=1 -sPTHREAD_POOL_SIZE=Module[\"pthreadPoolSize\"]"
+export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_COMPAT -pthread -sUSE_PTHREADS=1 -sPTHREAD_POOL_SIZE=0"
 emmake make wllama -j"$NPROC" 2>&1
 expose_emscripten_heap_views wllama.js
 patch_emscripten_jspi_exports wllama.js
-fix_pthread_pool_size wllama.js
 
 cd "$FORK_DIR"
 
 # ---------------------------------------------------------------------------
-# Copy to safe destinations
+# Build 3/4: single-thread CPU Memory64
 # ---------------------------------------------------------------------------
 echo ""
-echo "=== Copying safe outputs ==="
+echo "[3/4] Building single-thread WASM (CPU Memory64)..."
+rm -rf wasm/single-thread-cpu-mem64
+mkdir -p wasm/single-thread-cpu-mem64
+cd wasm/single-thread-cpu-mem64
+
+export EMCC_CFLAGS=""
+emcmake cmake ../.. "${cmake_mem64_args[@]}" 2>&1 | tail -3
+export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_MEM64"
+emmake make wllama -j"$NPROC" 2>&1
+expose_emscripten_heap_views wllama.js
+patch_emscripten_jspi_exports wllama.js
+
+cd "$FORK_DIR"
+
+# ---------------------------------------------------------------------------
+# Build 4/4: multi-thread CPU Memory64
+# ---------------------------------------------------------------------------
+echo ""
+echo "[4/4] Building multi-thread WASM (CPU Memory64)..."
+rm -rf wasm/multi-thread-cpu-mem64
+mkdir -p wasm/multi-thread-cpu-mem64
+cd wasm/multi-thread-cpu-mem64
+
+export EMCC_CFLAGS=""
+emcmake cmake ../.. "${cmake_mem64_args[@]}" 2>&1 | tail -3
+export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_MEM64 -pthread -sUSE_PTHREADS=1 -sPTHREAD_POOL_SIZE=0"
+emmake make wllama -j"$NPROC" 2>&1
+expose_emscripten_heap_views wllama.js
+patch_emscripten_jspi_exports wllama.js
+
+cd "$FORK_DIR"
+
+# ---------------------------------------------------------------------------
+# Copy to vendor directory
+# ---------------------------------------------------------------------------
+echo ""
+echo "=== Copying outputs ==="
 mkdir -p "$VENDOR_DIR"
 
-cp wasm/single-thread-compat/wllama.wasm "$VENDOR_DIR/single-thread-compat.wasm"
-cp wasm/multi-thread-compat/wllama.wasm  "$VENDOR_DIR/multi-thread-compat.wasm"
+cp wasm/single-thread-cpu-compat/wllama.wasm "$VENDOR_DIR/single-thread-cpu-compat.wasm"
+cp wasm/multi-thread-cpu-compat/wllama.wasm  "$VENDOR_DIR/multi-thread-cpu-compat.wasm"
+cp wasm/single-thread-cpu-mem64/wllama.wasm  "$VENDOR_DIR/single-thread-cpu-mem64.wasm"
+cp wasm/multi-thread-cpu-mem64/wllama.wasm   "$VENDOR_DIR/multi-thread-cpu-mem64.wasm"
 
 if [ "$BUILD_WEBGPU" = "1" ]; then
   cd "$FORK_DIR"
@@ -200,11 +245,10 @@ if [ "$BUILD_WEBGPU" = "1" ]; then
 
   export EMCC_CFLAGS=""
   emcmake cmake ../.. "${cmake_compat_args[@]}" "${cmake_webgpu_args[@]}" 2>&1 | tail -6
-  export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_COMPAT -pthread -sUSE_PTHREADS=1 -sPTHREAD_POOL_SIZE=Module[\"pthreadPoolSize\"]"
+  export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_COMPAT -pthread -sUSE_PTHREADS=1 -sPTHREAD_POOL_SIZE=0"
   emmake make wllama -j"$NPROC" 2>&1
   expose_emscripten_heap_views wllama.js
   patch_emscripten_jspi_exports wllama.js
-  fix_pthread_pool_size wllama.js
 
   cd "$FORK_DIR"
   cp wasm/single-thread-webgpu-compat/wllama.wasm "$VENDOR_DIR/single-thread-webgpu-compat.wasm"
@@ -233,13 +277,13 @@ if [ "$BUILD_WEBGPU" = "1" ]; then
     cp esm/index.js "$REPO_ROOT/src/vendor/wllama/webgpu-index.js"
 
     # --- Step B: restore CPU JS glue and rebuild index.js ---
-    # After the WebGPU build, bring back the CPU JS glue so that
+    # After the WebGPU build, bring back the CPU compat JS glue so that
     # src/vendor/wllama/index.js (the default used by the app) continues to
     # serve CPU WASM variants correctly.
-    cp wasm/single-thread-compat/wllama.js   src/single-thread/wllama.js
-    cp wasm/single-thread-compat/wllama.wasm src/single-thread/wllama.wasm
-    cp wasm/multi-thread-compat/wllama.js    src/multi-thread/wllama.js
-    cp wasm/multi-thread-compat/wllama.wasm  src/multi-thread/wllama.wasm
+    cp wasm/single-thread-cpu-compat/wllama.js   src/single-thread/wllama.js
+    cp wasm/single-thread-cpu-compat/wllama.wasm src/single-thread/wllama.wasm
+    cp wasm/multi-thread-cpu-compat/wllama.js    src/multi-thread/wllama.js
+    cp wasm/multi-thread-cpu-compat/wllama.wasm  src/multi-thread/wllama.wasm
 
     npm run build:worker
     npm run build:tsup
@@ -250,15 +294,14 @@ fi
 
 echo ""
 echo "=== Build complete ==="
-ls -lh "$VENDOR_DIR/"
+ls -lh "$VENDOR_DIR/"*.wasm
 echo ""
-echo "Compat WASM installed to: $VENDOR_DIR/"
+echo "CPU WASM installed to: $VENDOR_DIR/"
 echo ""
 echo "NOTE:"
-echo "  - build-local.sh no longer overwrites vendor/wllama/{single,multi}-thread.wasm"
-echo "  - Memory64 variants are intentionally not built by this script"
-echo "  - Keep vendor/wllama/{single,multi}-thread.wasm on upstream binaries"
-echo "  - WebGPU variants are opt-in via WLLAMA_BUILD_WEBGPU=1 and may require matching Emscripten JS glue"
+echo "  - Memory64 variants require browsers with WebAssembly.Memory64 support"
+echo "  - WebGPU variants are opt-in via WLLAMA_BUILD_WEBGPU=1"
+echo "  - WebGPU mem64 variants are not built (out of scope)"
 echo "  - WLLAMA_SYNC_VENDOR_JS=1 produces BOTH src/vendor/wllama/webgpu-index.js (WebGPU glue)"
 echo "    AND src/vendor/wllama/index.js (CPU glue, restored after WebGPU build)"
 echo "  - CPU and WebGPU JS glue use different WASM memory-export keys and MUST NOT be swapped"
