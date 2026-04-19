@@ -116,6 +116,43 @@ npm run dev
 yarn build
 ```
 
+#### Updating the wllama Worker Code
+
+`src/vendor/wllama/index.js` is a pre-built bundle that includes project-specific
+extensions (e.g. `loadModelFromOpfs`) not present in the upstream fork source.
+**Do not replace this file by running `npm run build:tsup` in `.wllama-fork`**
+— that would rebuild from the upstream source and silently drop the custom API.
+
+To patch only the embedded worker code (`llama-cpp.js`):
+
+1. Edit `.wllama-fork/src/workers-code/llama-cpp.js`
+2. Regenerate `generated.ts`:
+   ```bash
+   cd .wllama-fork && npm run build:worker
+   ```
+3. Surgically replace the `LLAMA_CPP_WORKER_CODE` constant in the existing
+   `src/vendor/wllama/index.js` (Python one-liner):
+   ```bash
+   python3 - <<'PY'
+   import re, json
+   with open('.wllama-fork/src/workers-code/llama-cpp.js') as f:
+       new_code = json.dumps(f.read())
+   with open('src/vendor/wllama/index.js') as f:
+       bundle = f.read()
+   bundle = re.sub(
+       r'(var LLAMA_CPP_WORKER_CODE\s*=\s*)"(?:[^"\\]|\\.)*"',
+       r'\g<1>' + new_code,
+       bundle,
+   )
+   with open('src/vendor/wllama/index.js', 'w') as f:
+       f.write(bundle)
+   print('Done')
+   PY
+   ```
+
+To rebuild the Emscripten WASM glue or the entire wllama library, see
+[`vendor/wllama/BUILD.md`](./vendor/wllama/BUILD.md).
+
 #### Google Drive Sync Setup
 
 Google Drive sync requires your own Google OAuth Web client ID via `VITE_GOOGLE_CLIENT_ID`.
@@ -238,6 +275,41 @@ npm run dev
 ```bash
 yarn build
 ```
+
+#### wllama ワーカーコードの更新
+
+`src/vendor/wllama/index.js` はプロジェクト独自の拡張（`loadModelFromOpfs` 等）を含む
+事前ビルド済みバンドルです。アップストリームフォーク側で `npm run build:tsup` を実行して
+このファイルを上書きすると、カスタム API が失われます。
+
+`llama-cpp.js` のみを更新する場合は以下の手順を使用してください:
+
+1. `.wllama-fork/src/workers-code/llama-cpp.js` を編集
+2. `generated.ts` を再生成:
+   ```bash
+   cd .wllama-fork && npm run build:worker
+   ```
+3. `src/vendor/wllama/index.js` 内の `LLAMA_CPP_WORKER_CODE` 定数だけを差し替え（Python）:
+   ```bash
+   python3 - <<'PY'
+   import re, json
+   with open('.wllama-fork/src/workers-code/llama-cpp.js') as f:
+       new_code = json.dumps(f.read())
+   with open('src/vendor/wllama/index.js') as f:
+       bundle = f.read()
+   bundle = re.sub(
+       r'(var LLAMA_CPP_WORKER_CODE\s*=\s*)"(?:[^"\\]|\\.)*"',
+       r'\g<1>' + new_code,
+       bundle,
+   )
+   with open('src/vendor/wllama/index.js', 'w') as f:
+       f.write(bundle)
+   print('Done')
+   PY
+   ```
+
+Emscripten WASM グルーや wllama ライブラリ全体の再ビルドは
+[`vendor/wllama/BUILD.md`](./vendor/wllama/BUILD.md) を参照してください。
 
 ### 謝辞
 
