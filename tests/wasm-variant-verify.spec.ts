@@ -3,9 +3,9 @@
  *
  * Tests (in order):
  *   A) SmolLM2 1.7B (≤2 GB) + WebGPU  → single-thread-webgpu-compat.wasm (compat+JSPI)
- *   B) Bonsai-8B    (>2 GB) + WebGPU  → single-thread-webgpu.wasm       (Memory64+JSPI)
- *   C) SmolLM2 1.7B           + CPU    → single-thread-compat.wasm       (compat, sync)
- *   D) Bonsai-8B               + CPU   → single-thread-cpu-mem64.wasm   (Memory64, sync)
+ *   B) Bonsai-8B    (>2 GB) + WebGPU  → single-thread-webgpu-compat.wasm (compat+JSPI; no WebGPU mem64 variant built)
+ *   C) SmolLM2 1.7B           + CPU    → single-thread-cpu-compat.wasm   (compat, sync)
+ *   D) Bonsai-8B               + CPU   → single-thread-cpu-mem64.wasm    (Memory64, sync)
  *
  * Requires:
  *   - Vite dev server running on http://localhost:5173
@@ -42,7 +42,7 @@ interface WasmTestCase {
 
 const CASES: WasmTestCase[] = [
   { label: 'A) SmolLM2 + WebGPU',  modelPath: SMALL_MODEL_PATH,       preferMemory64: false, allowWebGPU: true,  expectedWasm: 'single-thread-webgpu-compat.wasm' },
-  { label: 'B) Bonsai-8B + WebGPU', modelPath: LARGE_MODEL_PATH,       preferMemory64: true,  allowWebGPU: true,  expectedWasm: 'single-thread-webgpu.wasm' },
+  { label: 'B) Bonsai-8B + WebGPU', modelPath: LARGE_MODEL_PATH,       preferMemory64: true,  allowWebGPU: true,  expectedWasm: 'single-thread-webgpu-compat.wasm' },
   { label: 'C) SmolLM2 + CPU',      modelPath: COMPAT_CPU_MODEL_PATH,  preferMemory64: false, allowWebGPU: false, expectedWasm: 'single-thread-cpu-compat.wasm' },
   { label: 'D) Bonsai-8B + CPU',    modelPath: LARGE_MODEL_PATH,       preferMemory64: true,  allowWebGPU: false, expectedWasm: 'single-thread-cpu-mem64.wasm' },
 ];

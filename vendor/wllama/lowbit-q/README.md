@@ -95,10 +95,11 @@ Docker を使わずローカルの Emscripten でビルドする手順。
 - git
 - cmake (`brew install cmake`)
 - python3
-- Emscripten SDK (emsdk) **4.0.3**
+- Emscripten SDK (emsdk) **≥ 5.0.0**
 
-> **重要**: wllama v2.3.7 は emsdk 4.0.3 を前提にしている。
-> 異なるバージョンでは `-fwasm-exceptions` の ABI 差異で実行時不整合が起きうる。
+> **重要**: `build-local.sh` は semver チェックで 5.0.0 未満を拒否する。
+> emsdk 5 への移行により `-fwasm-exceptions` ABI が統一され、4.x 時代の
+> バージョン分岐（CPU: 4.0.3 / WebGPU: 4.0.10）は不要になった。
 
 ### ビルド手順
 
@@ -109,33 +110,33 @@ Docker を使わずローカルの Emscripten でビルドする手順。
 # 2. Emscripten を有効化
 source ~/emsdk/emsdk_env.sh
 
-# 3. compat 版をビルド
+# 3. CPU 版（compat + Memory64）をビルド
 ./vendor/wllama/lowbit-q/build-local.sh
+
+# 4. WebGPU 版も含める場合（compat のみ — WebGPU mem64 は未ビルド）
+WLLAMA_BUILD_WEBGPU=1 ./vendor/wllama/lowbit-q/build-local.sh
 ```
 
 ### ビルド出力
 
-`build-local.sh` は安全な compat 版のみを生成して `vendor/wllama/` に配置する:
+`build-local.sh` は CPU 4 バリアントを生成して `vendor/wllama/` に配置する:
 
 | ファイル | 出力先 | 用途 |
 |---------|--------|------|
-| `single-thread-compat.wasm` | `vendor/wllama/` | Memory64 非対応ブラウザ向け |
-| `multi-thread-compat.wasm` | `vendor/wllama/` | Memory64 非対応ブラウザ向け |
+| `single-thread-cpu-compat.wasm` | `vendor/wllama/` | Memory64 非対応ブラウザ向け CPU 単スレッド |
+| `multi-thread-cpu-compat.wasm` | `vendor/wllama/` | Memory64 非対応ブラウザ向け CPU マルチスレッド |
+| `single-thread-cpu-mem64.wasm` | `vendor/wllama/` | Memory64 対応ブラウザ向け CPU 単スレッド（8 GB 上限） |
+| `multi-thread-cpu-mem64.wasm` | `vendor/wllama/` | Memory64 対応ブラウザ向け CPU マルチスレッド（8 GB 上限） |
 
-### ⚠️ Memory64 版をローカルビルドしない理由
+`WLLAMA_BUILD_WEBGPU=1` を指定した場合は追加で:
 
-`single-thread.wasm` / `multi-thread.wasm` は `src/vendor/wllama/index.js` 内の
-Emscripten JS グルーコードと一致していなければならない。
+| ファイル | 出力先 | 用途 |
+|---------|--------|------|
+| `single-thread-webgpu-compat.wasm` | `vendor/wllama/` | compat+JSPI WebGPU 単スレッド |
+| `multi-thread-webgpu-compat.wasm` | `vendor/wllama/` | compat+JSPI WebGPU マルチスレッド |
 
-- `.wasm` だけを差し替えると、モデル読み込みがハングする
-- 現在の upstream `wllama.cpp` は Memory64 ビルド自体もそのままでは失敗する
-- そのため `build-local.sh` は Memory64 版をビルドしない
-- Memory64 版を本当に入れ替える場合は、対応する JS グルーも同時更新すること
-
-現在の安全な前提は次のとおり:
-
-- `vendor/wllama/single-thread.wasm` と `vendor/wllama/multi-thread.wasm` は upstream 提供版を維持する
-- ローカルビルドで扱うのは compat 版のみ
+Memory64 と CPU WASM は同じ `src/vendor/wllama/index.js` の JS グルーと組み合わせて使う。
+WebGPU WASM は `src/vendor/wllama/webgpu-index.js` と組み合わせる（メモリ export キーが異なるため混在不可）。
 
 ## カーネル実装の詳細
 
