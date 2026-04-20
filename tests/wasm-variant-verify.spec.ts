@@ -125,9 +125,13 @@ test.describe.serial('WASM variant verification', () => {
 
         try {
           console.log('[STAGE 1] importing wllama');
-          // Dynamically import Wllama from the app bundle — needs to be on the same origin
+          // WebGPU WASM variants require the WebGPU JS glue (different memory export key);
+          // CPU WASM variants use the CPU glue.
+          const modulePath = allowWebGPU
+            ? '/src/vendor/wllama/webgpu-index.js'
+            : '/src/vendor/wllama/index.js';
           // @ts-ignore
-          const mod = await import('/src/vendor/wllama/index.js');
+          const mod = await import(modulePath);
           const { Wllama } = mod;
           console.log('[STAGE 2] wllama imported');
 
