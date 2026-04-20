@@ -10,10 +10,13 @@
 #   bash scripts/wllama/build.sh               (preferred entry point)
 #   ./vendor/wllama/lowbit-q/build-local.sh    (direct invocation)
 #
+# Optional JS glue sync (CPU always; WebGPU requires BUILD_WEBGPU=1):
+#   WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
+#   WLLAMA_SYNC_VENDOR_JS=1 WLLAMA_BUILD_WEBGPU=1 bash scripts/wllama/build.sh
+#
 # Optional WebGPU build:
 #   WLLAMA_BUILD_WEBGPU=1 bash scripts/wllama/build.sh
 #   WLLAMA_BUILD_WEBGPU=1 EMDAWNWEBGPU_DIR=/path/to/emdawnwebgpu_pkg bash scripts/wllama/build.sh
-#   WLLAMA_BUILD_WEBGPU=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
 #
 # Output:
 #   vendor/wllama/single-thread-cpu-compat.wasm
@@ -102,6 +105,14 @@ fi
 # patch #3 (fix_pthread_pool_size) has been eliminated: -sPTHREAD_POOL_SIZE=0 is
 #   now hardcoded in the build flags; runtime-adapter injects pthreadPoolSize at
 #   attach time, so the generated glue no longer references the Module variable.
+#
+# patch #4 (patch_pthread_prewarm): Injects a Module.__pthreadPrewarm() function
+#   into the multi-thread glue's initMainThread() hook. Without this, Workers are
+#   created lazily by pthread_create and may still be loading their WASM module
+#   when the main thread reaches ggml_barrier during the first llama_decode →
+#   deadlock. __pthreadPrewarm() pre-allocates (pthreadPoolSize-1) Workers and
+#   awaits their WASM load before the runtime signals init-complete to the outer
+#   Wllama layer. Called from llama-cpp.js onRuntimeInitialized (async).
 # ---------------------------------------------------------------------------
 expose_emscripten_heap_views() {
   local js_file="$1"
@@ -140,6 +151,24 @@ patch_emscripten_jspi_exports() {
     "$js_file"
 }
 
+patch_pthread_prewarm() {
+  local js_file="$1"
+
+  if grep -qF '__pthreadPrewarm' "$js_file"; then
+    return
+  fi
+
+  local old=',initMainThread(){},terminateAllThreads'
+  local new=',initMainThread(){Module["__pthreadPrewarm"]=function(){var n=typeof Module["pthreadPoolSize"]==="number"?Module["pthreadPoolSize"]-1:0;if(n<=0)return Promise.resolve();var ps=[];for(var i=0;i<n;i++){PThread.allocateUnusedWorker();var w=PThread.unusedWorkers[PThread.unusedWorkers.length-1];ps.push(PThread.loadWasmModuleToWorker(w));}return Promise.all(ps);};},terminateAllThreads'
+
+  if ! grep -qF "$old" "$js_file"; then
+    echo "ERROR: patch_pthread_prewarm: initMainThread marker not found in $js_file" >&2
+    exit 1
+  fi
+
+  perl -0pi -e "s/\Q$old\E/$new/" "$js_file"
+}
+
 cd "$FORK_DIR"
 
 # ---------------------------------------------------------------------------
@@ -174,6 +203,7 @@ export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_COMPAT -pthread -sUSE_PTHREADS=1 -sPTHRE
 emmake make wllama -j"$NPROC" 2>&1
 expose_emscripten_heap_views wllama.js
 patch_emscripten_jspi_exports wllama.js
+patch_pthread_prewarm wllama.js
 
 cd "$FORK_DIR"
 
@@ -210,6 +240,7 @@ export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_MEM64 -pthread -sUSE_PTHREADS=1 -sPTHREA
 emmake make wllama -j"$NPROC" 2>&1
 expose_emscripten_heap_views wllama.js
 patch_emscripten_jspi_exports wllama.js
+patch_pthread_prewarm wllama.js
 
 cd "$FORK_DIR"
 
@@ -262,7 +293,7 @@ if [ "$BUILD_WEBGPU" = "1" ]; then
 
   if [ "$SYNC_VENDOR_JS" = "1" ]; then
     echo ""
-    echo "[webgpu js] Syncing Emscripten JS glue into vendored wllama runtime..."
+    echo "[webgpu js] Syncing WebGPU JS glue into vendored wllama runtime..."
     mkdir -p src/single-thread src/multi-thread
 
     # --- Step A: build WebGPU index.js ---
@@ -270,7 +301,7 @@ if [ "$BUILD_WEBGPU" = "1" ]; then
     # CPU glue ("v").  They are NOT interchangeable — each must only be paired
     # with its matching WASM variant.  We therefore produce a SEPARATE file:
     #   src/vendor/wllama/webgpu-index.js   ← WebGPU WASM variants
-    #   src/vendor/wllama/index.js          ← CPU WASM variants (built below)
+    #   src/vendor/wllama/index.js          ← CPU WASM variants (built separately)
     cp wasm/single-thread-webgpu-compat/wllama.js   src/single-thread/wllama.js
     cp wasm/single-thread-webgpu-compat/wllama.wasm src/single-thread/wllama.wasm
     cp wasm/multi-thread-webgpu-compat/wllama.js    src/multi-thread/wllama.js
@@ -281,44 +312,55 @@ if [ "$BUILD_WEBGPU" = "1" ]; then
     npm run build:typedef
 
     cp esm/index.js "$REPO_ROOT/src/vendor/wllama/webgpu-index.js"
-
-    # --- Step B: CPU compat glue → src/vendor/wllama/index.js ---
-    # CPU compat WASM uses wasm32 ABI (Number pointers).  This glue is the default
-    # for all cpu-compat variants and must NOT be paired with mem64 WASM.
-    cp wasm/single-thread-cpu-compat/wllama.js   src/single-thread/wllama.js
-    cp wasm/single-thread-cpu-compat/wllama.wasm src/single-thread/wllama.wasm
-    cp wasm/multi-thread-cpu-compat/wllama.js    src/multi-thread/wllama.js
-    cp wasm/multi-thread-cpu-compat/wllama.wasm  src/multi-thread/wllama.wasm
-
-    npm run build:worker
-    npm run build:tsup
-
-    cp esm/index.js "$REPO_ROOT/src/vendor/wllama/index.js"
-
-    # --- Step C: CPU mem64 glue → src/vendor/wllama/mem64-index.js ---
-    # CPU mem64 WASM uses Memory64 ABI (BigInt pointers).  A separate glue bundle
-    # is required because the embedded LLAMA_CPP_WORKER_CODE must match the WASM ABI.
-    # Using the compat glue with mem64 WASM causes "Cannot mix BigInt and other types".
-    echo ""
-    echo "[cpu-mem64 js] Verifying HEAPU64 presence in mem64 glue..."
-    grep -c 'HEAPU64' wasm/single-thread-cpu-mem64/wllama.js \
-      && echo "  HEAPU64 found — mem64 glue looks correct" \
-      || { echo "ERROR: HEAPU64 not found in single-thread-cpu-mem64/wllama.js — expose_emscripten_heap_views may have failed"; exit 1; }
-
-    cp wasm/single-thread-cpu-mem64/wllama.js   src/single-thread/wllama.js
-    cp wasm/single-thread-cpu-mem64/wllama.wasm src/single-thread/wllama.wasm
-    cp wasm/multi-thread-cpu-mem64/wllama.js    src/multi-thread/wllama.js
-    cp wasm/multi-thread-cpu-mem64/wllama.wasm  src/multi-thread/wllama.wasm
-
-    npm run build:worker
-    npm run build:tsup
-
-    cp esm/index.js "$REPO_ROOT/src/vendor/wllama/mem64-index.js"
-
-    # Verify all three glue bundles have the same public export surface.
-    node "$REPO_ROOT/scripts/wllama/verify-glue-exports.mjs" "$REPO_ROOT/src/vendor/wllama" \
-      || { echo "ERROR: glue export surface mismatch — aborting"; exit 1; }
   fi
+fi
+
+# ---------------------------------------------------------------------------
+# JS glue sync: CPU variants (runs whenever WLLAMA_SYNC_VENDOR_JS=1,
+# independent of BUILD_WEBGPU)
+# ---------------------------------------------------------------------------
+if [ "$SYNC_VENDOR_JS" = "1" ]; then
+  echo ""
+  echo "[cpu js] Syncing CPU JS glue into vendored wllama runtime..."
+  cd "$FORK_DIR"
+  mkdir -p src/single-thread src/multi-thread
+
+  # --- Step B: CPU compat glue → src/vendor/wllama/index.js ---
+  # CPU compat WASM uses wasm32 ABI (Number pointers).  This glue is the default
+  # for all cpu-compat variants and must NOT be paired with mem64 WASM.
+  cp wasm/single-thread-cpu-compat/wllama.js   src/single-thread/wllama.js
+  cp wasm/single-thread-cpu-compat/wllama.wasm src/single-thread/wllama.wasm
+  cp wasm/multi-thread-cpu-compat/wllama.js    src/multi-thread/wllama.js
+  cp wasm/multi-thread-cpu-compat/wllama.wasm  src/multi-thread/wllama.wasm
+
+  npm run build:worker
+  npm run build:tsup
+
+  cp esm/index.js "$REPO_ROOT/src/vendor/wllama/index.js"
+
+  # --- Step C: CPU mem64 glue → src/vendor/wllama/mem64-index.js ---
+  # CPU mem64 WASM uses Memory64 ABI (BigInt pointers).  A separate glue bundle
+  # is required because the embedded LLAMA_CPP_WORKER_CODE must match the WASM ABI.
+  # Using the compat glue with mem64 WASM causes "Cannot mix BigInt and other types".
+  echo ""
+  echo "[cpu-mem64 js] Verifying HEAPU64 presence in mem64 glue..."
+  grep -c 'HEAPU64' wasm/single-thread-cpu-mem64/wllama.js \
+    && echo "  HEAPU64 found — mem64 glue looks correct" \
+    || { echo "ERROR: HEAPU64 not found in single-thread-cpu-mem64/wllama.js — expose_emscripten_heap_views may have failed"; exit 1; }
+
+  cp wasm/single-thread-cpu-mem64/wllama.js   src/single-thread/wllama.js
+  cp wasm/single-thread-cpu-mem64/wllama.wasm src/single-thread/wllama.wasm
+  cp wasm/multi-thread-cpu-mem64/wllama.js    src/multi-thread/wllama.js
+  cp wasm/multi-thread-cpu-mem64/wllama.wasm  src/multi-thread/wllama.wasm
+
+  npm run build:worker
+  npm run build:tsup
+
+  cp esm/index.js "$REPO_ROOT/src/vendor/wllama/mem64-index.js"
+
+  # Verify all available glue bundles have the same public export surface.
+  node "$REPO_ROOT/scripts/wllama/verify-glue-exports.mjs" "$REPO_ROOT/src/vendor/wllama" \
+    || { echo "ERROR: glue export surface mismatch — aborting"; exit 1; }
 fi
 
 echo ""
@@ -331,8 +373,9 @@ echo "NOTE:"
 echo "  - Memory64 variants require browsers with WebAssembly.Memory64 support"
 echo "  - WebGPU variants are opt-in via WLLAMA_BUILD_WEBGPU=1"
 echo "  - WebGPU mem64 variants are not built (out of scope)"
-echo "  - WLLAMA_SYNC_VENDOR_JS=1 produces all three glue bundles:"
-echo "      src/vendor/wllama/webgpu-index.js  (WebGPU WASM variants)"
+echo "  - WLLAMA_SYNC_VENDOR_JS=1 always produces CPU glue bundles:"
 echo "      src/vendor/wllama/index.js          (CPU compat WASM variants)"
 echo "      src/vendor/wllama/mem64-index.js    (CPU mem64 WASM variants)"
+echo "  - WLLAMA_SYNC_VENDOR_JS=1 WLLAMA_BUILD_WEBGPU=1 additionally produces:"
+echo "      src/vendor/wllama/webgpu-index.js  (WebGPU WASM variants)"
 echo "  - CPU and WebGPU JS glue use different WASM memory-export keys and MUST NOT be swapped"

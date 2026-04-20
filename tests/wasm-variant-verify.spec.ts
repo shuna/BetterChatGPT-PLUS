@@ -26,7 +26,7 @@ const BASE_URL = 'http://localhost:5173/';
 const MODEL_DIR = '/Users/suzuki/Downloads';
 const MODEL_FILE = 'smollm2-360m-instruct-q8_0.gguf';
 const MODEL_PATH = path.join(MODEL_DIR, MODEL_FILE);
-const WASM_ASSET_VERSION = '20260420-pr2-rename';
+const WASM_ASSET_VERSION = '20260421-pr2-active-variants-fix';
 
 interface WasmTestCase {
   label: string;

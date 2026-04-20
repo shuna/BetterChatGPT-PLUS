@@ -23,7 +23,7 @@ import * as path from 'path';
 import * as http from 'http';
 
 const BASE_URL = 'http://localhost:5173/';
-const WASM_ASSET_VERSION = '20260420-pr2-rename';
+const WASM_ASSET_VERSION = '20260421-pr2-active-variants-fix';
 const MODEL_PATH = '/Users/suzuki/Downloads/smollm2-360m-instruct-q8_0.gguf';
 
 interface ThreadTestCase {
