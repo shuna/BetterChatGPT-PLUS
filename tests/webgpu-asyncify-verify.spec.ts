@@ -332,18 +332,21 @@ test.describe('WebGPU Asyncify variant E2E', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Worker runtime-selection path
+// Worker runtime-selection path + OPFS load path
 // ---------------------------------------------------------------------------
-// Tests the actual production path:
+// Tests the actual production path end-to-end:
 //   wllamaWorker.ts init → resolveVariant(forceVariant) → loadWllamaClass('webgpu-asyncify')
+//   → { type:'load', descriptor:{mode:'opfs-direct',...} } → loadModelFromOpfs()
 //
-// Gate: skips when either the artifacts are missing OR the Asyncify variant entries
-// are still disabled (forceVariant rejects disabled entries and returns an error
-// containing "rejected":["disabled"] in the payload).
+// Gate: skips when artifacts missing OR Asyncify entries are disabled:true
+// (forceVariant rejects disabled entries; error contains "rejected":["disabled"]).
+// OPFS load test additionally gates on model file being present.
 //
-// OPFS load path (loadModelFromOpfs) is additionally gated on the model being
-// present in OPFS under the standard key; skip with a note when absent.
+// OPFS layout expected by loadModelFromOpfs / inner worker fs.opfs-setup:
+//   navigator.storage.getDirectory() / models / {modelId} / {shardFilename}
 // ---------------------------------------------------------------------------
+
+const OPFS_TEST_MODEL_ID = 'e2e-asyncify-st-verify';
 
 test.describe('wllamaWorker runtime-selection path (Asyncify)', () => {
   const WORKER_URL = '/src/workers/wllamaWorker.ts';
@@ -354,107 +357,279 @@ test.describe('wllamaWorker runtime-selection path (Asyncify)', () => {
     [k: string]: unknown;
   }
 
-  async function workerExchange(
+  // Write model bytes into the OPFS location expected by loadModelFromOpfs:
+  //   opfsRoot / models / {modelId} / {shardFilename}
+  async function setupOpfsModel(
     page: import('@playwright/test').Page,
-    initMsg: Record<string, unknown>,
-    timeoutMs = 60_000,
-  ): Promise<{ messages: WorkerMessage[]; initResponse: WorkerMessage | null }> {
+    modelServerUrl: string,
+    modelId: string,
+    shardFilename: string,
+  ): Promise<boolean> {
     return page.evaluate(
-      async ({ workerUrl, initMsg, timeoutMs }) => {
-        const messages: WorkerMessage[] = [];
-        const worker = new Worker(workerUrl, { type: 'module' });
-
-        const result = await new Promise<{ messages: WorkerMessage[]; initResponse: WorkerMessage | null }>(
-          (resolve) => {
-            const deadline = setTimeout(() => {
-              worker.terminate();
-              resolve({ messages, initResponse: null });
-            }, timeoutMs);
-
-            worker.onmessage = (ev: MessageEvent<WorkerMessage>) => {
-              const msg = ev.data;
-              messages.push(msg);
-              // id>0 is a direct response to a request; id=0 is a broadcast diagnostic
-              if (msg.id === (initMsg as WorkerMessage).id) {
-                clearTimeout(deadline);
-                worker.terminate();
-                resolve({ messages, initResponse: msg });
-              }
-            };
-            worker.onerror = (ev) => {
-              clearTimeout(deadline);
-              worker.terminate();
-              resolve({ messages, initResponse: { id: -1, type: 'worker-error', message: ev.message } });
-            };
-
-            worker.postMessage(initMsg);
-          },
-        );
-        return result;
+      async ({ modelServerUrl, modelId, shardFilename }) => {
+        try {
+          const resp = await fetch(modelServerUrl);
+          if (!resp.ok) return false;
+          const buf = await resp.arrayBuffer();
+          const root = await navigator.storage.getDirectory();
+          const modelsDir = await root.getDirectoryHandle('models', { create: true });
+          const modelDir = await modelsDir.getDirectoryHandle(modelId, { create: true });
+          const fh = await modelDir.getFileHandle(shardFilename, { create: true });
+          const writable = await fh.createWritable();
+          await writable.write(buf);
+          await writable.close();
+          return true;
+        } catch {
+          return false;
+        }
       },
-      { workerUrl: WORKER_URL, initMsg, timeoutMs },
+      { modelServerUrl, modelId, shardFilename },
     );
   }
 
+  // Clean up OPFS after test: remove the model directory
+  async function cleanupOpfsModel(
+    page: import('@playwright/test').Page,
+    modelId: string,
+  ): Promise<void> {
+    await page.evaluate(
+      async ({ modelId }) => {
+        try {
+          const root = await navigator.storage.getDirectory();
+          const modelsDir = await root.getDirectoryHandle('models', { create: false });
+          await modelsDir.removeEntry(modelId, { recursive: true });
+        } catch {
+          // ignore — directory may not exist
+        }
+      },
+      { modelId },
+    );
+  }
+
+  // Send one message to the worker and collect all messages until the response
+  // with the matching id arrives (or timeout). Does NOT terminate the worker.
+  async function sendAndWait(
+    page: import('@playwright/test').Page,
+    workerHandle: string,
+    msg: Record<string, unknown>,
+    timeoutMs: number,
+  ): Promise<WorkerMessage[]> {
+    return page.evaluate(
+      async ({ handle, msg, timeoutMs }) => {
+        const w = (globalThis as unknown as Record<string, Worker>)[handle];
+        if (!w) throw new Error(`Worker handle ${handle} not found`);
+        const collected: WorkerMessage[] = [];
+        return new Promise<WorkerMessage[]>((resolve, reject) => {
+          const t = setTimeout(() => reject(new Error(`timeout waiting for id=${msg.id}`)), timeoutMs);
+          const handler = (ev: MessageEvent<WorkerMessage>) => {
+            collected.push(ev.data);
+            if (ev.data.id === msg.id) {
+              clearTimeout(t);
+              w.removeEventListener('message', handler);
+              resolve(collected);
+            }
+          };
+          w.addEventListener('message', handler);
+          w.postMessage(msg);
+        });
+      },
+      { handle: workerHandle, msg, timeoutMs },
+    );
+  }
+
+  // Hoist a Worker into globalThis so subsequent evaluate calls can reuse it.
+  async function createWorkerHandle(
+    page: import('@playwright/test').Page,
+    url: string,
+    handle: string,
+  ): Promise<void> {
+    await page.evaluate(
+      ({ url, handle }) => {
+        const w = new Worker(url, { type: 'module' });
+        (globalThis as unknown as Record<string, Worker>)[handle] = w;
+      },
+      { url, handle },
+    );
+  }
+
+  async function terminateWorkerHandle(
+    page: import('@playwright/test').Page,
+    handle: string,
+  ): Promise<void> {
+    await page.evaluate(
+      ({ handle }) => {
+        const w = (globalThis as unknown as Record<string, Worker>)[handle];
+        if (w) { w.terminate(); delete (globalThis as unknown as Record<string, Worker>)[handle]; }
+      },
+      { handle },
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Shared skip check: returns the skip reason or null if should proceed.
+  // -------------------------------------------------------------------------
+  function getArtifactSkipReason(): string | null {
+    if (!artifactsExist()) {
+      return 'Asyncify artifacts absent — run WLLAMA_BUILD_WEBGPU_ASYNCIFY=1 WLLAMA_SYNC_VENDOR_JS=1 first';
+    }
+    return null;
+  }
+
+  const DISABLED_SKIP_MSG =
+    'st-webgpu-asyncify-compat is still disabled:true in variant-table — ' +
+    'remove disabled:true after Firefox E2E passes before running this test';
+
+  function isDisabledRejection(errMsg: string): boolean {
+    return errMsg.includes('"disabled"') || errMsg.includes('No eligible WASM variant');
+  }
+
+  // -------------------------------------------------------------------------
+  // Test 1: init path
+  // -------------------------------------------------------------------------
   test('st-webgpu-asyncify-compat: init via wllamaWorker selects asyncify glue', async ({ persistentPage: page }) => {
     test.setTimeout(3 * 60_000);
 
-    if (!artifactsExist()) {
-      test.skip(true,
-        'Asyncify artifacts absent — run WLLAMA_BUILD_WEBGPU_ASYNCIFY=1 WLLAMA_SYNC_VENDOR_JS=1 first');
-      return;
-    }
+    const skipReason = getArtifactSkipReason();
+    if (skipReason) { test.skip(true, skipReason); return; }
 
     await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 30_000 });
+    const handle = '__wllamaWorker_initTest';
+    await createWorkerHandle(page, WORKER_URL, handle);
 
-    const { messages, initResponse } = await workerExchange(
-      page,
-      { id: 1, type: 'init', allowWebGPU: true, wasmVariantOverride: 'st-webgpu-asyncify-compat' },
-      90_000,
-    );
-
-    if (!initResponse) {
-      test.skip(true, 'wllamaWorker did not respond within timeout');
-      return;
+    let messages: WorkerMessage[];
+    try {
+      messages = await sendAndWait(
+        page, handle,
+        { id: 1, type: 'init', allowWebGPU: true, wasmVariantOverride: 'st-webgpu-asyncify-compat' },
+        90_000,
+      );
+    } catch (e) {
+      await terminateWorkerHandle(page, handle);
+      throw e;
     }
+    await terminateWorkerHandle(page, handle);
 
-    // Print diagnostic broadcasts for triage
+    const initResponse = messages.find(m => m.id === 1) ?? null;
+
     for (const msg of messages) {
       if (msg.type === '__diagnostic') {
         console.log(`[worker-diag] phase=${msg.phase} payload=${JSON.stringify(msg.payload).slice(0, 200)}`);
       }
     }
 
-    // Detect disabled-variant rejection: forceVariant on a disabled entry returns
-    // an error whose payload contains "rejected":["disabled"] in the considered array.
-    if (initResponse.type === 'error') {
+    if (initResponse?.type === 'error') {
       const errMsg = String(initResponse.message ?? '');
-      if (errMsg.includes('"disabled"') || errMsg.includes('No eligible WASM variant')) {
-        test.skip(true,
-          'st-webgpu-asyncify-compat is still disabled: true in variant-table — ' +
-          'remove disabled: true after Firefox E2E passes before running this test');
-        return;
-      }
+      if (isDisabledRejection(errMsg)) { test.skip(true, DISABLED_SKIP_MSG); return; }
       throw new Error(`wllamaWorker init failed unexpectedly: ${errMsg}`);
     }
 
-    expect(initResponse.type, 'expected worker to respond with ready').toBe('ready');
+    expect(initResponse?.type, 'expected worker ready').toBe('ready');
 
-    // Verify the __diagnostic from worker-init shows correct variant and glue
-    const workerInitDiag = messages.find(
-      m => m.type === '__diagnostic' && m.phase === 'worker-init',
-    );
+    const workerInitDiag = messages.find(m => m.type === '__diagnostic' && m.phase === 'worker-init');
     expect(workerInitDiag, '__diagnostic worker-init not found').toBeTruthy();
-    const payload = workerInitDiag!.payload as Record<string, unknown>;
-    expect(payload.variantId, 'variant should be st-webgpu-asyncify-compat').toBe('st-webgpu-asyncify-compat');
+    const initPayload = workerInitDiag!.payload as Record<string, unknown>;
+    expect(initPayload.variantId, 'variant should be st-webgpu-asyncify-compat').toBe('st-webgpu-asyncify-compat');
 
-    const variantDiag = messages.find(
-      m => m.type === '__diagnostic' && m.phase === 'variant-selection',
-    );
+    const variantDiag = messages.find(m => m.type === '__diagnostic' && m.phase === 'variant-selection');
     expect(variantDiag, '__diagnostic variant-selection not found').toBeTruthy();
     const selPayload = variantDiag!.payload as Record<string, unknown>;
     expect(selPayload.chosen, 'chosen variant should be st-webgpu-asyncify-compat').toBe('st-webgpu-asyncify-compat');
 
-    console.log('[worker-selection-path] PASS: wllamaWorker init completed, variant=st-webgpu-asyncify-compat');
+    console.log('[worker-selection-path] PASS init: variant=st-webgpu-asyncify-compat glue=webgpu-asyncify');
+  });
+
+  // -------------------------------------------------------------------------
+  // Test 2: OPFS load path (loadModelFromOpfs)
+  // -------------------------------------------------------------------------
+  test('st-webgpu-asyncify-compat: load via loadModelFromOpfs (OPFS direct)', async ({ persistentPage: page }) => {
+    test.setTimeout(10 * 60_000);
+
+    const skipReason = getArtifactSkipReason();
+    if (skipReason) { test.skip(true, skipReason); return; }
+
+    if (!fs.existsSync(MODEL_PATH)) {
+      test.skip(true, `Model file not found: ${MODEL_PATH}`);
+      return;
+    }
+
+    await page.goto(BASE_URL, { waitUntil: 'networkidle', timeout: 30_000 });
+
+    // Prepare model server and write model into OPFS
+    const srv = await getModelServer();
+    const modelFileName = path.basename(MODEL_PATH);
+    const modelServerUrl = `http://127.0.0.1:${srv.port}/`;
+    console.log(`[opfs-load] writing model to OPFS models/${OPFS_TEST_MODEL_ID}/${modelFileName}`);
+    const written = await setupOpfsModel(page, modelServerUrl, OPFS_TEST_MODEL_ID, modelFileName);
+    if (!written) {
+      test.skip(true, 'Failed to write model to OPFS (fetch or storage error)');
+      return;
+    }
+    console.log('[opfs-load] OPFS write complete');
+
+    const handle = '__wllamaWorker_opfsTest';
+    await createWorkerHandle(page, WORKER_URL, handle);
+    let initMessages: WorkerMessage[];
+    try {
+      initMessages = await sendAndWait(
+        page, handle,
+        { id: 1, type: 'init', allowWebGPU: true, wasmVariantOverride: 'st-webgpu-asyncify-compat' },
+        90_000,
+      );
+    } catch (e) {
+      await terminateWorkerHandle(page, handle);
+      await cleanupOpfsModel(page, OPFS_TEST_MODEL_ID);
+      throw e;
+    }
+
+    const initResponse = initMessages.find(m => m.id === 1) ?? null;
+    if (initResponse?.type === 'error') {
+      const errMsg = String(initResponse.message ?? '');
+      await terminateWorkerHandle(page, handle);
+      await cleanupOpfsModel(page, OPFS_TEST_MODEL_ID);
+      if (isDisabledRejection(errMsg)) { test.skip(true, DISABLED_SKIP_MSG); return; }
+      throw new Error(`wllamaWorker init failed: ${errMsg}`);
+    }
+    expect(initResponse?.type, 'worker init should succeed').toBe('ready');
+    console.log('[opfs-load] worker init OK, sending load message');
+
+    // Send the load message: wllamaWorker.handleLoad → wllama.loadModelFromOpfs
+    let loadMessages: WorkerMessage[];
+    try {
+      loadMessages = await sendAndWait(
+        page, handle,
+        {
+          id: 2,
+          type: 'load',
+          descriptor: {
+            mode: 'opfs-direct',
+            modelId: OPFS_TEST_MODEL_ID,
+            shards: [modelFileName],
+          },
+          expectedContextLength: 64,
+        },
+        5 * 60_000,
+      );
+    } catch (e) {
+      await terminateWorkerHandle(page, handle);
+      await cleanupOpfsModel(page, OPFS_TEST_MODEL_ID);
+      throw e;
+    } finally {
+      await terminateWorkerHandle(page, handle);
+      await cleanupOpfsModel(page, OPFS_TEST_MODEL_ID);
+    }
+
+    const loadResponse = loadMessages.find(m => m.id === 2) ?? null;
+
+    for (const msg of [...initMessages, ...loadMessages]) {
+      if (msg.type === '__diagnostic' || msg.type === '__load_progress') {
+        console.log(`[worker-diag] type=${msg.type} phase=${String(msg.phase ?? msg.percent ?? '')} detail=${String(msg.detail ?? JSON.stringify(msg.payload ?? '')).slice(0, 120)}`);
+      }
+    }
+
+    if (loadResponse?.type === 'error') {
+      throw new Error(`wllamaWorker load failed: ${String(loadResponse.message ?? '')}`);
+    }
+    expect(loadResponse?.type, 'load should return done').toBe('done');
+    console.log('[opfs-load] PASS: loadModelFromOpfs succeeded via wllamaWorker with st-webgpu-asyncify-compat');
   });
 });
