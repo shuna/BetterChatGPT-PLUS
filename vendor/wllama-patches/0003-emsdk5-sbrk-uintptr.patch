@@ -1,0 +1,13 @@
+diff --git a/cpp/wllama.cpp b/cpp/wllama.cpp
+index 64a1e1d..f8bbd17 100644
+--- a/cpp/wllama.cpp
++++ b/cpp/wllama.cpp
+@@ -171,7 +171,7 @@ extern "C" const char *wllama_debug()
+ #ifdef __EMSCRIPTEN__
+     auto i = mallinfo();
+     unsigned int total_mem = get_mem_total();
+-    unsigned int dynamic_top = (unsigned int)sbrk(0);
++    uintptr_t dynamic_top = (uintptr_t)sbrk(0);
+     return total_mem - dynamic_top + i.fordblks;
+ #else
+     return 0;

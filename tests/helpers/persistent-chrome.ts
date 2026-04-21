@@ -39,6 +39,7 @@ export const test = base.extend<PersistentFixtures>({
         '--enable-features=SharedArrayBuffer',
         '--enable-experimental-web-platform-features',
         '--unlimited-storage',
+        '--enable-unsafe-webgpu',
       ],
     });
 

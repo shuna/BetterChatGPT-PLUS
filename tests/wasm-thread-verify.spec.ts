@@ -23,7 +23,7 @@ import * as path from 'path';
 import * as http from 'http';
 
 const BASE_URL = 'http://localhost:5173/';
-const WASM_ASSET_VERSION = '20260416-align-fix-2';
+const WASM_ASSET_VERSION = '20260421-pr2-timedwaitany-fix';
 const MODEL_PATH = '/Users/suzuki/Downloads/smollm2-360m-instruct-q8_0.gguf';
 
 interface ThreadTestCase {
@@ -32,6 +32,8 @@ interface ThreadTestCase {
   multiThreadWasm: string | null;
   expectMultiThread: boolean;
   nThreads: number;
+  /** Browser-accessible URL path for the JS glue bundle. Authoritative — never derive from wasm names. */
+  gluePath: string;
 }
 
 const CASES: ThreadTestCase[] = [
@@ -41,6 +43,7 @@ const CASES: ThreadTestCase[] = [
     multiThreadWasm: null,
     expectMultiThread: false,
     nThreads: 1,
+    gluePath: '/src/vendor/wllama/index.js',
   },
   {
     label: 'B) single-thread-cpu-mem64',
@@ -48,6 +51,7 @@ const CASES: ThreadTestCase[] = [
     multiThreadWasm: null,
     expectMultiThread: false,
     nThreads: 1,
+    gluePath: '/src/vendor/wllama/mem64-index.js',
   },
   {
     label: 'C) multi-thread-cpu-compat',
@@ -55,6 +59,7 @@ const CASES: ThreadTestCase[] = [
     multiThreadWasm: 'multi-thread-cpu-compat.wasm',
     expectMultiThread: true,
     nThreads: 4,
+    gluePath: '/src/vendor/wllama/index.js',
   },
   {
     label: 'D) multi-thread-cpu-mem64',
@@ -62,6 +67,7 @@ const CASES: ThreadTestCase[] = [
     multiThreadWasm: 'multi-thread-cpu-mem64.wasm',
     expectMultiThread: true,
     nThreads: 4,
+    gluePath: '/src/vendor/wllama/mem64-index.js',
   },
 ];
 
@@ -129,15 +135,25 @@ test.describe.serial('WASM thread variant verification', () => {
       });
 
       const result = await page.evaluate(async ({
-        modelServerUrl, modelFileName, singleThreadWasmUrl, multiThreadWasmUrl, nThreads, label,
+        modelServerUrl, modelFileName, singleThreadWasmUrl, multiThreadWasmUrl, nThreads, label, gluePath,
       }) => {
         const logs: [string, string][] = [];
         const errors: string[] = [];
 
+        const withLoadTimeout = <T>(ms: number, step: string, p: Promise<T>): Promise<T> =>
+          Promise.race([
+            p,
+            new Promise<T>((_, reject) =>
+              setTimeout(() => reject(new Error(
+                `[${label}] "${step}" timed out after ${ms}ms — check WASM/glue ABI mismatch`,
+              )), ms)
+            ),
+          ]);
+
         try {
-          console.log(`[${label}] STAGE 1: importing wllama`);
+          console.log(`[${label}] STAGE 1: importing wllama gluePath=${gluePath}`);
           // @ts-ignore
-          const mod = await import('/src/vendor/wllama/index.js');
+          const mod = await import(gluePath);
           const { Wllama } = mod;
           console.log(`[${label}] STAGE 2: wllama imported`);
 
@@ -188,12 +204,12 @@ test.describe.serial('WASM thread variant verification', () => {
 
           const modelFile = new File([modelBlob], modelFileName, { type: 'application/octet-stream' });
 
-          console.log(`[${label}] STAGE 5: loadModel n_threads=${nThreads}`);
-          await wllama.loadModel([modelFile], {
+          console.log(`[${label}] STAGE 5: loadModel n_threads=${nThreads} timeout=120s`);
+          await withLoadTimeout(120_000, 'loadModel', wllama.loadModel([modelFile], {
             n_ctx: 64,
             n_threads: nThreads,
             use_mmap: false,
-          });
+          }));
 
           // Record actual threading state
           const isMultiThread = typeof wllama.isMultithread === 'function'
@@ -223,7 +239,7 @@ test.describe.serial('WASM thread variant verification', () => {
           await new Promise(r => setTimeout(r, 500));
           return { success: false, error: err.message, stack: err.stack, isMultiThread: null, numThreads: null, logs, errors };
         }
-      }, { modelServerUrl, modelFileName, singleThreadWasmUrl, multiThreadWasmUrl, nThreads: tc.nThreads, label: tc.label });
+      }, { modelServerUrl, modelFileName, singleThreadWasmUrl, multiThreadWasmUrl, nThreads: tc.nThreads, label: tc.label, gluePath: tc.gluePath });
 
       // Print key diagnostic logs
       const keyLogs = (result.logs as [string, string][]).filter(

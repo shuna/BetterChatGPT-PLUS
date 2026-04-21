@@ -21,12 +21,13 @@ if (typeof document === 'undefined') {
   };
 }
 
-import { Wllama, type AssetsPathConfig } from '../vendor/wllama';
+import type { Wllama, AssetsPathConfig } from '../vendor/wllama';
 import { buildBackendSummary } from './wllamaBackendSummary';
 import type { LoadDescriptor } from '../local-llm/types';
 import {
   selectVariant,
   type CapabilitySet,
+  type GlueKind,
   type VariantEntry,
   type VariantOverride,
   type VariantSelection,
@@ -56,7 +57,7 @@ let currentFlashAttnCpuFallback = false;
 
 const LOAD_HEARTBEAT_MS = 5_000;
 const LOAD_NO_PROGRESS_TIMEOUT_MS = 30_000;
-const WLLAMA_WASM_ASSET_VERSION = '20260416-align-fix-2';
+const WLLAMA_WASM_ASSET_VERSION = '20260421-pr2-timedwaitany-fix';
 
 type MinimalGpuDevice = {
   destroy: () => void;
@@ -66,6 +67,30 @@ type MinimalGpuAdapter = {
   features: Set<string>;
   requestDevice: (descriptor?: { requiredFeatures?: string[] }) => Promise<MinimalGpuDevice>;
 };
+
+// ---------------------------------------------------------------------------
+// Glue loader
+// ---------------------------------------------------------------------------
+
+/**
+ * Dynamically imports the JS glue bundle for the selected variant and returns
+ * the Wllama constructor. Each glue embeds a different LLAMA_CPP_WORKER_CODE
+ * (compat / mem64 / webgpu ABI) so the right one must be selected here.
+ */
+async function loadWllamaClass(glue: GlueKind): Promise<typeof Wllama> {
+  switch (glue) {
+    case 'cpu-mem64':
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-expect-error pre-built bundle; types via index.d.ts
+      return (await import('../vendor/wllama/mem64-index.js')).Wllama as typeof Wllama;
+    case 'webgpu':
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-expect-error pre-built bundle; types via index.d.ts
+      return (await import('../vendor/wllama/webgpu-index.js')).Wllama as typeof Wllama;
+    default:
+      return (await import('../vendor/wllama/index.js')).Wllama as typeof Wllama;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // WASM path resolution
@@ -631,11 +656,15 @@ async function handleInit(req: InitRequest) {
     console.info(
       '[wllamaWorker] init, isLowbitQ:', useLowbitQ,
       'variantId:', chosen?.id,
+      'glue:', chosen?.glue,
       'allowWebGPU:', allowWebGPU,
       'wasmVariantOverride:', wasmVariantOverride,
       'WASM paths:', paths,
     );
-    wllama = new Wllama(paths, {
+
+    // chosen is guaranteed non-null here: resolveVariant() throws if no eligible variant.
+    const WllamaClass = await loadWllamaClass(chosen!.glue);
+    wllama = new WllamaClass(paths, {
       suppressNativeLog: false,
       logger: workerLogger,
     });

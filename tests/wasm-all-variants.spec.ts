@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as http from 'http';
 
 const BASE_URL = 'http://localhost:5173/';
-const WASM_ASSET_VERSION = '20260420-pr2-rename';
+const WASM_ASSET_VERSION = '20260421-pr2-timedwaitany-fix';
 const MODEL_PATH = '/Users/suzuki/Downloads/smollm2-360m-instruct-q8_0.gguf';
 
 interface VariantCase {
@@ -14,6 +14,8 @@ interface VariantCase {
   nThreads: number;
   allowWebGPU: boolean;
   expectMultiThread: boolean;
+  /** Browser-accessible URL path for the JS glue bundle. Authoritative — never derive from wasm names. */
+  gluePath: string;
 }
 
 const CASES: VariantCase[] = [
@@ -24,6 +26,7 @@ const CASES: VariantCase[] = [
     nThreads: 1,
     allowWebGPU: false,
     expectMultiThread: false,
+    gluePath: '/src/vendor/wllama/index.js',
   },
   {
     label: 'single-thread-cpu-mem64',
@@ -32,6 +35,7 @@ const CASES: VariantCase[] = [
     nThreads: 1,
     allowWebGPU: false,
     expectMultiThread: false,
+    gluePath: '/src/vendor/wllama/mem64-index.js',
   },
   {
     label: 'multi-thread-cpu-compat',
@@ -40,6 +44,7 @@ const CASES: VariantCase[] = [
     nThreads: 4,
     allowWebGPU: false,
     expectMultiThread: true,
+    gluePath: '/src/vendor/wllama/index.js',
   },
   {
     label: 'multi-thread-cpu-mem64',
@@ -48,6 +53,7 @@ const CASES: VariantCase[] = [
     nThreads: 4,
     allowWebGPU: false,
     expectMultiThread: true,
+    gluePath: '/src/vendor/wllama/mem64-index.js',
   },
   {
     label: 'single-thread-webgpu-compat',
@@ -56,6 +62,7 @@ const CASES: VariantCase[] = [
     nThreads: 1,
     allowWebGPU: true,
     expectMultiThread: false,
+    gluePath: '/src/vendor/wllama/webgpu-index.js',
   },
   {
     label: 'single-thread-webgpu',
@@ -64,6 +71,7 @@ const CASES: VariantCase[] = [
     nThreads: 1,
     allowWebGPU: true,
     expectMultiThread: false,
+    gluePath: '/src/vendor/wllama/webgpu-index.js',
   },
   {
     label: 'multi-thread-webgpu-compat',
@@ -72,6 +80,7 @@ const CASES: VariantCase[] = [
     nThreads: 4,
     allowWebGPU: true,
     expectMultiThread: true,
+    gluePath: '/src/vendor/wllama/webgpu-index.js',
   },
   {
     label: 'multi-thread-webgpu',
@@ -80,6 +89,7 @@ const CASES: VariantCase[] = [
     nThreads: 4,
     allowWebGPU: true,
     expectMultiThread: true,
+    gluePath: '/src/vendor/wllama/webgpu-index.js',
   },
 ];
 
@@ -158,6 +168,7 @@ test.describe('WASM all variants inference', () => {
         multiThreadWasmUrl,
         nThreads,
         allowWebGPU,
+        gluePath,
       }) => {
         const logs: [string, string][] = [];
         const errors: string[] = [];
@@ -170,15 +181,24 @@ test.describe('WASM all variants inference', () => {
           }
         };
 
+        // P1 loadModel timeout helper — catches inner-worker crashes that leave loadModel pending.
+        const withLoadTimeout = <T>(ms: number, step: string, p: Promise<T>): Promise<T> =>
+          Promise.race([
+            p,
+            new Promise<T>((_, reject) =>
+              setTimeout(() => reject(new Error(
+                `[${label}] "${step}" timed out after ${ms}ms — ` +
+                `check WASM/glue ABI mismatch or inner worker crash`,
+              )), ms)
+            ),
+          ]);
+
         try {
-          console.log(`[${label}] stage1 import`);
-          // WebGPU WASM variants require the WebGPU JS glue (different memory export key);
-          // CPU WASM variants use the CPU glue built with the same emsdk version.
-          const modulePath = allowWebGPU
-            ? '/src/vendor/wllama/webgpu-index.js'
-            : '/src/vendor/wllama/index.js';
+          console.log(`[${label}] stage1 import gluePath=${gluePath}`);
+          // Each glue bundle embeds a different LLAMA_CPP_WORKER_CODE (compat / mem64 / webgpu ABI).
+          // gluePath is the authoritative selection — never derive from allowWebGPU or WASM names.
           // @ts-ignore
-          const mod = await import(modulePath);
+          const mod = await import(gluePath);
           const { Wllama } = mod;
           console.log(`[${label}] stage2 imported`);
 
@@ -213,13 +233,14 @@ test.describe('WASM all variants inference', () => {
           }
           const modelFile = new File([modelBlob], modelFileName, { type: 'application/octet-stream' });
 
-          console.log(`[${label}] stage4 loadModel n_threads=${nThreads} n_gpu_layers=${allowWebGPU ? 999 : 0}`);
-          await wllama.loadModel([modelFile], {
+          const loadModelTimeoutMs = 120_000;
+          console.log(`[${label}] stage4 loadModel n_threads=${nThreads} n_gpu_layers=${allowWebGPU ? 999 : 0} timeout=${loadModelTimeoutMs}ms`);
+          await withLoadTimeout(loadModelTimeoutMs, 'loadModel', wllama.loadModel([modelFile], {
             n_ctx: 64,
             n_threads: nThreads,
             n_gpu_layers: allowWebGPU ? 999 : 0,
             use_mmap: false,
-          });
+          }));
 
           const isMultiThread = typeof wllama.isMultithread === 'function'
             ? wllama.isMultithread()
@@ -291,6 +312,7 @@ test.describe('WASM all variants inference', () => {
         multiThreadWasmUrl,
         nThreads: tc.nThreads,
         allowWebGPU: tc.allowWebGPU,
+        gluePath: tc.gluePath,
       });
 
       const keyLogs = (result.logs as [string, string][]).filter(

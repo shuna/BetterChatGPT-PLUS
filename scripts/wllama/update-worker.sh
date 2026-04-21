@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
 # update-worker.sh — vendor/wllama-src/ のワーカーコードを再生成し、
-#                    src/vendor/wllama/{index,webgpu-index}.js の
+#                    src/vendor/wllama/{index,webgpu-index,mem64-index}.js の
 #                    LLAMA_CPP_WORKER_CODE を置換する。
 #
-# src/vendor/wllama/index.js と webgpu-index.js はプロジェクト独自拡張
-# (loadModelFromOpfs 等) を含む事前ビルド済みバンドルです。
+# src/vendor/wllama/index.js, webgpu-index.js, mem64-index.js は
+# プロジェクト独自拡張 (loadModelFromOpfs 等) を含む事前ビルド済みバンドルです。
 # npm run build:tsup でファイル全体を上書きすると独自拡張が失われるため、
 # このスクリプトは LLAMA_CPP_WORKER_CODE 定数のみを差し替えます。
 #
@@ -19,6 +19,7 @@
 # Output:
 #   src/vendor/wllama/index.js        — LLAMA_CPP_WORKER_CODE のみ更新済み
 #   src/vendor/wllama/webgpu-index.js — LLAMA_CPP_WORKER_CODE のみ更新済み
+#   src/vendor/wllama/mem64-index.js  — LLAMA_CPP_WORKER_CODE のみ更新済み (存在する場合)
 #
 set -euo pipefail
 
@@ -28,6 +29,7 @@ FORK_DIR="$REPO_ROOT/vendor/wllama-src"
 WORKER_SRC="$FORK_DIR/src/workers-code/llama-cpp.js"
 BUNDLE="$REPO_ROOT/src/vendor/wllama/index.js"
 WEBGPU_BUNDLE="$REPO_ROOT/src/vendor/wllama/webgpu-index.js"
+MEM64_BUNDLE="$REPO_ROOT/src/vendor/wllama/mem64-index.js"
 
 # ---------------------------------------------------------------------------
 # Validate
@@ -54,6 +56,14 @@ if [ ! -f "$WEBGPU_BUNDLE" ]; then
   exit 1
 fi
 
+# mem64-index.js is optional (generated only when WLLAMA_SYNC_VENDOR_JS=1 was run with emsdk 5+).
+MEM64_BUNDLES=()
+if [ -f "$MEM64_BUNDLE" ]; then
+  MEM64_BUNDLES=("$MEM64_BUNDLE")
+else
+  echo "NOTE: $MEM64_BUNDLE not found — skipping (run WLLAMA_SYNC_VENDOR_JS=1 build to generate it)"
+fi
+
 # ---------------------------------------------------------------------------
 # Step 1: Regenerate generated.ts (embeds JS glue constants)
 # ---------------------------------------------------------------------------
@@ -64,12 +74,12 @@ npm run build:worker
 # ---------------------------------------------------------------------------
 # Step 2: Splice LLAMA_CPP_WORKER_CODE into both vendored bundles
 # ---------------------------------------------------------------------------
-echo "[2/2] Replacing LLAMA_CPP_WORKER_CODE in index.js and webgpu-index.js ..."
+echo "[2/2] Replacing LLAMA_CPP_WORKER_CODE in index.js, webgpu-index.js, and mem64-index.js (if present) ..."
 python3 - <<PY
-import json, sys
+import json, sys, os
 
 worker_src = "$WORKER_SRC"
-bundles = ["$BUNDLE", "$WEBGPU_BUNDLE"]
+bundles = ["$BUNDLE", "$WEBGPU_BUNDLE"] + [p for p in ["${MEM64_BUNDLE}"] if os.path.exists(p)]
 
 with open(worker_src) as f:
     new_code = json.dumps(f.read())
@@ -105,3 +115,6 @@ echo ""
 echo "=== update-worker complete ==="
 echo "  src/vendor/wllama/index.js updated."
 echo "  src/vendor/wllama/webgpu-index.js updated."
+if [ -f "$MEM64_BUNDLE" ]; then
+  echo "  src/vendor/wllama/mem64-index.js updated."
+fi

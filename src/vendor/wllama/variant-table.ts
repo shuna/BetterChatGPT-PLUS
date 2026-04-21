@@ -14,6 +14,17 @@
 export type VariantCapability = 'jspi' | 'mt' | 'memory64' | 'webgpu' | 'exnref';
 
 /**
+ * Which JS glue bundle to use for this variant.
+ * Each corresponds to a distinct file in src/vendor/wllama/:
+ *   cpu-compat  → index.js        (wasm32 CPU compat build)
+ *   cpu-mem64   → mem64-index.js  (Memory64 CPU build)
+ *   webgpu      → webgpu-index.js (WebGPU + JSPI build)
+ *
+ * This is the authoritative source — never derive the glue from WASM file names.
+ */
+export type GlueKind = 'cpu-compat' | 'cpu-mem64' | 'webgpu';
+
+/**
  * How the WASM exports are called from the worker:
  *   wrapped-jspi    — JSPI async exports (JSPI-enabled WebGPU WASM)
  *   wrapped-sync    — synchronous exports wrapped in Promise.resolve (CPU WASM)
@@ -55,6 +66,10 @@ export interface VariantEntry {
   readonly heapAccess: HeapAccess;
   /** Higher priority wins when multiple variants are eligible. */
   readonly priority: number;
+  /**
+   * Which JS glue bundle to use. Authoritative — do not derive from wasm names.
+   */
+  readonly glue: GlueKind;
   /**
    * Value to assign to Module["pthreadPoolSize"] in attach().
    * Only defined for multi-thread variants; single-thread variants must NOT inject this.
@@ -119,6 +134,7 @@ export const VARIANT_TABLE: readonly VariantEntry[] = [
     },
     exportFlavor: 'wrapped-jspi',
     heapAccess: 'module-proxy',
+    glue: 'webgpu',
     priority: 100,
     pthreadPoolSize: 0,
   },
@@ -130,6 +146,7 @@ export const VARIANT_TABLE: readonly VariantEntry[] = [
     },
     exportFlavor: 'wrapped-jspi',
     heapAccess: 'module-proxy',
+    glue: 'webgpu',
     priority: 90,
   },
   // ── non-JSPI WebGPU (future) ───────────────────────────────────────────────
@@ -139,6 +156,7 @@ export const VARIANT_TABLE: readonly VariantEntry[] = [
     wasm: {},
     exportFlavor: 'wrapped-nonjspi',
     heapAccess: 'module-proxy',
+    glue: 'webgpu',
     priority: 80,
     disabled: true,
   },
@@ -153,6 +171,7 @@ export const VARIANT_TABLE: readonly VariantEntry[] = [
     },
     exportFlavor: 'wrapped-sync',
     heapAccess: 'module-proxy',
+    glue: 'cpu-mem64',
     priority: 50,
     pthreadPoolSize: 0,
   },
@@ -164,6 +183,7 @@ export const VARIANT_TABLE: readonly VariantEntry[] = [
     },
     exportFlavor: 'wrapped-sync',
     heapAccess: 'module-proxy',
+    glue: 'cpu-mem64',
     priority: 20,
   },
   // ── CPU compat ────────────────────────────────────────────────────────────
@@ -176,6 +196,7 @@ export const VARIANT_TABLE: readonly VariantEntry[] = [
     },
     exportFlavor: 'wrapped-sync',
     heapAccess: 'module-proxy',
+    glue: 'cpu-compat',
     priority: 40,
     pthreadPoolSize: 0,
   },
@@ -187,6 +208,7 @@ export const VARIANT_TABLE: readonly VariantEntry[] = [
     },
     exportFlavor: 'wrapped-sync',
     heapAccess: 'module-proxy',
+    glue: 'cpu-compat',
     priority: 10,
   },
 ] as const satisfies readonly VariantEntry[];

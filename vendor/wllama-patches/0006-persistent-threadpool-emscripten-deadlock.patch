@@ -1,0 +1,53 @@
+diff --git a/cpp/actions.hpp b/cpp/actions.hpp
+index 4d6f0eb..0427816 100644
+--- a/cpp/actions.hpp
++++ b/cpp/actions.hpp
+@@ -27,6 +27,10 @@ struct app_t
+   llama_batch batch = llama_batch_init(512, 0, 1);
+   llama_tokens tokens;
+   int32_t seed = LLAMA_DEFAULT_SEED;
++  // Persistent threadpool so pthreads are alive before the first llama_decode.
++  // Without this, emscripten sub-Workers would be spawned mid-inference and
++  // wouldn't finish loading before the main thread hits ggml_barrier → deadlock.
++  ggml_threadpool_t threadpool = nullptr;
+ };
+ 
+ inline std::vector<char> convert_string_to_buf(std::string &input)
+@@ -97,6 +101,8 @@ void free_all(app_t &app)
+ {
+   if (app.ctx != nullptr)
+     llama_free(app.ctx);
++  if (app.threadpool != nullptr)
++    ggml_threadpool_free(app.threadpool);
+   if (app.model != nullptr)
+     llama_model_free(app.model);
+   if (app.ctx_sampling != nullptr)
+@@ -204,9 +210,6 @@ glue_msg_load_res action_load(app_t &app, const char *req_raw)
+   if (req.flash_attn.not_null())
+     cparams.flash_attn_type = req.flash_attn.value ? LLAMA_FLASH_ATTN_TYPE_AUTO : LLAMA_FLASH_ATTN_TYPE_DISABLED;
+ 
+-  // init threadpool
+-  ggml_threadpool_params_default(cparams.n_threads);
+-
+   // prepare model paths
+   std::vector<const char *> model_paths_ptrs;
+   for (auto &path : model_paths)
+@@ -246,6 +249,18 @@ glue_msg_load_res action_load(app_t &app, const char *req_raw)
+     free_all(app);
+     throw app_exception("Out of memory, cannot create llama_context model");
+   }
++  // Create a persistent threadpool so pthread sub-Workers are spawned and fully
++  // initialized before the first llama_decode. A disposable threadpool created
++  // inside llama_decode spawns Workers mid-inference; the main thread reaches
++  // ggml_barrier before those Workers finish loading their WASM module → deadlock.
++  // poll=0: no spin-polling in WASM; Atomics.notify wakes condvar waiters fast.
++  if (cparams.n_threads > 1) {
++    struct ggml_threadpool_params tpp = ggml_threadpool_params_default(cparams.n_threads);
++    tpp.poll = 0;
++    app.threadpool = ggml_threadpool_new(&tpp);
++    llama_attach_threadpool(app.ctx, app.threadpool, app.threadpool);
++  }
++
+   llama_batch_free(app.batch);
+   app.batch = llama_batch_init(cparams.n_batch, 0, 1);
+   auto decoder_start_token = llama_model_decoder_start_token(app.model);
