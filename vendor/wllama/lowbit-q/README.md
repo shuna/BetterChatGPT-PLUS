@@ -113,8 +113,12 @@ source ~/emsdk/emsdk_env.sh
 # 3. CPU 版（compat + Memory64）をビルド
 ./vendor/wllama/lowbit-q/build-local.sh
 
-# 4. WebGPU 版も含める場合（compat のみ — WebGPU mem64 は未ビルド）
+# 4. WebGPU JSPI 版も含める場合（compat のみ — WebGPU mem64 は未ビルド）
 WLLAMA_BUILD_WEBGPU=1 ./vendor/wllama/lowbit-q/build-local.sh
+
+# 5. WebGPU Asyncify 版（experimental — JSPI なし環境向け）
+# 詳細は vendor/wllama/WASM-BUILD.md および SpecAndStatus.md 参照
+WLLAMA_BUILD_WEBGPU_ASYNCIFY=1 ./vendor/wllama/lowbit-q/build-local.sh
 ```
 
 ### ビルド出力
@@ -135,9 +139,18 @@ WLLAMA_BUILD_WEBGPU=1 ./vendor/wllama/lowbit-q/build-local.sh
 | `single-thread-webgpu-compat.wasm` | `vendor/wllama/` | compat+JSPI WebGPU 単スレッド |
 | `multi-thread-webgpu-compat.wasm` | `vendor/wllama/` | compat+JSPI WebGPU マルチスレッド |
 
+`WLLAMA_BUILD_WEBGPU_ASYNCIFY=1` を指定した場合は追加で（experimental、初期状態 disabled）:
+
+| ファイル | 出力先 | 用途 |
+|---------|--------|------|
+| `single-thread-webgpu-asyncify-compat.wasm` | `vendor/wllama/` | Asyncify WebGPU 単スレッド（JSPI なし環境向け） |
+| `multi-thread-webgpu-asyncify-compat.wasm` | `vendor/wllama/` | Asyncify WebGPU マルチスレッド（JSPI なし環境向け） |
+
 CPU compat WASM (`*-cpu-compat.wasm`) は `src/vendor/wllama/index.js` と組み合わせる。
 CPU Memory64 WASM (`*-cpu-mem64.wasm`) は `src/vendor/wllama/mem64-index.js` と組み合わせる（BigInt ポインタ ABI が異なるため混在不可）。
-WebGPU WASM は `src/vendor/wllama/webgpu-index.js` と組み合わせる（メモリ export キーが異なるため混在不可）。
+WebGPU JSPI WASM は `src/vendor/wllama/webgpu-index.js` と組み合わせる。
+WebGPU Asyncify WASM は `src/vendor/wllama/webgpu-asyncify-index.js` と組み合わせる。
+JSPI 用と Asyncify 用のグルーは混在不可。
 
 ## カーネル実装の詳細
 

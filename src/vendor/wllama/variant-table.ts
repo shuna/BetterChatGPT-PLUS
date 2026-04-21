@@ -6,9 +6,10 @@
  * priority eligible entry given the runtime capability snapshot.
  *
  * File naming convention:
- *   {single,multi}-thread-cpu-compat.wasm  — wasm32 compat, CPU only
- *   {single,multi}-thread-cpu-mem64.wasm   — Memory64, CPU only
- *   {single,multi}-thread-webgpu-compat.wasm — wasm32 compat, WebGPU + CPU fallback
+ *   {single,multi}-thread-cpu-compat.wasm          — wasm32 compat, CPU only
+ *   {single,multi}-thread-cpu-mem64.wasm           — Memory64, CPU only
+ *   {single,multi}-thread-webgpu-compat.wasm       — wasm32 compat, WebGPU + JSPI
+ *   {single,multi}-thread-webgpu-asyncify-compat.wasm — wasm32 compat, WebGPU + Asyncify (no JSPI)
  */
 
 export type VariantCapability = 'jspi' | 'mt' | 'memory64' | 'webgpu' | 'exnref';
@@ -16,22 +17,23 @@ export type VariantCapability = 'jspi' | 'mt' | 'memory64' | 'webgpu' | 'exnref'
 /**
  * Which JS glue bundle to use for this variant.
  * Each corresponds to a distinct file in src/vendor/wllama/:
- *   cpu-compat  → index.js        (wasm32 CPU compat build)
- *   cpu-mem64   → mem64-index.js  (Memory64 CPU build)
- *   webgpu      → webgpu-index.js (WebGPU + JSPI build)
+ *   cpu-compat       → index.js                 (wasm32 CPU compat build)
+ *   cpu-mem64        → mem64-index.js           (Memory64 CPU build)
+ *   webgpu           → webgpu-index.js          (WebGPU + JSPI build)
+ *   webgpu-asyncify  → webgpu-asyncify-index.js (WebGPU + Asyncify, no JSPI)
  *
  * This is the authoritative source — never derive the glue from WASM file names.
  */
-export type GlueKind = 'cpu-compat' | 'cpu-mem64' | 'webgpu';
+export type GlueKind = 'cpu-compat' | 'cpu-mem64' | 'webgpu' | 'webgpu-asyncify';
 
 /**
  * How the WASM exports are called from the worker:
- *   wrapped-jspi    — JSPI async exports (JSPI-enabled WebGPU WASM)
- *   wrapped-sync    — synchronous exports wrapped in Promise.resolve (CPU WASM)
- *   wrapped-nonjspi — async without JSPI (future non-JSPI WebGPU; exnref-based)
- *   direct          — raw export call, no wrapping (reserved)
+ *   wrapped-jspi      — JSPI async exports (JSPI-enabled WebGPU WASM)
+ *   wrapped-sync      — synchronous exports wrapped in Promise.resolve (CPU WASM)
+ *   wrapped-asyncify  — Asyncify async exports (Asyncify WebGPU WASM, no JSPI)
+ *   direct            — raw export call, no wrapping (reserved)
  */
-export type ExportFlavor = 'direct' | 'wrapped-jspi' | 'wrapped-sync' | 'wrapped-nonjspi';
+export type ExportFlavor = 'direct' | 'wrapped-jspi' | 'wrapped-sync' | 'wrapped-asyncify';
 
 /**
  * Where HEAP* views are available in the worker:
@@ -43,7 +45,8 @@ export type HeapAccess = 'module-proxy' | 'global-view';
 export type VariantId =
   | 'mt-webgpu-jspi-compat'
   | 'st-webgpu-jspi-compat'
-  | 'mt-webgpu-nojspi-compat'
+  | 'mt-webgpu-asyncify-compat'
+  | 'st-webgpu-asyncify-compat'
   | 'mt-cpu-compat'
   | 'st-cpu-compat'
   | 'mt-cpu-mem64'
@@ -114,14 +117,17 @@ export interface VariantSelection {
 
 // ---------------------------------------------------------------------------
 // Variant table
-// Priority ordering rationale:
-//   a. WebGPU variants beat CPU variants at equal threading — GPU utilisation
-//      dominates over memory space width at current model sizes.
-//      WebGPU mem64 is not built, so WebGPU is always compat.
-//   b. Multi-thread beats single-thread within the same class.
-//   c. Among non-WebGPU variants, mem64 beats compat when memory64 is requested,
-//      because large-model capacity matters more than compat overhead.
-//   d. st-cpu-compat is the unconditional fallback (no required capabilities).
+// Priority ordering (high → low):
+//   mt-webgpu-jspi-compat (100) > mt-webgpu-asyncify-compat (95) >
+//   st-webgpu-jspi-compat (90)  > st-webgpu-asyncify-compat (85) >
+//   mt-cpu-mem64 (50) > mt-cpu-compat (40) > st-cpu-mem64 (20) > st-cpu-compat (10)
+//
+// Rationale:
+//   a. WebGPU beats CPU — GPU utilisation dominates at current model sizes.
+//   b. JSPI WebGPU beats Asyncify WebGPU — lower overhead, smaller output.
+//   c. Multi-thread beats single-thread within the same class.
+//   d. Asyncify WebGPU variants are disabled until verified E2E.
+//   e. st-cpu-compat is the unconditional fallback (no required capabilities).
 // ---------------------------------------------------------------------------
 export const VARIANT_TABLE: readonly VariantEntry[] = [
   // ── WebGPU + JSPI ─────────────────────────────────────────────────────────
@@ -149,15 +155,38 @@ export const VARIANT_TABLE: readonly VariantEntry[] = [
     glue: 'webgpu',
     priority: 90,
   },
-  // ── non-JSPI WebGPU (future) ───────────────────────────────────────────────
+  // ── WebGPU + Asyncify (no JSPI) ───────────────────────────────────────────
+  // Targets environments that have WebGPU but not JSPI (e.g. Firefox, some mobile Chrome).
+  // Build uses JS-based exceptions (not -fwasm-exceptions) because -sASYNCIFY=1 is
+  // incompatible with -fwasm-exceptions under emsdk 5: Binaryen's Asyncify pass fails to
+  // expose asyncify_start_unwind from wasmExports when native wasm EH is active.
+  // Therefore 'exnref' is NOT required — exnref reflects browser wasm EH support,
+  // not a requirement of this build. Documented in vendor/wllama/SpecAndStatus.md.
+  // Starts disabled — promote to active only after verified E2E on ≥2 real browsers.
   {
-    id: 'mt-webgpu-nojspi-compat',
-    required: ['mt', 'webgpu', 'exnref'],
-    wasm: {},
-    exportFlavor: 'wrapped-nonjspi',
+    id: 'mt-webgpu-asyncify-compat',
+    required: ['mt', 'webgpu'],
+    wasm: {
+      single: 'single-thread-webgpu-asyncify-compat.wasm',
+      multi: 'multi-thread-webgpu-asyncify-compat.wasm',
+    },
+    exportFlavor: 'wrapped-asyncify',
     heapAccess: 'module-proxy',
-    glue: 'webgpu',
-    priority: 80,
+    glue: 'webgpu-asyncify',
+    priority: 95,
+    pthreadPoolSize: 0,
+    disabled: true,
+  },
+  {
+    id: 'st-webgpu-asyncify-compat',
+    required: ['webgpu'],
+    wasm: {
+      single: 'single-thread-webgpu-asyncify-compat.wasm',
+    },
+    exportFlavor: 'wrapped-asyncify',
+    heapAccess: 'module-proxy',
+    glue: 'webgpu-asyncify',
+    priority: 85,
     disabled: true,
   },
   // ── CPU Memory64 ──────────────────────────────────────────────────────────
@@ -217,7 +246,13 @@ export const VARIANT_TABLE: readonly VariantEntry[] = [
 // Selection
 // ---------------------------------------------------------------------------
 
-export function selectVariant(
+/**
+ * Pure selection function that operates on an arbitrary variant table.
+ * Use this in tests to inject a modified table (e.g. with Asyncify disabled: false)
+ * without touching the live VARIANT_TABLE or using module mocks.
+ */
+export function selectVariantFromTable(
+  table: readonly VariantEntry[],
   caps: CapabilitySet,
   opts: SelectVariantOptions = {},
 ): VariantSelection {
@@ -226,7 +261,7 @@ export function selectVariant(
   // Force override: select by id directly, but still reject disabled entries
   // and entries with no usable wasm paths to avoid a confusing late failure.
   if (forceVariant) {
-    const entry = VARIANT_TABLE.find(v => v.id === forceVariant) ?? null;
+    const entry = table.find(v => v.id === forceVariant) ?? null;
     if (!entry) {
       return { chosen: null, considered: [], capsSnapshot: caps };
     }
@@ -249,7 +284,7 @@ export function selectVariant(
 
   const eligible: VariantEntry[] = [];
 
-  for (const v of VARIANT_TABLE) {
+  for (const v of table) {
     if (v.disabled) continue;
 
     const missing = v.required.filter(
@@ -268,4 +303,11 @@ export function selectVariant(
   const chosen = eligible[0] ?? null;
 
   return { chosen, considered, capsSnapshot: caps };
+}
+
+export function selectVariant(
+  caps: CapabilitySet,
+  opts: SelectVariantOptions = {},
+): VariantSelection {
+  return selectVariantFromTable(VARIANT_TABLE, caps, opts);
 }

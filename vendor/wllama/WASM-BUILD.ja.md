@@ -87,8 +87,17 @@ source emsdk_env.sh
 # CPU ビルド（compat + Memory64）
 bash scripts/wllama/build.sh
 
-# WebGPU ビルドも含める（compat のみ — Memory64 WebGPU はビルドしない）
+# WebGPU JSPI ビルド（compat のみ — Memory64 WebGPU はビルドしない）
 WLLAMA_BUILD_WEBGPU=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
+
+# WebGPU Asyncify ビルド（experimental — JSPI なし環境向け）
+# -sASYNCIFY=1 と -fwasm-exceptions の相性リスクあり。
+# variant-table では初期状態 disabled。active 化は E2E 検証後に判断。
+# 詳細は vendor/wllama/SpecAndStatus.md を参照。
+WLLAMA_BUILD_WEBGPU_ASYNCIFY=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
+
+# JSPI + Asyncify 両方ビルド
+WLLAMA_BUILD_WEBGPU=1 WLLAMA_BUILD_WEBGPU_ASYNCIFY=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
 ```
 
 **バージョンを固定する:** ビルドが成功したらその具体的なバージョン番号をここに記録してください。

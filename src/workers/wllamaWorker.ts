@@ -87,6 +87,10 @@ async function loadWllamaClass(glue: GlueKind): Promise<typeof Wllama> {
       // eslint-disable-next-line @typescript-eslint/ban-ts-comment
       // @ts-expect-error pre-built bundle; types via index.d.ts
       return (await import('../vendor/wllama/webgpu-index.js')).Wllama as typeof Wllama;
+    case 'webgpu-asyncify':
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-expect-error pre-built bundle; types via index.d.ts
+      return (await import('../vendor/wllama/webgpu-asyncify-index.js')).Wllama as typeof Wllama;
     default:
       return (await import('../vendor/wllama/index.js')).Wllama as typeof Wllama;
   }

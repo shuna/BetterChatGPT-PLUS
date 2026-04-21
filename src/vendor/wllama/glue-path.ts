@@ -8,9 +8,10 @@
 import type { GlueKind } from './variant-table';
 
 const GLUE_FILE: Record<GlueKind, string> = {
-  'cpu-compat': 'index.js',
-  'cpu-mem64':  'mem64-index.js',
-  'webgpu':     'webgpu-index.js',
+  'cpu-compat':      'index.js',
+  'cpu-mem64':       'mem64-index.js',
+  'webgpu':          'webgpu-index.js',
+  'webgpu-asyncify': 'webgpu-asyncify-index.js',
 };
 
 /**

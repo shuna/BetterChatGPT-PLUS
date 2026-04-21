@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * verify-glue-exports.mjs — checks that all three glue bundles export
- * the same public surface (Wllama, WllamaError, WllamaAbortError).
+ * verify-glue-exports.mjs — checks that all glue bundles export the same
+ * public surface (Wllama, WllamaError, WllamaAbortError).
  *
  * Usage:
  *   node scripts/wllama/verify-glue-exports.mjs <glue-dir>
  *
  * <glue-dir> should be the directory containing index.js, webgpu-index.js,
- * and mem64-index.js (i.e. src/vendor/wllama/).
+ * mem64-index.js, and webgpu-asyncify-index.js (i.e. src/vendor/wllama/).
  *
  * Exits 0 if all present bundles have matching exports; exits 1 otherwise.
  */
@@ -23,6 +23,7 @@ const BUNDLES = [
   'index.js',
   'webgpu-index.js',
   'mem64-index.js',
+  'webgpu-asyncify-index.js',
 ];
 
 const results = [];

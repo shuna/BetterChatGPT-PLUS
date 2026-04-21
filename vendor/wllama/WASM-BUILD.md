@@ -11,16 +11,17 @@ Repository policy:
 
 ## Overview
 
-The build produces 8 WASM variants along 3 axes. Each WASM variant must be
-distributed with the Emscripten JS glue produced by the same build variant:
+The build produces WASM variants along 3 axes. Each WASM variant must be
+distributed with the Emscripten JS glue produced by the same build variant —
+glue files are **not interchangeable** across variants:
 
 | Axis | Values | Notes |
 |------|--------|-------|
 | Threading | single-thread / multi-thread | Multi-thread requires COOP/COEP headers |
 | Memory64 | memory64 / compat | Memory64 allows >2 GB models; compat for older browsers |
-| WebGPU | webgpu / no-webgpu | GPU acceleration via Dawn/emdawnwebgpu |
+| WebGPU async mode | JSPI / Asyncify / none | JSPI and Asyncify are **separate build types** with separate WASM, separate glue |
 
-WebGPU variants additionally require `-sJSPI=1`. The llama.cpp
+**JSPI WebGPU variants** additionally require `-sJSPI=1`. The llama.cpp
 `ggml-webgpu` backend requests `WGPUInstanceFeatureName_TimedWaitAny` and uses
 `Instance::WaitAny()` during adapter/device initialization. The emdawnwebgpu
 runtime rejects `TimedWaitAny` when neither Asyncify nor JSPI is enabled; in
@@ -60,6 +61,8 @@ Variant mapping:
 | `vendor/wllama/multi-thread-webgpu.wasm` | `wasm/multi-thread-webgpu/wllama.wasm` | `WLLAMA_MULTI_THREAD_WEBGPU_CODE` |
 | `vendor/wllama/single-thread-webgpu-compat.wasm` | `wasm/single-thread-webgpu-compat/wllama.wasm` | `WLLAMA_SINGLE_THREAD_WEBGPU_COMPAT_CODE` |
 | `vendor/wllama/multi-thread-webgpu-compat.wasm` | `wasm/multi-thread-webgpu-compat/wllama.wasm` | `WLLAMA_MULTI_THREAD_WEBGPU_COMPAT_CODE` |
+| `vendor/wllama/single-thread-webgpu-asyncify-compat.wasm` | `wasm/single-thread-webgpu-asyncify-compat/wllama.wasm` | (Asyncify glue, disabled until E2E verified) |
+| `vendor/wllama/multi-thread-webgpu-asyncify-compat.wasm` | `wasm/multi-thread-webgpu-asyncify-compat/wllama.wasm` | (Asyncify glue, disabled until E2E verified) |
 
 ## Prerequisites
 
@@ -86,8 +89,16 @@ source emsdk_env.sh
 # CPU builds (compat + Memory64)
 bash scripts/wllama/build.sh
 
-# WebGPU builds (compat only — Memory64 WebGPU not built)
+# WebGPU JSPI builds (compat only — Memory64 WebGPU not built)
 WLLAMA_BUILD_WEBGPU=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
+
+# WebGPU Asyncify builds (experimental — JSPI-less; starts disabled in variant-table)
+# Risk: -sASYNCIFY=1 + -fwasm-exceptions may be incompatible under current emsdk.
+# See SpecAndStatus.md for investigation notes before promoting to active.
+WLLAMA_BUILD_WEBGPU_ASYNCIFY=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
+
+# Both WebGPU variants at once
+WLLAMA_BUILD_WEBGPU=1 WLLAMA_BUILD_WEBGPU_ASYNCIFY=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
 ```
 
 **Pin the exact version** once a build succeeds. Update the version number here
