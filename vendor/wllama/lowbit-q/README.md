@@ -135,7 +135,8 @@ WLLAMA_BUILD_WEBGPU=1 ./vendor/wllama/lowbit-q/build-local.sh
 | `single-thread-webgpu-compat.wasm` | `vendor/wllama/` | compat+JSPI WebGPU 単スレッド |
 | `multi-thread-webgpu-compat.wasm` | `vendor/wllama/` | compat+JSPI WebGPU マルチスレッド |
 
-Memory64 と CPU WASM は同じ `src/vendor/wllama/index.js` の JS グルーと組み合わせて使う。
+CPU compat WASM (`*-cpu-compat.wasm`) は `src/vendor/wllama/index.js` と組み合わせる。
+CPU Memory64 WASM (`*-cpu-mem64.wasm`) は `src/vendor/wllama/mem64-index.js` と組み合わせる（BigInt ポインタ ABI が異なるため混在不可）。
 WebGPU WASM は `src/vendor/wllama/webgpu-index.js` と組み合わせる（メモリ export キーが異なるため混在不可）。
 
 ## カーネル実装の詳細
