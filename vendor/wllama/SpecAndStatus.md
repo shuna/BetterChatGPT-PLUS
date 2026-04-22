@@ -147,17 +147,89 @@ WebGPU を選択した場合は常に `*-webgpu-compat.wasm` が選ばれる。
 
 ---
 
+## プロジェクト構造
+
+```
+weavelet-canvas/
+├── vendor/
+│   ├── wllama/                          # 配布成果物の正本（git 管理対象）
+│   │   ├── *.wasm                       # ビルド済み WASM バイナリ
+│   │   ├── SpecAndStatus.md             # このファイル
+│   │   ├── WASM-BUILD.md / .ja.md       # ビルド・パッチ適用手順の詳細
+│   │   └── lowbit-q/                    # 独自フォーマット拡張の正本
+│   │       ├── build-local.sh           # Asyncify / low-bit-q WASM ローカルビルド
+│   │       ├── WLLAMA_VERSION           # 固定された upstream バージョン（現行: 2.3.7）
+│   │       └── Docs/Low-bit-q-STATUS.md
+│   ├── wllama-patches/                  # 本流拡張パッチ（git 管理対象）
+│   │   ├── README.md                    # パッチ一覧と管理方針
+│   │   └── 0001〜0005.patch
+│   └── wllama-src/                      # ローカル作業ツリー（gitignore 対象）
+│       └── ...                          # setup.sh が取得・パッチ適用済みのソース
+├── src/vendor/wllama/                   # アプリが参照する JS/TS 成果物（git 管理対象）
+│   ├── variant-table.ts                 # WASM バリアント定義・選択ロジック
+│   ├── glue-path.ts                     # GlueKind → glue ファイル名マッピング
+│   ├── runtime-adapter.ts               # Module オブジェクトへのアダプタ
+│   ├── index.js                         # CPU compat glue
+│   ├── mem64-index.js                   # CPU Memory64 glue
+│   ├── webgpu-index.js                  # WebGPU + JSPI glue
+│   └── webgpu-asyncify-index.js         # WebGPU + Asyncify glue（experimental）
+├── scripts/wllama/
+│   ├── setup.sh                         # vendor/wllama-src/ のセットアップ
+│   ├── build.sh                         # WASM ビルドのエントリポイント
+│   ├── update-worker.sh                 # llama-cpp.js を vendor/wllama-src/ から同期
+│   └── verify-glue-exports.mjs          # glue バンドルの export 検証
+└── src/workers/
+    └── wllamaWorker.ts                  # バリアント選択・glue ロード・推論ワーカー
+```
+
+### upstream バージョン固定
+
+upstream wllama のバージョンは `vendor/wllama/lowbit-q/WLLAMA_VERSION` に記録されている。
+`setup.sh` はこのファイルを読んで `git clone --depth 1 --branch v<VERSION>` を実行する。
+バージョンを更新するときはこのファイルを編集し、パッチの再確認を行う。
+
+---
+
 ## パッチ管理方針
 
 `vendor/wllama-patches/` を、本流拡張に必要な差分の唯一の置き場とする。
-責務ごとに統合された5本のパッチで構成し、番号は並び順でありカテゴリではない。
+low-bit-q 専用差分はここには置かず `vendor/wllama/lowbit-q/` 配下に置く。
+パッチは責務ごとに統合し、番号は並び順でありカテゴリではない。
 
-現在のパッチ一覧は [vendor/wllama-patches/README.md](../wllama-patches/README.md) を参照。
+### 現行パッチ一覧
 
-セットアップは `bash scripts/wllama/setup.sh` で行う。
-このスクリプトが `vendor/wllama-src/` を作成し、`vendor/wllama-patches/` の差分を適用する。
+| # | ファイル | 責務 | 主な対象 |
+|---|---|---|---|
+| 0001 | `worker-memory-and-exports.patch` | worker JS グルー: MT memory 選択・wllama 直接 exports・Memory64 BigInt 対応 | `src/workers-code/llama-cpp.js` |
+| 0002 | `emsdk5-compat.patch` | emsdk 5 互換: `sbrk` の uintptr 化・wasm64 向け `aligned_alloc` | `cpp/wllama.cpp`, `llama.cpp/ggml/src/ggml-backend.cpp` |
+| 0003 | `persistent-threadpool.patch` | Emscripten Asyncify デッドロック回避（永続スレッドプール） | `cpp/actions.hpp` |
+| 0004 | `webgpu-jspi.patch` | WebGPU + JSPI: `TimedWaitAny`・Emscripten 内蔵 `emdawnwebgpu` ポートへのフォールバック | `llama.cpp/ggml/src/ggml-webgpu/ggml-webgpu.cpp`, `CMakeLists.txt` |
+| 0005 | `opfs-model-loading.patch` | OPFS 直接ロード: `preflightInit` / `loadModelFromOpfs` / worker 側 OPFS setup・cleanup | `src/wllama.ts`, `src/worker.ts` |
+
 submodule を対象とするパッチも wllama ルートから `git apply` するだけで適用できるよう、
 パスは `llama.cpp/...` プレフィックス付きで統一している。
+
+詳細は [`vendor/wllama-patches/README.md`](../wllama-patches/README.md) を参照。
+
+### セットアップとビルド
+
+```bash
+# 1. upstream 取得 + パッチ適用（vendor/wllama-src/ を作成）
+bash scripts/wllama/setup.sh
+
+# 2. CPU WASM ビルド（compat + Memory64）
+bash scripts/wllama/build.sh
+
+# 3. WebGPU + JSPI compat WASM を追加ビルド
+WLLAMA_BUILD_WEBGPU=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
+
+# 4. WebGPU + Asyncify compat WASM を追加ビルド（experimental）
+WLLAMA_BUILD_WEBGPU_ASYNCIFY=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
+```
+
+`WLLAMA_SYNC_VENDOR_JS=1` を付けると、ビルド後に glue バンドルを
+`src/vendor/wllama/` へ自動コピーする。
+ビルド各ステップの詳細・検証コマンド・既知の落とし穴は [`vendor/wllama/WASM-BUILD.md`](WASM-BUILD.md) を参照。
 
 ---
 
