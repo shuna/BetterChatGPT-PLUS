@@ -597,6 +597,7 @@ export interface ExecuteLocalSubmitParams {
   mode: 'append' | 'midchat';
   abortController: AbortController;
   t: (key: string) => string;
+  assistantPrefill?: string;
 }
 
 export const executeLocalSubmit = async ({
@@ -609,22 +610,24 @@ export const executeLocalSubmit = async ({
   config,
   mode,
   abortController,
+  assistantPrefill,
 }: ExecuteLocalSubmitParams): Promise<ExecuteSubmitStreamResult> => {
   // Lazy imports to keep submitRuntime lightweight
   const { localModelRuntime } = await import('@src/local-llm/runtime');
-  const { buildLocalPromptFromContext } = await import('./submitHelpers');
+  const { buildLocalChatMessages } = await import('./submitHelpers');
 
   await localModelRuntime.ensureLoaded(config.model);
   const engine = localModelRuntime.getWllamaEngine(config.model);
   if (!engine) throw new Error('Local model engine not available');
 
   // `messages` is already the token-limited submit context from useSubmit.
-  // Reusing the original chat messageIndex here would slice that context again
-  // and can drop the latest user turn on local generation.
-  const prompt = buildLocalPromptFromContext(
+  // Pass structured messages directly so the worker can apply the model's
+  // chat template correctly (rather than re-wrapping a pre-serialized string).
+  const chatMessages = buildLocalChatMessages(
     messages, mode, messages.length, config.model,
     undefined, config.systemPrompt,
   );
+  const prefix = assistantPrefill ?? '';
 
   // Initialize streaming buffer for the target node (same pattern as handleStreamEvent)
   sessionChunkTargets.set(sessionId, { chatId, targetNodeId });
@@ -688,6 +691,13 @@ export const executeLocalSubmit = async ({
     }, STALL_TIMEOUT_MS);
   };
 
+  // Seed the streaming buffer with the prefix immediately so it's visible
+  // before the first generated token arrives.
+  if (prefix) {
+    setStreamingBufferText(targetNodeId, prefix);
+    notifyStreamingUpdate(targetNodeId);
+  }
+
   try {
     // If already aborted before generation starts, bail out immediately.
     if (abortController.signal.aborted) {
@@ -696,7 +706,7 @@ export const executeLocalSubmit = async ({
 
     resetStallTimer();
     await engine.generate(
-      prompt,
+      { messages: chatMessages, assistantPrefix: prefix || undefined },
       {
         maxTokens: config.max_tokens,
         temperature: config.temperature,
@@ -705,9 +715,9 @@ export const executeLocalSubmit = async ({
         if (abortController.signal.aborted) return;
         fullText = text;
         resetStallTimer();
-        // wllama sends currentText (full text-so-far), not deltas —
-        // use setStreamingBufferText to replace rather than append
-        setStreamingBufferText(targetNodeId, text);
+        // wllama sends currentText (full generated text-so-far), not deltas.
+        // Prepend the prefix so the buffer always shows the complete content.
+        setStreamingBufferText(targetNodeId, prefix + text);
         notifyStreamingUpdate(targetNodeId);
       },
       'chat',

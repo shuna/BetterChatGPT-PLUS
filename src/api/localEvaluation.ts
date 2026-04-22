@@ -5,7 +5,7 @@
  * and wllama generation for quality hints.
  */
 
-import { localModelRuntime } from '@src/local-llm/runtime';
+import { localModelRuntime, promptAsInput } from '@src/local-llm/runtime';
 import type { LocalModerationResult, StandardQualityEvaluationResult, QualityScores, AxisProgressState } from '@type/evaluation';
 import { qualityAxisKeys } from '@type/evaluation';
 import type { LocalModelTask } from '@src/local-llm/types';
@@ -384,7 +384,7 @@ export async function runLocalQualityEvaluation(
     console.info(`[evaluation] local quality: evaluating axis "${axis}"...`);
 
     let raw = await engine.generate(
-      prompt,
+      promptAsInput(prompt),
       { maxTokens: 400, temperature: 0.2 },
       () => {},
       'evaluation',
@@ -398,7 +398,7 @@ export async function runLocalQualityEvaluation(
       const fallback = lang.startsWith('ja')
         ? `「${inputText.slice(0, 150)}」\n${label.name}の評価:`
         : `"${inputText.slice(0, 150)}"\n${label.name}:`;
-      raw = await engine.generate(fallback, { maxTokens: 200, temperature: 0.5 }, () => {}, 'evaluation');
+      raw = await engine.generate(promptAsInput(fallback), { maxTokens: 200, temperature: 0.5 }, () => {}, 'evaluation');
     }
 
     const trimmed = raw.trim();

@@ -170,6 +170,18 @@ const useSubmit = () => {
       // Execute generation
       let streamResult: { generationId?: string } = {};
       if (isLocal) {
+        // Determine which nodeId's prefill to use:
+        // - append: the sticky composer's prefill (__sticky__)
+        // - midchat: the user message immediately preceding the insertion point
+        const { assistantPrefillMap } = useStore.getState();
+        let prefillKey: string;
+        if (mode === 'append') {
+          prefillKey = '__sticky__';
+        } else {
+          const activePath = chats[chatIndex].branchTree?.activePath ?? [];
+          prefillKey = activePath[(insertIndex ?? 1) - 1] ?? '__sticky__';
+        }
+        const assistantPrefill = assistantPrefillMap[prefillKey]?.trim() || undefined;
         await executeLocalSubmit({
           sessionId,
           chatId,
@@ -181,6 +193,7 @@ const useSubmit = () => {
           mode,
           abortController,
           t: (key: string) => t(key) as string,
+          assistantPrefill,
         });
       } else {
         streamResult = await executeSubmitStream({
@@ -259,6 +272,14 @@ const useSubmit = () => {
     } finally {
       useStore.getState().removeSession(sessionId);
       clearSubmitSessionRuntime(sessionId);
+      // Clear the prefill that was consumed (if any local generation happened)
+      if (isLocalModelConfig(chats[chatIndex]?.config)) {
+        const activePath = chats[chatIndex]?.branchTree?.activePath ?? [];
+        const prefillKey = mode === 'append'
+          ? '__sticky__'
+          : activePath[(insertIndex ?? 1) - 1] ?? '__sticky__';
+        useStore.getState().clearAssistantPrefill(prefillKey);
+      }
     }
   };
 

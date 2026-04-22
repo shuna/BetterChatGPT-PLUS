@@ -33,8 +33,18 @@ import type { VariantOverride } from '../vendor/wllama/variant-table';
 // Worker proxy interfaces (engine-specific facades)
 // ---------------------------------------------------------------------------
 
+export interface WllamaGenerateInput {
+  messages: { role: string; content: string }[];
+  assistantPrefix?: string;
+}
+
+/** Wrap a plain prompt string as a single-user-message WllamaGenerateInput. */
+export function promptAsInput(prompt: string): WllamaGenerateInput {
+  return { messages: [{ role: 'user', content: prompt }] };
+}
+
 export interface WllamaWorkerProxy {
-  generate(prompt: string, opts: GenerateOptions, onChunk: (text: string) => void, reason?: LocalModelBusyReason): Promise<string>;
+  generate(input: WllamaGenerateInput, opts: GenerateOptions, onChunk: (text: string) => void, reason?: LocalModelBusyReason): Promise<string>;
   abort(): void;
 }
 
@@ -715,7 +725,7 @@ export class LocalModelRuntime {
     if (!this.isLoaded(modelId)) return null;
 
     return {
-      generate: async (prompt: string, opts: GenerateOptions, onChunk: (text: string) => void, reason?: LocalModelBusyReason): Promise<string> => {
+      generate: async (input: WllamaGenerateInput, opts: GenerateOptions, onChunk: (text: string) => void, reason?: LocalModelBusyReason): Promise<string> => {
         if (this.isBusy(modelId)) {
           throw new Error(`Model ${modelId} is busy`);
         }
@@ -726,7 +736,8 @@ export class LocalModelRuntime {
         try {
           const result = await this.sendRequest(modelId, {
             type: 'generate',
-            prompt,
+            messages: input.messages,
+            assistantPrefix: input.assistantPrefix,
             maxTokens: opts.maxTokens ?? 256,
             temperature: opts.temperature ?? 0.7,
             stop: opts.stop,

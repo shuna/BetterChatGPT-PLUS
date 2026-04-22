@@ -9,6 +9,8 @@ import RoleSelector from './RoleSelector';
 import useIsDesktop from '@hooks/useIsDesktop';
 import useCanHover from '@hooks/useCanHover';
 import MetaActions from './View/MetaActions';
+import AssistantPrefillSeed from '../AssistantPrefillSeed';
+import { STICKY_PREFILL_KEY } from '@store/input-slice';
 
 const backgroundStyle = ['dark:bg-gray-800', 'bg-gray-50 dark:bg-gray-650'];
 
@@ -187,6 +189,9 @@ const Message = React.memo(
                   sticky={sticky}
                 />
               </div>
+              {role === 'user' && (
+                <AssistantPrefillSeed nodeId={STICKY_PREFILL_KEY} />
+              )}
             </>
           ) : (
             <>
@@ -220,6 +225,9 @@ const Message = React.memo(
                   />
                 )}
               </div>
+              {role === 'user' && resolvedNodeId && !isCollapsed && (
+                <AssistantPrefillSeed nodeId={resolvedNodeId} />
+              )}
             </>
           )}
         </div>

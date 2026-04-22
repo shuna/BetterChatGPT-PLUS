@@ -5,7 +5,7 @@
  * The runtime must have a generation-capable model loaded before calling these.
  */
 
-import { localModelRuntime } from '@src/local-llm/runtime';
+import { localModelRuntime, promptAsInput } from '@src/local-llm/runtime';
 import type { LocalModelTask, LocalModelBusyReason } from '@src/local-llm/types';
 import useStore from '@store/store';
 
@@ -48,7 +48,7 @@ export async function* localGenerate(
   let resolve: (() => void) | null = null;
 
   const generatePromise = engine.generate(
-    prompt,
+    promptAsInput(prompt),
     {
       maxTokens: opts?.maxTokens ?? 256,
       temperature: opts?.temperature ?? 0.7,
@@ -119,7 +119,7 @@ export async function localAnalyze(text: string, instruction: string, reason?: L
     .replace('{text}', text);
 
   const result = await engine.generate(
-    prompt,
+    promptAsInput(prompt),
     { maxTokens: 512, temperature: 0.3 },
     () => {},
     reason ?? 'chat',
@@ -162,7 +162,7 @@ export async function localFormat(text: string, format: FormatPreset, reason?: L
   const prompt = template.replace('{text}', text);
 
   const result = await engine.generate(
-    prompt,
+    promptAsInput(prompt),
     { maxTokens: 512, temperature: 0.3 },
     () => {},
     reason ?? 'chat',

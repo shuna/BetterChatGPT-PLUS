@@ -5,6 +5,7 @@ import Toggle from '@components/Toggle';
 import { SettingsGroup } from './SettingsMenu';
 import {
   localModelRuntime,
+  promptAsInput,
   type WllamaEnvironmentReport,
   type WllamaFeatureCheck,
 } from '@src/local-llm/runtime';
@@ -708,7 +709,7 @@ const LocalModelSettings = () => {
     setGenerating(true);
     setOutput('');
     try {
-      await engine.generate(prompt, { maxTokens: 256, temperature: 0.7 }, (text) => {
+      await engine.generate(promptAsInput(prompt), { maxTokens: 256, temperature: 0.7 }, (text) => {
         setOutput(text);
         if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight;
       }, 'test');

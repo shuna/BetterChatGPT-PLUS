@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { downloadModelFiles, type DownloadProgress } from '@src/local-llm/download';
-import { localModelRuntime, type RuntimeDiagnosticEvent, type RuntimeLogEvent, type RuntimeLoadProgressEvent } from '@src/local-llm/runtime';
+import { localModelRuntime, promptAsInput, type RuntimeDiagnosticEvent, type RuntimeLogEvent, type RuntimeLoadProgressEvent } from '@src/local-llm/runtime';
 import { OpfsFileProvider, readFile, saveFile, createOPFSWritable, verifyStoredModel, deleteModelFile } from '@src/local-llm/storage';
 import {
   FIXED_VALIDATION_MODEL,
@@ -424,7 +424,7 @@ function LowbitQValidationPage() {
 
       let latestText = '';
       const output = await engine.generate(
-        selectedPrompt.prompt,
+        promptAsInput(selectedPrompt.prompt),
         { maxTokens, temperature },
         (text) => {
           latestText = text;
@@ -477,7 +477,7 @@ function LowbitQValidationPage() {
 
     let latestText = '';
     const output = await engine.generate(
-      prompt,
+      promptAsInput(prompt),
       { maxTokens, temperature },
       (text) => { latestText = text; },
       'test',

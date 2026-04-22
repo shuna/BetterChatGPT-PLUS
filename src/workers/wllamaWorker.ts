@@ -363,7 +363,8 @@ interface LoadRequest { id: number; type: 'load'; descriptor: LoadDescriptor; ex
 interface GenerateRequest {
   id: number;
   type: 'generate';
-  prompt: string;
+  messages: { role: string; content: string }[];
+  assistantPrefix?: string;
   maxTokens: number;
   temperature: number;
   stop?: string[];
@@ -1123,19 +1124,28 @@ async function handleGenerate(req: GenerateRequest) {
     // Apply chat template if the model has one. Instruct-tuned models (SmolLM2,
     // Qwen, Gemma, etc.) expect prompts wrapped in their chat template — passing
     // raw text causes immediate EOS or garbage output.
-    let prompt = req.prompt;
+    //
+    // We pass the full structured messages array so the template sees the real
+    // conversation history (system + user turns), not a pre-serialized string.
+    // assistantPrefix (if any) is appended after template expansion so it becomes
+    // the start of the assistant turn that the model continues.
+    const rawLength = req.messages.reduce((n, m) => n + m.content.length, 0);
+    let prompt = req.messages.map((m) => `${m.role}: ${m.content}`).join('\n\n') + '\n\nassistant:';
     const chatTemplate = wllama.getChatTemplate();
     if (chatTemplate) {
       try {
         prompt = await wllama.formatChat(
-          [{ role: 'user', content: req.prompt }],
-          true, // addAssistant: append assistant turn start
+          req.messages as Parameters<typeof wllama.formatChat>[0],
+          true, // addAssistant: append assistant turn start token(s)
         );
-        console.info('[wllamaWorker] chat template applied, prompt length:', req.prompt.length, '->', prompt.length);
+        console.info('[wllamaWorker] chat template applied, raw length:', rawLength, '-> prompt length:', prompt.length);
       } catch (e) {
-        // Fall back to raw prompt if template formatting fails
-        console.warn('[wllamaWorker] chat template formatting failed, using raw prompt:', (e as Error).message);
+        // Fall back to serialized messages if template formatting fails
+        console.warn('[wllamaWorker] chat template formatting failed, using raw serialization:', (e as Error).message);
       }
+    }
+    if (req.assistantPrefix) {
+      prompt += req.assistantPrefix;
     }
 
     // wllama only supports stopTokens (token IDs), not string stop sequences.
@@ -1154,7 +1164,7 @@ async function handleGenerate(req: GenerateRequest) {
 
     let stopped = false;
 
-    console.info('[wllamaWorker] generate start, prompt length:', req.prompt.length, 'maxTokens:', req.maxTokens);
+    console.info('[wllamaWorker] generate start, prompt length:', prompt.length, 'maxTokens:', req.maxTokens);
 
     for await (const chunk of stream) {
       fullText = chunk.currentText;

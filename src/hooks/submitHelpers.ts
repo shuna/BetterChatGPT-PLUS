@@ -416,6 +416,31 @@ export function isLocalModelConfig(config: ConfigInterface): boolean {
 }
 
 /**
+ * Build a structured messages array for local wllama generation.
+ * Returns WllamaChatMessage-compatible objects that the worker will pass
+ * directly to wllama.formatChat(), enabling proper chat-template expansion.
+ */
+export function buildLocalChatMessages(
+  messages: MessageInterface[],
+  mode: SubmitMode,
+  messageIndex: number,
+  modelId?: string,
+  chatIndex?: number,
+  systemPrompt?: string,
+): { role: string; content: string }[] {
+  const contextMessages = getSubmitContextMessages(
+    messages, mode, messageIndex, modelId, chatIndex, systemPrompt,
+  );
+  return contextMessages.map((m) => ({
+    role: m.role,
+    content: m.content
+      .filter((c): c is TextContentInterface => c.type === 'text')
+      .map((c) => c.text)
+      .join('\n'),
+  }));
+}
+
+/**
  * Build a text prompt from submit context for local wllama generation.
  * Reuses getSubmitContextMessages() for omission, sanitization, and system prompt,
  * then converts the structured messages to a generic text prompt.

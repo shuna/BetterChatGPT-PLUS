@@ -658,5 +658,11 @@
       "confirmDeleteFile": "Delete the file {{file}}?",
       "confirmClearAll": "Delete ALL model files from browser storage? This will free up all storage used by local models. Downloaded models will need to be re-downloaded."
     }
+  },
+  "assistantPrefill": {
+    "label": "Assistant prefill",
+    "placeholder": "e.g. Sure, here is a step-by-step guide:\n1.",
+    "hint": "Inserted at the start of the assistant reply when generating. Cleared after sending.",
+    "badge": "Prefill active"
   }
 }
