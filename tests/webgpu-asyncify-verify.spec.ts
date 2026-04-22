@@ -10,8 +10,8 @@
  * Run after a successful WLLAMA_BUILD_WEBGPU_ASYNCIFY=1 WLLAMA_SYNC_VENDOR_JS=1 build.
  *
  * IMPORTANT: To force-select these variants the Asyncify entries must be temporarily
- * set to disabled: false in variant-table.ts.  Run this spec on a verification
- * branch/commit; do not merge with disabled: false on main until E2E is confirmed.
+ * active in variant-table.ts. Run this spec on browsers/devices that expose
+ * WebGPU without JSPI as part of promotion verification.
  *
  * Run:
  *   cd /Users/suzuki/weavelet-canvas && npx playwright test tests/webgpu-asyncify-verify.spec.ts --reporter=list
@@ -338,8 +338,7 @@ test.describe('WebGPU Asyncify variant E2E', () => {
 //   wllamaWorker.ts init → resolveVariant(forceVariant) → loadWllamaClass('webgpu-asyncify')
 //   → { type:'load', descriptor:{mode:'opfs-direct',...} } → loadModelFromOpfs()
 //
-// Gate: skips when artifacts missing OR Asyncify entries are disabled:true
-// (forceVariant rejects disabled entries; error contains "rejected":["disabled"]).
+// Gate: skips when artifacts are missing.
 // OPFS load test additionally gates on model file being present.
 //
 // OPFS layout expected by loadModelFromOpfs / inner worker fs.opfs-setup:
@@ -475,14 +474,6 @@ test.describe('wllamaWorker runtime-selection path (Asyncify)', () => {
     return null;
   }
 
-  const DISABLED_SKIP_MSG =
-    'st-webgpu-asyncify-compat is still disabled:true in variant-table — ' +
-    'remove disabled:true after Firefox E2E passes before running this test';
-
-  function isDisabledRejection(errMsg: string): boolean {
-    return errMsg.includes('"disabled"') || errMsg.includes('No eligible WASM variant');
-  }
-
   // -------------------------------------------------------------------------
   // Test 1: init path
   // -------------------------------------------------------------------------
@@ -519,7 +510,6 @@ test.describe('wllamaWorker runtime-selection path (Asyncify)', () => {
 
     if (initResponse?.type === 'error') {
       const errMsg = String(initResponse.message ?? '');
-      if (isDisabledRejection(errMsg)) { test.skip(true, DISABLED_SKIP_MSG); return; }
       throw new Error(`wllamaWorker init failed unexpectedly: ${errMsg}`);
     }
 
@@ -586,7 +576,6 @@ test.describe('wllamaWorker runtime-selection path (Asyncify)', () => {
       const errMsg = String(initResponse.message ?? '');
       await terminateWorkerHandle(page, handle);
       await cleanupOpfsModel(page, OPFS_TEST_MODEL_ID);
-      if (isDisabledRejection(errMsg)) { test.skip(true, DISABLED_SKIP_MSG); return; }
       throw new Error(`wllamaWorker init failed: ${errMsg}`);
     }
     expect(initResponse?.type, 'worker init should succeed').toBe('ready');
@@ -629,7 +618,7 @@ test.describe('wllamaWorker runtime-selection path (Asyncify)', () => {
     if (loadResponse?.type === 'error') {
       throw new Error(`wllamaWorker load failed: ${String(loadResponse.message ?? '')}`);
     }
-    expect(loadResponse?.type, 'load should return done').toBe('done');
+    expect(loadResponse?.type, 'load should return loaded').toBe('loaded');
     console.log('[opfs-load] PASS: loadModelFromOpfs succeeded via wllamaWorker with st-webgpu-asyncify-compat');
   });
 });

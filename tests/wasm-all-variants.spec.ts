@@ -65,13 +65,13 @@ const CASES: VariantCase[] = [
     gluePath: '/src/vendor/wllama/webgpu-index.js',
   },
   {
-    label: 'single-thread-webgpu',
-    singleThreadWasm: 'single-thread-webgpu.wasm',
+    label: 'single-thread-webgpu-asyncify-compat',
+    singleThreadWasm: 'single-thread-webgpu-asyncify-compat.wasm',
     multiThreadWasm: null,
     nThreads: 1,
     allowWebGPU: true,
     expectMultiThread: false,
-    gluePath: '/src/vendor/wllama/webgpu-index.js',
+    gluePath: '/src/vendor/wllama/webgpu-asyncify-index.js',
   },
   {
     label: 'multi-thread-webgpu-compat',
@@ -83,13 +83,13 @@ const CASES: VariantCase[] = [
     gluePath: '/src/vendor/wllama/webgpu-index.js',
   },
   {
-    label: 'multi-thread-webgpu',
-    singleThreadWasm: 'single-thread-webgpu.wasm',
-    multiThreadWasm: 'multi-thread-webgpu.wasm',
+    label: 'multi-thread-webgpu-asyncify-compat',
+    singleThreadWasm: 'single-thread-webgpu-asyncify-compat.wasm',
+    multiThreadWasm: 'multi-thread-webgpu-asyncify-compat.wasm',
     nThreads: 4,
     allowWebGPU: true,
     expectMultiThread: true,
-    gluePath: '/src/vendor/wllama/webgpu-index.js',
+    gluePath: '/src/vendor/wllama/webgpu-asyncify-index.js',
   },
 ];
 

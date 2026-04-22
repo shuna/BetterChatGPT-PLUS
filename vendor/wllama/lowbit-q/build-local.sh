@@ -595,4 +595,4 @@ echo "      src/vendor/wllama/mem64-index.js           (CPU mem64 WASM variants)
 echo "      src/vendor/wllama/webgpu-index.js          (WebGPU JSPI variants, with WLLAMA_BUILD_WEBGPU=1)"
 echo "      src/vendor/wllama/webgpu-asyncify-index.js (WebGPU Asyncify variants, with WLLAMA_BUILD_WEBGPU_ASYNCIFY=1)"
 echo "  - JS glue bundles use ABI-specific WASM memory keys and MUST NOT be swapped across variants"
-echo "  - Asyncify WebGPU variants start disabled in the variant table; promote only after E2E verification"
+echo "  - Asyncify WebGPU variants are experimental active entries; validate Firefox/mobile behavior before release"

@@ -126,7 +126,7 @@ export interface VariantSelection {
 //   a. WebGPU beats CPU — GPU utilisation dominates at current model sizes.
 //   b. JSPI WebGPU beats Asyncify WebGPU — lower overhead, smaller output.
 //   c. Multi-thread beats single-thread within the same class.
-//   d. Asyncify WebGPU variants are disabled until verified E2E.
+//   d. Asyncify WebGPU variants are active for JSPI-less WebGPU environments.
 //   e. st-cpu-compat is the unconditional fallback (no required capabilities).
 // ---------------------------------------------------------------------------
 export const VARIANT_TABLE: readonly VariantEntry[] = [
@@ -162,7 +162,7 @@ export const VARIANT_TABLE: readonly VariantEntry[] = [
   // expose asyncify_start_unwind from wasmExports when native wasm EH is active.
   // Therefore 'exnref' is NOT required — exnref reflects browser wasm EH support,
   // not a requirement of this build. Documented in vendor/wllama/SpecAndStatus.md.
-  // Starts disabled — promote to active only after verified E2E on ≥2 real browsers.
+  // Active for limited rollout/testing in JSPI-less WebGPU environments.
   {
     id: 'mt-webgpu-asyncify-compat',
     required: ['mt', 'webgpu'],
@@ -175,7 +175,6 @@ export const VARIANT_TABLE: readonly VariantEntry[] = [
     glue: 'webgpu-asyncify',
     priority: 95,
     pthreadPoolSize: 0,
-    disabled: true,
   },
   {
     id: 'st-webgpu-asyncify-compat',
@@ -187,7 +186,6 @@ export const VARIANT_TABLE: readonly VariantEntry[] = [
     heapAccess: 'module-proxy',
     glue: 'webgpu-asyncify',
     priority: 85,
-    disabled: true,
   },
   // ── CPU Memory64 ──────────────────────────────────────────────────────────
   // File names reflect current build output; renamed to *-cpu-mem64.wasm in PR2.
@@ -248,7 +246,7 @@ export const VARIANT_TABLE: readonly VariantEntry[] = [
 
 /**
  * Pure selection function that operates on an arbitrary variant table.
- * Use this in tests to inject a modified table (e.g. with Asyncify disabled: false)
+ * Use this in tests to inject a modified table (e.g. with specific variants disabled)
  * without touching the live VARIANT_TABLE or using module mocks.
  */
 export function selectVariantFromTable(

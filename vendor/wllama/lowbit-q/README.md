@@ -139,7 +139,7 @@ WLLAMA_BUILD_WEBGPU_ASYNCIFY=1 ./vendor/wllama/lowbit-q/build-local.sh
 | `single-thread-webgpu-compat.wasm` | `vendor/wllama/` | compat+JSPI WebGPU 単スレッド |
 | `multi-thread-webgpu-compat.wasm` | `vendor/wllama/` | compat+JSPI WebGPU マルチスレッド |
 
-`WLLAMA_BUILD_WEBGPU_ASYNCIFY=1` を指定した場合は追加で（experimental、初期状態 disabled）:
+`WLLAMA_BUILD_WEBGPU_ASYNCIFY=1` を指定した場合は追加で（experimental、JSPI なし WebGPU 向け）:
 
 | ファイル | 出力先 | 用途 |
 |---------|--------|------|

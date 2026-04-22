@@ -61,8 +61,8 @@ Variant mapping:
 | `vendor/wllama/multi-thread-webgpu.wasm` | `wasm/multi-thread-webgpu/wllama.wasm` | `WLLAMA_MULTI_THREAD_WEBGPU_CODE` |
 | `vendor/wllama/single-thread-webgpu-compat.wasm` | `wasm/single-thread-webgpu-compat/wllama.wasm` | `WLLAMA_SINGLE_THREAD_WEBGPU_COMPAT_CODE` |
 | `vendor/wllama/multi-thread-webgpu-compat.wasm` | `wasm/multi-thread-webgpu-compat/wllama.wasm` | `WLLAMA_MULTI_THREAD_WEBGPU_COMPAT_CODE` |
-| `vendor/wllama/single-thread-webgpu-asyncify-compat.wasm` | `wasm/single-thread-webgpu-asyncify-compat/wllama.wasm` | (Asyncify glue, disabled until E2E verified) |
-| `vendor/wllama/multi-thread-webgpu-asyncify-compat.wasm` | `wasm/multi-thread-webgpu-asyncify-compat/wllama.wasm` | (Asyncify glue, disabled until E2E verified) |
+| `vendor/wllama/single-thread-webgpu-asyncify-compat.wasm` | `wasm/single-thread-webgpu-asyncify-compat/wllama.wasm` | `src/vendor/wllama/webgpu-asyncify-index.js` |
+| `vendor/wllama/multi-thread-webgpu-asyncify-compat.wasm` | `wasm/multi-thread-webgpu-asyncify-compat/wllama.wasm` | `src/vendor/wllama/webgpu-asyncify-index.js` |
 
 ## Prerequisites
 
@@ -92,9 +92,9 @@ bash scripts/wllama/build.sh
 # WebGPU JSPI builds (compat only — Memory64 WebGPU not built)
 WLLAMA_BUILD_WEBGPU=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
 
-# WebGPU Asyncify builds (experimental — JSPI-less; starts disabled in variant-table)
+# WebGPU Asyncify builds (experimental — JSPI-less)
 # Risk: -sASYNCIFY=1 + -fwasm-exceptions may be incompatible under current emsdk.
-# See SpecAndStatus.md for investigation notes before promoting to active.
+# See SpecAndStatus.md for current verification status.
 WLLAMA_BUILD_WEBGPU_ASYNCIFY=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
 
 # Both WebGPU variants at once
