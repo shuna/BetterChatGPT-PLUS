@@ -82,14 +82,16 @@ Memory64/compat/WebGPU の各バリアント間で互換ではありません。
 
 すべてのビルド対象に単一の SDK バージョンを使用します。
 
-| ビルド種別 | 必要な emsdk |
-|------------|----------------|
-| CPU compat（`*-cpu-compat`） | **≥ 5.0.0** |
-| CPU Memory64（`*-cpu-mem64`） | **≥ 5.0.0** |
-| WebGPU（`*-webgpu-compat`） | **≥ 5.0.0** |
+| ビルド種別 | 必要な emsdk | 動作確認済み |
+|------------|----------------|------------|
+| CPU compat（`*-cpu-compat`） | **≥ 5.0.0** | 5.0.5 |
+| CPU Memory64（`*-cpu-mem64`） | **≥ 5.0.0** | 5.0.5 |
+| WebGPU + JSPI（`*-webgpu-compat`） | **≥ 5.0.0** | 5.0.5 |
+| WebGPU + Asyncify（`*-webgpu-asyncify-compat`） | **≥ 5.0.0** | 5.0.5 |
 
 自動ビルドスクリプト（`scripts/wllama/build.sh`）は semver チェックによって
-5.0.0 未満の場合はエラー終了します。
+5.0.0 未満の場合はエラー終了します。5.0.0〜5.0.4 は未検証のため、
+疑わしい場合は `SpecAndStatus.md`（Asyncify build notes 表）に記録されているバージョンを使用してください。
 
 ```bash
 # 一度だけインストール
@@ -104,16 +106,20 @@ bash scripts/wllama/build.sh
 # WebGPU JSPI ビルド（compat のみ — Memory64 WebGPU はビルドしない）
 WLLAMA_BUILD_WEBGPU=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
 
-# WebGPU Asyncify ビルド（experimental — JSPI なし環境向け）
-# -sASYNCIFY=1 と -fwasm-exceptions の相性リスクあり。
-# 現在の検証状況は vendor/wllama/SpecAndStatus.md を参照。
+# WebGPU Asyncify ビルド（experimental）
 WLLAMA_BUILD_WEBGPU_ASYNCIFY=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
 
 # JSPI + Asyncify 両方ビルド
 WLLAMA_BUILD_WEBGPU=1 WLLAMA_BUILD_WEBGPU_ASYNCIFY=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
 ```
 
-**バージョンを固定する:** ビルドが成功したらその具体的なバージョン番号をここに記録してください。
+`WLLAMA_SYNC_VENDOR_JS=1` を付けると、すべての成果物が自動コピーされます。
+- WASM バイナリ → `vendor/wllama/*.wasm`
+- JS glue → `src/vendor/wllama/{index,mem64-index,webgpu-index,webgpu-asyncify-index}.js`
+
+各 glue ファイルはそれぞれのビルドディレクトリが生成した `esm/index.js` を
+リネームしてコピーしたものです（`esm/mem64.js` のようなファイルは存在しません）。
+glue ファイルは手動コピーせず `WLLAMA_SYNC_VENDOR_JS=1` を使ってください。
 
 ### emdawnwebgpu（WebGPU ビルド時のみ）
 
@@ -129,7 +135,29 @@ Dawn 固有型のいくつかが不足しています
 `ggml-webgpu.cpp` 内で `#ifndef __EMSCRIPTEN__` によってガードしています。
 詳細は **セクション 5** を参照してください。
 
+### E2E テスト
+
+ビルド後は Playwright で検証します。
+
+```bash
+# 既存 6 バリアントのリグレッション確認
+npx playwright test tests/wasm-variant-verify.spec.ts --reporter=list
+
+# Asyncify 検証（disabled: true 時は自動スキップ）
+npx playwright test tests/webgpu-asyncify-verify.spec.ts --reporter=list
+```
+
+Asyncify 検証テストの OPFS ロードケースには実モデルファイルが必要です。
+`smollm2-360m-instruct-q8_0.gguf` をスペックファイル内のパスに配置してください。
+`disabled: true` の間は、モデルファイルがなくても両テストがスキップします。
+
 ## ビルド手順
+
+> **主要フロー:** 通常の開発では以下の手動手順を実行する必要はありません。
+> `scripts/wllama/build.sh`（適切な環境変数付き）がセットアップ・パッチ適用・
+> WASM コンパイル・glue 埋め込み・成果物コピーをすべて自動処理します。
+> 手動手順（1〜5）は、自動スクリプトをバイパスする必要がある場合や
+> デバッグ時の参照用です。
 
 ### 手順 1: WASM バイナリをビルドする
 
@@ -325,33 +353,32 @@ NODE
 
 ### 手順 4: 成果物をメインプロジェクトへコピーする
 
+> **主要フローでは自動処理されます** — `scripts/wllama/build.sh` に
+> `WLLAMA_SYNC_VENDOR_JS=1` を付けると WASM バイナリと glue ファイルの
+> 両方が自動コピーされます。以下は手動でビルドした場合の参考手順です。
+
 `vendor/wllama-src/` から実行します（リポジトリルートの 1 階層内側）。
 
 ```bash
-# CPU バリアント
+# WASM バイナリ — 各バリアントのビルドディレクトリからコピー
 cp wasm/single-thread-cpu-mem64/wllama.wasm    ../vendor/wllama/single-thread-cpu-mem64.wasm
 cp wasm/multi-thread-cpu-mem64/wllama.wasm     ../vendor/wllama/multi-thread-cpu-mem64.wasm
 cp wasm/single-thread-cpu-compat/wllama.wasm   ../vendor/wllama/single-thread-cpu-compat.wasm
 cp wasm/multi-thread-cpu-compat/wllama.wasm    ../vendor/wllama/multi-thread-cpu-compat.wasm
-
-# WebGPU + JSPI compat バリアント（WLLAMA_BUILD_WEBGPU=1）
 cp wasm/single-thread-webgpu-compat/wllama.wasm  ../vendor/wllama/single-thread-webgpu-compat.wasm
 cp wasm/multi-thread-webgpu-compat/wllama.wasm   ../vendor/wllama/multi-thread-webgpu-compat.wasm
-
-# WebGPU + Asyncify compat バリアント（WLLAMA_BUILD_WEBGPU_ASYNCIFY=1）— experimental
+# Asyncify（ビルドした場合）:
 # cp wasm/single-thread-webgpu-asyncify-compat/wllama.wasm  ../vendor/wllama/single-thread-webgpu-asyncify-compat.wasm
 # cp wasm/multi-thread-webgpu-asyncify-compat/wllama.wasm   ../vendor/wllama/multi-thread-webgpu-asyncify-compat.wasm
 
 # 注意: single-thread-webgpu.wasm / multi-thread-webgpu.wasm（Memory64 + JSPI）は
-# upstream artifact であり、このリポジトリのスクリプトではビルドしません。
-# ローカルビルド出力からコピーしないでください。
+# upstream artifact なので、ローカルビルド出力からコピーしないでください。
 
-# JS glue バンドルをコピー
-cp esm/index.js    ../src/vendor/wllama/index.js
-cp esm/mem64.js    ../src/vendor/wllama/mem64-index.js
-cp esm/webgpu.js   ../src/vendor/wllama/webgpu-index.js
-# Asyncify glue（WLLAMA_BUILD_WEBGPU_ASYNCIFY=1 の場合のみ）:
-# cp esm/webgpu-asyncify.js  ../src/vendor/wllama/webgpu-asyncify-index.js
+# JS glue バンドル — 手動コピーは複雑（各バリアントのビルドが独立した
+# esm/index.js を生成し、コピー時にリネームされる）。
+# esm/mem64.js のようなファイルは存在しません。
+# 手動コピーが必要な場合は build-local.sh の WLLAMA_SYNC_VENDOR_JS ブロックを参照:
+#   grep -n "SYNC_VENDOR_JS\|cp esm" vendor/wllama/lowbit-q/build-local.sh
 ```
 
 ### 手順 5: メインプロジェクトへコピーした内容を検証する
@@ -383,23 +410,13 @@ for (const [src, dst] of wasmPairs) {
   }
 }
 
-// JS glue バンドルの検証
-const gluePairs = [
-  ['esm/index.js',           '../src/vendor/wllama/index.js'],
-  ['esm/mem64.js',           '../src/vendor/wllama/mem64-index.js'],
-  ['esm/webgpu.js',          '../src/vendor/wllama/webgpu-index.js'],
-  // ['esm/webgpu-asyncify.js', '../src/vendor/wllama/webgpu-asyncify-index.js'],
-];
+// JS glue の整合性確認:
+// 各 glue ファイルは別々のビルドディレクトリで生成された esm/index.js を
+// リネームしてコピーしたものです。単一の vendor/wllama-src/ から比較する
+// ことは意味がありません。代わりに次を使用してください:
+//   node scripts/wllama/verify-glue-exports.mjs
 
-for (const [src, dst] of gluePairs) {
-  const a = fs.readFileSync(src, 'utf8');
-  const b = fs.readFileSync(dst, 'utf8');
-  if (a !== b) {
-    throw new Error(`${dst} が ${src} と一致しません`);
-  }
-}
-
-console.log('OK: vendored WASM and JS glue artifacts match the current build');
+console.log('OK: vendored WASM artifacts match the current build');
 NODE
 ```
 

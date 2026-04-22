@@ -84,14 +84,17 @@ Variant mapping:
 
 A single SDK version covers all build targets:
 
-| Build type | Required emsdk |
-|------------|----------------|
-| CPU compat (`*-cpu-compat`) | **≥ 5.0.0** |
-| CPU Memory64 (`*-cpu-mem64`) | **≥ 5.0.0** |
-| WebGPU (`*-webgpu-compat`) | **≥ 5.0.0** |
+| Build type | Required emsdk | Verified working |
+|------------|----------------|-----------------|
+| CPU compat (`*-cpu-compat`) | **≥ 5.0.0** | 5.0.5 |
+| CPU Memory64 (`*-cpu-mem64`) | **≥ 5.0.0** | 5.0.5 |
+| WebGPU + JSPI (`*-webgpu-compat`) | **≥ 5.0.0** | 5.0.5 |
+| WebGPU + Asyncify (`*-webgpu-asyncify-compat`) | **≥ 5.0.0** | 5.0.5 |
 
 The automated build script (`scripts/wllama/build.sh`) enforces this via a
 semver check and will exit with an error if the version is below 5.0.0.
+Versions between 5.0.0 and 5.0.4 have not been tested. When in doubt, use
+the same version as recorded in `SpecAndStatus.md` (Asyncify build notes table).
 
 ```bash
 # Install (one-time)
@@ -130,9 +133,66 @@ types used by newer llama.cpp (`DawnTogglesDescriptor`, `SubgroupMatrixConfig`,
 These are guarded with `#ifndef __EMSCRIPTEN__` in this fork's ggml-webgpu.cpp.
 See **Section 5** for details.
 
+### E2E tests
+
+After building, verify with Playwright:
+
+```bash
+# Regression: existing 6 active variants
+npx playwright test tests/wasm-variant-verify.spec.ts --reporter=list
+
+# Asyncify verify (skips automatically when disabled: true)
+npx playwright test tests/webgpu-asyncify-verify.spec.ts --reporter=list
+```
+
+The Asyncify verify test (`webgpu-asyncify-verify.spec.ts`) requires a real
+model file to run the OPFS-load test case. Place `smollm2-360m-instruct-q8_0.gguf`
+at a path reachable via the dev server, then set the `ASYNCIFY_MODEL_PATH`
+environment variable (or the path hard-coded in the spec) before running.
+While `disabled: true`, both runtime-selection tests skip cleanly without the
+model file.
+
 ## Build Steps
 
-### Step 1: Build WASM binaries
+> **Primary path:** In normal development you do not run the manual steps below.
+> Use `scripts/wllama/build.sh` (with appropriate env vars), which handles
+> setup, patching, WASM compilation, glue embedding, and artifact copy
+> automatically. The manual steps (1–5) document the internals for debugging
+> or when the automated script needs to be bypassed.
+
+### Primary build flow (recommended)
+
+```bash
+# First-time setup (creates vendor/wllama-src/, applies patches):
+bash scripts/wllama/setup.sh
+
+# CPU variants (compat + Memory64):
+bash scripts/wllama/build.sh
+
+# WebGPU + JSPI compat variants:
+WLLAMA_BUILD_WEBGPU=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
+
+# WebGPU + Asyncify compat variants (experimental):
+WLLAMA_BUILD_WEBGPU_ASYNCIFY=1 WLLAMA_SYNC_VENDOR_JS=1 bash scripts/wllama/build.sh
+```
+
+`WLLAMA_SYNC_VENDOR_JS=1` copies all artifacts automatically:
+- WASM binaries → `vendor/wllama/*.wasm`
+- JS glue bundles → `src/vendor/wllama/{index,mem64-index,webgpu-index,webgpu-asyncify-index}.js`
+
+Each glue bundle is produced as `esm/index.js` within its own build directory
+and then renamed on copy (e.g. the mem64 build's `esm/index.js` → `mem64-index.js`).
+The filenames `esm/mem64.js` etc. do **not** exist; always use
+`WLLAMA_SYNC_VENDOR_JS=1` rather than copying `esm/` files manually.
+
+---
+
+### Manual build internals (reference only)
+
+The steps below describe what the automated script does internally. They are
+useful when a step fails and you need to reproduce it by hand.
+
+#### Step 1: Build WASM binaries
 
 ```bash
 cd vendor/wllama-src
@@ -140,33 +200,11 @@ cd vendor/wllama-src
 ```
 
 `vendor/wllama-src/` is a gitignore'd local working tree created from upstream
-sources. Set it up once with `bash scripts/wllama/setup.sh`, which clones
-wllama and applies patches from `vendor/wllama-patches/`.
+sources by `bash scripts/wllama/setup.sh`.
 
-The intended flow:
-
-1. `bash scripts/wllama/setup.sh` — fetch upstream into `vendor/wllama-src/`, apply patches
-2. `cd vendor/wllama-src && ./scripts/build_all_wasm.sh`
-
-This builds all 8 variants under `wasm/`.
-
-Each directory contains:
+Each build directory contains:
 - `wllama.wasm` — the WASM binary
 - `wllama.js` — the Emscripten JS glue (runtime + import definitions)
-
-To rebuild only selected variants, pass variant names as arguments:
-
-```bash
-# run from vendor/wllama-src/
-./scripts/build_all_wasm.sh \
-  single-thread-webgpu \
-  multi-thread-webgpu \
-  single-thread-webgpu-compat \
-  multi-thread-webgpu-compat
-```
-
-This is the recommended fast path when only the base WebGPU backend or its JS
-glue needs to be refreshed.
 
 ### Step 2: Patch generated JS glue (CRITICAL)
 
@@ -321,34 +359,42 @@ NODE
 
 ### Step 4: Copy artifacts to the main project
 
+> **In the primary flow, this step is automatic** — `WLLAMA_SYNC_VENDOR_JS=1`
+> in `scripts/wllama/build.sh` handles all copies. Use the commands below only
+> if you built manually and need to copy by hand.
+
 Run from `vendor/wllama-src/` (one level inside the repo root):
 
 ```bash
-# CPU variants
+# WASM binaries — copy from each variant's build directory
 cp wasm/single-thread-cpu-mem64/wllama.wasm    ../vendor/wllama/single-thread-cpu-mem64.wasm
 cp wasm/multi-thread-cpu-mem64/wllama.wasm     ../vendor/wllama/multi-thread-cpu-mem64.wasm
 cp wasm/single-thread-cpu-compat/wllama.wasm   ../vendor/wllama/single-thread-cpu-compat.wasm
 cp wasm/multi-thread-cpu-compat/wllama.wasm    ../vendor/wllama/multi-thread-cpu-compat.wasm
-
-# WebGPU + JSPI compat variants (WLLAMA_BUILD_WEBGPU=1)
 cp wasm/single-thread-webgpu-compat/wllama.wasm  ../vendor/wllama/single-thread-webgpu-compat.wasm
 cp wasm/multi-thread-webgpu-compat/wllama.wasm   ../vendor/wllama/multi-thread-webgpu-compat.wasm
-
-# WebGPU + Asyncify compat variants (WLLAMA_BUILD_WEBGPU_ASYNCIFY=1) — experimental
+# Asyncify (if built):
 # cp wasm/single-thread-webgpu-asyncify-compat/wllama.wasm  ../vendor/wllama/single-thread-webgpu-asyncify-compat.wasm
 # cp wasm/multi-thread-webgpu-asyncify-compat/wllama.wasm   ../vendor/wllama/multi-thread-webgpu-asyncify-compat.wasm
 
 # NOTE: single-thread-webgpu.wasm / multi-thread-webgpu.wasm (Memory64 + JSPI)
-# are upstream artifacts — they are NOT built by this repo's scripts.
-# Do NOT copy them from local build output.
+# are upstream artifacts — NOT built by this repo's scripts.
 
-# Copy JS glue bundles
-cp esm/index.js    ../src/vendor/wllama/index.js
-cp esm/mem64.js    ../src/vendor/wllama/mem64-index.js
-cp esm/webgpu.js   ../src/vendor/wllama/webgpu-index.js
-# Asyncify glue (only when WLLAMA_BUILD_WEBGPU_ASYNCIFY=1):
-# cp esm/webgpu-asyncify.js  ../src/vendor/wllama/webgpu-asyncify-index.js
+# JS glue bundles — each build produces esm/index.js in its own build dir;
+# the automated script renames on copy (e.g. mem64 build → mem64-index.js).
+# There is no esm/mem64.js or esm/webgpu.js; copy from the correct build dir:
+#
+#   CPU compat glue:
+cp wasm/single-thread-cpu-compat/wllama.js     # (already embedded via npm run build:worker)
+#   → see npm run build:worker + build:tsup for the bundled output → esm/index.js
+#   → cp esm/index.js ../src/vendor/wllama/index.js  (for cpu-compat variants)
+#
+# In practice, run build-local.sh with WLLAMA_SYNC_VENDOR_JS=1 instead of
+# copying manually — it handles the correct source directory and renaming.
 ```
+
+> If you need the exact copy logic, read `vendor/wllama/lowbit-q/build-local.sh`
+> around the `SYNC_VENDOR_JS` blocks (search for `WLLAMA_SYNC_VENDOR_JS`).
 
 ### Step 5: Verify the main project copy
 
@@ -380,23 +426,14 @@ for (const [src, dst] of wasmPairs) {
   }
 }
 
-// Verify JS glue bundles
-const gluePairs = [
-  ['esm/index.js',           '../src/vendor/wllama/index.js'],
-  ['esm/mem64.js',           '../src/vendor/wllama/mem64-index.js'],
-  ['esm/webgpu.js',          '../src/vendor/wllama/webgpu-index.js'],
-  // ['esm/webgpu-asyncify.js', '../src/vendor/wllama/webgpu-asyncify-index.js'],
-];
+// JS glue verification: each glue file comes from a DIFFERENT build directory
+// (each build produces its own esm/index.js and the sync renames it on copy).
+// Checking glue consistency from a single vendor/wllama-src/ is not meaningful
+// unless you know which build directory produced which glue file.
+// Use scripts/wllama/verify-glue-exports.mjs instead:
+//   node scripts/wllama/verify-glue-exports.mjs
 
-for (const [src, dst] of gluePairs) {
-  const a = fs.readFileSync(src, 'utf8');
-  const b = fs.readFileSync(dst, 'utf8');
-  if (a !== b) {
-    throw new Error(`${dst} does not match ${src}`);
-  }
-}
-
-console.log('OK: vendored WASM and JS glue artifacts match the current build');
+console.log('OK: vendored WASM artifacts match the current build');
 NODE
 ```
 
