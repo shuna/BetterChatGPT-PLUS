@@ -57,7 +57,7 @@ let currentFlashAttnCpuFallback = false;
 
 const LOAD_HEARTBEAT_MS = 5_000;
 const LOAD_NO_PROGRESS_TIMEOUT_MS = 30_000;
-const WLLAMA_WASM_ASSET_VERSION = '20260423-graph-align-fix';
+const WLLAMA_WASM_ASSET_VERSION = '20260423-asyncify-exports-fix';
 
 type MinimalGpuDevice = {
   destroy: () => void;

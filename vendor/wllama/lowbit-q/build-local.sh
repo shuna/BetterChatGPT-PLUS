@@ -515,6 +515,8 @@ if [ "$BUILD_WEBGPU_ASYNCIFY" = "1" ]; then
   export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_WEBGPU_ASYNCIFY_COMPAT"
   emmake make wllama -j"$NPROC" 2>&1
   expose_emscripten_heap_views wllama.js
+  patch_emscripten_jspi_exports wllama.js
+  patch_growmemviews_guard wllama.js
   verify_webgpu_jspi_disabled "$(pwd)" "$_cmake_log_st"
   rm -f "$_cmake_log_st"
 
@@ -533,6 +535,8 @@ if [ "$BUILD_WEBGPU_ASYNCIFY" = "1" ]; then
   export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_WEBGPU_ASYNCIFY_COMPAT -pthread -sUSE_PTHREADS=1 -sPTHREAD_POOL_SIZE=0"
   emmake make wllama -j"$NPROC" 2>&1
   expose_emscripten_heap_views wllama.js
+  patch_emscripten_jspi_exports wllama.js
+  patch_growmemviews_guard wllama.js
   verify_webgpu_jspi_disabled "$(pwd)" "$_cmake_log_mt"
   rm -f "$_cmake_log_mt"
   patch_pthread_prewarm wllama.js
