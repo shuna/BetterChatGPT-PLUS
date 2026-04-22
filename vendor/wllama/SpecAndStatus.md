@@ -150,16 +150,14 @@ WebGPU を選択した場合は常に `*-webgpu-compat.wasm` が選ばれる。
 ## パッチ管理方針
 
 `vendor/wllama-patches/` を、本流拡張に必要な差分の唯一の置き場とする。
+責務ごとに統合された5本のパッチで構成し、番号は並び順でありカテゴリではない。
 
-想定する内容:
-
-- `wllama` 側ビルドスクリプト差分
-- `llama.cpp` / `ggml-webgpu` の upstream 互換パッチ
-- Emscripten JS グルー補正
-- 再ビルド手順に必要な apply スクリプト
+現在のパッチ一覧は [vendor/wllama-patches/README.md](../wllama-patches/README.md) を参照。
 
 セットアップは `bash scripts/wllama/setup.sh` で行う。
 このスクリプトが `vendor/wllama-src/` を作成し、`vendor/wllama-patches/` の差分を適用する。
+submodule を対象とするパッチも wllama ルートから `git apply` するだけで適用できるよう、
+パスは `llama.cpp/...` プレフィックス付きで統一している。
 
 ---
 
@@ -175,7 +173,7 @@ WebGPU を選択した場合は常に `*-webgpu-compat.wasm` が選ばれる。
 
 ### 未整理
 
-- 上記差分の一部はまだ `vendor/wllama-src/` ローカル作業ツリーにのみ反映されており、`vendor/wllama-patches/` のパッチ正本へ移し切れていない
+- （解消済み 2026-04-22 / PR #401）ローカル作業ツリーのみに残っていた差分は `vendor/wllama-patches/` の5本のパッチへ統合済み
 
 ---
 
@@ -202,6 +200,6 @@ WebGPU を選択した場合は常に `*-webgpu-compat.wasm` が選ばれる。
 
 ## 次の整理作業
 
-1. `vendor/wllama-src/` に残っている本流拡張差分を `vendor/wllama-patches/` へ patch として切り出す
+1. ~~`vendor/wllama-src/` に残っている本流拡張差分を `vendor/wllama-patches/` へ patch として切り出す~~ （2026-04-22 PR #401 で完了）
 2. low-bit-q 側文書から、本流 WebGPU 状況の記述を外す
 3. low-bit-q をこの本流拡張の上に積む二段構成を README へ明文化する
