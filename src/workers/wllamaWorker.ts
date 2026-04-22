@@ -57,7 +57,7 @@ let currentFlashAttnCpuFallback = false;
 
 const LOAD_HEARTBEAT_MS = 5_000;
 const LOAD_NO_PROGRESS_TIMEOUT_MS = 30_000;
-const WLLAMA_WASM_ASSET_VERSION = '20260421-pr2-timedwaitany-fix';
+const WLLAMA_WASM_ASSET_VERSION = '20260423-graph-align-fix';
 
 type MinimalGpuDevice = {
   destroy: () => void;
@@ -236,11 +236,6 @@ async function canUseWebGPU(allowWebGPU: boolean): Promise<boolean> {
   if (!hasWebGPUApi()) {
     currentWebGpuSelectionReason = 'navigator-gpu-unavailable';
     console.info('[wllamaWorker] WebGPU API is not available in this worker environment');
-    return false;
-  }
-  if (!hasWebAssemblyJspi()) {
-    currentWebGpuSelectionReason = 'webassembly-jspi-unavailable';
-    console.warn('[wllamaWorker] WebGPU WASM requires JSPI, but WebAssembly.Suspending/promising is not available');
     return false;
   }
   try {
