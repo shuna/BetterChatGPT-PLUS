@@ -1516,8 +1516,8 @@ var ProxyToWorker = class {
     this.logger = logger;
     this.suppressNativeLog = suppressNativeLog;
   }
-  moduleInit(ggufFiles) {
-    return __async(this, null, function* () {
+  moduleInit() {
+    return __async(this, arguments, function* (ggufFiles = []) {
       if (!this.pathConfig["wllama.wasm"]) {
         throw new Error('"single-thread/wllama.wasm" is missing from pathConfig');
       }
@@ -1551,6 +1551,33 @@ var ProxyToWorker = class {
         })
       );
       return res;
+    });
+  }
+  opfsSetup(modelId, shards) {
+    return __async(this, null, function* () {
+      return yield this.pushTask({
+        verb: "fs.opfs-setup",
+        args: [modelId, shards],
+        callbackId: this.taskId++
+      });
+    });
+  }
+  opfsCleanup() {
+    return __async(this, null, function* () {
+      return yield this.pushTask({
+        verb: "fs.opfs-cleanup",
+        args: [],
+        callbackId: this.taskId++
+      });
+    });
+  }
+  opfsStats() {
+    return __async(this, null, function* () {
+      return yield this.pushTask({
+        verb: "fs.opfs-stats",
+        args: [],
+        callbackId: this.taskId++
+      });
     });
   }
   wllamaStart() {
@@ -2676,34 +2703,155 @@ var Wllama = class {
         swa_full: true
         // TODO: properly support SWA
       });
-      const loadedCtxInfo = __spreadProps(__spreadValues({}, loadResult), {
-        metadata: {}
-      });
-      for (let i = 0; i < loadResult.metadata_key.length; i++) {
-        loadedCtxInfo.metadata[loadResult.metadata_key[i]] = loadResult.metadata_val[i];
-      }
-      this.bosToken = loadedCtxInfo.token_bos;
-      this.eosToken = loadedCtxInfo.token_eos;
-      this.eotToken = loadedCtxInfo.token_eot;
-      this.useEmbeddings = !!config.embeddings;
-      this.metadata = {
-        hparams: {
-          nVocab: loadedCtxInfo.n_vocab,
-          nCtxTrain: loadedCtxInfo.n_ctx_train,
-          nEmbd: loadedCtxInfo.n_embd,
-          nLayer: loadedCtxInfo.n_layer
-        },
-        meta: loadedCtxInfo.metadata
-      };
-      this.hasEncoder = !!loadedCtxInfo.has_encoder;
-      this.decoderStartToken = loadedCtxInfo.token_decoder_start;
-      this.addBosToken = loadedCtxInfo.add_bos_token;
-      this.addEosToken = loadedCtxInfo.add_eos_token;
-      this.chatTemplate = loadedCtxInfo.metadata["tokenizer.chat_template"];
-      this.loadedContextInfo = loadedCtxInfo;
-      this.eogTokens = new Set(loadedCtxInfo.list_tokens_eog);
-      this.logger().debug({ loadedCtxInfo });
+      this.applyLoadedContext(loadResult, config);
     });
+  }
+  /**
+   * Initialize the runtime without loading a model. Used by preflight checks that
+   * validate wasm/glue exports without exercising the Blob[] loading path.
+   */
+  preflightInit() {
+    return __async(this, arguments, function* (config = {}) {
+      if (this.proxy) {
+        throw new WllamaError("Module is already initialized", "load_error");
+      }
+      yield this.initializeProxy(config, []);
+      const proxy = this.proxy;
+      const startResult = yield proxy.wllamaStart();
+      if (!startResult.success) {
+        throw new WllamaError(
+          `Error while calling start function, result = ${startResult}`
+        );
+      }
+    });
+  }
+  /**
+   * Load a model whose shards already exist in OPFS under:
+   *   /models/{modelId}/{shardPath}
+   *
+   * The inner worker opens SyncAccessHandles directly and avoids copying the
+   * GGUF bytes into JS Blob/File memory.
+   */
+  loadModelFromOpfs(_0, _1) {
+    return __async(this, arguments, function* (modelId, shardPaths, config = {}) {
+      var _a, _b, _c;
+      if (shardPaths.length === 0) {
+        throw new WllamaError("OPFS model must contain at least one shard", "load_error");
+      }
+      const sortedShardFiles = shardPaths.map((name) => new File([], name));
+      sortFileByShard(sortedShardFiles);
+      if (this.proxy) {
+        throw new WllamaError("Module is already initialized", "load_error");
+      }
+      yield this.initializeProxy(config, []);
+      const proxy = this.proxy;
+      const modelFiles = sortedShardFiles.map(({ name: opfsFilename }, i) => ({
+        memfsName: `model-${i}.gguf`,
+        opfsFilename
+      }));
+      yield proxy.opfsSetup(modelId, modelFiles);
+      const startResult = yield proxy.wllamaStart();
+      if (!startResult.success) {
+        throw new WllamaError(
+          `Error while calling start function, result = ${startResult}`
+        );
+      }
+      const loadResult = yield proxy.wllamaAction("load", {
+        _name: "load_req",
+        use_mmap: (_a = config.use_mmap) != null ? _a : false,
+        use_mlock: (_b = config.use_mlock) != null ? _b : false,
+        n_gpu_layers: (_c = config.n_gpu_layers) != null ? _c : 0,
+        seed: config.seed || Math.floor(Math.random() * 1e5),
+        n_ctx: config.n_ctx || 1024,
+        n_threads: this.useMultiThread ? this.nbThreads : 1,
+        n_ctx_auto: false,
+        model_paths: modelFiles.map((f) => `models/${f.memfsName}`),
+        embeddings: config.embeddings,
+        offload_kqv: config.offload_kqv,
+        n_batch: config.n_batch,
+        pooling_type: config.pooling_type,
+        rope_scaling_type: config.rope_scaling_type,
+        rope_freq_base: config.rope_freq_base,
+        rope_freq_scale: config.rope_freq_scale,
+        yarn_ext_factor: config.yarn_ext_factor,
+        yarn_attn_factor: config.yarn_attn_factor,
+        yarn_beta_fast: config.yarn_beta_fast,
+        yarn_beta_slow: config.yarn_beta_slow,
+        yarn_orig_ctx: config.yarn_orig_ctx,
+        cache_type_k: config.cache_type_k,
+        cache_type_v: config.cache_type_v,
+        n_seq_max: 1,
+        flash_attn: config.flash_attn,
+        swa_full: true
+      });
+      this.applyLoadedContext(loadResult, config);
+    });
+  }
+  initializeProxy(config, modelFiles) {
+    return __async(this, null, function* () {
+      var _a, _b;
+      const supportMultiThread = yield isSupportMultiThread();
+      if (!supportMultiThread) {
+        this.logger().warn(
+          "Multi-threads are not supported in this environment, falling back to single-thread"
+        );
+      }
+      const hasPathMultiThread = !!this.pathConfig["multi-thread/wllama.wasm"];
+      if (!hasPathMultiThread) {
+        this.logger().warn(
+          'Missing paths to "multi-thread/wllama.wasm", falling back to single-thread'
+        );
+      }
+      const hwConccurency = Math.floor((navigator.hardwareConcurrency || 1) / 2);
+      const nbThreads = (_a = config.n_threads) != null ? _a : hwConccurency;
+      this.nbThreads = nbThreads;
+      this.useMultiThread = supportMultiThread && hasPathMultiThread && nbThreads > 1;
+      const mPathConfig = this.useMultiThread ? {
+        "wllama.wasm": absoluteUrl(
+          this.pathConfig["multi-thread/wllama.wasm"]
+        )
+      } : {
+        "wllama.wasm": absoluteUrl(
+          this.pathConfig["single-thread/wllama.wasm"]
+        )
+      };
+      this.proxy = new ProxyToWorker(
+        mPathConfig,
+        this.useMultiThread ? nbThreads : 1,
+        (_b = this.config.suppressNativeLog) != null ? _b : false,
+        this.logger()
+      );
+      yield this.proxy.moduleInit(modelFiles);
+    });
+  }
+  applyLoadedContext(loadResult, config) {
+    const loadedCtxInfo = __spreadProps(__spreadValues({}, loadResult), {
+      metadata: {}
+    });
+    for (let i = 0; i < loadResult.metadata_key.length; i++) {
+      loadedCtxInfo.metadata[loadResult.metadata_key[i]] = loadResult.metadata_val[i];
+    }
+    this.bosToken = loadedCtxInfo.token_bos;
+    this.eosToken = loadedCtxInfo.token_eos;
+    this.eotToken = loadedCtxInfo.token_eot;
+    this.useEmbeddings = !!config.embeddings;
+    this.metadata = {
+      hparams: {
+        nVocab: loadedCtxInfo.n_vocab,
+        nCtxTrain: loadedCtxInfo.n_ctx_train,
+        nEmbd: loadedCtxInfo.n_embd,
+        nLayer: loadedCtxInfo.n_layer
+      },
+      meta: loadedCtxInfo.metadata
+    };
+    this.hasEncoder = !!loadedCtxInfo.has_encoder;
+    this.decoderStartToken = loadedCtxInfo.token_decoder_start;
+    this.addBosToken = loadedCtxInfo.add_bos_token;
+    this.addEosToken = loadedCtxInfo.add_eos_token;
+    this.chatTemplate = loadedCtxInfo.metadata["tokenizer.chat_template"];
+    this.loadedContextInfo = loadedCtxInfo;
+    this.eogTokens = new Set(loadedCtxInfo.list_tokens_eog);
+    this.logger().debug({ loadedCtxInfo });
   }
   getLoadedContextInfo() {
     this.checkModelLoaded();
