@@ -156,6 +156,25 @@ function summarizePayload(payload: Record<string, unknown>): string {
 }
 
 /**
+ * Firefox detection for WebGPU backend suppression.
+ *
+ * Reason: ggml-webgpu WGSL shaders (Q2_K blocks in
+ * vendor/wllama-src/llama.cpp/ggml/src/ggml-webgpu/ggml-webgpu.cpp ~:2504)
+ * use `bitcast<u32>(vec2<u16>(...))` which Chromium/Tint accepts but
+ * Firefox/Naga rejects as an invalid implicit conversion. Until the
+ * upstream shaders are made Naga-compatible, force Firefox onto the CPU
+ * path and prefer Memory64 so we retain the >2GB addressing needed for
+ * large models.
+ *
+ * How to apply: call before passing allowWebGPU / preferMemory64 to the
+ * worker. Safe no-op outside browsers (ua falsy).
+ */
+function isFirefoxRuntime(): boolean {
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  return /Firefox\//.test(ua);
+}
+
+/**
  * Compute the total byte size of a wllama model definition.
  * Used for preferMemory64 determination in OPFS-direct mode (no File[] available).
  *
@@ -340,6 +359,10 @@ export class LocalModelRuntime {
     };
 
     try {
+      if (isFirefoxRuntime()) {
+        // Firefox: ggml-webgpu WGSL shaders fail Naga validation; skip preflight.
+        return false;
+      }
       this.emitDiagnostic({
         modelId,
         phase: 'runtime-webgpu-preflight-request',
@@ -421,6 +444,7 @@ export class LocalModelRuntime {
       };
 
       const canAttemptPreflight =
+        !isFirefoxRuntime() &&
         report.checks.jspi.state === 'ok' &&
         report.checks.exnref.state === 'ok' &&
         report.checks.requestDevice.state === 'ok';
@@ -444,6 +468,11 @@ export class LocalModelRuntime {
             detail: (e as Error).message,
           };
         }
+      } else if (isFirefoxRuntime()) {
+        report.checks.webgpuPreflight = {
+          state: 'no',
+          detail: 'Firefox: ggml-webgpu WGSL シェーダが Naga バリデータで不可 (Q2_K 系の vec2<u16>→u32 bitcast)。CPU パスで動作します。',
+        };
       } else {
         const blocker = [
           report.checks.jspi.state !== 'ok' ? 'JSPI' : null,
@@ -551,6 +580,13 @@ export class LocalModelRuntime {
 
         const webGpuSetting = this.webGpuEnabled;
         allowWebGPU = !options.forceDisableWebGPU && webGpuSetting !== false;
+
+        if (isFirefoxRuntime() && allowWebGPU) {
+          // Firefox: ggml-webgpu WGSL incompatible with Naga; fall back to CPU.
+          // Prefer Memory64 to keep >2GB addressing for larger models.
+          allowWebGPU = false;
+          preferMemory64 = true;
+        }
       }
 
       // Init worker — pass flags so the worker can select the right WASM.

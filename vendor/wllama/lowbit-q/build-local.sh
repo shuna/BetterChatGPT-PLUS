@@ -89,7 +89,7 @@ SHARED_EMCC_CFLAGS_WEBGPU_COMPAT="$SHARED_EMCC_CFLAGS_COMPAT -sJSPI=1"
 # (no explicit exception flag = Emscripten default = longjmp/JS, compatible with Asyncify).
 # Consequence: the 'exnref' capability is not required for this variant (see variant-table.ts).
 # Documented in vendor/wllama/SpecAndStatus.md.
-SHARED_EMCC_CFLAGS_ASYNCIFY_BASE="--no-entry -O3 -msimd128 -DNDEBUG -flto=full -frtti -sEXPORT_ALL=1 -sEXPORT_ES6=0 -sMODULARIZE=0 -sALLOW_MEMORY_GROWTH=1 -sFORCE_FILESYSTEM=1 -sEXPORTED_FUNCTIONS=_main,_wllama_malloc,_wllama_start,_wllama_action,_wllama_exit,_wllama_debug -sEXPORTED_RUNTIME_METHODS=ccall,cwrap -sNO_EXIT_RUNTIME=1"
+SHARED_EMCC_CFLAGS_ASYNCIFY_BASE="--no-entry -O3 -msimd128 -DNDEBUG -flto=full -frtti -fexceptions -sEXPORT_ALL=1 -sEXPORT_ES6=0 -sMODULARIZE=0 -sALLOW_MEMORY_GROWTH=1 -sFORCE_FILESYSTEM=1 -sEXPORTED_FUNCTIONS=_main,_wllama_malloc,_wllama_start,_wllama_action,_wllama_exit,_wllama_debug -sEXPORTED_RUNTIME_METHODS=ccall,cwrap -sNO_EXIT_RUNTIME=1"
 SHARED_EMCC_CFLAGS_WEBGPU_ASYNCIFY_COMPAT="$SHARED_EMCC_CFLAGS_ASYNCIFY_BASE -sINITIAL_MEMORY=128MB -sMAXIMUM_MEMORY=2048MB -sASYNCIFY=1 -sASSERTIONS=1 -sIMPORTED_MEMORY"
 NPROC=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 SYNC_VENDOR_JS="${WLLAMA_SYNC_VENDOR_JS:-0}"
@@ -305,6 +305,29 @@ verify_webgpu_jspi_disabled() {
   echo "  [verify] all JSPI-disabled checks passed"
 }
 
+patch_growmemviews_guard() {
+  # Pthread workers can call growMemViews() before the main thread has posted
+  # the {cmd:"load", wasmMemory, wasmModule} message. Without a guard the child
+  # crashes with "TypeError: can't access property 'buffer', wasmMemory is
+  # undefined" — the buffer obviously cannot be re-derived if wasmMemory itself
+  # has not been assigned yet, so the right action is to no-op.
+  local js_file="$1"
+
+  if grep -qF 'growMemViews wasmMemory undefined-guard' "$js_file"; then
+    return
+  fi
+
+  local marker='function growMemViews(){'
+  local guarded='function growMemViews(){if(typeof wasmMemory==="undefined"||!wasmMemory)return;/*growMemViews wasmMemory undefined-guard*/'
+
+  # Single-thread glue does not emit growMemViews (no shared memory grow path).
+  if ! grep -qF "$marker" "$js_file"; then
+    return
+  fi
+
+  MARKER="$marker" GUARDED="$guarded" perl -0pi -e 's/\Q$ENV{MARKER}\E/$ENV{GUARDED}/' "$js_file"
+}
+
 patch_pthread_prewarm() {
   local js_file="$1"
 
@@ -339,6 +362,7 @@ export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_COMPAT"
 emmake make wllama -j"$NPROC" 2>&1
 expose_emscripten_heap_views wllama.js
 patch_emscripten_jspi_exports wllama.js
+patch_growmemviews_guard wllama.js
 
 cd "$FORK_DIR"
 
@@ -357,6 +381,7 @@ export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_COMPAT -pthread -sUSE_PTHREADS=1 -sPTHRE
 emmake make wllama -j"$NPROC" 2>&1
 expose_emscripten_heap_views wllama.js
 patch_emscripten_jspi_exports wllama.js
+patch_growmemviews_guard wllama.js
 patch_pthread_prewarm wllama.js
 
 cd "$FORK_DIR"
@@ -376,6 +401,7 @@ export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_MEM64"
 emmake make wllama -j"$NPROC" 2>&1
 expose_emscripten_heap_views wllama.js
 patch_emscripten_jspi_exports wllama.js
+patch_growmemviews_guard wllama.js
 
 cd "$FORK_DIR"
 
@@ -394,6 +420,7 @@ export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_MEM64 -pthread -sUSE_PTHREADS=1 -sPTHREA
 emmake make wllama -j"$NPROC" 2>&1
 expose_emscripten_heap_views wllama.js
 patch_emscripten_jspi_exports wllama.js
+patch_growmemviews_guard wllama.js
 patch_pthread_prewarm wllama.js
 
 cd "$FORK_DIR"
@@ -425,6 +452,7 @@ if [ "$BUILD_WEBGPU" = "1" ]; then
   emmake make wllama -j"$NPROC" 2>&1
   expose_emscripten_heap_views wllama.js
   patch_emscripten_jspi_exports wllama.js
+  patch_growmemviews_guard wllama.js
 
   cd "$FORK_DIR"
 
@@ -440,6 +468,7 @@ if [ "$BUILD_WEBGPU" = "1" ]; then
   emmake make wllama -j"$NPROC" 2>&1
   expose_emscripten_heap_views wllama.js
   patch_emscripten_jspi_exports wllama.js
+  patch_growmemviews_guard wllama.js
   patch_pthread_prewarm wllama.js
 
   cd "$FORK_DIR"
@@ -486,6 +515,8 @@ if [ "$BUILD_WEBGPU_ASYNCIFY" = "1" ]; then
   export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_WEBGPU_ASYNCIFY_COMPAT"
   emmake make wllama -j"$NPROC" 2>&1
   expose_emscripten_heap_views wllama.js
+  patch_emscripten_jspi_exports wllama.js
+  patch_growmemviews_guard wllama.js
   verify_webgpu_jspi_disabled "$(pwd)" "$_cmake_log_st"
   rm -f "$_cmake_log_st"
 
@@ -504,6 +535,8 @@ if [ "$BUILD_WEBGPU_ASYNCIFY" = "1" ]; then
   export EMCC_CFLAGS="$SHARED_EMCC_CFLAGS_WEBGPU_ASYNCIFY_COMPAT -pthread -sUSE_PTHREADS=1 -sPTHREAD_POOL_SIZE=0"
   emmake make wllama -j"$NPROC" 2>&1
   expose_emscripten_heap_views wllama.js
+  patch_emscripten_jspi_exports wllama.js
+  patch_growmemviews_guard wllama.js
   verify_webgpu_jspi_disabled "$(pwd)" "$_cmake_log_mt"
   rm -f "$_cmake_log_mt"
   patch_pthread_prewarm wllama.js

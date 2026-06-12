@@ -58,6 +58,10 @@
     "xhigh": "Max",
     "unsupported": "This model does not support reasoning configuration."
   },
+  "forceReasoning": {
+    "label": "Force reasoning parameters",
+    "description": "Reasoning support was not detected for this model. Enable this to send reasoning parameters anyway — useful for newly released models that are not yet recognized."
+  },
   "reasoningBudget": {
     "label": "Reasoning Budget (tokens)",
     "description": "Advanced: set an explicit token budget for the model's internal reasoning. Leave at 0 to use the provider's default. (Min: 1024)",

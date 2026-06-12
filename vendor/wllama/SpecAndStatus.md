@@ -145,6 +145,66 @@ WebGPU を選択した場合は常に `*-webgpu-compat.wasm` が選ばれる。
 2. Mobile Chrome / Mobile Safari で実機 smoke を行い、WebGPU Asyncify または CPU fallback のどちらに流れたかを記録
 3. 問題が出た場合は `variant-table.ts` で該当バリアントのみ `disabled: true` に戻し、CPU fallback を維持する
 
+### ブラウザ自動操作手順（Playwright）
+
+Chromium / Firefox の WebGPU・Memory64 挙動は実ブラウザでしか検証できないため、ローカル検証は Playwright 経由でシステムインストール済みの本物ブラウザを起動する方針を取る。既存ユーザープロファイルを壊さないよう **いずれも専用 `userDataDir` を指定する**。
+
+前提: リポジトリ root で `@playwright/test` 済 (v1.59+)。`import { chromium, firefox } from 'playwright'`.
+
+#### Chrome (Google Chrome 本体)
+
+```js
+import { chromium } from 'playwright';
+import { mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const userDataDir = resolve('.playwright-chrome-profile');
+mkdirSync(userDataDir, { recursive: true });
+
+const ctx = await chromium.launchPersistentContext(userDataDir, {
+  channel: 'chrome',                        // system Google Chrome を使用
+  headless: false,
+  args: ['--enable-unsafe-webgpu'],         // 必要な場合のみ
+});
+```
+
+- `channel: 'chrome'` は macOS では `/Applications/Google Chrome.app` を自動解決する。未インストール時は `executablePath` を明示。
+- WebGPU を使う検証は `headless: false` を推奨（headless shell では adapter 取得不能な場合がある）。
+
+#### Firefox (Firefox.app 本体・BiDi 経由)
+
+Playwright 1.57+ は `channel: 'moz-firefox'` で本物 Firefox を WebDriver BiDi で操作できる（改造版 `playwright-firefox` バイナリは不要）。
+
+```js
+import { firefox } from 'playwright';
+import { mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+
+const userDataDir = resolve('.playwright-firefox-profile');
+mkdirSync(userDataDir, { recursive: true });
+
+const ctx = await firefox.launchPersistentContext(userDataDir, {
+  channel: 'moz-firefox',                   // 本物の Firefox.app を BiDi で起動
+  headless: false,
+  executablePath: '/Applications/Firefox.app/Contents/MacOS/firefox',
+});
+```
+
+- 既存プロファイル `~/Library/Application Support/Firefox/Profiles/*.default` は使わない（汚染防止）。`userDataDir` に別ディレクトリを渡す。
+- `channel` が未サポートな環境では `channel` を外し `executablePath` のみで起動する。
+
+#### 動作確認済みスクリプト
+
+- [`scripts/verify-playwright-firefox.mjs`](../../scripts/verify-playwright-firefox.mjs) — Firefox を `moz-firefox` チャネルで起動し `https://example.com/` を開いてタイトル取得・スクリーンショット保存。2026-04-23 動作確認済み。
+
+#### .gitignore 追加対象
+
+```
+.playwright-chrome-profile/
+.playwright-firefox-profile/
+firefox-verify.png
+```
+
 ---
 
 ## プロジェクト構造
