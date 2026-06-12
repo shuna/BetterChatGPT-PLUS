@@ -183,6 +183,8 @@ export interface ConfigInterface {
   reasoning_effort?: ReasoningEffort;
   reasoning_budget_tokens?: number;
   verbosity?: Verbosity;
+  /** Send reasoning params even when the model's support isn't detected (manual override). */
+  force_reasoning?: boolean;
   /** Per-chat system prompt. This is the source of truth; the top system bubble is a synced view. */
   systemPrompt?: string;
   /** Whether this chat uses a local or remote model. undefined = remote. */

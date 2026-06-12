@@ -108,6 +108,87 @@ describe('prepareStreamRequest reasoning payloads', () => {
     });
   });
 
+  it('passes effort directly for OpenRouter Claude 4.7+ / Fable models', () => {
+    const { body } = prepareStreamRequest(
+      'https://openrouter.ai/api/v1/chat/completions',
+      messages,
+      {
+        ...baseConfig,
+        model: 'anthropic/claude-fable-5',
+        providerId: 'openrouter',
+        reasoning_effort: 'xhigh',
+      }
+    );
+
+    expect(body).toMatchObject({
+      reasoning: {
+        effort: 'xhigh',
+      },
+    });
+    expect((body as { reasoning: object }).reasoning).not.toHaveProperty('max_tokens');
+  });
+
+  it('ignores an explicit budget on effort-capable Claude models and clamps minimal to low', () => {
+    const { body } = prepareStreamRequest(
+      'https://openrouter.ai/api/v1/chat/completions',
+      messages,
+      {
+        ...baseConfig,
+        model: 'anthropic/claude-opus-4.8',
+        providerId: 'openrouter',
+        reasoning_effort: 'minimal',
+        reasoning_budget_tokens: 4096,
+      }
+    );
+
+    expect(body).toMatchObject({
+      reasoning: {
+        effort: 'low',
+      },
+    });
+    expect((body as { reasoning: object }).reasoning).not.toHaveProperty('max_tokens');
+  });
+
+  it('sends reasoning params when force_reasoning is set even if support is not detected', () => {
+    vi.mocked(getModelSupportsReasoning).mockReturnValue(false);
+
+    const { body } = prepareStreamRequest(
+      'https://openrouter.ai/api/v1/chat/completions',
+      messages,
+      {
+        ...baseConfig,
+        model: 'anthropic/claude-fable-5',
+        providerId: 'openrouter',
+        reasoning_effort: 'high',
+        force_reasoning: true,
+      }
+    );
+
+    expect(body).toMatchObject({
+      reasoning: {
+        effort: 'high',
+      },
+    });
+    expect(body).not.toHaveProperty('force_reasoning');
+  });
+
+  it('omits reasoning params when support is not detected and force_reasoning is unset', () => {
+    vi.mocked(getModelSupportsReasoning).mockReturnValue(false);
+
+    const { body } = prepareStreamRequest(
+      'https://openrouter.ai/api/v1/chat/completions',
+      messages,
+      {
+        ...baseConfig,
+        model: 'some/unknown-model',
+        providerId: 'openrouter',
+        reasoning_effort: 'high',
+      }
+    );
+
+    expect(body).not.toHaveProperty('reasoning');
+  });
+
   it('omits reasoning config when effort is none', () => {
     const { body } = prepareStreamRequest(
       'https://openrouter.ai/api/v1/chat/completions',

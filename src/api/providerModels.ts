@@ -15,6 +15,7 @@ type ProviderModelPayload = {
   created?: unknown;
   pricing?: unknown;
   architecture?: unknown;
+  supported_parameters?: unknown;
 };
 
 type ProviderModelListPayload = {
@@ -133,6 +134,19 @@ const normalizeModelEntry = (
   const inputModality = modality.split('->')[0] ?? '';
   const modelType: 'text' | 'image' = inputModality.includes('image') ? 'image' : 'text';
 
+  // OpenRouter exposes supported_parameters; treat a declared "reasoning"
+  // entry as authoritative support. Absence falls back to the ID heuristic
+  // (some providers support reasoning without declaring it).
+  const supportedParameters = Array.isArray(payload.supported_parameters)
+    ? payload.supported_parameters.filter(
+        (value): value is string => typeof value === 'string'
+      )
+    : undefined;
+  const declaresReasoning =
+    supportedParameters?.some(
+      (param) => param === 'reasoning' || param === 'include_reasoning'
+    ) ?? false;
+
   return {
     id,
     name,
@@ -145,7 +159,7 @@ const normalizeModelEntry = (
     created: toNumberValue(payload.created),
     modelType,
     streamSupport: true,
-    supportsReasoning: isReasoningModel(id),
+    supportsReasoning: declaresReasoning || isReasoningModel(id),
     supportsVision: modelType === 'image' || isVisionModel(id),
     supportsAudio: isAudioModel(id),
   };

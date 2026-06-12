@@ -120,10 +120,13 @@ const ConfigMenu = ({
   const [_reasoningEffort, _setReasoningEffort] = useState<ReasoningEffort | undefined>(config.reasoning_effort ?? DEFAULT_REASONING_EFFORT);
   const [_reasoningBudget, _setReasoningBudget] = useState<number>(config.reasoning_budget_tokens ?? DEFAULT_REASONING_BUDGET);
   const [_verbosity, _setVerbosity] = useState<Verbosity | undefined>(config.verbosity ?? DEFAULT_VERBOSITY);
+  const [_forceReasoning, _setForceReasoning] = useState<boolean>(config.force_reasoning ?? false);
   const [_systemPrompt, _setSystemPrompt] = useState<string>(config.systemPrompt ?? '');
   const { t } = useTranslation('model');
   const isStreamSupported = isModelStreamSupported(_model, _providerId, _modelSource);
-  const reasoningSupported = useModelSupportsReasoning(_model, _providerId);
+  const reasoningDetected = useModelSupportsReasoning(_model, _providerId);
+  const reasoningForced = !reasoningDetected && _modelSource !== 'local' && _forceReasoning;
+  const reasoningSupported = reasoningDetected || reasoningForced;
   const capabilities = useModelCapabilities(_model, _providerId);
   const verbositySupported = isOpenRouterClaudeVerbosityModel(_model, _providerId);
   const latestDraftRef = useRef<ConfigInterface>(config);
@@ -150,10 +153,11 @@ const ConfigMenu = ({
       reasoning_effort: reasoningSupported ? _reasoningEffort : undefined,
       reasoning_budget_tokens: reasoningSupported && _reasoningBudget >= 1024 ? _reasoningBudget : undefined,
       verbosity: verbositySupported ? _verbosity : undefined,
+      force_reasoning: reasoningForced || undefined,
       systemPrompt: _systemPrompt || undefined,
     });
     latestImageDetailRef.current = _imageDetail;
-  }, [_maxToken, _model, _providerId, _modelSource, _temperature, _presencePenalty, _topP, _frequencyPenalty, _imageDetail, _stream, _reasoningEffort, _reasoningBudget, _verbosity, _systemPrompt, reasoningSupported, verbositySupported]);
+  }, [_maxToken, _model, _providerId, _modelSource, _temperature, _presencePenalty, _topP, _frequencyPenalty, _imageDetail, _stream, _reasoningEffort, _reasoningBudget, _verbosity, _systemPrompt, reasoningSupported, reasoningForced, verbositySupported]);
 
   const applyDraft = () => {
     setConfig(latestDraftRef.current);
@@ -232,6 +236,13 @@ const ConfigMenu = ({
             />
           </ConfigFieldCell>
         </SettingsGroup>
+
+        {!reasoningDetected && _modelSource !== 'local' && (
+          <ForceReasoningToggle
+            _forceReasoning={_forceReasoning}
+            _setForceReasoning={_setForceReasoning}
+          />
+        )}
 
         {reasoningSupported && (
           <SettingsGroup label={t('section.reasoning')}>
@@ -659,6 +670,31 @@ export const ImageDetailSelector = ({
         onChange={(value) => _setImageDetail(value as ImageDetail)}
       />
     </div>
+  );
+};
+
+export const ForceReasoningToggle = ({
+  _forceReasoning,
+  _setForceReasoning,
+}: {
+  _forceReasoning: boolean;
+  _setForceReasoning: React.Dispatch<React.SetStateAction<boolean>>;
+}) => {
+  const { t } = useTranslation('model');
+
+  return (
+    <label className='flex items-center gap-2 cursor-pointer select-none'>
+      <input
+        type='checkbox'
+        className='w-4 h-4 rounded border-gray-400/50 accent-blue-600 cursor-pointer'
+        checked={_forceReasoning}
+        onChange={(e) => _setForceReasoning(e.target.checked)}
+      />
+      <span className='text-sm font-medium text-gray-900 dark:text-white'>
+        {t('forceReasoning.label', 'Force reasoning parameters')}
+      </span>
+      <InfoTooltip text={t('forceReasoning.description')} />
+    </label>
   );
 };
 
