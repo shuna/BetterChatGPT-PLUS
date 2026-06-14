@@ -75,3 +75,14 @@ export const supportsMaxVerbosity = (
   modelId: string,
   providerId?: ProviderId
 ): boolean => isOpenRouterAdaptiveReasoningModel(modelId, providerId);
+
+/**
+ * OpenRouter's Fusion alias runs a multi-model panel plus a judge call on top
+ * of the normal completion, so it costs several times a single request. We use
+ * this only to surface a cost warning — the request itself stays OpenAI-compatible.
+ */
+export const isOpenRouterFusionModel = (
+  modelId: string,
+  providerId?: ProviderId
+): boolean =>
+  providerId === 'openrouter' && normalizeModelId(modelId).includes('fusion');

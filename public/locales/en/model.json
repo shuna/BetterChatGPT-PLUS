@@ -126,5 +126,12 @@
     "tabBrowse": "Official",
     "noModelSelected": "No model selected",
     "keySaved": "API key saved"
+  },
+  "fusion": {
+    "costWarning": "Fusion runs a multi-model panel plus a judge on top of your request — expect roughly 4–5× the cost of a single completion."
+  },
+  "presets": {
+    "label": "Presets",
+    "replaceConfirm": "Replace the current system prompt with this preset?"
   }
 }

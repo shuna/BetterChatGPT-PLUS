@@ -5,6 +5,7 @@ import {
   isOpenRouterAdaptiveReasoningModel,
   isOpenRouterClaudeEffortModel,
   isOpenRouterClaudeVerbosityModel,
+  isOpenRouterFusionModel,
   supportsMaxVerbosity,
 } from './reasoning';
 
@@ -51,5 +52,12 @@ describe('reasoning model helpers', () => {
     expect(isOpenRouterClaudeVerbosityModel('anthropic/claude-sonnet-4', 'openai')).toBe(false);
     expect(supportsMaxVerbosity('anthropic/claude-opus-4.6', 'openrouter')).toBe(true);
     expect(supportsMaxVerbosity('anthropic/claude-sonnet-4', 'openrouter')).toBe(false);
+  });
+
+  it('detects the OpenRouter Fusion alias only on OpenRouter', () => {
+    expect(isOpenRouterFusionModel('openrouter/fusion', 'openrouter')).toBe(true);
+    expect(isOpenRouterFusionModel('openrouter/fusion', 'openai')).toBe(false);
+    expect(isOpenRouterFusionModel('anthropic/claude-sonnet-4', 'openrouter')).toBe(false);
+    expect(isOpenRouterFusionModel('openrouter/fusion')).toBe(false);
   });
 });
