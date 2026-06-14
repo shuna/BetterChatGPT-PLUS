@@ -70,24 +70,30 @@ export const SystemPromptField = ({
         setIsPresetOpen(false);
       }
     };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsPresetOpen(false);
+    };
     document.addEventListener('mousedown', onPointerDown);
-    return () => document.removeEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
   }, [isPresetOpen]);
 
   const applyPreset = (content: string) => {
-    setSystemPrompt((prev) => {
-      if (prev.trim() && prev.trim() !== content.trim()) {
-        const ok = window.confirm(
-          t(
-            'presets.replaceConfirm',
-            'Replace the current system prompt with this preset?'
-          ) as string
-        );
-        if (!ok) return prev;
-      }
-      return content;
-    });
     setIsPresetOpen(false);
+    const current = systemPrompt.trim();
+    if (current && current !== content.trim()) {
+      const ok = window.confirm(
+        t(
+          'presets.replaceConfirm',
+          'Replace the current system prompt with this preset?'
+        ) as string
+      );
+      if (!ok) return;
+    }
+    setSystemPrompt(content);
   };
 
   return (
