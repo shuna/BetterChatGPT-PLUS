@@ -105,5 +105,12 @@
     "colPrice": "価格 (入力/出力)",
     "noModelSelected": "モデル未選択",
     "keySaved": "APIキーを保存しました"
+  },
+  "fusion": {
+    "costWarning": "Fusion は通常のリクエストに加えて複数モデルのパネルとジャッジを実行するため、単一の応答に比べておよそ4〜5倍のコストがかかります。"
+  },
+  "presets": {
+    "label": "プリセット",
+    "replaceConfirm": "現在のシステムプロンプトをこのプリセットで置き換えますか？"
   }
 }

@@ -14,6 +14,7 @@ import { ModelOptions } from '@type/chat';
 import { isModelStreamSupported, normalizeConfigStream } from '@utils/streamSupport';
 import { clampCompletionTokens, getMaxCompletionTokensForContext } from '@utils/tokenBudget';
 import { _defaultChatConfig } from '@constants/chat';
+import { SYSTEM_PROMPT_PRESETS } from '@constants/systemPromptPresets';
 import useStore from '@store/store';
 import { CURATED_MODELS } from '@src/local-llm/catalog';
 import { localModelRuntime } from '@src/local-llm/runtime';
@@ -23,6 +24,7 @@ import { ProviderIcon, LocalChipIcon } from '@icon/ProviderIcons';
 import {
   isOpenRouterAdaptiveReasoningModel,
   isOpenRouterClaudeVerbosityModel,
+  isOpenRouterFusionModel,
   supportsMaxVerbosity,
 } from '@utils/reasoning';
 import {
@@ -58,18 +60,89 @@ export const SystemPromptField = ({
 }) => {
   const { t } = useTranslation('model');
   const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [isPresetOpen, setIsPresetOpen] = useState(false);
+  const presetMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isPresetOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (presetMenuRef.current && !presetMenuRef.current.contains(e.target as Node)) {
+        setIsPresetOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsPresetOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isPresetOpen]);
+
+  const applyPreset = (content: string) => {
+    setIsPresetOpen(false);
+    const current = systemPrompt.trim();
+    if (current && current !== content.trim()) {
+      const ok = window.confirm(
+        t(
+          'presets.replaceConfirm',
+          'Replace the current system prompt with this preset?'
+        ) as string
+      );
+      if (!ok) return;
+    }
+    setSystemPrompt(content);
+  };
 
   return (
     <div>
       <div className='flex items-center justify-between'>
         <FieldLabel>{label ?? t('chatSystemPrompt', 'System Prompt')}</FieldLabel>
-        <button
-          type='button'
-          className='text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors'
-          onClick={() => setIsPickerOpen(true)}
-        >
-          {t('insertFromLibrary', 'Insert from library')}
-        </button>
+        <div className='flex items-center gap-2'>
+          <div className='relative' ref={presetMenuRef}>
+            <button
+              type='button'
+              className='text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors'
+              onClick={() => setIsPresetOpen((v) => !v)}
+              aria-haspopup='menu'
+              aria-expanded={isPresetOpen}
+            >
+              {t('presets.label', 'Presets')} ▾
+            </button>
+            {isPresetOpen && (
+              <div
+                role='menu'
+                className='absolute right-0 z-20 mt-1 w-72 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 shadow-lg py-1'
+              >
+                {SYSTEM_PROMPT_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type='button'
+                    role='menuitem'
+                    className='w-full text-left px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors'
+                    onClick={() => applyPreset(preset.content)}
+                  >
+                    <div className='text-sm font-medium text-gray-900 dark:text-gray-100'>
+                      {preset.name}
+                    </div>
+                    <div className='text-xs text-gray-500 dark:text-gray-400'>
+                      {preset.description}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button
+            type='button'
+            className='text-xs px-2 py-1 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 transition-colors'
+            onClick={() => setIsPickerOpen(true)}
+          >
+            {t('insertFromLibrary', 'Insert from library')}
+          </button>
+        </div>
       </div>
       <textarea
         className='w-full mt-1 px-2 py-1.5 text-sm rounded-lg bg-transparent border border-gray-400/50 focus:ring-1 focus:ring-blue resize-y min-h-[2.5rem] max-h-[12rem] leading-6 text-gray-900 dark:text-gray-100'
@@ -129,6 +202,7 @@ const ConfigMenu = ({
   const reasoningSupported = reasoningDetected || reasoningForced;
   const capabilities = useModelCapabilities(_model, _providerId);
   const verbositySupported = isOpenRouterClaudeVerbosityModel(_model, _providerId);
+  const isFusion = isOpenRouterFusionModel(_model, _providerId);
   const latestDraftRef = useRef<ConfigInterface>(config);
   const latestImageDetailRef = useRef<ImageDetail>(imageDetail);
 
@@ -197,6 +271,20 @@ const ConfigMenu = ({
               audio: t('capabilities.audio'),
             }}
           />
+          {isFusion && (
+            <div
+              role='alert'
+              className='mt-2 flex items-start gap-2 rounded-lg border border-amber-400/50 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-sm text-amber-800 dark:text-amber-200'
+            >
+              <span aria-hidden className='mt-0.5'>⚠️</span>
+              <span>
+                {t(
+                  'fusion.costWarning',
+                  'Fusion runs a multi-model panel plus a judge on top of your request — expect roughly 4–5× the cost of a single completion.'
+                )}
+              </span>
+            </div>
+          )}
         </div>
 
         <SystemPromptField
