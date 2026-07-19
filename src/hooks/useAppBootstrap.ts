@@ -186,6 +186,11 @@ const useAppBootstrap = () => {
         });
         setChatDataWritesBlocked(false);
         storageHealthy = true;
+        if ((indexedDbChatData.repairedMissingContentHashes?.length ?? 0) > 0) {
+          showBootstrapWarning(
+            `${indexedDbChatData.repairedMissingContentHashes!.length}件の欠損した会話内容を復旧しました。元の内容が残っていない箇所は空として表示されます。`
+          );
+        }
       } else if (
         (useStore.getState().chats?.length ?? 0) > 0 ||
         Object.keys(useStore.getState().contentStore ?? {}).length > 0 ||

@@ -51,9 +51,20 @@ export function getPendingGCHashes(): ReadonlySet<string> {
  * Actually remove pending GC entries from the in-memory store.
  * Called after the commit protocol completes successfully.
  */
-export function flushPendingGC(store: ContentStoreData): string[] {
+export function flushPendingGC(
+  store: ContentStoreData,
+  protectedHashes: ReadonlySet<string> = new Set()
+): string[] {
   const flushed: string[] = [];
   for (const hash of pendingGCHashes) {
+    if (protectedHashes.has(hash)) {
+      // Reference counts are an optimization and can drift after interrupted
+      // or legacy operations. A live branch reference is authoritative.
+      if (store[hash] && store[hash].refCount <= 0) {
+        store[hash].refCount = 1;
+      }
+      continue;
+    }
     if (store[hash] && store[hash].refCount <= 0) {
       delete store[hash];
       flushed.push(hash);

@@ -10,7 +10,11 @@ import {
 } from '@store/persistence';
 import type { StoreState } from '@store/store';
 import type { ContentStoreData } from '@utils/contentStore';
-import { flushPendingGC, getPendingGCHashes } from '@utils/contentStore';
+import {
+  addContent,
+  flushPendingGC,
+  getPendingGCHashes,
+} from '@utils/contentStore';
 import type { BranchClipboard, ChatInterface } from '@type/chat';
 import { ensureUniqueChatIds } from '@utils/chatIdentity';
 import {
@@ -95,6 +99,7 @@ export type ChatDataLoadResult = PersistedChatData & {
   loadStatus: ChatDataLoadStatus;
   missingChatIds: string[];
   errors: string[];
+  repairedMissingContentHashes?: string[];
 };
 
 let currentGeneration = 0;
@@ -341,6 +346,98 @@ function findPersistedDataIntegrityErrors(
   }
 
   return errors;
+}
+
+function repairMissingContentReferences(
+  inputChats: PersistedChat[],
+  inputContentStore: ContentStoreData,
+  inputClipboard: BranchClipboard | null
+): {
+  chats: PersistedChat[];
+  contentStore: ContentStoreData;
+  clipboard: BranchClipboard | null;
+  repairedHashes: string[];
+} {
+  let chats = inputChats;
+  let contentStore = inputContentStore;
+  let clipboard = inputClipboard;
+  const repairedHashes: string[] = [];
+
+  const ensureStoreCopy = () => {
+    if (contentStore === inputContentStore) contentStore = { ...inputContentStore };
+  };
+
+  inputChats.forEach((chat, chatIndex) => {
+    const tree = chat?.branchTree;
+    if (!tree?.nodes || typeof tree.nodes !== 'object' || Array.isArray(tree.nodes)) return;
+
+    let repairedChat: PersistedChat | undefined;
+    for (const node of Object.values(tree.nodes)) {
+      const missingHash = node?.contentHash;
+      if (
+        typeof missingHash !== 'string' ||
+        isStreamingContentHash(missingHash) ||
+        contentStore[missingHash]
+      ) {
+        continue;
+      }
+
+      const activeIndex = Array.isArray(tree.activePath)
+        ? tree.activePath.indexOf(node.id)
+        : -1;
+      const legacyMessage = activeIndex >= 0 ? chat.messages?.[activeIndex] : undefined;
+      const recoveredContent =
+        legacyMessage?.role === node.role && Array.isArray(legacyMessage.content)
+          ? legacyMessage.content
+          : [];
+
+      ensureStoreCopy();
+      if (!repairedChat) {
+        if (chats === inputChats) chats = inputChats.slice();
+        repairedChat = {
+          ...chat,
+          branchTree: {
+            ...tree,
+            nodes: { ...tree.nodes },
+          },
+        };
+        chats[chatIndex] = repairedChat;
+      }
+      repairedChat.branchTree!.nodes[node.id] = {
+        ...node,
+        contentHash: addContent(contentStore, recoveredContent),
+      };
+      repairedHashes.push(missingHash);
+    }
+  });
+
+  if (
+    inputClipboard?.nodes &&
+    typeof inputClipboard.nodes === 'object' &&
+    !Array.isArray(inputClipboard.nodes)
+  ) {
+    let repairedNodes: BranchClipboard['nodes'] | undefined;
+    for (const node of Object.values(inputClipboard.nodes)) {
+      const missingHash = node?.contentHash;
+      if (
+        typeof missingHash !== 'string' ||
+        isStreamingContentHash(missingHash) ||
+        contentStore[missingHash]
+      ) {
+        continue;
+      }
+      ensureStoreCopy();
+      repairedNodes ??= { ...inputClipboard.nodes };
+      repairedNodes[node.id] = {
+        ...node,
+        contentHash: addContent(contentStore, []),
+      };
+      repairedHashes.push(missingHash);
+    }
+    if (repairedNodes) clipboard = { ...inputClipboard, nodes: repairedNodes };
+  }
+
+  return { chats, contentStore, clipboard, repairedHashes };
 }
 
 /**
@@ -692,7 +789,7 @@ async function loadSplitData(
     // However, if csGen > G (content-store was written but meta was not updated),
     // meta.chatIds is stale and may not include chats added in the newer generation.
     // In that case, skip chatIds filtering to avoid dropping valid new chats.
-    const chats: PersistedChat[] = [];
+    let chats: PersistedChat[] = [];
     for (const { record } of chatRecords) {
       if (record.generation > committedGen) {
         console.warn(
@@ -746,6 +843,15 @@ async function loadSplitData(
       errors.push('Missing or invalid content-store record');
     }
 
+    const repairedContent = repairMissingContentReferences(
+      chats,
+      contentStore,
+      clipboard
+    );
+    chats = repairedContent.chats;
+    contentStore = repairedContent.contentStore;
+    clipboard = repairedContent.clipboard;
+
     const recoveredChatIds = new Set(chats.map((chat) => chat.id));
     const missingChatIds = (meta.chatIds ?? []).filter((id) => !recoveredChatIds.has(id));
     for (const id of missingChatIds) {
@@ -780,6 +886,7 @@ async function loadSplitData(
       loadStatus,
       missingChatIds,
       errors,
+      repairedMissingContentHashes: repairedContent.repairedHashes,
     };
   } catch (e) {
     database.close();
@@ -999,9 +1106,10 @@ const saveChatDataUnlocked = async (data: PersistedChatData): Promise<void> => {
   const pendingGCSet = getPendingGCHashes();
   if (pendingGCSet.size > 0) {
     const hashesToGC = [...pendingGCSet];
+    const protectedHashes = collectReferencedHashes(chats, clipboard);
     // Flush from in-memory snapshot (keeps Zustand contentStore clean for
     // future snapshots) and clear the global pending set.
-    flushPendingGC(contentStore);
+    flushPendingGC(contentStore, protectedHashes);
 
     await withTransaction('readwrite', async (store) => {
       const record = await idbGet<ContentStoreRecord>(store, CONTENT_STORE_KEY);
@@ -1010,6 +1118,7 @@ const saveChatDataUnlocked = async (data: PersistedChatData): Promise<void> => {
       const liveStore = record.data;
       let changed = false;
       for (const hash of hashesToGC) {
+        if (protectedHashes.has(hash)) continue;
         if (liveStore[hash] && liveStore[hash].refCount <= 0) {
           delete liveStore[hash];
           changed = true;
