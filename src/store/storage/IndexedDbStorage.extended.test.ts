@@ -32,7 +32,11 @@ import {
   areChatDataWritesBlocked,
   _resetInternalState,
 } from './IndexedDbStorage';
-import type { ContentStoreData, ContentEntry } from '@utils/contentStore';
+import {
+  releaseContent,
+  type ContentStoreData,
+  type ContentEntry,
+} from '@utils/contentStore';
 import type { BranchClipboard, BranchNode, ChatInterface } from '@type/chat';
 import type { StoreState } from '@store/store';
 import { createStreamingContentHash } from '@utils/streamingBuffer';
@@ -342,6 +346,41 @@ describe('loadSplitData crash recovery', () => {
       'interrupted-stream',
     ]);
     expect(result?.errors).toEqual([]);
+  });
+
+  it('repairs missing node content from a retained legacy active-path message', async () => {
+    const chat = makeChat('recoverable', ['missing-hash'], {
+      messages: [{ role: 'user', content: [{ type: 'text', text: 'recovered' }] }],
+    });
+    await idbPut('meta', { version: 18, generation: 1, chatIds: ['recoverable'] });
+    await idbPut('content-store', { data: {}, generation: 1 });
+    await idbPut('chat:recoverable', { chat, generation: 1 });
+    await idbPut('branch-clipboard', { data: null, generation: 1 });
+
+    const result = await loadChatData(baseState);
+    const repairedHash = result?.chats?.[0].branchTree?.nodes.n0.contentHash;
+
+    expect(result?.loadStatus).toBe('ok');
+    expect(result?.repairedMissingContentHashes).toEqual(['missing-hash']);
+    expect(repairedHash).not.toBe('missing-hash');
+    expect(result?.contentStore[repairedHash!].content).toEqual([
+      { type: 'text', text: 'recovered' },
+    ]);
+  });
+
+  it('repairs an unrecoverable missing node content with an empty placeholder', async () => {
+    const chat = makeChat('placeholder', ['missing-hash']);
+    await idbPut('meta', { version: 18, generation: 1, chatIds: ['placeholder'] });
+    await idbPut('content-store', { data: {}, generation: 1 });
+    await idbPut('chat:placeholder', { chat, generation: 1 });
+    await idbPut('branch-clipboard', { data: null, generation: 1 });
+
+    const result = await loadChatData(baseState);
+    const repairedHash = result?.chats?.[0].branchTree?.nodes.n0.contentHash;
+
+    expect(result?.loadStatus).toBe('ok');
+    expect(result?.repairedMissingContentHashes).toEqual(['missing-hash']);
+    expect(result?.contentStore[repairedHash!].content).toEqual([]);
   });
 
   it('still rejects transient streaming references when saving directly', async () => {
@@ -700,6 +739,23 @@ describe('write safety and serialization', () => {
     expect(loaded?.loadStatus).toBe('ok');
     expect(loaded?.chats?.map((chat) => chat.id)).toEqual(['chat-a', 'chat-b']);
     expect((await idbGet<any>('meta')).generation).toBe(2);
+  });
+
+  it('does not garbage-collect content that is still referenced by a chat', async () => {
+    const contentStore = { h1: textEntry('still live') };
+    releaseContent(contentStore, 'h1');
+    expect(contentStore.h1.refCount).toBeLessThanOrEqual(0);
+
+    await saveChatData({
+      chats: [makeChat('live-chat', ['h1'])],
+      contentStore,
+      branchClipboard: null,
+    });
+
+    const stored = await idbGet<{ data: ContentStoreData }>('content-store');
+    expect(contentStore.h1).toBeDefined();
+    expect(contentStore.h1.refCount).toBeGreaterThan(0);
+    expect(stored?.data.h1).toBeDefined();
   });
 });
 
