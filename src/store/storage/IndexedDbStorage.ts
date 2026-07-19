@@ -68,6 +68,7 @@ export interface IndexedDbRecoveryChatSnapshot {
   packed: boolean;
   generation?: number;
   compressedBytes?: number;
+  compressedBase64?: string;
   record?: ChatRecord;
   error?: string;
 }
@@ -84,9 +85,68 @@ export interface IndexedDbRecoverySnapshot {
   chats: IndexedDbRecoveryChatSnapshot[];
 }
 
+export type ChatDataLoadStatus = 'ok' | 'degraded';
+
+export type ChatDataLoadResult = PersistedChatData & {
+  loadStatus: ChatDataLoadStatus;
+  missingChatIds: string[];
+  errors: string[];
+};
+
 let currentGeneration = 0;
 let previousContentStoreSnapshot: ContentStoreData = {};
 let migrationInProgress = false;
+let chatDataWritesBlocked = false;
+let storageMutationQueue: Promise<void> = Promise.resolve();
+let hasLoadedCommittedSnapshot = false;
+
+const transactionDone = (tx: IDBTransaction): Promise<void> =>
+  new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onabort = () => reject(tx.error ?? new Error('IDB transaction aborted'));
+    tx.onerror = () => reject(tx.error ?? new Error('IDB transaction failed'));
+  });
+
+const bytesToBase64 = (bytes: Uint8Array): string => {
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  return btoa(binary);
+};
+
+const withCrossContextStorageLock = async <T>(run: () => Promise<T>): Promise<T> => {
+  if (typeof navigator !== 'undefined' && navigator.locks) {
+    return navigator.locks.request(
+      `${DB_NAME}:${STORE_NAME}:mutation`,
+      { mode: 'exclusive' },
+      run
+    );
+  }
+  return run();
+};
+
+const enqueueStorageMutation = <T>(run: () => Promise<T>): Promise<T> => {
+  const result = storageMutationQueue.then(
+    () => withCrossContextStorageLock(run),
+    () => withCrossContextStorageLock(run)
+  );
+  storageMutationQueue = result.then(
+    () => undefined,
+    () => undefined
+  );
+  return result;
+};
+
+export function setChatDataWritesBlocked(blocked: boolean): void {
+  chatDataWritesBlocked = blocked;
+  if (blocked) cancelCompression();
+}
+
+export function areChatDataWritesBlocked(): boolean {
+  return chatDataWritesBlocked;
+}
 
 const hasIndexedDb = () =>
   typeof window !== 'undefined' && typeof indexedDB !== 'undefined';
@@ -147,14 +207,21 @@ const withTransaction = async <T>(
   const database = await openDatabase();
   try {
     const tx = database.transaction(STORE_NAME, mode);
+    const done = transactionDone(tx);
     const store = tx.objectStore(STORE_NAME);
-    const result = await run(store);
-    await new Promise<void>((resolve, reject) => {
-      tx.oncomplete = () => resolve();
-      tx.onabort = () => reject(tx.error ?? new Error('IDB transaction aborted'));
-      tx.onerror = () => reject(tx.error ?? new Error('IDB transaction failed'));
-    });
-    return result;
+    try {
+      const result = await run(store);
+      await done;
+      return result;
+    } catch (error) {
+      try {
+        tx.abort();
+      } catch {
+        // The transaction may already have completed or aborted.
+      }
+      await done.catch(() => undefined);
+      throw error;
+    }
   } finally {
     database.close();
   }
@@ -181,6 +248,64 @@ function collectReferencedHashes(
     }
   }
   return refs;
+}
+
+function findPersistedDataIntegrityErrors(
+  chats: PersistedChat[],
+  contentStore: ContentStoreData,
+  clipboard: BranchClipboard | null
+): string[] {
+  const errors: string[] = [];
+  const seenChatIds = new Set<string>();
+
+  const checkContentHash = (hash: unknown, owner: string) => {
+    if (typeof hash !== 'string' || !contentStore[hash]) {
+      errors.push(`Missing contentHash for ${owner}: ${String(hash)}`);
+      return;
+    }
+    const visited = new Set<string>();
+    let current = hash;
+    while (contentStore[current]?.delta) {
+      if (visited.has(current)) {
+        errors.push(`Circular delta chain for ${owner}: ${hash}`);
+        return;
+      }
+      visited.add(current);
+      current = contentStore[current].delta!.baseHash;
+      if (!contentStore[current]) {
+        errors.push(`Missing delta base for ${owner}: ${current}`);
+        return;
+      }
+    }
+  };
+
+  for (const chat of chats) {
+    if (!chat || typeof chat.id !== 'string' || chat.id.length === 0) {
+      errors.push('Chat has an invalid id');
+      continue;
+    }
+    if (seenChatIds.has(chat.id)) {
+      errors.push(`Duplicate chat id: ${chat.id}`);
+    }
+    seenChatIds.add(chat.id);
+
+    if (!chat.branchTree) continue;
+    if (!chat.branchTree.nodes || typeof chat.branchTree.nodes !== 'object') {
+      errors.push(`Invalid branchTree nodes: ${chat.id}`);
+      continue;
+    }
+    for (const node of Object.values(chat.branchTree.nodes)) {
+      checkContentHash(node?.contentHash, `chat ${chat.id}`);
+    }
+  }
+
+  if (clipboard?.nodes && typeof clipboard.nodes === 'object') {
+    for (const node of Object.values(clipboard.nodes)) {
+      checkContentHash(node?.contentHash, 'branch clipboard');
+    }
+  }
+
+  return errors;
 }
 
 /**
@@ -243,7 +368,7 @@ export function isMigrationInProgress(): boolean {
  */
 async function migrateLegacyData(
   _baseState: StoreState
-): Promise<PersistedChatData | null> {
+): Promise<ChatDataLoadResult | null> {
   const database = await openDatabase();
   try {
     const tx1 = database.transaction(STORE_NAME, 'readonly');
@@ -267,6 +392,19 @@ async function migrateLegacyData(
     };
 
     const chats = (chatData.chats ?? []) as PersistedChat[];
+    const integrityErrors = findPersistedDataIntegrityErrors(
+      chats,
+      chatData.contentStore ?? {},
+      chatData.branchClipboard ?? null
+    );
+    if (integrityErrors.length > 0) {
+      return {
+        ...chatData,
+        loadStatus: 'degraded',
+        missingChatIds: [],
+        errors: integrityErrors,
+      };
+    }
     const gen = 1;
 
     const tx2 = database.transaction(STORE_NAME, 'readwrite');
@@ -306,9 +444,15 @@ async function migrateLegacyData(
     });
 
     currentGeneration = gen;
+    hasLoadedCommittedSnapshot = true;
     previousContentStoreSnapshot = { ...(chatData.contentStore ?? {}) };
 
-    return chatData;
+    return {
+      ...chatData,
+      loadStatus: 'ok',
+      missingChatIds: [],
+      errors: [],
+    };
   } finally {
     database.close();
   }
@@ -323,28 +467,43 @@ async function migrateLegacyData(
  */
 export const loadChatData = async (
   baseState: StoreState
-): Promise<PersistedChatData | null> => {
+): Promise<ChatDataLoadResult | null> => {
   if (!hasIndexedDb()) return null;
 
   const database = await openDatabase();
   try {
     const tx = database.transaction(STORE_NAME, 'readonly');
+    const txDone = transactionDone(tx);
     const store = tx.objectStore(STORE_NAME);
 
-    const legacy = await idbGet<LegacyChatDataRecord>(store, LEGACY_KEY);
-    const meta = await idbGet<MetaRecord>(store, META_KEY);
+    const [legacy, meta] = await Promise.all([
+      idbGet<LegacyChatDataRecord>(store, LEGACY_KEY),
+      idbGet<MetaRecord>(store, META_KEY),
+    ]);
 
-    await new Promise<void>((r) => { tx.oncomplete = () => r(); });
+    await txDone;
     database.close();
 
     // If legacy data exists and no meta, migrate storage format (not schema)
     if (legacy && !meta) {
-      return migrateLegacyData(baseState);
+      const migrated = await enqueueStorageMutation(() => migrateLegacyData(baseState));
+      if (migrated) return migrated;
+
+      // Another tab may have completed the migration while this tab waited
+      // for the mutation lock. Re-read the committed format rather than
+      // treating the store as empty and starting a destructive first save.
+      return loadChatData(baseState);
     }
 
     if (!meta) return null;
 
-    return loadSplitData(meta);
+    return withCrossContextStorageLock(async () => {
+      // The meta observed before waiting for the lock may already be stale.
+      const currentMeta = await withTransaction('readonly', (store) =>
+        idbGet<MetaRecord>(store, META_KEY)
+      );
+      return currentMeta ? loadSplitData(currentMeta) : null;
+    });
   } catch (e) {
     database.close();
     throw e;
@@ -353,20 +512,15 @@ export const loadChatData = async (
 
 async function loadSplitData(
   meta: MetaRecord
-): Promise<PersistedChatData | null> {
+): Promise<ChatDataLoadResult | null> {
   const G = meta.generation;
 
   const database = await openDatabase();
   try {
-    const tx = database.transaction(STORE_NAME, 'readonly');
-    const store = tx.objectStore(STORE_NAME);
-
-    // Load content-store
-    const csRecord = await idbGet<ContentStoreRecord>(store, CONTENT_STORE_KEY);
-    const cbRecord = await idbGet<BranchClipboardRecord>(store, BRANCH_CLIPBOARD_KEY);
-
-    // Enumerate all chat keys (both raw and packed)
-    const allKeys = await idbGetAllKeys(store);
+    const keyTx = database.transaction(STORE_NAME, 'readonly');
+    const keyTxDone = transactionDone(keyTx);
+    const allKeys = await idbGetAllKeys(keyTx.objectStore(STORE_NAME));
+    await keyTxDone;
     const rawChatKeys = (allKeys as string[]).filter(
       (k) => typeof k === 'string' && k.startsWith('chat:') && !isPackedKey(k)
     );
@@ -374,25 +528,52 @@ async function loadSplitData(
       (k) => typeof k === 'string' && isPackedKey(k)
     );
 
-    // Build set of raw chat keys for raw-first resolution
-    const rawKeySet = new Set(rawChatKeys);
+    // Start a fresh transaction and issue every record request synchronously,
+    // without awaiting a prior request in that transaction. Gzip
+    // decompression happens only after recordTxDone.
+    const recordTx = database.transaction(STORE_NAME, 'readonly');
+    const recordTxDone = transactionDone(recordTx);
+    const recordStore = recordTx.objectStore(STORE_NAME);
+    const [csRecord, cbRecord, rawValues, packedValues] = await Promise.all([
+      idbGet<ContentStoreRecord>(recordStore, CONTENT_STORE_KEY),
+      idbGet<BranchClipboardRecord>(recordStore, BRANCH_CLIPBOARD_KEY),
+      Promise.all(rawChatKeys.map((key) => idbGet<ChatRecord>(recordStore, key))),
+      Promise.all(
+        packedChatKeys.map((key) =>
+          idbGet<{ compressed: Uint8Array; generation: number }>(recordStore, key)
+        )
+      ),
+    ]);
+    await recordTxDone;
+    database.close();
 
+    const errors: string[] = [];
     const chatRecords: Array<{ key: string; record: ChatRecord }> = [];
+    const validRawKeys = new Set<string>();
 
-    // Load raw chats
-    for (const key of rawChatKeys) {
-      const record = await idbGet<ChatRecord>(store, key);
-      if (record?.chat) {
+    for (let i = 0; i < rawChatKeys.length; i++) {
+      const key = rawChatKeys[i];
+      const record = rawValues[i];
+      const expectedId = key.slice('chat:'.length);
+      if (
+        record?.chat &&
+        typeof record.chat === 'object' &&
+        record.chat.id === expectedId &&
+        Number.isFinite(record.generation)
+      ) {
+        validRawKeys.add(key);
         chatRecords.push({ key, record });
+      } else {
+        errors.push(`Invalid raw chat record: ${key}`);
       }
     }
 
-    // Load packed chats (only if no raw version exists)
-    for (const pk of packedChatKeys) {
+    for (let i = 0; i < packedChatKeys.length; i++) {
+      const pk = packedChatKeys[i];
       const rawKey = pk.slice(0, -':packed'.length);
-      if (rawKeySet.has(rawKey)) continue; // raw-first rule: skip packed when raw exists
+      if (validRawKeys.has(rawKey)) continue;
 
-      const packed = await idbGet<{ compressed: Uint8Array; generation: number }>(store, pk);
+      const packed = packedValues[i];
       if (packed?.compressed) {
         try {
           const record = await decompressChatRecord<ChatRecord>(
@@ -400,18 +581,25 @@ async function loadSplitData(
               ? packed.compressed
               : new Uint8Array(packed.compressed as ArrayBufferLike)
           );
+          const expectedId = rawKey.slice('chat:'.length);
+          if (!record?.chat || record.chat.id !== expectedId) {
+            throw new Error(`Packed chat id does not match key: ${expectedId}`);
+          }
           chatRecords.push({
             key: rawKey,
             record: { ...record, generation: packed.generation },
           });
+          const invalidRawError = `Invalid raw chat record: ${rawKey}`;
+          const invalidRawIndex = errors.indexOf(invalidRawError);
+          if (invalidRawIndex >= 0) errors.splice(invalidRawIndex, 1);
         } catch (e) {
           console.warn(`[IndexedDb] Failed to decompress ${pk}, skipping`, e);
+          errors.push(`Failed to decompress packed chat: ${pk}`);
         }
+      } else {
+        errors.push(`Invalid packed chat record: ${pk}`);
       }
     }
-
-    await new Promise<void>((r) => { tx.oncomplete = () => r(); });
-    database.close();
 
     // ── Generation reconciliation ──
 
@@ -471,6 +659,7 @@ async function loadSplitData(
     }
 
     currentGeneration = committedGen;
+    hasLoadedCommittedSnapshot = true;
 
     // Raise the needs-migration flag if stored data predates current schema
     if (meta.version < STORE_VERSION) {
@@ -478,10 +667,26 @@ async function loadSplitData(
     }
 
     let contentStore = csRecord?.data ?? {};
+    if (!csRecord || !csRecord.data || typeof csRecord.data !== 'object') {
+      errors.push('Missing or invalid content-store record');
+    }
+
+    const recoveredChatIds = new Set(chats.map((chat) => chat.id));
+    const missingChatIds = (meta.chatIds ?? []).filter((id) => !recoveredChatIds.has(id));
+    for (const id of missingChatIds) {
+      errors.push(`Missing committed chat: ${id}`);
+    }
+
+    errors.push(...findPersistedDataIntegrityErrors(chats, contentStore, clipboard));
+
+    const loadStatus: ChatDataLoadStatus = errors.length > 0 ? 'degraded' : 'ok';
 
     // Run residual GC to clean up any leftover superset entries
-    // (entries that are not referenced by any chat or clipboard)
-    contentStore = runResidualGC(contentStore, chats, clipboard);
+    // only after a complete load. A partial load must never discard content
+    // belonging to a chat that could not be decoded.
+    if (loadStatus === 'ok') {
+      contentStore = runResidualGC(contentStore, chats, clipboard);
+    }
 
     previousContentStoreSnapshot = { ...contentStore };
 
@@ -495,6 +700,9 @@ async function loadSplitData(
       chats,
       contentStore,
       branchClipboard: clipboard,
+      loadStatus,
+      missingChatIds,
+      errors,
     };
   } catch (e) {
     database.close();
@@ -502,26 +710,20 @@ async function loadSplitData(
   }
 }
 
-export async function collectIndexedDbRecoverySnapshot(): Promise<IndexedDbRecoverySnapshot | null> {
+async function collectIndexedDbRecoverySnapshotUnlocked(): Promise<IndexedDbRecoverySnapshot | null> {
   if (!hasIndexedDb()) return null;
 
   const database = await openDatabase();
   try {
-    const tx = database.transaction(STORE_NAME, 'readonly');
-    const txDone = new Promise<void>((resolve, reject) => {
-      tx.oncomplete = () => resolve();
-      tx.onabort = () => reject(tx.error ?? new Error('IDB transaction aborted'));
-      tx.onerror = () => reject(tx.error ?? new Error('IDB transaction failed'));
-    });
-    const store = tx.objectStore(STORE_NAME);
-
-    const allKeys = await idbGetAllKeys(store);
+    const keyTx = database.transaction(STORE_NAME, 'readonly');
+    const keyTxDone = transactionDone(keyTx);
+    const allKeys = await idbGetAllKeys(keyTx.objectStore(STORE_NAME));
+    await keyTxDone;
     const keys = allKeys
       .filter((key): key is string => typeof key === 'string')
       .sort();
 
     if (keys.length === 0) {
-      await txDone;
       return null;
     }
 
@@ -529,17 +731,28 @@ export async function collectIndexedDbRecoverySnapshot(): Promise<IndexedDbRecov
       (key) => key.startsWith('chat:') && !isPackedKey(key)
     );
     const packedChatKeys = keys.filter(isPackedKey);
+    const recordTx = database.transaction(STORE_NAME, 'readonly');
+    const recordTxDone = transactionDone(recordTx);
+    const recordStore = recordTx.objectStore(STORE_NAME);
+    const [meta, legacy, contentStore, branchClipboard, rawValues, packedValues] = await Promise.all([
+      idbGet<MetaRecord>(recordStore, META_KEY),
+      idbGet<LegacyChatDataRecord>(recordStore, LEGACY_KEY),
+      idbGet<ContentStoreRecord>(recordStore, CONTENT_STORE_KEY),
+      idbGet<BranchClipboardRecord>(recordStore, BRANCH_CLIPBOARD_KEY),
+      Promise.all(rawChatKeys.map((key) => idbGet<ChatRecord>(recordStore, key))),
+      Promise.all(
+        packedChatKeys.map((key) =>
+          idbGet<{ compressed: Uint8Array; generation: number }>(recordStore, key)
+        )
+      ),
+    ]);
+    await recordTxDone;
+
     const chats: IndexedDbRecoveryChatSnapshot[] = [];
 
-    const [meta, legacy, contentStore, branchClipboard] = await Promise.all([
-      idbGet<MetaRecord>(store, META_KEY),
-      idbGet<LegacyChatDataRecord>(store, LEGACY_KEY),
-      idbGet<ContentStoreRecord>(store, CONTENT_STORE_KEY),
-      idbGet<BranchClipboardRecord>(store, BRANCH_CLIPBOARD_KEY),
-    ]);
-
-    for (const key of rawChatKeys) {
-      const record = await idbGet<ChatRecord>(store, key);
+    for (let i = 0; i < rawChatKeys.length; i++) {
+      const key = rawChatKeys[i];
+      const record = rawValues[i];
       chats.push({
         key,
         packed: false,
@@ -548,8 +761,9 @@ export async function collectIndexedDbRecoverySnapshot(): Promise<IndexedDbRecov
       });
     }
 
-    for (const key of packedChatKeys) {
-      const packed = await idbGet<{ compressed: Uint8Array; generation: number }>(store, key);
+    for (let i = 0; i < packedChatKeys.length; i++) {
+      const key = packedChatKeys[i];
+      const packed = packedValues[i];
       const snapshot: IndexedDbRecoveryChatSnapshot = {
         key: key.slice(0, -':packed'.length),
         packed: true,
@@ -562,6 +776,7 @@ export async function collectIndexedDbRecoverySnapshot(): Promise<IndexedDbRecov
             ? packed.compressed
             : new Uint8Array(packed.compressed as ArrayBufferLike);
           snapshot.compressedBytes = compressed.byteLength;
+          snapshot.compressedBase64 = bytesToBase64(compressed);
           snapshot.record = await decompressChatRecord<ChatRecord>(compressed);
         } catch (error) {
           snapshot.error = error instanceof Error ? error.message : String(error);
@@ -583,13 +798,18 @@ export async function collectIndexedDbRecoverySnapshot(): Promise<IndexedDbRecov
       chats,
     };
 
-    await txDone;
-
     return snapshot;
   } finally {
     database.close();
   }
 }
+
+export const collectIndexedDbRecoverySnapshot = (
+  options: { consistent?: boolean } = {}
+): Promise<IndexedDbRecoverySnapshot | null> =>
+  options.consistent === false
+    ? collectIndexedDbRecoverySnapshotUnlocked()
+    : withCrossContextStorageLock(collectIndexedDbRecoverySnapshotUnlocked);
 
 /**
  * Track chat IDs from the previous save for differential writes.
@@ -610,18 +830,40 @@ function computeChatFingerprint(chat: PersistedChat): string {
  * 3. Write meta (commit marker)
  * 4. GC (deferred, safe to skip on crash)
  */
-export const saveChatData = async (data: PersistedChatData): Promise<void> => {
+const saveChatDataUnlocked = async (data: PersistedChatData): Promise<void> => {
   if (!hasIndexedDb()) return;
+  if (chatDataWritesBlocked) {
+    throw new Error('Chat data writes are blocked because persisted data did not load safely');
+  }
   debugReport('idb-save', { label: 'IndexedDB Save', status: 'active' });
   if (migrationInProgress) {
-    console.warn('[saveChatData] Skipped — migration in progress');
-    return;
+    throw new Error('Chat data save deferred because migration is in progress');
   }
 
+  const diskMeta = await withTransaction('readonly', (store) =>
+    idbGet<MetaRecord>(store, META_KEY)
+  );
+  if (
+    diskMeta &&
+    diskMeta.generation > currentGeneration &&
+    hasLoadedCommittedSnapshot
+  ) {
+    throw new Error(
+      'Refusing to overwrite chat data because a newer generation was saved by another context'
+    );
+  }
+  currentGeneration = Math.max(currentGeneration, diskMeta?.generation ?? 0);
   const nextGen = currentGeneration + 1;
   const chats = (data.chats ?? []) as PersistedChat[];
   const contentStore = data.contentStore ?? {};
   const clipboard = data.branchClipboard ?? null;
+  const integrityErrors = findPersistedDataIntegrityErrors(chats, contentStore, clipboard);
+  if (integrityErrors.length > 0) {
+    throw new Error(`Refusing to persist inconsistent chat data: ${integrityErrors.join('; ')}`);
+  }
+  if ((diskMeta?.chatIds?.length ?? 0) > 0 && chats.length === 0) {
+    throw new Error('Refusing to replace a non-empty committed store with an empty chat list');
+  }
 
   // Content store is already a superset: deferred GC entries (refCount<=0)
   // are still present in the store, so no separate superset build is needed.
@@ -673,6 +915,7 @@ export const saveChatData = async (data: PersistedChatData): Promise<void> => {
   });
 
   currentGeneration = nextGen;
+  hasLoadedCommittedSnapshot = true;
 
   // Step 4: Deferred GC — read-modify-write from IDB to avoid
   // overwriting content-store entries added by concurrent saves.
@@ -724,87 +967,121 @@ export const saveChatData = async (data: PersistedChatData): Promise<void> => {
   debugReport('idb-save', { status: 'done', detail: `${changedChatIds.length} chats` });
 };
 
+export const saveChatData = (data: PersistedChatData): Promise<void> =>
+  enqueueStorageMutation(() => saveChatDataUnlocked(data));
+
 // ─── Copy-on-Write Compression ───
 
 /** Active compression abort controller — only one compression cycle runs at a time */
 let compressionAbort: AbortController | null = null;
 
 /**
- * Compress a single chat: write packed, then delete raw (2-phase for safety).
+ * Compress a single chat with an atomic compare-and-swap transaction.
  * Returns true if compression succeeded.
  */
-async function compressSingleChat(chatId: string, signal?: AbortSignal): Promise<boolean> {
-  if (!isCompressionSupported()) return false;
-
+async function commitCompressedChatUnlocked(
+  chatId: string,
+  rawRecord: ChatRecord,
+  compressed: Uint8Array,
+  signal?: AbortSignal
+): Promise<boolean> {
+  if (chatDataWritesBlocked || signal?.aborted) return false;
   const key = chatKey(chatId);
   const pk = packedKey(key);
-
-  // Read raw record
-  const rawRecord = await withTransaction('readonly', async (store) => {
-    return idbGet<ChatRecord>(store, key);
-  });
-
-  if (!rawRecord?.chat) return false;
-  if (signal?.aborted) return false;
-
-  // Compress
-  const compressed = await compressChatRecord(rawRecord);
-  if (signal?.aborted) return false;
-
-  // Phase 1: Write packed key
-  await withTransaction('readwrite', async (store) => {
+  // Compare-and-swap the raw record and packed replacement in one atomic
+  // transaction. If another writer changed the chat while compression was
+  // running, preserve the newer raw record.
+  return withTransaction('readwrite', async (store) => {
+    const currentRaw = await idbGet<ChatRecord>(store, key);
+    if (
+      !currentRaw?.chat ||
+      currentRaw.generation !== rawRecord.generation ||
+      computeChatFingerprint(currentRaw.chat) !== computeChatFingerprint(rawRecord.chat)
+    ) {
+      return false;
+    }
     await idbPut(store, pk, {
       compressed,
       generation: rawRecord.generation,
     });
-  });
-
-  if (signal?.aborted) return false;
-
-  // Phase 2: Delete raw key (packed is now durable)
-  await withTransaction('readwrite', async (store) => {
     await idbDelete(store, key);
+    return true;
   });
-
-  return true;
 }
 
+export const compressSingleChat = (
+  chatId: string,
+  signal?: AbortSignal
+): Promise<boolean> => {
+  if (!isCompressionSupported() || chatDataWritesBlocked || signal?.aborted) {
+    return Promise.resolve(false);
+  }
+
+  // Gzip can be relatively slow. Do the immutable read and compression before
+  // taking the mutation queue/Web Lock, then use CAS for the short commit.
+  return withTransaction('readonly', (store) =>
+    idbGet<ChatRecord>(store, chatKey(chatId))
+  ).then(async (rawRecord) => {
+    if (!rawRecord?.chat || signal?.aborted || chatDataWritesBlocked) return false;
+    const compressed = await compressChatRecord(rawRecord);
+    if (signal?.aborted || chatDataWritesBlocked) return false;
+    return enqueueStorageMutation(() =>
+      commitCompressedChatUnlocked(chatId, rawRecord, compressed, signal)
+    );
+  });
+};
+
 /**
- * Decompress a single chat: write raw, then delete packed (2-phase for safety).
+ * Decompress a single chat without overwriting an equal or newer raw record.
  * Returns true if decompression occurred.
  */
-async function decompressSingleChat(chatId: string): Promise<boolean> {
+async function commitDecompressedChatUnlocked(
+  chatId: string,
+  packed: { compressed: Uint8Array; generation: number },
+  record: ChatRecord
+): Promise<boolean> {
+  if (chatDataWritesBlocked) return false;
   const key = chatKey(chatId);
   const pk = packedKey(key);
-
-  // Check if packed exists
-  const packed = await withTransaction('readonly', async (store) => {
-    return idbGet<{ compressed: Uint8Array; generation: number }>(store, pk);
-  });
-
-  if (!packed?.compressed) return false;
-
-  const record = await decompressChatRecord<ChatRecord>(
-    packed.compressed instanceof Uint8Array
-      ? packed.compressed
-      : new Uint8Array(packed.compressed as ArrayBufferLike)
-  );
-
-  // Phase 1: Write raw key
-  await withTransaction('readwrite', async (store) => {
+  return withTransaction('readwrite', async (store) => {
+    const [currentPacked, currentRaw] = await Promise.all([
+      idbGet<{ compressed: Uint8Array; generation: number }>(store, pk),
+      idbGet<ChatRecord>(store, key),
+    ]);
+    if (!currentPacked?.compressed || currentPacked.generation !== packed.generation) {
+      return false;
+    }
+    if (currentRaw && currentRaw.generation >= packed.generation) {
+      await idbDelete(store, pk);
+      return false;
+    }
     await idbPut(store, key, {
       chat: record.chat,
       generation: packed.generation,
     });
-  });
-
-  // Phase 2: Delete packed key
-  await withTransaction('readwrite', async (store) => {
     await idbDelete(store, pk);
+    return true;
   });
-
-  return true;
 }
+
+export const decompressSingleChat = async (chatId: string): Promise<boolean> => {
+  if (chatDataWritesBlocked) return false;
+
+  // As with compression, keep the CPU/stream work outside the mutation lock.
+  // The commit re-checks the generation so a newer packed/raw record wins.
+  const packed = await withTransaction('readonly', (store) =>
+    idbGet<{ compressed: Uint8Array; generation: number }>(store, packedKey(chatKey(chatId)))
+  );
+  if (!packed?.compressed || chatDataWritesBlocked) return false;
+  const compressed = packed.compressed instanceof Uint8Array
+    ? packed.compressed
+    : new Uint8Array(packed.compressed as ArrayBufferLike);
+  const record = await decompressChatRecord<ChatRecord>(compressed);
+  if (chatDataWritesBlocked) return false;
+  return enqueueStorageMutation(() =>
+    commitDecompressedChatUnlocked(chatId, { ...packed, compressed }, record)
+  );
+};
 
 /**
  * Compress inactive chats. `activeChatId` is excluded.
@@ -814,7 +1091,7 @@ export async function compressInactiveChats(
   activeChatId: string | undefined,
   signal?: AbortSignal
 ): Promise<number> {
-  if (!isCompressionSupported()) return 0;
+  if (!isCompressionSupported() || chatDataWritesBlocked) return 0;
 
   // Find raw chat keys that are not the active chat
   const rawKeys = await withTransaction('readonly', async (store) => {
@@ -876,7 +1153,7 @@ function scheduleIdleCompression() {
 }
 
 function triggerCompression() {
-  if (migrationInProgress) return;
+  if (migrationInProgress || chatDataWritesBlocked) return;
   cancelCompression();
   const abort = new AbortController();
   compressionAbort = abort;
@@ -911,6 +1188,7 @@ function handleVisibilityChange() {
  * Triggers compression of the previously active chat.
  */
 export function notifyActiveChatChanged(chatId: string | undefined): void {
+  if (chatDataWritesBlocked) return;
   schedulerActiveChatId = chatId;
   cancelCompression();
 
@@ -932,7 +1210,9 @@ export function notifyActiveChatChanged(chatId: string | undefined): void {
  * Returns a cleanup function.
  */
 export function initCompressionScheduler(activeChatId: string | undefined): () => void {
-  if (!isCompressionSupported() || migrationInProgress) return () => {};
+  if (!isCompressionSupported() || migrationInProgress || chatDataWritesBlocked) {
+    return () => {};
+  }
 
   schedulerActiveChatId = activeChatId;
   document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -948,7 +1228,7 @@ export function initCompressionScheduler(activeChatId: string | undefined): () =
   };
 }
 
-export const clearChatData = async (): Promise<void> => {
+const clearChatDataUnlocked = async (): Promise<void> => {
   if (!hasIndexedDb()) return;
 
   await withTransaction('readwrite', async (store) => {
@@ -959,8 +1239,13 @@ export const clearChatData = async (): Promise<void> => {
   });
 
   currentGeneration = 0;
+  hasLoadedCommittedSnapshot = false;
   previousContentStoreSnapshot = {};
+  previousChatSnapshot = new Map();
 };
+
+export const clearChatData = (): Promise<void> =>
+  enqueueStorageMutation(clearChatDataUnlocked);
 
 // Exported for testing
 export {
@@ -968,14 +1253,15 @@ export {
   buildSupersetForCommit,
   runResidualGC,
   computeChatFingerprint,
-  compressSingleChat,
-  decompressSingleChat,
   currentGeneration as _currentGeneration,
   previousContentStoreSnapshot as _previousContentStoreSnapshot,
 };
 
 export const _resetInternalState = () => {
   currentGeneration = 0;
+  hasLoadedCommittedSnapshot = false;
   previousContentStoreSnapshot = {};
   previousChatSnapshot = new Map();
+  chatDataWritesBlocked = false;
+  storageMutationQueue = Promise.resolve();
 };

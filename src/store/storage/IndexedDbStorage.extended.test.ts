@@ -28,6 +28,8 @@ import {
   notifyActiveChatChanged,
   initCompressionScheduler,
   collectIndexedDbRecoverySnapshot,
+  setChatDataWritesBlocked,
+  areChatDataWritesBlocked,
   _resetInternalState,
 } from './IndexedDbStorage';
 import type { ContentStoreData, ContentEntry } from '@utils/contentStore';
@@ -189,11 +191,74 @@ describe('collectIndexedDbRecoverySnapshot', () => {
   it('returns null when IndexedDB has no persisted keys', async () => {
     await expect(collectIndexedDbRecoverySnapshot()).resolves.toBeNull();
   });
+
+  it('exports multiple packed chats after reading all bytes before decompression', async () => {
+    await saveChatData({
+      chats: [makeChat('active', ['h1']), makeChat('packed-a', ['h2']), makeChat('packed-b', ['h3'])],
+      contentStore: {
+        h1: textEntry('one'),
+        h2: textEntry('two'),
+        h3: textEntry('three'),
+      },
+      branchClipboard: null,
+    });
+    await compressSingleChat('packed-a');
+    await compressSingleChat('packed-b');
+
+    const snapshot = await collectIndexedDbRecoverySnapshot();
+
+    expect(snapshot?.chats).toHaveLength(3);
+    expect(snapshot?.chats.filter((chat) => chat.packed)).toHaveLength(2);
+    expect(snapshot?.chats.every((chat) => chat.record?.chat)).toBe(true);
+  });
 });
 
 // ─── Crash Recovery (Priority High) ───
 
 describe('loadSplitData crash recovery', () => {
+  it('loads multiple packed chats without keeping the transaction open during gzip', async () => {
+    await saveChatData({
+      chats: [makeChat('active', ['h1']), makeChat('packed-a', ['h2']), makeChat('packed-b', ['h3'])],
+      contentStore: {
+        h1: textEntry('one'),
+        h2: textEntry('two'),
+        h3: textEntry('three'),
+      },
+      branchClipboard: null,
+    });
+    await compressSingleChat('packed-a');
+    await compressSingleChat('packed-b');
+    _resetInternalState();
+
+    const result = await loadChatData(baseState);
+
+    expect(result?.loadStatus).toBe('ok');
+    expect(result?.chats?.map((chat) => chat.id)).toEqual([
+      'active',
+      'packed-a',
+      'packed-b',
+    ]);
+  });
+
+  it('falls back to a valid packed record when the raw record is malformed', async () => {
+    await saveChatData({
+      chats: [makeChat('chat-a', ['h1'])],
+      contentStore: { h1: textEntry('safe') },
+      branchClipboard: null,
+    });
+    await compressSingleChat('chat-a');
+    await idbPut('chat:chat-a', {
+      chat: makeChat('wrong-id', ['h1']),
+      generation: 1,
+    });
+    _resetInternalState();
+
+    const result = await loadChatData(baseState);
+
+    expect(result?.loadStatus).toBe('ok');
+    expect(result?.chats?.[0].id).toBe('chat-a');
+  });
+
   it('recovers new chat when content-store=G+1, chat(new)=G+1, meta=G', async () => {
     // Simulate crash after Step 1-2 but before Step 3 (meta update)
     const chat = makeChat('new-chat', ['h1']);
@@ -418,6 +483,167 @@ describe('Phase 3 interruption resilience', () => {
     expect(result).not.toBeNull();
     expect(result!.chats!.length).toBe(1);
     expect(result!.chats![0].id).toBe('good');
+    expect(result!.loadStatus).toBe('degraded');
+    expect(result!.missingChatIds).toEqual(['bad']);
+    // No residual GC is allowed after a partial load because h2 may still be
+    // needed to recover the unreadable chat.
+    expect(result!.contentStore).toHaveProperty('h2');
+  });
+});
+
+describe('write safety and serialization', () => {
+  it('blocks writes after an unsafe startup without mutating committed data', async () => {
+    const original = {
+      chats: [makeChat('kept', ['h1'])],
+      contentStore: { h1: textEntry('keep me') },
+      branchClipboard: null,
+    };
+    await saveChatData(original);
+    const metaBefore = await idbGet<any>('meta');
+
+    setChatDataWritesBlocked(true);
+    expect(areChatDataWritesBlocked()).toBe(true);
+    await expect(
+      saveChatData({
+        chats: [makeChat('replacement', ['h2'])],
+        contentStore: { h2: textEntry('do not write') },
+        branchClipboard: null,
+      })
+    ).rejects.toThrow(/writes are blocked/);
+
+    expect(await idbGet('meta')).toEqual(metaBefore);
+    expect(await idbGet('chat:kept')).toBeDefined();
+    expect(await idbGet('chat:replacement')).toBeUndefined();
+  });
+
+  it('never regresses generation when module state is reset before a save', async () => {
+    const first = {
+      chats: [makeChat('chat-a', ['h1'])],
+      contentStore: { h1: textEntry('one') },
+      branchClipboard: null,
+    };
+    await saveChatData(first);
+    const firstMeta = await idbGet<any>('meta');
+    _resetInternalState();
+
+    await saveChatData({
+      chats: [makeChat('chat-a', ['h1']), makeChat('chat-b', ['h2'])],
+      contentStore: { h1: textEntry('one'), h2: textEntry('two') },
+      branchClipboard: null,
+    });
+
+    const secondMeta = await idbGet<any>('meta');
+    expect(secondMeta.generation).toBe(firstMeta.generation + 1);
+    expect(secondMeta.chatIds).toEqual(['chat-a', 'chat-b']);
+  });
+
+  it('rejects a stale loaded context after another context advances the generation', async () => {
+    const snapshot = {
+      chats: [makeChat('chat-a', ['h1'])],
+      contentStore: { h1: textEntry('one') },
+      branchClipboard: null,
+    };
+    await saveChatData(snapshot);
+    _resetInternalState();
+    await loadChatData(baseState);
+
+    const loadedMeta = await idbGet<any>('meta');
+    await idbPut('meta', {
+      ...loadedMeta,
+      generation: loadedMeta.generation + 1,
+    });
+
+    await expect(saveChatData(snapshot)).rejects.toThrow(/newer generation/);
+    expect((await idbGet<any>('meta')).generation).toBe(loadedMeta.generation + 1);
+  });
+
+  it('rejects a snapshot with missing content before writing any commit records', async () => {
+    await expect(
+      saveChatData({
+        chats: [makeChat('broken', ['missing-hash'])],
+        contentStore: {},
+        branchClipboard: null,
+      })
+    ).rejects.toThrow(/inconsistent chat data/);
+
+    expect(await idbGet('meta')).toBeUndefined();
+    expect(await idbGet('content-store')).toBeUndefined();
+  });
+
+  it('rejects an empty snapshot when committed chats already exist', async () => {
+    await saveChatData({
+      chats: [makeChat('kept', ['h1'])],
+      contentStore: { h1: textEntry('keep') },
+      branchClipboard: null,
+    });
+    const metaBefore = await idbGet<any>('meta');
+
+    await expect(
+      saveChatData({ chats: [], contentStore: {}, branchClipboard: null })
+    ).rejects.toThrow(/empty chat list/);
+
+    expect(await idbGet('meta')).toEqual(metaBefore);
+    expect(await idbGet('chat:kept')).toBeDefined();
+  });
+
+  it('serializes concurrent saves into coherent generations', async () => {
+    const first = saveChatData({
+      chats: [makeChat('chat-a', ['h1'])],
+      contentStore: { h1: textEntry('one') },
+      branchClipboard: null,
+    });
+    const second = saveChatData({
+      chats: [makeChat('chat-a', ['h1']), makeChat('chat-b', ['h2'])],
+      contentStore: { h1: textEntry('one'), h2: textEntry('two') },
+      branchClipboard: null,
+    });
+
+    await Promise.all([first, second]);
+    _resetInternalState();
+    const loaded = await loadChatData(baseState);
+
+    expect(loaded?.loadStatus).toBe('ok');
+    expect(loaded?.chats?.map((chat) => chat.id)).toEqual(['chat-a', 'chat-b']);
+    expect((await idbGet<any>('meta')).generation).toBe(2);
+  });
+});
+
+describe('legacy migration integrity', () => {
+  it('re-reads the committed split store when another loader wins migration', async () => {
+    await idbPut('chat-data', {
+      version: 18,
+      chats: [makeChat('legacy-chat', ['h1'])],
+      contentStore: { h1: textEntry('preserved') },
+      branchClipboard: null,
+    });
+
+    const [first, second] = await Promise.all([
+      loadChatData(baseState),
+      loadChatData(baseState),
+    ]);
+
+    expect(first?.loadStatus).toBe('ok');
+    expect(second?.loadStatus).toBe('ok');
+    expect(first?.chats?.map((chat) => chat.id)).toEqual(['legacy-chat']);
+    expect(second?.chats?.map((chat) => chat.id)).toEqual(['legacy-chat']);
+    expect((await idbGet<any>('meta')).chatIds).toEqual(['legacy-chat']);
+    expect(await idbGet('chat-data')).toBeUndefined();
+  });
+
+  it('preserves an inconsistent legacy record and reports a degraded load', async () => {
+    await idbPut('chat-data', {
+      version: 17,
+      chats: [makeChat('legacy-chat', ['missing-hash'])],
+      contentStore: {},
+      branchClipboard: null,
+    });
+
+    const result = await loadChatData(baseState);
+
+    expect(result?.loadStatus).toBe('degraded');
+    expect(result?.errors.join(' ')).toMatch(/Missing contentHash/);
+    expect(await idbGet('chat-data')).toBeDefined();
+    expect(await idbGet('meta')).toBeUndefined();
   });
 });
 
