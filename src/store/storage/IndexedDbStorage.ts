@@ -551,6 +551,20 @@ async function loadSplitData(
     const chatRecords: Array<{ key: string; record: ChatRecord }> = [];
     const validRawKeys = new Set<string>();
 
+    // When meta and content-store describe the same committed generation,
+    // meta.chatIds is authoritative. Records outside that set are leftovers
+    // from an interrupted cleanup, not evidence that the committed snapshot
+    // failed to load. Keep them on disk for recovery, but do not let a
+    // malformed orphan permanently force the app into read-only mode.
+    const csGen = csRecord?.generation ?? 0;
+    const committedGen = Math.max(G, csGen);
+    const authoritativeChatIds =
+      csGen <= G && meta.chatIds ? new Set(meta.chatIds) : null;
+    const belongsToCommittedSnapshot = (key: string) => {
+      if (!authoritativeChatIds) return true;
+      return authoritativeChatIds.has(key.slice('chat:'.length));
+    };
+
     for (let i = 0; i < rawChatKeys.length; i++) {
       const key = rawChatKeys[i];
       const record = rawValues[i];
@@ -563,7 +577,7 @@ async function loadSplitData(
       ) {
         validRawKeys.add(key);
         chatRecords.push({ key, record });
-      } else {
+      } else if (belongsToCommittedSnapshot(key)) {
         errors.push(`Invalid raw chat record: ${key}`);
       }
     }
@@ -594,9 +608,11 @@ async function loadSplitData(
           if (invalidRawIndex >= 0) errors.splice(invalidRawIndex, 1);
         } catch (e) {
           console.warn(`[IndexedDb] Failed to decompress ${pk}, skipping`, e);
-          errors.push(`Failed to decompress packed chat: ${pk}`);
+          if (belongsToCommittedSnapshot(rawKey)) {
+            errors.push(`Failed to decompress packed chat: ${pk}`);
+          }
         }
-      } else {
+      } else if (belongsToCommittedSnapshot(rawKey)) {
         errors.push(`Invalid packed chat record: ${pk}`);
       }
     }
@@ -605,8 +621,6 @@ async function loadSplitData(
 
     // Determine the effective committed generation.
     // content-store is written first (step 1), so it may be ahead of meta.
-    const csGen = csRecord?.generation ?? 0;
-    const committedGen = Math.max(G, csGen);
 
     // Chat records: filter by generation AND by the authoritative chat ID list
     // stored in meta. This prevents deleted chats from resurrecting when the
@@ -615,8 +629,6 @@ async function loadSplitData(
     // However, if csGen > G (content-store was written but meta was not updated),
     // meta.chatIds is stale and may not include chats added in the newer generation.
     // In that case, skip chatIds filtering to avoid dropping valid new chats.
-    const authoritativeChatIds =
-      csGen <= G && meta.chatIds ? new Set(meta.chatIds) : null;
     const chats: PersistedChat[] = [];
     for (const { record } of chatRecords) {
       if (record.generation > committedGen) {
