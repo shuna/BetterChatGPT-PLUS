@@ -259,6 +259,44 @@ describe('loadSplitData crash recovery', () => {
     expect(result?.chats?.[0].id).toBe('chat-a');
   });
 
+  it('does not degrade a valid commit because of a malformed orphan record', async () => {
+    await saveChatData({
+      chats: [makeChat('committed', ['h1'])],
+      contentStore: { h1: textEntry('safe') },
+      branchClipboard: null,
+    });
+    await idbPut('chat:old-orphan:packed', {
+      compressed: null,
+      generation: 1,
+    });
+    _resetInternalState();
+
+    const result = await loadChatData(baseState);
+
+    expect(result?.loadStatus).toBe('ok');
+    expect(result?.chats?.map((chat) => chat.id)).toEqual(['committed']);
+    expect(result?.errors).toEqual([]);
+    // Loading must remain non-destructive so the orphan can still be included
+    // in a recovery export if needed.
+    expect(await idbGet('chat:old-orphan:packed')).toBeDefined();
+  });
+
+  it('still degrades when the malformed record belongs to the committed snapshot', async () => {
+    await idbPut('meta', { version: 18, generation: 1, chatIds: ['committed'] });
+    await idbPut('content-store', { data: {}, generation: 1 });
+    await idbPut('chat:committed:packed', {
+      compressed: null,
+      generation: 1,
+    });
+    await idbPut('branch-clipboard', { data: null, generation: 1 });
+
+    const result = await loadChatData(baseState);
+
+    expect(result?.loadStatus).toBe('degraded');
+    expect(result?.missingChatIds).toEqual(['committed']);
+    expect(result?.errors.join(' ')).toMatch(/Invalid packed chat record/);
+  });
+
   it('recovers new chat when content-store=G+1, chat(new)=G+1, meta=G', async () => {
     // Simulate crash after Step 1-2 but before Step 3 (meta update)
     const chat = makeChat('new-chat', ['h1']);
