@@ -6,6 +6,7 @@ import ChatFolder from './ChatFolder';
 import ChatHistory from './ChatHistory';
 import GrepResults from './GrepResults';
 import SidebarSearchHistory from './SidebarSearchHistory';
+import { expandExistingFolder } from './chatHistoryFolderUtils';
 
 import {
   ChatHistoryInterface,
@@ -206,11 +207,8 @@ const ChatHistoryList = ({
 
         if (folderId) {
           const currentFolders = useStore.getState().folders;
-          if (!currentFolders[folderId]?.expanded) {
-            const updatedFolders: FolderCollection = JSON.parse(
-              JSON.stringify(currentFolders)
-            );
-            updatedFolders[folderId].expanded = true;
+          const updatedFolders = expandExistingFolder(currentFolders, folderId);
+          if (updatedFolders) {
             setFolders(updatedFolders);
           }
         }
