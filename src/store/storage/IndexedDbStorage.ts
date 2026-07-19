@@ -1,4 +1,7 @@
-import { getStreamingChatIds } from '@utils/streamingBuffer';
+import {
+  getStreamingChatIds,
+  isStreamingContentHash,
+} from '@utils/streamingBuffer';
 import { debugReport } from '@store/debug-store';
 import { STORE_VERSION } from '@store/version';
 import {
@@ -9,6 +12,7 @@ import type { StoreState } from '@store/store';
 import type { ContentStoreData } from '@utils/contentStore';
 import { flushPendingGC, getPendingGCHashes } from '@utils/contentStore';
 import type { BranchClipboard, ChatInterface } from '@type/chat';
+import { ensureUniqueChatIds } from '@utils/chatIdentity';
 import {
   packedKey,
   isPackedKey,
@@ -236,13 +240,21 @@ function collectReferencedHashes(
 ): Set<string> {
   const refs = new Set<string>();
   for (const chat of chats) {
-    if (chat.branchTree) {
+    if (
+      chat.branchTree?.nodes &&
+      typeof chat.branchTree.nodes === 'object' &&
+      !Array.isArray(chat.branchTree.nodes)
+    ) {
       for (const node of Object.values(chat.branchTree.nodes)) {
         refs.add(node.contentHash);
       }
     }
   }
-  if (clipboard) {
+  if (
+    clipboard?.nodes &&
+    typeof clipboard.nodes === 'object' &&
+    !Array.isArray(clipboard.nodes)
+  ) {
     for (const node of Object.values(clipboard.nodes)) {
       refs.add(node.contentHash);
     }
@@ -253,12 +265,24 @@ function collectReferencedHashes(
 function findPersistedDataIntegrityErrors(
   chats: PersistedChat[],
   contentStore: ContentStoreData,
-  clipboard: BranchClipboard | null
+  clipboard: BranchClipboard | null,
+  options: { allowTransientStreamingHashes?: boolean } = {}
 ): string[] {
   const errors: string[] = [];
   const seenChatIds = new Set<string>();
 
   const checkContentHash = (hash: unknown, owner: string) => {
+    // A page can close between persisting a streaming placeholder and the
+    // final buffered snapshot. Rehydration already replaces these known
+    // transient references with recoverable empty content. Let that repair
+    // run instead of classifying the whole committed snapshot as corrupt.
+    if (
+      options.allowTransientStreamingHashes &&
+      typeof hash === 'string' &&
+      isStreamingContentHash(hash)
+    ) {
+      return;
+    }
     if (typeof hash !== 'string' || !contentStore[hash]) {
       errors.push(`Missing contentHash for ${owner}: ${String(hash)}`);
       return;
@@ -290,7 +314,11 @@ function findPersistedDataIntegrityErrors(
     seenChatIds.add(chat.id);
 
     if (!chat.branchTree) continue;
-    if (!chat.branchTree.nodes || typeof chat.branchTree.nodes !== 'object') {
+    if (
+      !chat.branchTree.nodes ||
+      typeof chat.branchTree.nodes !== 'object' ||
+      Array.isArray(chat.branchTree.nodes)
+    ) {
       errors.push(`Invalid branchTree nodes: ${chat.id}`);
       continue;
     }
@@ -299,7 +327,14 @@ function findPersistedDataIntegrityErrors(
     }
   }
 
-  if (clipboard?.nodes && typeof clipboard.nodes === 'object') {
+  if (
+    clipboard &&
+    (!clipboard.nodes ||
+      typeof clipboard.nodes !== 'object' ||
+      Array.isArray(clipboard.nodes))
+  ) {
+    errors.push('Invalid branch clipboard nodes');
+  } else if (clipboard?.nodes) {
     for (const node of Object.values(clipboard.nodes)) {
       checkContentHash(node?.contentHash, 'branch clipboard');
     }
@@ -385,8 +420,30 @@ async function migrateLegacyData(
       migratePersistedState(legacy, legacyVersion);
     }
 
+    // Rehydrate has always repaired invalid/duplicate IDs and malformed node
+    // maps. Apply the same non-destructive normalization to a migration copy
+    // before integrity validation, otherwise repairable legacy data is locked
+    // behind the recovery banner forever.
+    const legacyChats = ((legacy.chats ?? []) as PersistedChat[]).map((chat) => {
+      if (!chat || typeof chat !== 'object' || !chat.branchTree) return chat;
+      const nodes = chat.branchTree.nodes;
+      return {
+        ...chat,
+        branchTree: {
+          ...chat.branchTree,
+          nodes:
+            nodes && typeof nodes === 'object' && !Array.isArray(nodes)
+              ? { ...nodes }
+              : {},
+        },
+      };
+    });
+    if (legacyChats.every((chat) => chat && typeof chat === 'object')) {
+      ensureUniqueChatIds(legacyChats as ChatInterface[]);
+    }
+
     const chatData: PersistedChatData = {
-      chats: legacy.chats,
+      chats: legacyChats,
       contentStore: legacy.contentStore,
       branchClipboard: legacy.branchClipboard ?? null,
     };
@@ -395,7 +452,8 @@ async function migrateLegacyData(
     const integrityErrors = findPersistedDataIntegrityErrors(
       chats,
       chatData.contentStore ?? {},
-      chatData.branchClipboard ?? null
+      chatData.branchClipboard ?? null,
+      { allowTransientStreamingHashes: true }
     );
     if (integrityErrors.length > 0) {
       return {
@@ -549,7 +607,7 @@ async function loadSplitData(
 
     const errors: string[] = [];
     const chatRecords: Array<{ key: string; record: ChatRecord }> = [];
-    const validRawKeys = new Set<string>();
+    const usableRawKeys = new Set<string>();
 
     // When meta and content-store describe the same committed generation,
     // meta.chatIds is authoritative. Records outside that set are leftovers
@@ -575,7 +633,12 @@ async function loadSplitData(
         record.chat.id === expectedId &&
         Number.isFinite(record.generation)
       ) {
-        validRawKeys.add(key);
+        // A raw record from an interrupted future generation is not eligible
+        // for raw-first resolution. A packed record may still contain the
+        // last committed version of the same chat.
+        if (record.generation <= committedGen) {
+          usableRawKeys.add(key);
+        }
         chatRecords.push({ key, record });
       } else if (belongsToCommittedSnapshot(key)) {
         errors.push(`Invalid raw chat record: ${key}`);
@@ -585,7 +648,7 @@ async function loadSplitData(
     for (let i = 0; i < packedChatKeys.length; i++) {
       const pk = packedChatKeys[i];
       const rawKey = pk.slice(0, -':packed'.length);
-      if (validRawKeys.has(rawKey)) continue;
+      if (usableRawKeys.has(rawKey)) continue;
 
       const packed = packedValues[i];
       if (packed?.compressed) {
@@ -689,7 +752,9 @@ async function loadSplitData(
       errors.push(`Missing committed chat: ${id}`);
     }
 
-    errors.push(...findPersistedDataIntegrityErrors(chats, contentStore, clipboard));
+    errors.push(...findPersistedDataIntegrityErrors(chats, contentStore, clipboard, {
+      allowTransientStreamingHashes: true,
+    }));
 
     const loadStatus: ChatDataLoadStatus = errors.length > 0 ? 'degraded' : 'ok';
 

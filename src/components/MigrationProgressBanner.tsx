@@ -20,6 +20,7 @@ const MigrationProgressBanner = () => {
   };
 
   const recoveryRequired = migrationUiState.status === 'storage-recovery-required';
+  const recoveryDetails = migrationUiState.details?.filter(Boolean).slice(0, 3) ?? [];
 
   const handleRecoveryExport = async () => {
     setExporting(true);
@@ -46,6 +47,11 @@ const MigrationProgressBanner = () => {
           {recoveryRequired
             ? '既存データを保護するため保存と圧縮を停止しています。復旧用データを保存してください。'
             : '問題がある場合は、設定からデータをエクスポートし、再インポートしてください。'}
+          {recoveryRequired && recoveryDetails.length > 0 && (
+            <div className='mt-1 text-xs opacity-90 break-all'>
+              詳細: {recoveryDetails.join(' / ')}
+            </div>
+          )}
         </div>
         {recoveryRequired ? (
           <button
