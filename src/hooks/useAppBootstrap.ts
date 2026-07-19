@@ -141,11 +141,13 @@ const useAppBootstrap = () => {
       // Load chat data from IndexedDB
       let indexedDbChatData = null;
       let indexedDbLoadFailed = false;
+      let indexedDbLoadErrors: string[] = [];
       try {
         setBootPhase('loading chat data');
         indexedDbChatData = await loadChatData(useStore.getState());
       } catch (error) {
         indexedDbLoadFailed = true;
+        indexedDbLoadErrors = [error instanceof Error ? error.message : String(error)];
         notifyStorageError(error);
       }
       if (cancelled) return;
@@ -156,6 +158,9 @@ const useAppBootstrap = () => {
         useStore.getState().setMigrationUiState({
           visible: true,
           status: 'storage-recovery-required',
+          details: indexedDbLoadDegraded
+            ? indexedDbChatData?.errors
+            : indexedDbLoadErrors,
         });
         if (indexedDbLoadDegraded) {
           indexedDbLoadFailed = true;
@@ -198,6 +203,7 @@ const useAppBootstrap = () => {
           useStore.getState().setMigrationUiState({
             visible: true,
             status: 'storage-recovery-required',
+            details: [error instanceof Error ? error.message : String(error)],
           });
           notifyStorageError(error);
         }
@@ -211,6 +217,15 @@ const useAppBootstrap = () => {
       // confirmed migration. On degraded/failed loads it remains recoverable.
       if (storageHealthy) {
         localStorage.removeItem('chats');
+        // A previous StrictMode/HMR bootstrap attempt may have failed before
+        // this successful attempt completed. Do not leave a stale recovery
+        // banner visible once the committed snapshot has loaded safely.
+        if (
+          useStore.getState().migrationUiState?.status ===
+          'storage-recovery-required'
+        ) {
+          useStore.getState().setMigrationUiState(null);
+        }
       }
 
       setBootPhase('finalizing');

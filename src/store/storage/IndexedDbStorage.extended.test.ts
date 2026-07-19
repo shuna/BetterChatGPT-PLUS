@@ -35,6 +35,7 @@ import {
 import type { ContentStoreData, ContentEntry } from '@utils/contentStore';
 import type { BranchClipboard, BranchNode, ChatInterface } from '@type/chat';
 import type { StoreState } from '@store/store';
+import { createStreamingContentHash } from '@utils/streamingBuffer';
 
 // ── Helpers ──
 
@@ -259,6 +260,30 @@ describe('loadSplitData crash recovery', () => {
     expect(result?.chats?.[0].id).toBe('chat-a');
   });
 
+  it('falls back to the committed packed record when raw is from a future generation', async () => {
+    const committedChat = makeChat('chat-a', ['h1'], { title: 'committed' });
+    const futureChat = makeChat('chat-a', ['h2'], { title: 'uncommitted' });
+    const { compressChatRecord } = await import('./CompressionService');
+    const compressed = await compressChatRecord({
+      chat: committedChat,
+      generation: 1,
+    });
+    await idbPut('meta', { version: 18, generation: 1, chatIds: ['chat-a'] });
+    await idbPut('content-store', {
+      data: { h1: textEntry('committed content') },
+      generation: 1,
+    });
+    await idbPut('chat:chat-a:packed', { compressed, generation: 1 });
+    await idbPut('chat:chat-a', { chat: futureChat, generation: 2 });
+    await idbPut('branch-clipboard', { data: null, generation: 1 });
+
+    const result = await loadChatData(baseState);
+
+    expect(result?.loadStatus).toBe('ok');
+    expect(result?.chats).toHaveLength(1);
+    expect(result?.chats?.[0].title).toBe('committed');
+  });
+
   it('does not degrade a valid commit because of a malformed orphan record', async () => {
     await saveChatData({
       chats: [makeChat('committed', ['h1'])],
@@ -295,6 +320,38 @@ describe('loadSplitData crash recovery', () => {
     expect(result?.loadStatus).toBe('degraded');
     expect(result?.missingChatIds).toEqual(['committed']);
     expect(result?.errors.join(' ')).toMatch(/Invalid packed chat record/);
+  });
+
+  it('loads a committed transient streaming reference so rehydration can repair it', async () => {
+    const chat = makeChat('interrupted-stream', [
+      createStreamingContentHash('assistant-node'),
+    ]);
+    await idbPut('meta', {
+      version: 18,
+      generation: 1,
+      chatIds: ['interrupted-stream'],
+    });
+    await idbPut('content-store', { data: {}, generation: 1 });
+    await idbPut('chat:interrupted-stream', { chat, generation: 1 });
+    await idbPut('branch-clipboard', { data: null, generation: 1 });
+
+    const result = await loadChatData(baseState);
+
+    expect(result?.loadStatus).toBe('ok');
+    expect(result?.chats?.map((loadedChat) => loadedChat.id)).toEqual([
+      'interrupted-stream',
+    ]);
+    expect(result?.errors).toEqual([]);
+  });
+
+  it('still rejects transient streaming references when saving directly', async () => {
+    await expect(
+      saveChatData({
+        chats: [makeChat('unsafe-save', [createStreamingContentHash('node')])],
+        contentStore: {},
+        branchClipboard: null,
+      })
+    ).rejects.toThrow(/Missing contentHash/);
   });
 
   it('recovers new chat when content-store=G+1, chat(new)=G+1, meta=G', async () => {
@@ -682,6 +739,71 @@ describe('legacy migration integrity', () => {
     expect(result?.errors.join(' ')).toMatch(/Missing contentHash/);
     expect(await idbGet('chat-data')).toBeDefined();
     expect(await idbGet('meta')).toBeUndefined();
+  });
+
+  it('migrates a legacy transient streaming reference for rehydration repair', async () => {
+    await idbPut('chat-data', {
+      version: 18,
+      chats: [
+        makeChat('legacy-stream', [createStreamingContentHash('assistant-node')]),
+      ],
+      contentStore: {},
+      branchClipboard: null,
+    });
+
+    const result = await loadChatData(baseState);
+
+    expect(result?.loadStatus).toBe('ok');
+    expect(result?.chats?.map((chat) => chat.id)).toEqual(['legacy-stream']);
+    expect(await idbGet('chat-data')).toBeUndefined();
+    expect(await idbGet('meta')).toBeDefined();
+  });
+
+  it('repairs duplicate and empty legacy chat ids before split-key migration', async () => {
+    await idbPut('chat-data', {
+      version: 18,
+      chats: [makeChat('duplicate', []), makeChat('duplicate', []), makeChat('', [])],
+      contentStore: {},
+      branchClipboard: null,
+    });
+
+    const result = await loadChatData(baseState);
+    const ids = result?.chats?.map((chat) => chat.id) ?? [];
+
+    expect(result?.loadStatus).toBe('ok');
+    expect(ids).toHaveLength(3);
+    expect(ids.every((id) => typeof id === 'string' && id.length > 0)).toBe(true);
+    expect(new Set(ids).size).toBe(3);
+  });
+
+  it('repairs a malformed legacy branchTree node map before validation', async () => {
+    const chat = makeChat('legacy-tree', []);
+    (chat.branchTree as unknown as { nodes: null }).nodes = null;
+    await idbPut('chat-data', {
+      version: 18,
+      chats: [chat],
+      contentStore: {},
+      branchClipboard: null,
+    });
+
+    const result = await loadChatData(baseState);
+
+    expect(result?.loadStatus).toBe('ok');
+    expect(result?.chats?.[0].branchTree?.nodes).toEqual({});
+  });
+
+  it('reports a malformed clipboard as degraded instead of throwing during GC', async () => {
+    await idbPut('meta', { version: 18, generation: 1, chatIds: [] });
+    await idbPut('content-store', { data: {}, generation: 1 });
+    await idbPut('branch-clipboard', {
+      data: { sourceChat: 'legacy', nodeIds: [] },
+      generation: 1,
+    });
+
+    const result = await loadChatData(baseState);
+
+    expect(result?.loadStatus).toBe('degraded');
+    expect(result?.errors).toContain('Invalid branch clipboard nodes');
   });
 });
 
