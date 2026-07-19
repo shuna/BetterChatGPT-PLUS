@@ -15,6 +15,7 @@ import {
   saveChatData,
   initCompressionScheduler,
   notifyActiveChatChanged,
+  setChatDataWritesBlocked,
 } from '@store/storage/IndexedDbStorage';
 import { notifyStorageError } from '@store/storage/storageErrors';
 import { registerSnapshotFlushCallback } from '@utils/streamingBuffer';
@@ -57,8 +58,15 @@ const useAppBootstrap = () => {
     let cleanupCompression: (() => void) | undefined;
     let saving = false;
     let pendingSave = false;
+    let storageHealthy = false;
+
+    // No chat-data write is allowed until IndexedDB has been loaded and
+    // validated. This prevents a default empty store from overwriting data
+    // after a startup read failure.
+    setChatDataWritesBlocked(true);
 
     const flushChatDataSave = async () => {
+      if (!storageHealthy) return;
       if (saveTimer) {
         window.clearTimeout(saveTimer);
         saveTimer = undefined;
@@ -142,10 +150,27 @@ const useAppBootstrap = () => {
       }
       if (cancelled) return;
 
-      if (
-        (indexedDbChatData?.chats && indexedDbChatData.chats.length > 0) ||
-        (indexedDbChatData?.contentStore && Object.keys(indexedDbChatData.contentStore).length > 0)
-      ) {
+      const indexedDbLoadDegraded = indexedDbChatData?.loadStatus === 'degraded';
+      if (indexedDbLoadFailed || indexedDbLoadDegraded) {
+        setChatDataWritesBlocked(true);
+        useStore.getState().setMigrationUiState({
+          visible: true,
+          status: 'storage-recovery-required',
+        });
+        if (indexedDbLoadDegraded) {
+          indexedDbLoadFailed = true;
+          showBootstrapWarning(
+            i18n.t('storage.degradedChatData', {
+              defaultValue:
+                '会話データの一部を安全に復元できなかったため、上書きを停止しました。既存データは変更されていません。',
+            })
+          );
+          console.error('[bootstrap] IndexedDB chat data is degraded', {
+            missingChatIds: indexedDbChatData?.missingChatIds,
+            errors: indexedDbChatData?.errors,
+          });
+        }
+      } else if (indexedDbChatData) {
         setIndexedDbMigrationComplete(true);
         const nextState = { ...useStore.getState() };
         applyPersistedChatDataState(nextState, indexedDbChatData);
@@ -154,30 +179,44 @@ const useAppBootstrap = () => {
           contentStore: nextState.contentStore,
           currentChatIndex: nextState.currentChatIndex,
         });
+        setChatDataWritesBlocked(false);
+        storageHealthy = true;
       } else if (
-        useStore.getState().chats ||
+        (useStore.getState().chats?.length ?? 0) > 0 ||
         Object.keys(useStore.getState().contentStore ?? {}).length > 0 ||
         useStore.getState().branchClipboard
       ) {
         // First launch with IndexedDB: move existing chat data to IndexedDB
         const chatDataState = createPersistedChatDataState(useStore.getState());
         try {
+          setChatDataWritesBlocked(false);
           await saveChatData(chatDataState);
           setIndexedDbMigrationComplete(true);
+          storageHealthy = true;
         } catch (error) {
+          setChatDataWritesBlocked(true);
+          useStore.getState().setMigrationUiState({
+            visible: true,
+            status: 'storage-recovery-required',
+          });
           notifyStorageError(error);
         }
-      } else {
+      } else if (!indexedDbLoadFailed) {
         setIndexedDbMigrationComplete(true);
+        setChatDataWritesBlocked(false);
+        storageHealthy = true;
       }
 
-      // Remove legacy 'chats' key from localStorage
-      localStorage.removeItem('chats');
+      // Remove the legacy fallback only after a complete, validated load or a
+      // confirmed migration. On degraded/failed loads it remains recoverable.
+      if (storageHealthy) {
+        localStorage.removeItem('chats');
+      }
 
       setBootPhase('finalizing');
 
       // Check if persisted data needs schema migration
-      if (needsDataMigration()) {
+      if (storageHealthy && needsDataMigration()) {
         useStore.getState().setMigrationUiState({
           visible: true,
           status: 'needs-export-import',
@@ -214,7 +253,9 @@ const useAppBootstrap = () => {
         setIsBootstrapped(true);
       }
 
-      // Register streaming snapshot flush callback
+      if (!storageHealthy) return;
+
+      // Register streaming snapshot flush callback only after validated load.
       registerSnapshotFlushCallback(() => void flushChatDataSave());
 
       // Initialize compression scheduler

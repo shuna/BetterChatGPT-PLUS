@@ -2,7 +2,7 @@ import { StoreSlice } from './store';
 
 export interface MigrationUiState {
   visible: boolean;
-  status: 'needs-export-import' | 'done';
+  status: 'needs-export-import' | 'storage-recovery-required' | 'done';
 }
 
 export interface MigrationSlice {

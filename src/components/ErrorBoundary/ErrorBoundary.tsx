@@ -1,9 +1,6 @@
 import React, { Component, type ErrorInfo, type ReactNode } from 'react';
+import { collectIndexedDbRecoverySnapshot } from '@store/storage/IndexedDbStorage';
 
-const DB_NAME = 'weavelet-canvas';
-const DB_VERSION = 1;
-const STORE_NAME = 'persisted-state';
-const CHAT_DATA_KEY = 'chat-data';
 const LS_KEY = 'free-chat-gpt';
 
 interface Props {
@@ -35,24 +32,9 @@ class ErrorBoundary extends Component<Props, State> {
 
   /** Read raw chat data directly from IndexedDB, bypassing Zustand. */
   private readIndexedDb = (): Promise<unknown> =>
-    new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, DB_VERSION);
-      req.onerror = () => reject(req.error);
-      req.onsuccess = () => {
-        const db = req.result;
-        try {
-          const tx = db.transaction(STORE_NAME, 'readonly');
-          const store = tx.objectStore(STORE_NAME);
-          const get = store.get(CHAT_DATA_KEY);
-          get.onsuccess = () => resolve(get.result ?? null);
-          get.onerror = () => reject(get.error);
-        } catch {
-          resolve(null);
-        } finally {
-          db.close();
-        }
-      };
-    });
+    // A render crash may have interrupted the normal mutation path. Prefer a
+    // best-effort snapshot over indefinitely waiting for its Web Lock.
+    collectIndexedDbRecoverySnapshot({ consistent: false });
 
   /** Read localStorage settings (may be lz-string compressed). */
   private readLocalStorage = (): unknown => {
