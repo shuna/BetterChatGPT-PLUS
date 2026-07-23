@@ -141,6 +141,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
   );
   const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
   const chatActiveView = useStore((state) => state.chatActiveView);
+  const suppressScrollNavigation = useStore((state) => state.suppressScrollNavigation);
 
   const model = useStore((state) =>
     state.chats &&
@@ -391,6 +392,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
           scrollNavDebounceRef.current = null;
           const state = useStore.getState();
           if (state.isRestoringNavigation) return;
+          if (Date.now() < state.scrollNavigationSuppressedUntil) return;
           if (Object.values(state.generatingSessions).some((s: any) => s.chatId === currentChatId)) return;
           if (prevTopBubbleNodeIdRef.current === null) {
             // First detection after mount / chat switch — just record, don't push
@@ -497,6 +499,7 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
       const scroller = scrollerRef.current;
       const item = scroller?.querySelector<HTMLElement>(`[data-item-index="${itemIndex}"]`);
       if (!item || !scroller) return;
+      suppressScrollNavigation();
       const scrollerHeight = scroller.clientHeight;
       const itemHeight = item.offsetHeight;
       item.scrollIntoView({
@@ -504,7 +507,14 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
         behavior: 'smooth',
       });
     });
-  }, [pendingChatFocus, currentChatIndex, activePath, items, clearPendingChatFocus]);
+  }, [
+    pendingChatFocus,
+    currentChatIndex,
+    activePath,
+    items,
+    clearPendingChatFocus,
+    suppressScrollNavigation,
+  ]);
 
   // Restore saved scroll anchor on chat switch (when no pendingChatFocus)
   useEffect(() => {
@@ -518,10 +528,11 @@ const ChatContent = ({ isChatFindOpen, onChatFindClose }: ChatContentProps = {})
       const scroller = scrollerRef.current;
       const item = scroller?.querySelector<HTMLElement>(`[data-item-index="${anchor.firstVisibleItemIndex}"]`);
       if (!item || !scroller) return;
+      suppressScrollNavigation();
       item.scrollIntoView({ block: 'start' });
       scroller.scrollTop += anchor.offsetWithinItem;
     });
-  }, [currentChatIndex]); // intentionally only on chat switch (mount)
+  }, [currentChatIndex, pendingChatFocus, currentChatId, getChatScrollAnchor, suppressScrollNavigation]); // intentionally only on chat switch (mount)
 
 
   useEffect(() => {

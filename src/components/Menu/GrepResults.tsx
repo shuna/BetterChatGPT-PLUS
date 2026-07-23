@@ -165,6 +165,7 @@ const GrepResultGroup = ({ result, query }: { result: GrepResult; query: string 
   const [showAll, setShowAll] = useState(false);
   const navigateToGrepResult = useStore((state) => state.navigateToGrepResult);
   const pushNavigationEntry = useStore((state) => state.pushNavigationEntry);
+  const suppressScrollNavigation = useStore((state) => state.suppressScrollNavigation);
   const currentChatIndex = useStore((state) => state.currentChatIndex);
   const chats = useStore((state) => state.chats);
 
@@ -185,6 +186,7 @@ const GrepResultGroup = ({ result, query }: { result: GrepResult; query: string 
       });
     }
     navigateToGrepResult(chatIndex, nodeId);
+    suppressScrollNavigation();
     triggerHighlight(query, !isSameChat);
   };
 

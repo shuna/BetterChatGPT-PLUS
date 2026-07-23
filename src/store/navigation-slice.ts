@@ -19,6 +19,8 @@ export interface NavigationSlice {
   navEntryMap: Map<string, NavEntry>;
 
   isRestoringNavigation: boolean;
+  scrollNavigationSuppressedUntil: number;
+  suppressScrollNavigation: (durationMs?: number) => void;
   pushNavigationEntry: (entry: Omit<NavEntry, 'key'>) => void;
   restoreNavigationEntry: (entry: NavEntry) => void;
   navBack: () => void;
@@ -29,6 +31,8 @@ export interface NavigationSlice {
 }
 
 const MAX_HISTORY = 100;
+const DEFAULT_SCROLL_NAV_SUPPRESSION_MS = 800;
+let restoreNavigationTimer: ReturnType<typeof setTimeout> | null = null;
 
 function resolveChatIndex(
   chats: Array<{ id: string }> | null | undefined,
@@ -47,6 +51,7 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
   navHistoryFuture: [],
   navEntryMap: new Map(),
   isRestoringNavigation: false,
+  scrollNavigationSuppressedUntil: 0,
 
   initNavigationEntry: () => {
     if (get().navHistoryCurrent) return;
@@ -76,6 +81,16 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
     set({ navHistoryCurrent: entry, navEntryMap: map });
   },
 
+  suppressScrollNavigation: (durationMs = DEFAULT_SCROLL_NAV_SUPPRESSION_MS) => {
+    const nextUntil = Date.now() + durationMs;
+    set({
+      scrollNavigationSuppressedUntil: Math.max(
+        get().scrollNavigationSuppressedUntil,
+        nextUntil
+      ),
+    });
+  },
+
   pushNavigationEntry: (partial) => {
     const key = uuidv4();
     const entry: NavEntry = { ...partial, key };
@@ -99,7 +114,12 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
   },
 
   restoreNavigationEntry: (entry) => {
+    if (restoreNavigationTimer) {
+      clearTimeout(restoreNavigationTimer);
+      restoreNavigationTimer = null;
+    }
     set({ isRestoringNavigation: true });
+    get().suppressScrollNavigation();
 
     const chats = get().chats;
     const idx = resolveChatIndex(chats, entry.chatId);
@@ -137,7 +157,10 @@ export const createNavigationSlice: StoreSlice<NavigationSlice> = (
     }
 
     // Clear flag after a delay to allow scroll events from restore to settle
-    setTimeout(() => set({ isRestoringNavigation: false }), 500);
+    restoreNavigationTimer = setTimeout(() => {
+      restoreNavigationTimer = null;
+      set({ isRestoringNavigation: false });
+    }, 500);
   },
 
   navBack: () => {

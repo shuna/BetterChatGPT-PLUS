@@ -79,6 +79,7 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
   const contentStore = useStore((s) => s.contentStore);
   const switchActivePathSilent = useStore((s) => s.switchActivePathSilent);
   const pushNavigationEntry = useStore((s) => s.pushNavigationEntry);
+  const suppressScrollNavigation = useStore((s) => s.suppressScrollNavigation);
 
   const hasQuery = query.trim().length > 0;
 
@@ -218,6 +219,44 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
     return [{ tree: branchTree, chatIndex: currentChatIndex }];
   }, [branchTree, currentChatIndex]);
 
+  const navigateToNodeResult = useCallback(
+    (
+      result: SearchResult,
+      q: string,
+      options?: { recordHistory?: boolean }
+    ) => {
+      if (!branchTree) return;
+      const newPath = buildPathToLeaf(branchTree, result.nodeId);
+      const shouldRecordHistory = options?.recordHistory ?? true;
+
+      if (shouldRecordHistory) {
+        pushNavigationEntry({
+          chatId: currentChatId,
+          activePath: newPath,
+          focusedNodeId: result.nodeId,
+          source: 'search',
+        });
+      }
+
+      if (!result.isOnActivePath) {
+        switchActivePathSilent(currentChatIndex, newPath);
+      }
+      // After path switch, highlight in DOM with a short delay for re-render
+      setTimeout(() => {
+        suppressScrollNavigation();
+        applyDomHighlightAndScroll(q);
+      }, 200);
+    },
+    [
+      branchTree,
+      currentChatIndex,
+      currentChatId,
+      switchActivePathSilent,
+      pushNavigationEntry,
+      suppressScrollNavigation,
+    ]
+  );
+
   const doNodeSearch = useCallback(
     (q: string) => {
       clearHighlights();
@@ -232,35 +271,12 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
       setMatchCount(results.length);
       if (results.length > 0) {
         setCurrentIndex(0);
-        navigateToNodeResult(results[0], q);
+        navigateToNodeResult(results[0], q, { recordHistory: false });
       } else {
         setCurrentIndex(-1);
       }
     },
-    [entries, contentStore, clearHighlights]
-  );
-
-  const navigateToNodeResult = useCallback(
-    (result: SearchResult, q: string) => {
-      if (!branchTree) return;
-      const newPath = buildPathToLeaf(branchTree, result.nodeId);
-
-      pushNavigationEntry({
-        chatId: currentChatId,
-        activePath: newPath,
-        focusedNodeId: result.nodeId,
-        source: 'search',
-      });
-
-      if (!result.isOnActivePath) {
-        switchActivePathSilent(currentChatIndex, newPath);
-      }
-      // After path switch, highlight in DOM with a short delay for re-render
-      setTimeout(() => {
-        applyDomHighlightAndScroll(q);
-      }, 200);
-    },
-    [branchTree, currentChatIndex, currentChatId, switchActivePathSilent, pushNavigationEntry]
+    [entries, contentStore, clearHighlights, navigateToNodeResult]
   );
 
   /** Apply DOM highlights and scroll to the first match after a path switch. */
@@ -358,7 +374,7 @@ const ChatFindBar = ({ scrollerRef, onClose }: ChatFindBarProps) => {
         const result = nodeResults[newIndex];
         if (!result) return;
         setCurrentIndex(newIndex);
-        navigateToNodeResult(result, query);
+        navigateToNodeResult(result, query, { recordHistory: true });
       }
     },
     [scope, currentIndex, scrollerRef, nodeResults, query, navigateToNodeResult]
